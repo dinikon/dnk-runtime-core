@@ -1,4 +1,8 @@
 from dataclasses import asdict
+from datetime import timedelta
+from src.config import dnk_config
+from src.modules.shared.domain.time.clock_port import ClockPort
+from src.modules.shared.infrastructure.time.utc_clock import UtcClock
 from uuid import UUID, uuid5
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from sqlalchemy import select, update, delete, func, text
@@ -86,14 +90,15 @@ class SqlAlchemyCatalogImportRepository:
             {"key": schema + ":catalog-import"},
         )
 
-    async def executing(self, exclude: EntityIdVO) -> bool:
-        """Проверяет активный запуск в этой схеме."""
-        return bool(
+    async def count_executing(self, exclude: EntityIdVO) -> int:
+        """Считает активные запуски этой схемы после получения lock_lane."""
+        return int(
             await self.session.scalar(
-                select(Imports.id)
+                select(func.count())
+                .select_from(Imports)
                 .where(Imports.id != exclude.uuid, Imports.status.in_(EXECUTING))
-                .limit(1)
             )
+            or 0
         )
 
 
@@ -185,7 +190,16 @@ class SqlAlchemyImportRows:
         )
 
     async def find_item(self, sku: str) -> UUID | None:
-        """Разрешает SKU в текущем tenant."""
+        """Сериализует поиск/создание одного SKU между параллельными импортами."""
+        schema = str(
+            self.session.get_bind()
+            .get_execution_options()
+            .get("schema_translate_map", {})
+        )
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
+            {"key": schema + ":catalog-import-sku:" + sku},
+        )
         return await self.session.scalar(
             select(CatalogItemModel.id).where(
                 CatalogItemModel.sku == sku, CatalogItemModel.kind == "simple"
@@ -196,9 +210,20 @@ class SqlAlchemyImportRows:
 class SqlAlchemyImportRead:
     """Читает SQL-проекции, не загружая агрегаты и все строки."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        clock: ClockPort | None = None,
+        source_lifetime: timedelta | None = None,
+    ) -> None:
         """Получает read-сессию внешнего UoW."""
         self.session = session
+        self.clock = clock or UtcClock()
+        self.source_lifetime = (
+            source_lifetime
+            if source_lifetime is not None
+            else timedelta(days=dnk_config.CATALOG_IMPORT.source_days)
+        )
 
     async def get(self, identifier: UUID) -> GetCatalogImportResultDTO:
         """Возвращает ограниченный предпросмотр запуска."""
@@ -214,7 +239,9 @@ class SqlAlchemyImportRead:
         if row is None:
             raise CatalogNotFoundError("Импорт не найден.")
         return GetCatalogImportResultDTO(
-            CatalogImportQueryMapper.to_summary(row),
+            CatalogImportQueryMapper.to_summary(
+                row, now=self.clock.now(), source_lifetime=self.source_lifetime
+            ),
             configuration_from_values(row["configuration"]),
             CatalogImportQueryMapper.to_analysis(row["analysis"]),
         )
@@ -230,7 +257,12 @@ class SqlAlchemyImportRead:
             )
         ).mappings()
         return ListCatalogImportsResultDTO(
-            tuple(CatalogImportQueryMapper.to_summary(row) for row in rows),
+            tuple(
+                CatalogImportQueryMapper.to_summary(
+                    row, now=self.clock.now(), source_lifetime=self.source_lifetime
+                )
+                for row in rows
+            ),
             int(
                 await self.session.scalar(select(func.count()).select_from(Imports))
                 or 0

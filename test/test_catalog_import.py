@@ -5,7 +5,7 @@ import io
 import ipaddress
 import unittest
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -357,6 +357,59 @@ class CatalogImportLifecycleTests(unittest.TestCase):
         self.assertEqual(entity.status, "cancelled")
         self.assertEqual(entity.processed, 1)
 
+    def test_resume_preserves_results_and_previous_request_cannot_resume_twice(
+        self,
+    ) -> None:
+        now = datetime.now(UTC)
+        entity = CatalogImport.create(
+            identifier=EntityIdVO(uuid4()),
+            actor_id=EntityIdVO(uuid4()),
+            key="resume",
+            fingerprint="f" * 64,
+            name="products.csv",
+            url=None,
+            file_id=EntityIdVO(uuid4()),
+            configuration=ImportConfiguration(
+                mappings=(ImportFieldMapping("sku", "c:0"),)
+            ),
+            now=now,
+        )
+        entity.prepared(3, now)
+        entity.start(1, now)
+        entity.begin(now)
+        entity.record("created", 1, now)
+        entity.cancel(now)
+        entity.stop(now)
+        self.assertTrue(entity.resume(0, now, timedelta(days=7)))
+        self.assertEqual(
+            (
+                entity.generation,
+                entity.version,
+                entity.processed,
+                entity.created,
+                entity.warnings,
+            ),
+            (1, 1, 1, 1, 1),
+        )
+        self.assertIsNone(entity.finished_at)
+        with self.assertRaises(CatalogConflictError):
+            entity.resume(1, now, timedelta(days=7))
+        with self.assertRaises(InvalidCatalogValueError):
+            entity.resume(-1, now, timedelta(days=7))
+        self.assertFalse(entity.resume(0, now, timedelta(days=7)))
+        entity.cancel(now)
+        entity.stop(now)
+        self.assertFalse(entity.resume(0, now, timedelta(days=7)))
+        self.assertEqual(entity.status, "cancelled")
+        self.assertTrue(entity.resume(1, now, timedelta(days=7)))
+        entity.cancel(now)
+        entity.stop(now)
+        with self.assertRaises(CatalogConflictError):
+            entity.resume(2, now + timedelta(days=7), timedelta(days=7))
+        entity.forget_source(now)
+        with self.assertRaises(CatalogConflictError):
+            entity.resume(2, now, timedelta(days=7))
+
     def test_required_sku_mapping_and_duplicate_target_rejected(self) -> None:
         with self.assertRaises(InvalidCatalogValueError):
             ImportConfiguration(mode="update").ensure_startable()
@@ -409,6 +462,36 @@ class CatalogImportNetworkTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(connect.call_args.args[0], "93.184.216.34")
 
 
+class CatalogImportConcurrencyTests(unittest.TestCase):
+    """Проверяет конфигурируемую границу допуска и загрузку настройки окружения."""
+
+    def test_positive_limits_and_domain_boundary(self) -> None:
+        from src.config.feature.catalog_import_config import CatalogImportSettings
+        from src.modules.catalog.domain.catalog_import.concurrency_policy import (
+            CatalogImportConcurrencyPolicy,
+        )
+
+        for maximum in (1, 2, 5):
+            policy = CatalogImportConcurrencyPolicy(maximum)
+            policy.ensure_capacity(maximum - 1)
+            with self.assertRaises(CatalogConflictError) as caught:
+                policy.ensure_capacity(maximum)
+            self.assertIn(str(maximum), str(caught.exception))
+        for invalid in (0, -1):
+            with self.assertRaises(ValueError):
+                CatalogImportSettings(max_active_per_tenant=invalid)
+            with self.assertRaises(InvalidCatalogValueError):
+                CatalogImportConcurrencyPolicy(invalid)
+
+    def test_environment_configures_tenant_admission_limit(self) -> None:
+        import os
+        from src.config.feature.catalog_import_config import CatalogImportConfig
+
+        with patch.dict(os.environ, {"CATALOG_IMPORT__MAX_ACTIVE_PER_TENANT": "2"}):
+            settings = CatalogImportConfig(_env_nested_delimiter="__", _env_file=None)
+        self.assertEqual(settings.CATALOG_IMPORT.max_active_per_tenant, 2)
+
+
 class CatalogImportContractsTests(unittest.IsolatedAsyncioTestCase):
     """Проверяет HTTP-документацию, лимиты и отсутствие сети при прикреплении файлов."""
 
@@ -427,6 +510,7 @@ class CatalogImportContractsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content["application/json"]["schema"]["required"], ["url"])
         self.assertEqual(content["multipart/form-data"]["schema"]["required"], ["file"])
         settings = CatalogImportSettings()
+        self.assertEqual(settings.max_active_per_tenant, 1)
         self.assertEqual(settings.max_records, 100000)
         self.assertEqual(settings.source_max_bytes, 100 * 1024 * 1024)
         self.assertEqual(settings.download_concurrency, 4)

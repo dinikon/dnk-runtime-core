@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
+import { X } from "@lucide/vue";
+import { Spinner } from "@/components/ui/spinner";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
+  DialogClose,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -49,6 +53,7 @@ defineEmits<{
   preview: [];
   start: [];
   cancel: [];
+  resume: [];
   report: [];
   rowPage: [page: number];
   outcome: [outcome: string];
@@ -63,6 +68,22 @@ const editable = computed(
         props.detail.run.total === 0 &&
         !!props.detail.analysis.format)),
 );
+const sourceReady = ref(false);
+watch(
+  () => props.open,
+  (value) => {
+    if (!value) sourceReady.value = false;
+  },
+);
+const preparing = computed(() => props.detail?.run.status === "preparing");
+const modeLabel = computed(
+  () =>
+    ({
+      create: "Только создание",
+      update: "Обновление по SKU",
+      upsert: "Создание и обновление",
+    })[props.draft?.mode ?? "create"],
+);
 const step = computed(() => (!props.detail ? 1 : editable.value ? 2 : 3));
 </script>
 <template>
@@ -75,47 +96,46 @@ const step = computed(() => (!props.detail ? 1 : editable.value ? 2 : 3));
     "
   >
     <DialogContent
-      class="flex h-dvh max-h-dvh max-w-full flex-col gap-5 overflow-hidden rounded-none p-4 sm:h-auto sm:max-h-[90dvh] sm:max-w-6xl sm:rounded-lg sm:p-6"
+      :show-close-button="false"
+      class="flex h-dvh max-h-dvh max-w-full flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-[90dvh] sm:max-h-[90dvh] sm:max-w-6xl sm:rounded-xl"
     >
-      <DialogHeader
-        ><DialogTitle>Импорт позиций</DialogTitle
-        ><DialogDescription>{{
+      <DialogClose as-child
+        ><Button
+          variant="ghost"
+          size="icon"
+          class="absolute top-2 right-2 size-11 sm:top-3 sm:right-3"
+          aria-label="Закрыть мастер"
+          ><X /></Button
+      ></DialogClose>
+      <DialogHeader class="shrink-0 gap-1 px-5 pt-5 text-left sm:px-7 sm:pt-6"
+        ><DialogTitle class="pr-8">Импорт позиций</DialogTitle
+        ><DialogDescription class="truncate pr-8">{{
           detail?.run.name || "Перенесите товары из CSV или XML в Catalog"
         }}</DialogDescription></DialogHeader
       >
       <Stepper
         :model-value="step"
         aria-label="Шаги импорта"
-        class="shrink-0 justify-between border-b pb-4"
+        class="shrink-0 justify-between px-5 py-5 sm:px-7"
       >
         <StepperItem
-          v-for="(label, index) in ['Источник', 'Сопоставление', 'Импорт']"
+          v-for="(label, index) in ['Источник', 'Поля', 'Импорт']"
           :key="label"
           :step="index + 1"
-          class="flex-1"
-          ><StepperIndicator>{{ index + 1 }}</StepperIndicator
+          class="flex-1 gap-2"
+          ><StepperIndicator class="size-8 shrink-0">{{
+            index + 1
+          }}</StepperIndicator
           ><StepperTitle class="text-xs sm:text-sm">{{
             label
           }}</StepperTitle></StepperItem
         >
       </Stepper>
+      <Separator />
       <div
-        class="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pr-1"
+        class="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6"
       >
         <div class="flex min-w-0 flex-col gap-5">
-          <Alert v-if="error" variant="destructive"
-            ><AlertTitle>Не удалось выполнить действие</AlertTitle
-            ><AlertDescription
-              >{{ error
-              }}<Button
-                v-if="existing && !detail"
-                variant="outline"
-                size="sm"
-                @click="$emit('retry')"
-                >Повторить</Button
-              ></AlertDescription
-            ></Alert
-          >
           <div
             v-if="loading && !detail"
             class="flex flex-col gap-3"
@@ -126,7 +146,9 @@ const step = computed(() => (!props.detail ? 1 : editable.value ? 2 : 3));
           </div>
           <CatalogImportSourceForm
             v-else-if="!detail && !existing"
+            form-id="catalog-import-source"
             :pending="sourcePending"
+            @ready="sourceReady = $event"
             @submit="(value) => $emit('source', value)"
           />
           <template v-else-if="detail && editable">
@@ -163,26 +185,11 @@ const step = computed(() => (!props.detail ? 1 : editable.value ? 2 : 3));
               :pending="pending || detail.run.status === 'preparing'"
               :dirty="dirty"
               @change="(value) => $emit('change', value)"
-              @preview="$emit('preview')"
-              @start="$emit('start')"
             />
             <Skeleton v-else class="h-48 w-full" />
-            <div class="flex justify-end">
-              <Button
-                variant="ghost"
-                :disabled="pending"
-                @click="$emit('cancel')"
-                >Отменить подготовку</Button
-              >
-            </div>
           </template>
           <template v-else-if="detail">
-            <CatalogImportProgress
-              :run="detail.run"
-              :pending="pending"
-              @cancel="$emit('cancel')"
-              @report="$emit('report')"
-            />
+            <CatalogImportProgress :run="detail.run" :pending="pending" />
             <CatalogImportRows
               :data="rows"
               :loading="rowsLoading"
@@ -197,11 +204,128 @@ const step = computed(() => (!props.detail ? 1 : editable.value ? 2 : 3));
           </template>
         </div>
       </div>
-      <div class="flex shrink-0 justify-end border-t pt-3">
-        <Button variant="outline" @click="$emit('close')">{{
-          step === 3 ? "Вернуться к журналу" : "Закрыть"
-        }}</Button>
-      </div>
+      <Separator />
+      <footer
+        aria-label="Действия импорта"
+        class="shrink-0 bg-background px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-7 sm:pb-5"
+      >
+        <Alert
+          v-if="error"
+          variant="destructive"
+          class="mb-3 max-h-28 overflow-y-auto"
+          ><AlertTitle>Не удалось выполнить действие</AlertTitle
+          ><AlertDescription
+            >{{ error
+            }}<Button
+              v-if="existing && !detail"
+              variant="outline"
+              size="sm"
+              @click="$emit('retry')"
+              >Повторить</Button
+            ></AlertDescription
+          ></Alert
+        >
+        <template v-if="detail && editable">
+          <p class="mb-3 text-xs text-muted-foreground" role="status">
+            {{
+              dirty
+                ? "Есть изменения — обновите предпросмотр перед запуском."
+                : `${modeLabel} · ${detail.run.total} записей`
+            }}
+          </p>
+          <div class="grid grid-cols-2 gap-3 sm:flex sm:justify-end">
+            <Button
+              v-if="preparing"
+              variant="outline"
+              class="h-11 min-w-0 whitespace-normal"
+              :disabled="pending"
+              @click="$emit('cancel')"
+              >Отменить подготовку</Button
+            >
+            <Button
+              v-else
+              variant="outline"
+              class="h-11 min-w-0 whitespace-normal"
+              :disabled="pending"
+              @click="$emit('preview')"
+              >Предпросмотр</Button
+            >
+            <Button
+              class="h-11 min-w-0 whitespace-normal"
+              :disabled="
+                pending ||
+                preparing ||
+                dirty ||
+                !draft?.mappings.length ||
+                !detail.run.total ||
+                detail.run.status !== 'mapping'
+              "
+              @click="$emit('start')"
+              ><Spinner
+                v-if="pending || preparing"
+                data-icon="inline-start"
+              />{{ preparing ? "Подготовка…" : "Запустить импорт" }}</Button
+            >
+          </div>
+        </template>
+        <div
+          v-else-if="detail"
+          class="grid grid-cols-[auto_minmax(0,1fr)] gap-3 sm:flex sm:justify-end"
+        >
+          <Button
+            variant="outline"
+            class="h-11 min-w-0 whitespace-normal"
+            :disabled="pending"
+            @click="$emit('report')"
+            >Отчёт CSV</Button
+          >
+          <Button
+            v-if="detail.run.canResume"
+            class="h-11 min-w-0 whitespace-normal"
+            :disabled="pending"
+            @click="$emit('resume')"
+            ><Spinner v-if="pending" data-icon="inline-start" />Продолжить
+            импорт</Button
+          >
+          <Button
+            v-else-if="
+              ['queued', 'running', 'cancelling'].includes(detail.run.status)
+            "
+            class="h-11 min-w-0 whitespace-normal"
+            :disabled="pending || detail.run.status === 'cancelling'"
+            @click="$emit('cancel')"
+            >{{
+              detail.run.status === "cancelling"
+                ? "Останавливаем…"
+                : "Остановить импорт"
+            }}</Button
+          >
+          <Button
+            v-else
+            class="h-11 min-w-0 whitespace-normal"
+            @click="$emit('close')"
+            >К журналу</Button
+          >
+        </div>
+        <div v-else class="grid grid-cols-2 gap-3 sm:flex sm:justify-end">
+          <Button
+            variant="outline"
+            class="h-11 min-w-0 whitespace-normal"
+            @click="$emit('close')"
+            >Закрыть</Button
+          >
+          <Button
+            v-if="!existing"
+            type="submit"
+            form="catalog-import-source"
+            class="h-11 min-w-0 whitespace-normal"
+            :disabled="sourcePending || !sourceReady"
+            ><Spinner v-if="sourcePending" data-icon="inline-start" />{{
+              sourcePending ? "Загрузка…" : "Продолжить"
+            }}</Button
+          >
+        </div>
+      </footer>
     </DialogContent>
   </Dialog>
 </template>

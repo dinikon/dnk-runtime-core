@@ -22,6 +22,6 @@ class CatalogImportRepository(Protocol):
         """Сериализует запуск импорта внутри tenant."""
         ...
 
-    async def executing(self, exclude: EntityIdVO) -> bool:
-        """Проверяет наличие другого запущенного импорта."""
+    async def count_executing(self, exclude: EntityIdVO) -> int:
+        """Возвращает число других активных импортов под общей блокировкой tenant."""
         ...

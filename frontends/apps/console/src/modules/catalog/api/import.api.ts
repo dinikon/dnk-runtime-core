@@ -76,6 +76,14 @@ export const catalogImportApi = {
       )
     ).data;
   },
+  async resume(id: string, generation: number): Promise<ImportActionResult> {
+    return (
+      await httpClient.post<DTO.ResumeImportResponse>(
+        `${base}/${encodeURIComponent(id)}/resume`,
+        { generation },
+      )
+    ).data;
+  },
   async cancel(id: string): Promise<ImportActionResult> {
     return (
       await httpClient.post<DTO.CancelImportResponse>(

@@ -110,3 +110,22 @@ export function useDownloadImportReport(): UseMutationReturnType<
     retry: false,
   });
 }
+
+export function useResumeCatalogImport(
+  tenant: MaybeRefOrGetter<string>,
+  session: MaybeRefOrGetter<string>,
+): UseMutationReturnType<
+  ImportActionResult,
+  Error,
+  { id: string; generation: number },
+  string[]
+> {
+  const update = useImportInvalidation(tenant, session);
+  return useMutation({
+    mutationFn: (value: { id: string; generation: number }) =>
+      catalogImportApi.resume(value.id, value.generation),
+    retry: false,
+    onMutate: update.snapshot,
+    onSuccess: (_data, _variables, context) => update.refresh(context),
+  });
+}

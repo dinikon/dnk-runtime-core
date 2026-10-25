@@ -1,5 +1,6 @@
 from typing import Annotated
 from uuid import UUID
+from src.config import dnk_config
 from fastapi import Depends, HTTPException
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
@@ -93,6 +94,7 @@ def get_start_catalog_import_handler(
         SqlAlchemyCatalogImportRepository(uow.session),
         build_import_queue(uow.session, tenant),
         UtcClock(),
+        dnk_config.CATALOG_IMPORT.max_active_per_tenant,
     )
 
 
@@ -164,4 +166,26 @@ def get_list_catalog_import_rows_handler(
 
 ListCatalogImportRowsHandlerDep = Annotated[
     ListCatalogImportRowsHandler, Depends(get_list_catalog_import_rows_handler)
+]
+
+from src.modules.catalog.application.catalog_import.command.resume_catalog_import.handler import (
+    ResumeCatalogImportHandler,
+)
+
+
+def get_resume_catalog_import_handler(
+    uow: UoWDep, tenant: ImportTenantDep
+) -> ResumeCatalogImportHandler:
+    """Собирает продолжение на том же tenant UoW и очереди."""
+    return ResumeCatalogImportHandler(
+        SqlAlchemyCatalogImportRepository(uow.session),
+        build_import_queue(uow.session, tenant),
+        UtcClock(),
+        dnk_config.CATALOG_IMPORT.source_days,
+        dnk_config.CATALOG_IMPORT.max_active_per_tenant,
+    )
+
+
+ResumeCatalogImportHandlerDep = Annotated[
+    ResumeCatalogImportHandler, Depends(get_resume_catalog_import_handler)
 ]

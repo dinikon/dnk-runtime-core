@@ -25,6 +25,8 @@ class ImportSummaryDTO:
     created_at: datetime
     finished_at: datetime | None
     error: str | None
+    generation: int = 0
+    can_resume: bool = False
 
 
 @dataclass(frozen=True, slots=True)

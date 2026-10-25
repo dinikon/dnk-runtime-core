@@ -152,3 +152,22 @@ router.add_api_route(
     },
     dependencies=[Depends(require_authenticated_request_context)],
 )
+
+from src.modules.catalog.presentation.catalog_import.http.controller.resume_catalog_import import (
+    resume_catalog_import,
+)
+from src.modules.catalog.presentation.catalog_import.http.response.resume_catalog_import import (
+    ResumeCatalogImportResponse,
+)
+
+router.add_api_route(
+    "/{import_id}/resume",
+    resume_catalog_import,
+    methods=["POST"],
+    status_code=202,
+    response_model=ResumeCatalogImportResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)

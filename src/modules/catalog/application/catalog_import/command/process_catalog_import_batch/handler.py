@@ -27,7 +27,11 @@ class ProcessCatalogImportBatchHandler:
         entity.stop(self.clock.now())
         if entity.status not in TERMINAL and entity.version == command.version:
             job_id = await self.queue.schedule(
-                entity.id, entity.version, entity.processed, "run"
+                entity.id,
+                entity.version,
+                entity.processed,
+                "run",
+                generation=entity.generation,
             )
             entity.schedule(job_id, self.clock.now())
         await self.repository.save(entity)

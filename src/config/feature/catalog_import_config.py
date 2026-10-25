@@ -8,6 +8,7 @@ class CatalogImportSettings(BaseModel):
 
     model_config = ConfigDict(validate_default=True)
 
+    max_active_per_tenant: int = Field(default=1, ge=1)
     source_max_bytes: int = Field(default=100 * 1024 * 1024, gt=0)
     max_records: int = Field(default=100_000, gt=0)
     max_images: int = Field(default=100, ge=1, le=100)

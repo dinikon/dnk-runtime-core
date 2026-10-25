@@ -39,6 +39,7 @@ application:
       value: ''
       existingSecret: {name: '', key: ''}
   catalogImport:
+    maxActivePerTenant: 1
     sourceMaxBytes: 104857600
     maxRecords: 100000
     maxImages: 100

@@ -11,6 +11,7 @@ class CatalogImportModel(TenantBase):
 
     __tablename__ = "catalog_imports"
     __table_args__ = (
+        sa.CheckConstraint("generation >= 0", name="ck_catalog_import_generation"),
         sa.CheckConstraint(
             "status IN ('preparing','mapping','queued','running','cancelling','cancelled','completed','completed_with_errors','failed','expired')",
             name="ck_catalog_import_status",
@@ -20,9 +21,8 @@ class CatalogImportModel(TenantBase):
             name="ck_catalog_import_counts",
         ),
         sa.Index(
-            "uq_catalog_import_executing",
-            sa.literal_column("(true)"),
-            unique=True,
+            "ix_catalog_import_executing",
+            "id",
             postgresql_where=sa.text("status IN ('queued','running','cancelling')"),
         ),
         sa.Index("ix_catalog_import_created", "created_at", "id"),
@@ -40,6 +40,7 @@ class CatalogImportModel(TenantBase):
     )
     status: Mapped[str] = mapped_column(sa.String(32))
     version: Mapped[int] = mapped_column(sa.Integer)
+    generation: Mapped[int] = mapped_column(sa.Integer, default=0, server_default="0")
     prepared_version: Mapped[int] = mapped_column(sa.Integer)
     total: Mapped[int] = mapped_column(sa.Integer)
     processed: Mapped[int] = mapped_column(sa.Integer)

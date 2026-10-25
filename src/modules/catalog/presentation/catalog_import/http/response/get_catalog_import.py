@@ -20,6 +20,8 @@ class CatalogImportSummaryResponse(BaseModel):
     created_at: datetime
     finished_at: datetime | None
     error: str | None
+    generation: int
+    can_resume: bool
 
 
 class ImportMappingResponse(BaseModel):

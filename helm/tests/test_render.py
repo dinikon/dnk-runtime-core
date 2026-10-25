@@ -381,6 +381,30 @@ class HelmContractTests(unittest.TestCase):
                 )
                 self.assertEqual(container["imagePullPolicy"], "Always")
 
+    def test_catalog_import_concurrency_setting(self) -> None:
+        """Передаёт общий tenant-лимит API и worker через ConfigMap."""
+        for maximum in (1, 2, 5):
+            with self.subTest(maximum=maximum):
+                values = runtime_values()
+                values["application"]["catalogImport"] = {"maxActivePerTenant": maximum}
+                manifests = self.render(values)
+                settings = next(
+                    r["data"]
+                    for r in manifests
+                    if r["kind"] == "ConfigMap"
+                    and "CATALOG_IMPORT__MAX_ACTIVE_PER_TENANT" in r.get("data", {})
+                )
+                self.assertEqual(
+                    settings["CATALOG_IMPORT__MAX_ACTIVE_PER_TENANT"], str(maximum)
+                )
+
+    def test_catalog_import_active_limit_rejects_non_positive_values(self) -> None:
+        """Не публикует конфигурацию с отключённым либо отрицательным лимитом."""
+        for maximum in (0, -1):
+            values = runtime_values()
+            values["application"]["catalogImport"] = {"maxActivePerTenant": maximum}
+            self.run_helm(RUNTIME, values, success=False)
+
     def test_files_upload_ingress_limit_and_overrides(self) -> None:
         """Ingress учитывает multipart overhead, timeout и явные настройки оператора."""
         prefix = "nginx.ingress.kubernetes.io/"

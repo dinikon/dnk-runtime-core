@@ -422,6 +422,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "maxActivePerTenant": {
+              "type": "integer",
+              "minimum": 1
+            },
             "sourceMaxBytes": {
               "type": "integer",
               "minimum": 1

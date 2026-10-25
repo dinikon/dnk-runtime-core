@@ -20,6 +20,19 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     return detail.detail;
   }
 
+  if (
+    detail &&
+    typeof detail === "object" &&
+    "detail" in detail &&
+    detail.detail &&
+    typeof detail.detail === "object" &&
+    "message" in detail.detail &&
+    typeof detail.detail.message === "string" &&
+    detail.detail.message.trim().length > 0
+  ) {
+    return detail.detail.message;
+  }
+
   return fallback;
 }
 

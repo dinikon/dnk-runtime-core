@@ -1,6 +1,8 @@
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
+from datetime import datetime, timedelta
+from src.modules.catalog.domain.catalog_import.resumption import can_resume_import
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_import.aggregate import CatalogImport
 from src.modules.catalog.domain.catalog_import.value_object.configuration import (
@@ -55,10 +57,28 @@ class CatalogImportQueryMapper:
     """Создаёт ограниченные проекции чтения."""
 
     @staticmethod
-    def to_summary(row: Mapping[str, Any]) -> ImportSummaryDTO:
+    def to_summary(
+        row: Mapping[str, Any], *, now: datetime, source_lifetime: timedelta
+    ) -> ImportSummaryDTO:
         """Возвращает данные журнала без source URL и файловых координат."""
         return ImportSummaryDTO(
-            **{key: row[key] for key in ImportSummaryDTO.__dataclass_fields__}
+            **{
+                key: row[key]
+                for key in ImportSummaryDTO.__dataclass_fields__
+                if key != "can_resume"
+            },
+            can_resume=can_resume_import(
+                status=row["status"],
+                has_source=row["source_file_id"] is not None,
+                version=row["version"],
+                prepared_version=row["prepared_version"],
+                total=row["total"],
+                processed=row["processed"],
+                finished_at=row["finished_at"],
+                now=now,
+                source_lifetime=source_lifetime,
+                configuration=configuration_from_values(row["configuration"]),
+            ),
         )
 
     @staticmethod

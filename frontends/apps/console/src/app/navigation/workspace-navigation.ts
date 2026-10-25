@@ -13,7 +13,6 @@ export const workspaceNavigation: WorkspaceNavigation = {
       items: [
         { title: "Лиды", url: "/crm/leads", icon: Users },
         { title: "Сделки", url: "/crm/deals", icon: ShoppingBasket },
-        { title: "Воронки", url: "/funnels", icon: Building2 },
         { title: "Контакты", url: "/crm/contacts", icon: Users },
         { title: "Компании", url: "/crm/companies", icon: Building2 },
       ],

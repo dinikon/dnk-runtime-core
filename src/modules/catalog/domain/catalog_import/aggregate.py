@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Self
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_import.value_object.configuration import (
@@ -43,6 +43,7 @@ class CatalogImport:
     finished_at: datetime | None
     job_id: EntityIdVO | None
     error: str | None
+    generation: int = 0
 
     @classmethod
     def create(
@@ -116,6 +117,7 @@ class CatalogImport:
         finished_at: datetime | None,
         job_id: EntityIdVO | None,
         error: str | None,
+        generation: int = 0,
     ) -> Self:
         """Восстанавливает сохранённое состояние; проверка переходов остаётся в методах."""
         entity = cls(
@@ -142,6 +144,7 @@ class CatalogImport:
             finished_at,
             job_id,
             error,
+            generation,
         )
         entity._validate()
         return entity
@@ -180,6 +183,8 @@ class CatalogImport:
             raise InvalidCatalogValueError("Прогресс импорта несогласован.")
         if (
             self.version < 1
+            or type(self.generation) is not int
+            or self.generation < 0
             or not 0 <= self.prepared_version <= self.version
             or any(
                 value.tzinfo is None or value.utcoffset() is None
@@ -271,6 +276,42 @@ class CatalogImport:
         if self.status not in {"queued", "running"}:
             raise CatalogConflictError("Импорт не находится в очереди.")
         self.status, self.updated_at = "running", now
+
+    def resume(
+        self, generation: int, now: datetime, source_lifetime: timedelta
+    ) -> bool:
+        """Продолжает остаток снимка; повтор прежнего запроса не запускает новый цикл."""
+        from src.modules.catalog.domain.catalog_import.resumption import (
+            can_resume_import,
+        )
+
+        if type(generation) is not int or generation < 0:
+            raise InvalidCatalogValueError("Некорректное поколение импорта.")
+        if generation < self.generation:
+            return False
+        if generation != self.generation:
+            raise CatalogConflictError(
+                "Состояние импорта изменилось. Обновите страницу."
+            )
+        if not can_resume_import(
+            status=self.status,
+            has_source=self.source_file_id is not None,
+            version=self.version,
+            prepared_version=self.prepared_version,
+            total=self.total,
+            processed=self.processed,
+            finished_at=self.finished_at,
+            now=now,
+            source_lifetime=source_lifetime,
+            configuration=self.configuration,
+        ):
+            raise CatalogConflictError(
+                "Этот импорт нельзя продолжить: он не остановлен или срок хранения источника истёк."
+            )
+        self.generation += 1
+        self.status, self.updated_at = "queued", now
+        self.finished_at, self.error = None, None
+        return True
 
     def record(self, outcome: str, warnings: int, now: datetime) -> None:
         """Учитывает ровно один атомарно сохранённый результат строки."""

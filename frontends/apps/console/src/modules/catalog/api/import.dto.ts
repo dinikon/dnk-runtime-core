@@ -29,6 +29,8 @@ export interface ImportRunDTO {
     | "failed"
     | "expired";
   version: number;
+  generation: number;
+  can_resume: boolean;
   total: number;
   processed: number;
   created: number;
@@ -87,4 +89,10 @@ export interface StartImportResponse {
 export interface CancelImportResponse {
   id: string;
   status: ImportRunDTO["status"];
+}
+
+export interface ResumeImportResponse {
+  id: string;
+  status: ImportRunDTO["status"];
+  generation: number;
 }

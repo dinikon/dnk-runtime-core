@@ -16,6 +16,8 @@ export function importRunFromDto(dto: ImportRunDTO): CatalogImportRun {
     name: dto.source_name,
     status: dto.status,
     version: dto.version,
+    generation: dto.generation,
+    canResume: dto.can_resume,
     total: dto.total,
     processed: dto.processed,
     created: dto.created,

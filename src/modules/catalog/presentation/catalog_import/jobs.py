@@ -152,6 +152,7 @@ class CatalogImportJobHandler:
             return None
         if (
             entity.version != job.payload["version"]
+            or entity.generation != job.payload.get("generation", 0)
             or entity.status in TERMINAL
             or entity.job_id != EntityIdVO(job.id)
         ):

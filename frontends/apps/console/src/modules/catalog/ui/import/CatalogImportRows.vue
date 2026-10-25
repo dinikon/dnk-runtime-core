@@ -70,44 +70,95 @@ const labels: Record<string, string> = {
     <p v-else-if="loading && !data" class="text-sm text-muted-foreground">
       Загрузка результатов…
     </p>
-    <div v-else class="max-h-80 overflow-auto rounded-md border">
-      <Table
-        ><TableHeader
-          ><TableRow
-            ><TableHead>№</TableHead><TableHead>SKU</TableHead
-            ><TableHead>Результат</TableHead
-            ><TableHead>Подробности</TableHead></TableRow
-          ></TableHeader
-        ><TableBody
-          ><TableRow v-for="row in data?.items ?? []" :key="row.number"
-            ><TableCell>{{ row.number }}</TableCell
-            ><TableCell
+    <template v-else>
+      <ul
+        class="flex flex-col divide-y rounded-lg border sm:hidden"
+        aria-label="Результаты товаров"
+      >
+        <li
+          v-for="row in data?.items ?? []"
+          :key="row.number"
+          class="flex min-w-0 flex-col gap-2 p-3"
+        >
+          <div class="flex min-w-0 items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="text-xs text-muted-foreground"
+                >{{ row.number }}.</span
               ><Button
                 v-if="row.itemId"
                 variant="link"
-                class="h-auto p-0"
+                class="h-auto min-w-0 truncate p-0"
                 @click="$emit('item', row.itemId)"
                 >{{ row.sku || "Открыть товар" }}</Button
-              ><span v-else>{{ row.sku || "—" }}</span></TableCell
-            ><TableCell>{{ labels[row.outcome] || row.outcome }}</TableCell
-            ><TableCell class="min-w-52 whitespace-normal"
-              ><p
-                v-for="message in [...row.errors, ...row.warnings]"
-                :key="message"
-              >
-                {{ message }}
-              </p></TableCell
-            ></TableRow
-          ><TableRow v-if="!data?.items.length"
-            ><TableCell
-              :colspan="4"
-              class="p-6 text-center text-muted-foreground"
-              >Записей с выбранным результатом пока нет.</TableCell
-            ></TableRow
-          ></TableBody
-        ></Table
-      >
-    </div>
+              ><span v-else class="truncate text-sm font-medium">{{
+                row.sku || "Без SKU"
+              }}</span>
+            </div>
+            <span class="shrink-0 text-xs">{{
+              labels[row.outcome] || row.outcome
+            }}</span>
+          </div>
+          <p
+            v-for="message in row.errors"
+            :key="message"
+            class="break-words text-sm text-destructive"
+          >
+            {{ message }}
+          </p>
+          <p
+            v-for="message in row.warnings"
+            :key="message"
+            class="break-words text-xs text-muted-foreground"
+          >
+            {{ message }}
+          </p>
+        </li>
+        <li
+          v-if="!data?.items.length"
+          class="p-5 text-center text-sm text-muted-foreground"
+        >
+          Записей с выбранным результатом пока нет.
+        </li>
+      </ul>
+      <div class="hidden overflow-x-auto rounded-lg border sm:block">
+        <Table
+          ><TableHeader
+            ><TableRow
+              ><TableHead>№</TableHead><TableHead>SKU</TableHead
+              ><TableHead>Результат</TableHead
+              ><TableHead>Подробности</TableHead></TableRow
+            ></TableHeader
+          ><TableBody
+            ><TableRow v-for="row in data?.items ?? []" :key="row.number"
+              ><TableCell>{{ row.number }}</TableCell
+              ><TableCell
+                ><Button
+                  v-if="row.itemId"
+                  variant="link"
+                  class="h-auto p-0"
+                  @click="$emit('item', row.itemId)"
+                  >{{ row.sku || "Открыть товар" }}</Button
+                ><span v-else>{{ row.sku || "—" }}</span></TableCell
+              ><TableCell>{{ labels[row.outcome] || row.outcome }}</TableCell
+              ><TableCell class="min-w-52 whitespace-normal"
+                ><p
+                  v-for="message in [...row.errors, ...row.warnings]"
+                  :key="message"
+                >
+                  {{ message }}
+                </p></TableCell
+              ></TableRow
+            ><TableRow v-if="!data?.items.length"
+              ><TableCell
+                :colspan="4"
+                class="p-6 text-center text-muted-foreground"
+                >Записей с выбранным результатом пока нет.</TableCell
+              ></TableRow
+            ></TableBody
+          ></Table
+        >
+      </div>
+    </template>
     <div class="flex items-center justify-end gap-3">
       <Button
         variant="outline"

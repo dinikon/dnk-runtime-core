@@ -77,6 +77,8 @@ test("API mapping preserves source IDs, constants, UTC dates and decimal strings
       source_name: "products.csv",
       status: "mapping",
       version: 2,
+      generation: 1,
+      can_resume: true,
       total: 19,
       processed: 0,
       created: 0,
@@ -104,6 +106,8 @@ test("API mapping preserves source IDs, constants, UTC dates and decimal strings
   const result = importDetailsFromDto(dto);
   assert.equal(result.run.createdAt.toISOString(), "2026-10-25T12:00:00.000Z");
   assert.equal(result.run.finishedAt, null);
+  assert.equal(result.run.generation, 1);
+  assert.equal(result.run.canResume, true);
   assert.equal(result.analysis.samples[0]!.values["c:2"]![0], "507,7");
   assert.deepEqual(
     importConfigurationToDto(result.configuration),

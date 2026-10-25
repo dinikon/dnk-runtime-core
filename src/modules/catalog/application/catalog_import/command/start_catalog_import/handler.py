@@ -2,7 +2,9 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_import.repository import CatalogImportRepository
 from src.modules.catalog.application.catalog_import.contracts import ImportQueuePort
 from src.modules.shared.domain.time.clock_port import ClockPort
-from src.modules.catalog.domain.error import CatalogConflictError
+from src.modules.catalog.domain.catalog_import.concurrency_policy import (
+    CatalogImportConcurrencyPolicy,
+)
 from .command import StartCatalogImportCommand
 from .dto import StartCatalogImportResultDTO
 
@@ -15,9 +17,11 @@ class StartCatalogImportHandler:
         repository: CatalogImportRepository,
         queue: ImportQueuePort,
         clock: ClockPort,
+        max_active: int,
     ) -> None:
         """Получает порты общей транзакции запуска."""
         self.repository, self.queue, self.clock = repository, queue, clock
+        self.policy = CatalogImportConcurrencyPolicy(max_active)
 
     async def execute(
         self, command: StartCatalogImportCommand
@@ -26,10 +30,9 @@ class StartCatalogImportHandler:
         await self.repository.lock_lane()
         entity = await self.repository.get(EntityIdVO(command.import_id), lock=True)
         if entity.start(command.version, self.clock.now()):
-            if await self.repository.executing(entity.id):
-                raise CatalogConflictError(
-                    "В этом рабочем пространстве уже выполняется импорт."
-                )
+            self.policy.ensure_capacity(
+                await self.repository.count_executing(entity.id)
+            )
             job_id = await self.queue.schedule(entity.id, entity.version, 0, "run")
             entity.schedule(job_id, self.clock.now())
             await self.repository.save(entity)

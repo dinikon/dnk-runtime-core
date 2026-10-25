@@ -28,6 +28,7 @@ import {
   useCreateCatalogImport,
   useConfigureCatalogImport,
   useStartCatalogImport,
+  useResumeCatalogImport,
   useCancelCatalogImport,
   useDownloadImportReport,
 } from "../../model/import.mutations";
@@ -62,6 +63,7 @@ const rows = useCatalogImportRowsQuery(
 const creation = useCreateCatalogImport(tenantId, session),
   configuration = useConfigureCatalogImport(tenantId, session),
   start = useStartCatalogImport(tenantId, session),
+  resume = useResumeCatalogImport(tenantId, session),
   cancel = useCancelCatalogImport(tenantId, session),
   report = useDownloadImportReport();
 const draft = ref<ImportConfiguration | null>(null),
@@ -81,6 +83,7 @@ const pending = computed(
   () =>
     configuration.isPending.value ||
     start.isPending.value ||
+    resume.isPending.value ||
     cancel.isPending.value ||
     report.isPending.value,
 );
@@ -235,6 +238,24 @@ async function run(): Promise<void> {
     }
   }
 }
+async function continueImport(): Promise<void> {
+  if (!detail.data.value?.run.canResume || pending.value) return;
+  const valid = capture(),
+    generation = detail.data.value.run.generation;
+  actionError.value = "";
+  try {
+    await resume.mutateAsync({ id: state.id.value, generation });
+  } catch (error) {
+    if (!valid()) return;
+    const refreshed = await detail.refetch();
+    if (!valid()) return;
+    if (refreshed.data && refreshed.data.run.generation > generation) return;
+    actionError.value = getApiErrorMessage(
+      error,
+      "Не удалось продолжить импорт. Повторите действие после обновления состояния.",
+    );
+  }
+}
 async function stop(): Promise<void> {
   const valid = capture();
   actionError.value = "";
@@ -361,6 +382,7 @@ const rowsError = computed(() =>
       @preview="preview"
       @start="run"
       @cancel="stop"
+      @resume="continueImport"
       @report="download"
       @row-page="(value) => state.query({ row_page: value })"
       @outcome="

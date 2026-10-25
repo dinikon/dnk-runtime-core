@@ -30,6 +30,8 @@ export interface CatalogImportRun {
   name: string;
   status: ImportStatus;
   version: number;
+  generation: number;
+  canResume: boolean;
   total: number;
   processed: number;
   created: number;
@@ -91,4 +93,5 @@ export interface ImportActionResult {
   id: string;
   status: ImportStatus;
   version?: number;
+  generation?: number;
 }

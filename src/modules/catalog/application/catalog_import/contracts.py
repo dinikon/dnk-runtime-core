@@ -100,7 +100,7 @@ class ImportRowsPort(Protocol):
         ...
 
     async def find_item(self, sku: str) -> UUID | None:
-        """Разрешает SKU только в текущем tenant."""
+        """Разрешает SKU в текущем tenant под блокировкой до конца общей транзакции."""
         ...
 
 
@@ -114,6 +114,7 @@ class ImportQueuePort(Protocol):
         cursor: int,
         kind: str,
         delay_seconds: int | None = None,
+        generation: int = 0,
     ) -> EntityIdVO:
         """Возвращает ID единственного задания для этапа и курсора."""
         ...

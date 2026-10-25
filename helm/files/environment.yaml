@@ -65,6 +65,7 @@ FILES__OPERATION_TIMEOUT_SECONDS: application.files.operationTimeoutSeconds
 FILES__CONCURRENCY: application.files.concurrency
 FILES__CONSOLE_MAX_UPLOAD_BYTES: application.files.consoleMaxUploadBytes
 
+CATALOG_IMPORT__MAX_ACTIVE_PER_TENANT: application.catalogImport.maxActivePerTenant
 CATALOG_IMPORT__SOURCE_MAX_BYTES: application.catalogImport.sourceMaxBytes
 CATALOG_IMPORT__MAX_RECORDS: application.catalogImport.maxRecords
 CATALOG_IMPORT__MAX_IMAGES: application.catalogImport.maxImages

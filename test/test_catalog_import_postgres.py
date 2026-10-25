@@ -1,10 +1,12 @@
 """HTTP и worker импорта на настоящем PostgreSQL с локальным файловым адаптером."""
 
 import io
+import asyncio
 import os
 import unittest
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from dataclasses import replace
 from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -90,6 +92,8 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
     asyncTearDownBase = catalog_support_tests.CatalogPostgresTests.asyncTearDown
 
     async def asyncSetUp(self):
+        from src.config import dnk_config
+
         await self.asyncSetUpBase()
         self.store = MemoryStorage()
         outer = self
@@ -108,6 +112,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         self.runtime_class = Runtime
         self.patches = [
+            patch.object(dnk_config.CATALOG_IMPORT, "max_active_per_tenant", 1),
             patch(
                 "src.modules.catalog.presentation.catalog_import.jobs.CatalogImportRuntime",
                 Runtime,
@@ -481,6 +486,277 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             (run["status"], run["processed"], run["created"]), ("cancelled", 1, 1)
         )
+
+    async def test_resume_retains_rows_rejects_old_jobs_and_is_idempotent_across_stops(
+        self,
+    ):
+        from src.config import dnk_config
+
+        identifier = await self.create_import(b"sku,title\nA,One\nB,Two\nC,Three\n")
+        await self.execute_current(identifier)
+        await self.start_import(identifier)
+        with patch.object(dnk_config.CATALOG_IMPORT, "batch_size", 1):
+            first = await self.execute_current(identifier)
+        await self.client.post(
+            f"{self.base}/imports/{identifier}/cancel", headers=self.headers
+        )
+        stopped_job = await self.execute_current(identifier)
+        before = (await self.get_import(identifier))["run"]
+        self.assertTrue(before["can_resume"])
+        self.assertEqual(before["processed"], 1)
+        url = f"{self.base}/imports/{identifier}/resume"
+        response = await self.client.post(
+            url, json={"generation": 0}, headers=self.headers
+        )
+        self.assertEqual(response.status_code, 202, response.text)
+        self.assertEqual(response.json()["generation"], 1)
+        async with self.runtime_class(
+            self.sessions, self.tenant.uuid
+        ).transaction() as uow:
+            resumed = await SqlAlchemyCatalogImportRepository(uow.session).get(
+                EntityIdVO(UUID(identifier))
+            )
+            self.assertNotEqual(resumed.job_id.uuid, stopped_job.id)
+            self.assertEqual(
+                await uow.session.scalar(
+                    select(ScheduledJobModel.status).where(
+                        ScheduledJobModel.id == resumed.job_id.uuid
+                    )
+                ),
+                "scheduled",
+            )
+        with patch.object(dnk_config.CATALOG_IMPORT, "batch_size", 1):
+            await self.execute_current(identifier)
+        await self.worker.handle(first)
+        await self.worker.handle(stopped_job)
+        self.assertEqual((await self.get_import(identifier))["run"]["processed"], 2)
+        await self.client.post(
+            f"{self.base}/imports/{identifier}/cancel", headers=self.headers
+        )
+        await self.execute_current(identifier)
+        repeated = await self.client.post(
+            url, json={"generation": 0}, headers=self.headers
+        )
+        self.assertEqual(
+            (repeated.status_code, repeated.json()["status"]), (202, "cancelled")
+        )
+        second = await self.client.post(
+            url, json={"generation": 1}, headers=self.headers
+        )
+        self.assertEqual(second.status_code, 202, second.text)
+        await self.execute_current(identifier)
+        run = (await self.get_import(identifier))["run"]
+        self.assertEqual(
+            (run["status"], run["processed"], run["created"], run["generation"]),
+            ("completed", 3, 3, 2),
+        )
+        self.assertFalse(run["can_resume"])
+        self.assertEqual(self.downloads.count("https://example.com/source.csv"), 1)
+        rows = (await self.client.get(f"{self.base}/imports/{identifier}/rows")).json()[
+            "items"
+        ]
+        self.assertEqual(len({r["item_id"] for r in rows}), 3)
+
+    async def test_resume_conflict_expiry_csrf_and_tenant_isolation(self):
+        from src.modules.catalog.infrastructure.persistence.models.catalog_import import (
+            CatalogImportModel,
+        )
+
+        first = await self.create_import(b"sku,title\nA,One\nB,Two\n")
+        await self.execute_current(first)
+        await self.start_import(first)
+        await self.client.post(
+            f"{self.base}/imports/{first}/cancel", headers=self.headers
+        )
+        await self.execute_current(first)
+        second = await self.create_import(key="other-import")
+        await self.execute_current(second)
+        await self.start_import(second)
+        url = f"{self.base}/imports/{first}/resume"
+        conflict = await self.client.post(
+            url, json={"generation": 0}, headers=self.headers
+        )
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual((await self.get_import(first))["run"]["generation"], 0)
+        no_csrf = await self.client.post(url, json={"generation": 0})
+        self.assertEqual(no_csrf.status_code, 403)
+        self.app.state.test_context = replace(
+            self.context,
+            principal=replace(self.context.principal, tenant_id=str(self.other)),
+        )
+        try:
+            isolated = await self.client.post(
+                url, json={"generation": 0}, headers=self.headers
+            )
+            self.assertEqual(isolated.status_code, 404)
+        finally:
+            self.app.state.test_context = self.context
+        await self.execute_current(second)
+        async with self.runtime_class(
+            self.sessions, self.tenant.uuid
+        ).transaction() as uow:
+            await uow.session.execute(
+                update(CatalogImportModel)
+                .where(CatalogImportModel.id == UUID(first))
+                .values(finished_at=datetime.now(UTC) - timedelta(days=8))
+            )
+        self.assertFalse((await self.get_import(first))["run"]["can_resume"])
+        expired = await self.client.post(
+            url, json={"generation": 0}, headers=self.headers
+        )
+        self.assertEqual(expired.status_code, 409)
+
+    async def test_configured_limit_serializes_parallel_starts_and_resume(self):
+        from src.config import dnk_config
+
+        identifiers = []
+        for _ in range(3):
+            identifier = await self.create_import()
+            await self.execute_current(identifier)
+            identifiers.append(identifier)
+        details = [await self.get_import(identifier) for identifier in identifiers]
+        with patch.object(dnk_config.CATALOG_IMPORT, "max_active_per_tenant", 2):
+            responses = await asyncio.gather(
+                *(
+                    self.client.post(
+                        f"{self.base}/imports/{identifier}/start",
+                        json={"version": detail["run"]["version"]},
+                        headers=self.headers,
+                    )
+                    for identifier, detail in zip(identifiers, details)
+                )
+            )
+            self.assertEqual(sorted(r.status_code for r in responses), [202, 202, 409])
+            blocked = next(
+                i for i, r in zip(identifiers, responses) if r.status_code == 409
+            )
+            active = [i for i, r in zip(identifiers, responses) if r.status_code == 202]
+            self.assertIn(
+                "2",
+                next(
+                    r.json()["detail"]["message"]
+                    for r in responses
+                    if r.status_code == 409
+                ),
+            )
+            self.assertEqual(
+                (await self.get_import(blocked))["run"]["status"], "mapping"
+            )
+            await self.client.post(
+                f"{self.base}/imports/{active[0]}/cancel", headers=self.headers
+            )
+            # Остановка ещё занимает слот до подтверждения worker.
+            response = await self.client.post(
+                f"{self.base}/imports/{blocked}/start",
+                json={"version": 1},
+                headers=self.headers,
+            )
+            self.assertEqual(response.status_code, 409)
+            await self.execute_current(active[0])
+            await self.start_import(blocked)
+            response = await self.client.post(
+                f"{self.base}/imports/{active[0]}/resume",
+                json={"generation": 0},
+                headers=self.headers,
+            )
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual((await self.get_import(active[0]))["run"]["generation"], 0)
+            await self.client.post(
+                f"{self.base}/imports/{active[1]}/cancel", headers=self.headers
+            )
+            await self.execute_current(active[1])
+            resumed = await self.client.post(
+                f"{self.base}/imports/{active[0]}/resume",
+                json={"generation": 0},
+                headers=self.headers,
+            )
+            self.assertEqual(resumed.status_code, 202, resumed.text)
+            # Снижение лимита не отменяет уже допущенные запуски и их повторные запросы.
+            with patch.object(dnk_config.CATALOG_IMPORT, "max_active_per_tenant", 1):
+                await self.start_import(blocked)
+                rejected = await self.client.post(
+                    f"{self.base}/imports/{active[1]}/resume",
+                    json={"generation": 0},
+                    headers=self.headers,
+                )
+                self.assertEqual(rejected.status_code, 409)
+
+    async def test_active_limit_is_independent_for_each_tenant(self):
+        first = await self.create_import()
+        await self.execute_current(first)
+        await self.start_import(first)
+        original_tenant = self.tenant
+        self.app.state.test_context = replace(
+            self.context,
+            principal=replace(self.context.principal, tenant_id=str(self.other)),
+        )
+        self.tenant = self.other
+        try:
+            second = await self.create_import()
+            await self.execute_current(second)
+            await self.start_import(second)
+            self.assertEqual((await self.get_import(second))["run"]["status"], "queued")
+        finally:
+            self.tenant = original_tenant
+            self.app.state.test_context = self.context
+        self.assertEqual((await self.get_import(first))["run"]["status"], "queued")
+
+    async def test_parallel_imports_create_same_sku_once(self):
+        from src.config import dnk_config
+
+        first = await self.create_import(b"sku,title\nSHARED,One\n")
+        await self.execute_current(first)
+        second = await self.create_import(b"sku,title\nSHARED,Two\n")
+        await self.execute_current(second)
+        with patch.object(dnk_config.CATALOG_IMPORT, "max_active_per_tenant", 2):
+            await self.start_import(first)
+            await self.start_import(second)
+            await asyncio.gather(
+                self.execute_current(first), self.execute_current(second)
+            )
+        runs = [(await self.get_import(i))["run"] for i in (first, second)]
+        self.assertEqual(sum(r["created"] for r in runs), 1)
+        self.assertEqual(sum(r["skipped"] for r in runs), 1)
+        self.assertEqual(sum(r["errors"] for r in runs), 0)
+        self.assertEqual(
+            (await self.client.get(self.base + "/items?locale=ru")).json()["total"], 1
+        )
+
+    async def test_limit_migration_refuses_unsafe_downgrade_and_preserves_imports(self):
+        from src.config import dnk_config
+        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
+            TenantMigrator,
+        )
+
+        first = await self.create_import()
+        await self.execute_current(first)
+        second = await self.create_import()
+        await self.execute_current(second)
+        with patch.object(dnk_config.CATALOG_IMPORT, "max_active_per_tenant", 2):
+            await self.start_import(first)
+            await self.start_import(second)
+        with self.assertRaisesRegex(RuntimeError, "multiple imports are active"):
+            async with self.engine.begin() as connection:
+                await TenantMigrator().downgrade(
+                    connection, self.schemas[0], "0004_catalog_import_resume"
+                )
+        async with self.engine.begin() as connection:
+            self.assertEqual(
+                await TenantMigrator().current(connection, self.schemas[0]),
+                ("0005_catalog_import_limits",),
+            )
+        await self.client.post(
+            f"{self.base}/imports/{second}/cancel", headers=self.headers
+        )
+        await self.execute_current(second)
+        async with self.engine.begin() as connection:
+            await TenantMigrator().downgrade(
+                connection, self.schemas[0], "0004_catalog_import_resume"
+            )
+        async with self.engine.begin() as connection:
+            await TenantMigrator().upgrade(connection, self.schemas[0])
+        self.assertEqual((await self.get_import(first))["run"]["status"], "queued")
+        self.assertEqual((await self.get_import(second))["run"]["status"], "cancelled")
 
     async def test_source_retention_and_results_cleanup_do_not_delete_product(self):
         from src.modules.catalog.application.catalog_import.command.maintain_catalog_imports.command import (

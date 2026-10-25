@@ -26,9 +26,13 @@ class ScheduledCatalogImportQueue:
         cursor: int,
         kind: str,
         delay_seconds: int | None = None,
+        generation: int = 0,
     ) -> EntityIdVO:
         """Повторная постановка этапа сохраняет его исходный job ID."""
-        job_id = uuid5(identifier.uuid, f"{kind}:{version}:{cursor}")
+        key = f"{kind}:{version}:{cursor}"
+        job_id = uuid5(
+            identifier.uuid, f"{key}:generation:{generation}" if generation else key
+        )
         await self.scheduler(
             ScheduleScheduledJobCommand(
                 tenant_id=self.tenant_id,
@@ -37,6 +41,7 @@ class ScheduledCatalogImportQueue:
                     "import_id": str(identifier.uuid),
                     "version": version,
                     "cursor": cursor,
+                    "generation": generation,
                 },
                 run_at=self.clock.now()
                 + timedelta(
