@@ -32,6 +32,14 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "contact_point_labels",
         "contact_points",
         "contacts",
+        "crm_leads",
+        "crm_deals",
+        "crm_deal_contacts",
+        "crm_deal_companies",
+        "crm_baskets",
+        "crm_basket_items",
+        "funnels",
+        "funnel_stages",
         "currency_exchange_rate_books",
         "currency_exchange_rate_quotes",
         "files_buckets",
@@ -63,3 +71,19 @@ import src.modules.catalog.infrastructure.persistence.models.product_type_transl
 
 import src.modules.currency.infrastructure.persistence.models.exchange_rate_book  # noqa: F401
 import src.modules.currency.infrastructure.persistence.models.exchange_rate_quote  # noqa: F401
+
+import src.modules.crm.infrastructure.persistence.models.lead  # noqa: F401
+
+import src.modules.crm.infrastructure.persistence.models.deal  # noqa: F401
+
+import src.modules.crm.infrastructure.persistence.models.deal_contact  # noqa: F401
+
+import src.modules.crm.infrastructure.persistence.models.deal_company  # noqa: F401
+
+import src.modules.crm.infrastructure.persistence.models.basket  # noqa: F401
+
+import src.modules.crm.infrastructure.persistence.models.basket_item  # noqa: F401
+
+import src.modules.funnel.infrastructure.persistence.models.funnel  # noqa: F401
+
+import src.modules.funnel.infrastructure.persistence.models.stage  # noqa: F401

@@ -8,6 +8,7 @@ import { accessRoutes } from "@/modules/access/routes";
 import { authRoutes } from "@/modules/auth/routes";
 import { catalogRoutes } from "@/modules/catalog/routes";
 import { filesRoutes } from "@/modules/files/routes";
+import { funnelRoutes } from "@/modules/funnel";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
 
@@ -38,6 +39,7 @@ export const router = createRouter({
         ...dashboardRoutes,
         ...catalogRoutes,
         ...crmRoutes,
+        ...funnelRoutes,
         {
           path: "settings/members",
           redirect: { name: "admin-users" },

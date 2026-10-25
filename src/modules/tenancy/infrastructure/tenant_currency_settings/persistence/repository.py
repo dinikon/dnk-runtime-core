@@ -8,6 +8,7 @@ from src.modules.tenancy.domain.tenant_currency_settings.error import (
     TenantCurrencySettingsNotFoundError,
 )
 from src.modules.tenancy.infrastructure.persistence.models.tenant_currency_settings import (
+    TENANT_CURRENCY_SETTINGS_ID,
     TenantCurrencySettingsModel,
 )
 from src.modules.tenancy.infrastructure.tenant_currency_settings.persistence.mapper import (
@@ -25,7 +26,9 @@ class SqlAlchemyTenantCurrencySettingsRepository:
     async def get(self) -> TenantCurrencySettings | None:
         """Читает единственную запись текущей схемы и восстанавливает агрегат."""
         table = TenantCurrencySettingsModel.__table__
-        result = await self._session.execute(select(table).where(table.c.id == 1))
+        result = await self._session.execute(
+            select(table).where(table.c.id == TENANT_CURRENCY_SETTINGS_ID)
+        )
         row = result.mappings().one_or_none()
         return None if row is None else TenantCurrencySettingsMapper.to_domain(row)
 
@@ -34,7 +37,7 @@ class SqlAlchemyTenantCurrencySettingsRepository:
         table = TenantCurrencySettingsModel.__table__
         result = await self._session.execute(
             update(table)
-            .where(table.c.id == 1)
+            .where(table.c.id == TENANT_CURRENCY_SETTINGS_ID)
             .values(TenantCurrencySettingsMapper.to_update_values(settings))
         )
         if result.rowcount != 1:

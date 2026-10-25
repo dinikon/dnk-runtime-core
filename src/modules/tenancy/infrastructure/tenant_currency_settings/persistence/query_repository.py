@@ -6,6 +6,7 @@ from src.modules.tenancy.application.tenant_currency_settings.query.get_tenant_c
 )
 from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 from src.modules.tenancy.infrastructure.persistence.models.tenant_currency_settings import (
+    TENANT_CURRENCY_SETTINGS_ID,
     TenantCurrencySettingsModel,
 )
 from src.modules.tenancy.infrastructure.tenant_currency_settings.persistence.query_mapper import (
@@ -29,7 +30,9 @@ class SqlAlchemyTenantCurrencySettingsQueryRepository:
             return None
         settings = TenantCurrencySettingsModel.__table__
         result = await self._session.execute(
-            select(settings.c.base_currency).where(settings.c.id == 1)
+            select(settings.c.base_currency).where(
+                settings.c.id == TENANT_CURRENCY_SETTINGS_ID
+            )
         )
         row = result.mappings().one_or_none()
         return (

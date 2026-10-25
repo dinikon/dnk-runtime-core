@@ -239,7 +239,8 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(IntegrityError):
                 async with connection.begin_nested():
                     await connection.execute(
-                        text(f'UPDATE "{schema}".tenant_currency_settings SET id=2')
+                        text(f'UPDATE "{schema}".tenant_currency_settings SET id=:id'),
+                        {"id": uuid4()},
                     )
             await connection.execute(
                 text(f'CREATE TABLE "{schema}".legacy_objects (id integer)')

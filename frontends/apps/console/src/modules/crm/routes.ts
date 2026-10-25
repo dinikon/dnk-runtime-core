@@ -5,6 +5,30 @@ export const crmRoutes: RouteRecordRaw[] = [
     path: "crm",
     component: () => import("./pages/CrmWorkspacePage.vue"),
     children: [
+      {
+        path: "leads",
+        name: "crm-leads",
+        component: () => import("./pages/SalesCollectionPage.vue"),
+        props: { kind: "leads" },
+      },
+      {
+        path: "deals",
+        name: "crm-deals",
+        component: () => import("./pages/SalesCollectionPage.vue"),
+        props: { kind: "deals" },
+      },
+      {
+        path: "leads/:id",
+        name: "crm-lead-detail",
+        component: () => import("./pages/SaleDetailPage.vue"),
+        props: (route) => ({ kind: "leads", id: route.params.id }),
+      },
+      {
+        path: "deals/:id",
+        name: "crm-deal-detail",
+        component: () => import("./pages/SaleDetailPage.vue"),
+        props: (route) => ({ kind: "deals", id: route.params.id }),
+      },
       { path: "", redirect: { name: "crm-contacts" } },
       {
         path: "contacts",

@@ -187,6 +187,17 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             {path for path in paths if path.startswith("/api/console/crm")},
             {
+                "/api/console/crm/leads",
+                "/api/console/crm/leads/{lead_id}",
+                "/api/console/crm/leads/{lead_id}/stage",
+                "/api/console/crm/leads/{lead_id}/funnel",
+                "/api/console/crm/leads/{lead_id}/conversion-context",
+                "/api/console/crm/leads/{lead_id}/convert",
+                "/api/console/crm/deals",
+                "/api/console/crm/deals/{deal_id}",
+                "/api/console/crm/deals/{deal_id}/stage",
+                "/api/console/crm/deals/{deal_id}/funnel",
+                "/api/console/crm/deal-currencies",
                 "/api/console/crm/contacts",
                 "/api/console/crm/contacts/{contact_id}",
                 "/api/console/crm/contacts/{contact_id}/companies",

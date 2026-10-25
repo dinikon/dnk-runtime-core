@@ -1,0 +1,43 @@
+from dataclasses import asdict
+from uuid import UUID
+from fastapi import Query
+from src.modules.identity.presentation.auth.depends import (
+    AuthenticatedRequestContextDep,
+)
+from src.modules.crm.presentation.sales.context import sales_identity
+from src.modules.crm.presentation.depends.sales import ChangeLeadFunnelHandlerDep
+from src.modules.crm.application.lead.command.change_funnel_lead.command import (
+    ChangeLeadFunnelCommand,
+)
+from src.modules.crm.presentation.lead.http.response.change_funnel_lead import (
+    ChangeFunnelLeadResponse,
+)
+from sqlalchemy.exc import IntegrityError
+from src.modules.shared.domain.domain_error import DomainError
+from src.modules.crm.presentation.sales.errors import sales_http_error
+from src.modules.crm.presentation.lead.http.request.change_funnel_lead import (
+    ChangeFunnelLeadRequest,
+)
+
+
+async def change_funnel_lead(
+    lead_id: UUID,
+    context: AuthenticatedRequestContextDep,
+    handler: ChangeLeadFunnelHandlerDep,
+    payload: ChangeFunnelLeadRequest,
+) -> ChangeFunnelLeadResponse:
+    """Явно преобразует HTTP change_funnel в конкретный сценарий и собственный Response."""
+    tenant_id, actor_id = sales_identity(context)
+    try:
+        result = await handler.execute(
+            ChangeLeadFunnelCommand(
+                tenant_id=tenant_id,
+                actor_id=actor_id,
+                record_id=lead_id,
+                expected_position_revision=payload.expected_position_revision,
+                funnel_id=payload.funnel_id,
+            )
+        )
+    except (DomainError, IntegrityError, ValueError, ArithmeticError) as exc:
+        raise sales_http_error(exc) from exc
+    return ChangeFunnelLeadResponse.model_validate(asdict(result))
