@@ -11,4 +11,4 @@ class CreateFunnelCommand:
     actor_id: UUID
     model_key: str
     name: str
-    stages: tuple[StageInput, ...]
+    stages: tuple[StageInput, ...] | None = None

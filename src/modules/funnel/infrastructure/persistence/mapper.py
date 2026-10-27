@@ -27,7 +27,9 @@ class FunnelMapper:
                 )
             },
             stages=tuple(
-                Stage.restore(stage_id=s["id"], name=s["name"], color=s["color"])
+                Stage.restore(
+                    stage_id=s["id"], name=s["name"], color=s["color"], kind=s["kind"]
+                )
                 for s in stages
             ),
         )

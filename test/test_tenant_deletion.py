@@ -1,5 +1,9 @@
 """Real PostgreSQL deletion, late-delivery fences and admission drain races."""
 
+from cryptography.fernet import Fernet
+from src.modules.shared.infrastructure.crypto.fernet_cipher import FernetCipher
+
+
 import asyncio
 import os
 import unittest
@@ -81,6 +85,7 @@ class TenantDeletionTests(unittest.IsolatedAsyncioTestCase):
         self.engine = create_async_engine(os.environ["TEST_CP_POSTGRES_URL"])
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         self.settings = configuration()
+        self.cipher = FernetCipher(Fernet.generate_key().decode())
         self.eraser = AsyncMock()
         self.worker = DeletionWorker(self.sessions, self.settings, "dnk_", self.eraser)
         self.payloads = []
@@ -129,15 +134,18 @@ class TenantDeletionTests(unittest.IsolatedAsyncioTestCase):
         self.payloads.append(payload)
         async with self.sessions() as session, session.begin():
             repository = ProvisioningRepository(
-                session, self.settings, TenancyAdapter(session, "dnk_")
+                session,
+                self.settings,
+                TenancyAdapter(session, "dnk_"),
+                cipher=self.cipher,
             )
             await AcceptProvisioningCommand(repository, self.settings)(
                 ProvisioningCommand.model_validate(payload), payload["attempt_id"]
             )
         if run:
-            await Installer(self.sessions, self.settings, "dnk_").run(
-                UUID(payload["attempt_id"])
-            )
+            await Installer(
+                self.sessions, self.settings, "dnk_", cipher=self.cipher
+            ).run(UUID(payload["attempt_id"]))
         async with self.sessions() as session:
             installation = await session.get(
                 InstallationModel, UUID(payload["tenant_id"])
@@ -530,7 +538,7 @@ class TenantDeletionTests(unittest.IsolatedAsyncioTestCase):
         payload, runtime_id = await self.install(run=False)
         command = self.command(payload, source="operator")
         await self.accept(command)
-        await Installer(self.sessions, self.settings, "dnk_").run(
+        await Installer(self.sessions, self.settings, "dnk_", cipher=self.cipher).run(
             UUID(payload["attempt_id"])
         )
         async with self.sessions() as session:
@@ -541,7 +549,8 @@ class TenantDeletionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ProvisioningConflict):
             async with self.sessions() as session, session.begin():
                 await AcceptProvisioningCommand(
-                    ProvisioningRepository(session, self.settings), self.settings
+                    ProvisioningRepository(session, self.settings, cipher=self.cipher),
+                    self.settings,
                 )(ProvisioningCommand.model_validate(payload), payload["attempt_id"])
 
     async def test_operator_can_fence_a_tenant_never_received_by_runtime(self):

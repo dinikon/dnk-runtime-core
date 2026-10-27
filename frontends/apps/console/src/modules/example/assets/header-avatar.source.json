@@ -1,0 +1,6 @@
+{
+  "asset": "header-avatar.png",
+  "generator": "Built-in image_gen",
+  "reference": "Screenshot 2026-10-26 at 09.22.59.png",
+  "prompt": "Use the supplied screenshot only as a reference for the small colorful circular illustrated avatar. Create a standalone square profile-avatar artwork closely matching that avatar: a friendly stylized young adult with swept brown hair, oversized dark rounded glasses, pink face, dark jacket, cyan and violet neon accents, vibrant purple and blue illustrated background. Tight head-and-shoulders portrait, face looking slightly to the right, character centered, visually readable at 48 CSS pixels. Preserve the original small avatar's illustrated character, colors and overall framing as closely as practical. Fill the square canvas edge-to-edge with the avatar artwork; the website will crop it to a circle. No interface, no screenshot framing, no words, no logos, no text. This is a UI asset, not a new page concept."
+}

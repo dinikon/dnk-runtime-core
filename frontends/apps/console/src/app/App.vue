@@ -22,5 +22,5 @@ const toasterTheme = computed(() => (mode.value === "dark" ? "dark" : "light"));
 
 <template>
   <RouterView />
-  <Toaster rich-colors close-button :theme="toasterTheme" />
+  <Toaster rich-colors close-button :theme="toasterTheme" :visible-toasts="9" />
 </template>

@@ -1,9 +1,7 @@
 """Instance-local integration settings; no shared database or broker with Core."""
 
-import base64
 import ipaddress
 import re
-from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -28,8 +26,6 @@ class ControlPlaneSettings(BaseModel):
     instance_id: UUID | None = None
     trusted_proxy_networks: list[str] = Field(default_factory=list)
     allowed_core_fingerprints: list[str] = Field(default_factory=list)
-    secret_encryption_key: str = Field(default="", repr=False)
-    encryption_key_path: str = ""
     client_cert_path: str = ""
     client_key_path: str = ""
     ca_bundle_path: str = ""
@@ -56,26 +52,6 @@ class ControlPlaneSettings(BaseModel):
 
     @model_validator(mode="after")
     def validate_integration(self):
-        if self.secret_encryption_key and self.encryption_key_path:
-            raise ValueError("Use secret_encryption_key OR encryption_key_path")
-        if self.encryption_key_path:
-            try:
-                self.secret_encryption_key = (
-                    Path(self.encryption_key_path).read_text().strip()
-                )
-            except OSError:
-                raise ValueError(
-                    "Cannot read Control Plane encryption key file"
-                ) from None
-        if self.secret_encryption_key:
-            try:
-                valid_key = (
-                    len(base64.urlsafe_b64decode(self.secret_encryption_key)) == 32
-                )
-            except (ValueError, TypeError):
-                valid_key = False
-            if not valid_key:
-                raise ValueError("Control Plane encryption key must be a Fernet key")
         for field in ("public_origin", "management_origin"):
             value = getattr(self, field)
             if value:
@@ -143,7 +119,6 @@ class ControlPlaneSettings(BaseModel):
                 "allowed_base_domains",
                 "trusted_proxy_networks",
                 "allowed_core_fingerprints",
-                "secret_encryption_key",
                 "client_cert_path",
                 "client_key_path",
                 "ca_bundle_path",

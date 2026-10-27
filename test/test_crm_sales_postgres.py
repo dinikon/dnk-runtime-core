@@ -165,6 +165,8 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "stages": [
                     {"client_key": "a", "name": "Первый"},
                     {"client_key": "b", "name": "Второй"},
+                    {"client_key": "won", "name": "Успех", "kind": "won"},
+                    {"client_key": "lost", "name": "Отказ", "kind": "lost"},
                 ],
             },
         )
@@ -196,7 +198,7 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "expected_revision": 1,
                 "stages": [
                     dict(id=s["id"], name=s["name"], color=s["color"])
-                    for s in reversed(funnel["stages"])
+                    for s in [*reversed(funnel["stages"][:2]), *funnel["stages"][2:]]
                 ],
             },
         )
@@ -558,7 +560,7 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
             await migrator.upgrade(connection, self.schemas[0])
             self.assertEqual(
                 await migrator.current(connection, self.schemas[0]),
-                ("0002_crm_sales_mvp",),
+                (migrator.head(),),
             )
         self.assertEqual((await self.client.get(path)).json(), contact.json())
         self.assertEqual(
@@ -571,3 +573,315 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
         definitions = await self.client.get("/api/console/funnels")
         self.assertEqual(definitions.status_code, 200, definitions.text)
         self.assertEqual(definitions.json()["total"], 2)
+
+    async def definition(self, model: str = "crm.lead") -> dict:
+        """Возвращает отдельную воронку с серверным шаблоном."""
+        response = await self.client.post(
+            "/api/console/funnels",
+            headers=self.headers,
+            json={"model_key": model, "name": "Тест стадий"},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        return (
+            await self.client.get("/api/console/funnels/" + response.json()["id"])
+        ).json()
+
+    @staticmethod
+    def stage_payload(stage: dict) -> dict:
+        """Исключает read-only поля из полного определения."""
+        return {key: stage[key] for key in ("id", "name", "color", "kind")}
+
+    async def test_stage_deletion_new_initial_history_and_counts(self) -> None:
+        """Переносит на новую начальную, сохраняя версии и историю удалённых стадий."""
+        from src.modules.crm.infrastructure.persistence.models.position_history import (
+            PositionHistoryModel,
+        )
+
+        lead = await self.create_lead()
+        funnel = (
+            await self.client.get("/api/console/funnels/" + lead["funnel_id"])
+        ).json()
+        self.assertEqual(funnel["stages"][0]["cards_count"], 1)
+        old_id = lead["stage_id"]
+        replacement = [
+            {"client_key": "new", "name": "Другой старт", "color": "#abcdef"},
+            *[self.stage_payload(s) for s in funnel["stages"][2:]],
+        ]
+        result = await self.client.put(
+            "/api/console/funnels/" + funnel["id"],
+            headers=self.headers,
+            json={
+                "name": funnel["name"],
+                "expected_revision": funnel["revision"],
+                "stages": replacement,
+            },
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(result.json()["moved_cards_count"], 1)
+        updated = (await self.client.get("/api/console/crm/leads/" + lead["id"])).json()
+        self.assertEqual(updated["stage_id"], result.json()["stage_id_map"]["new"])
+        self.assertEqual(updated["position_revision"], 2)
+        definition = (
+            await self.client.get("/api/console/funnels/" + funnel["id"])
+        ).json()
+        self.assertEqual(definition["stages"][0]["color"], "#ABCDEF")
+        entries = sorted(
+            await self.rows(PositionHistoryModel), key=lambda r: r["current_revision"]
+        )
+        self.assertEqual([r["reason"] for r in entries], ["created", "stage_deleted"])
+        self.assertEqual(entries[1]["previous"]["stage_id"], old_id)
+        self.assertEqual(entries[1]["current"]["kind"], "in_progress")
+        listing = (await self.client.get("/api/console/funnels")).json()
+        self.assertNotIn("cards_count", listing["items"][0]["stages"][0])
+
+    async def test_stage_invariants_reject_without_changes(self) -> None:
+        """Тип и успешная стадия неизменяемы, формат цвета и состав проверяет API."""
+        funnel = await self.definition()
+        stages = [self.stage_payload(s) for s in funnel["stages"]]
+        invalid = [
+            [],
+            stages[:2],
+            [{**s, "color": "blue"} for s in stages],
+            [stages[0], stages[2], {**stages[1], "kind": "lost"}, stages[3]],
+            [
+                *stages[:2],
+                {"client_key": "other", "name": "Другой успех", "kind": "won"},
+                stages[3],
+            ],
+        ]
+        for values in invalid:
+            result = await self.client.put(
+                "/api/console/funnels/" + funnel["id"],
+                headers=self.headers,
+                json={"name": funnel["name"], "expected_revision": 1, "stages": values},
+            )
+            self.assertEqual(result.status_code, 422, result.text)
+        self.assertEqual(
+            (await self.client.get("/api/console/funnels/" + funnel["id"])).json(),
+            funnel,
+        )
+
+    async def test_stage_deletion_failure_rolls_back_everything(self) -> None:
+        """Ошибка записи истории откатывает определение, удаление и все позиции."""
+        from unittest.mock import patch, AsyncMock
+
+        lead = await self.create_lead()
+        funnel = (
+            await self.client.get("/api/console/funnels/" + lead["funnel_id"])
+        ).json()
+        with patch(
+            "src.modules.crm.infrastructure.persistence.position_history.SqlAlchemyPositionHistory.append",
+            new=AsyncMock(side_effect=RuntimeError("test rollback")),
+        ):
+            response = await self.client.put(
+                "/api/console/funnels/" + funnel["id"],
+                headers=self.headers,
+                json={
+                    "name": "Не сохранять",
+                    "expected_revision": 1,
+                    "stages": [self.stage_payload(s) for s in funnel["stages"][1:]],
+                },
+            )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            (await self.client.get("/api/console/funnels/" + funnel["id"])).json(),
+            funnel,
+        )
+        self.assertEqual(
+            (await self.client.get("/api/console/crm/leads/" + lead["id"])).json()[
+                "position_revision"
+            ],
+            1,
+        )
+
+    async def test_concurrent_move_and_delete_do_not_deadlock(self) -> None:
+        """Конкурирующие изменения завершаются согласованно без зависших ссылок."""
+        lead = await self.create_lead()
+        funnel = (
+            await self.client.get("/api/console/funnels/" + lead["funnel_id"])
+        ).json()
+        update, move = await asyncio.wait_for(
+            asyncio.gather(
+                self.client.put(
+                    "/api/console/funnels/" + funnel["id"],
+                    headers=self.headers,
+                    json={
+                        "name": funnel["name"],
+                        "expected_revision": 1,
+                        "stages": [self.stage_payload(s) for s in funnel["stages"][1:]],
+                    },
+                ),
+                self.client.put(
+                    "/api/console/crm/leads/" + lead["id"] + "/stage",
+                    headers=self.headers,
+                    json={
+                        "stage_id": funnel["stages"][1]["id"],
+                        "expected_position_revision": 1,
+                    },
+                ),
+            ),
+            timeout=10,
+        )
+        self.assertEqual(update.status_code, 200, update.text)
+        self.assertIn(move.status_code, (200, 409), move.text)
+        card = (await self.client.get("/api/console/crm/leads/" + lead["id"])).json()
+        self.assertEqual(card["stage_id"], funnel["stages"][1]["id"])
+        self.assertEqual(card["position_revision"], 2)
+
+    async def test_lost_deal_reopens_without_changing_lifecycle(self) -> None:
+        """Удаление неуспешной стадии возвращает сделку в работу с сохранением истории."""
+        from src.modules.crm.infrastructure.persistence.models.position_history import (
+            PositionHistoryModel,
+        )
+
+        response = await self.client.post(
+            "/api/console/crm/deals",
+            headers=self.headers,
+            json={"title": "Сделка", "basket": {"currency": "UAH", "items": []}},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        deal_id = response.json()["id"]
+        path = "/api/console/crm/deals/" + deal_id
+        deal = (await self.client.get(path)).json()
+        funnel = (
+            await self.client.get("/api/console/funnels/" + deal["funnel_id"])
+        ).json()
+        lost = funnel["stages"][-1]
+        moved = await self.client.put(
+            path + "/stage",
+            headers=self.headers,
+            json={"stage_id": lost["id"], "expected_position_revision": 1},
+        )
+        self.assertEqual(moved.status_code, 200, moved.text)
+        stages = [self.stage_payload(s) for s in funnel["stages"][:-1]] + [
+            {"client_key": "replacement", "name": "Отказ", "kind": "lost"}
+        ]
+        removed = await self.client.put(
+            "/api/console/funnels/" + funnel["id"],
+            headers=self.headers,
+            json={"name": funnel["name"], "expected_revision": 1, "stages": stages},
+        )
+        self.assertEqual(removed.status_code, 200, removed.text)
+        self.assertEqual(removed.json()["moved_cards_count"], 1)
+        card = (await self.client.get(path)).json()
+        self.assertEqual(card["stage_id"], funnel["stages"][0]["id"])
+        self.assertEqual(card["position_revision"], 3)
+        self.assertEqual(card["lifecycle_state"], "draft")
+        history = sorted(
+            await self.rows(PositionHistoryModel),
+            key=lambda row: row["current_revision"],
+        )
+        self.assertEqual(
+            [row["reason"] for row in history],
+            ["created", "manual_move", "stage_deleted"],
+        )
+        self.assertEqual(history[-1]["previous"]["kind"], "lost")
+
+    async def test_converted_lead_system_relocation_preserves_conversion(self) -> None:
+        """Системный перенос не меняет результат и пользовательскую read-only защиту."""
+        lead = await self.create_lead()
+        path = "/api/console/crm/leads/" + lead["id"]
+        context = (await self.client.get(path + "/conversion-context")).json()
+        response = await self.client.post(
+            path + "/convert",
+            headers={**self.headers, "Idempotency-Key": "relocation"},
+            json={
+                "mode": "deal",
+                "expected_source_token": context["source_token"],
+                "expected_basket_revision": lead["basket"]["revision"],
+                "deal": {"title": "Из лида"},
+                "deal_points": [],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        before = (await self.client.get(path)).json()
+        funnel = (
+            await self.client.get("/api/console/funnels/" + lead["funnel_id"])
+        ).json()
+        self.assertEqual(funnel["stages"][0]["cards_count"], 1)
+        result = await self.client.put(
+            "/api/console/funnels/" + funnel["id"],
+            headers=self.headers,
+            json={
+                "name": funnel["name"],
+                "expected_revision": 1,
+                "stages": [self.stage_payload(s) for s in funnel["stages"][1:]],
+            },
+        )
+        self.assertEqual(result.status_code, 200, result.text)
+        after = (await self.client.get(path)).json()
+        self.assertEqual(after["conversion_result"], before["conversion_result"])
+        self.assertEqual(after["position_revision"], 2)
+        manual = await self.client.put(
+            path + "/stage",
+            headers=self.headers,
+            json={
+                "stage_id": funnel["stages"][2]["id"],
+                "expected_position_revision": 2,
+            },
+        )
+        self.assertEqual(manual.status_code, 409)
+
+    async def test_concurrent_create_and_delete_choose_valid_initial(self) -> None:
+        """Создание и удаление начальной сериализуются определением воронки."""
+        funnel = await self.definition("crm.deal")
+        delete, create = await asyncio.wait_for(
+            asyncio.gather(
+                self.client.put(
+                    "/api/console/funnels/" + funnel["id"],
+                    headers=self.headers,
+                    json={
+                        "name": funnel["name"],
+                        "expected_revision": 1,
+                        "stages": [self.stage_payload(s) for s in funnel["stages"][1:]],
+                    },
+                ),
+                self.client.post(
+                    "/api/console/crm/deals",
+                    headers=self.headers,
+                    json={
+                        "title": "Одновременно",
+                        "funnel_id": funnel["id"],
+                        "basket": {"currency": "UAH", "items": []},
+                    },
+                ),
+            ),
+            timeout=10,
+        )
+        self.assertEqual(delete.status_code, 200, delete.text)
+        self.assertEqual(create.status_code, 201, create.text)
+        deal = (
+            await self.client.get("/api/console/crm/deals/" + create.json()["id"])
+        ).json()
+        self.assertEqual(deal["stage_id"], funnel["stages"][1]["id"])
+        self.assertIn(deal["position_revision"], (1, 2))
+
+    async def test_concurrent_conversion_and_destination_deletion(self) -> None:
+        """Конвертация блокирует целевое определение раньше исходного лида."""
+        lead = await self.create_lead()
+        path, body, headers = await self.conversion(
+            lead, "deal", key="concurrent-definition"
+        )
+        funnel = await self.definition("crm.deal")
+        body["deal"] = {"title": "Результат", "funnel_id": funnel["id"]}
+        delete, convert = await asyncio.wait_for(
+            asyncio.gather(
+                self.client.put(
+                    "/api/console/funnels/" + funnel["id"],
+                    headers=self.headers,
+                    json={
+                        "name": funnel["name"],
+                        "expected_revision": 1,
+                        "stages": [self.stage_payload(s) for s in funnel["stages"][1:]],
+                    },
+                ),
+                self.client.post(path + "/convert", headers=headers, json=body),
+            ),
+            timeout=10,
+        )
+        self.assertEqual(delete.status_code, 200, delete.text)
+        self.assertEqual(convert.status_code, 200, convert.text)
+        deal = (
+            await self.client.get("/api/console/crm/deals/" + convert.json()["deal_id"])
+        ).json()
+        self.assertEqual(deal["stage_id"], funnel["stages"][1]["id"])

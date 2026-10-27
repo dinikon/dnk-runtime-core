@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Self
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.funnel.domain.stage import Stage
+from src.modules.funnel.domain.stage_kind import StageKind
 from src.modules.funnel.domain.error import (
     FunnelError,
     FunnelConflictError,
@@ -34,8 +35,20 @@ class Funnel:
             or len(name) > 150
         ):
             raise FunnelError("Некорректный тип или название воронки.")
-        if not 1 <= len(stages) <= 50 or len({s.id for s in stages}) != len(stages):
-            raise FunnelError("Нужны 1–50 стадий с уникальными ID.")
+        if not 3 <= len(stages) <= 50 or len({s.id for s in stages}) != len(stages):
+            raise FunnelError("Нужны 3–50 стадий с уникальными ID.")
+        kinds = [stage.kind for stage in stages]
+        if (
+            kinds.count(StageKind.WON) != 1
+            or StageKind.LOST not in kinds
+            or StageKind.IN_PROGRESS not in kinds
+        ):
+            raise FunnelError(
+                "Нужны рабочая, ровно одна успешная и хотя бы одна неуспешная стадия."
+            )
+        order = {StageKind.IN_PROGRESS: 0, StageKind.WON: 1, StageKind.LOST: 2}
+        if kinds != sorted(kinds, key=order.__getitem__):
+            raise FunnelError("Порядок групп: в работе, успешная, неуспешные.")
 
     @classmethod
     def create(
@@ -65,6 +78,25 @@ class Funnel:
             EntityIdVO.from_value(actor_id),
         )
 
+    @staticmethod
+    def default_stages(stage_ids: tuple[EntityIdVO, ...]) -> tuple[Stage, ...]:
+        """Собирает стандартный процесс из предоставленных извне ID."""
+        if len(stage_ids) != 4:
+            raise FunnelError("Для шаблона нужны четыре ID.")
+        return tuple(
+            Stage.create(stage_id=stage_id, name=name, color=color, kind=kind)
+            for stage_id, (name, color, kind) in zip(
+                stage_ids,
+                (
+                    ("Новый", "#3B82F6", "in_progress"),
+                    ("В работе", "#06B6D4", "in_progress"),
+                    ("Успешный", "#84CC16", "won"),
+                    ("Неудачный", "#EF4444", "lost"),
+                ),
+                strict=True,
+            )
+        )
+
     @classmethod
     def restore(cls, **values: object) -> Self:
         """Восстанавливает процесс с сохранением ID и версии."""
@@ -86,13 +118,21 @@ class Funnel:
         actor_id: EntityIdVO,
         now: datetime,
     ) -> None:
-        """Проверяет версию и запрещает удаление сохранённых стадий."""
+        """Атомарно проверяет определение, сохраняя назначение и успешную стадию."""
         if expected_revision != self.revision:
             raise FunnelConflictError("Воронка изменена. Сверьте актуальные стадии.")
         name = name.strip()
         self._validate(self.model_key, name, stages)
-        if not {s.id for s in self.stages}.issubset({s.id for s in stages}):
-            raise FunnelError("Удаление сохранённых стадий пока недоступно.")
+        previous = {stage.id: stage for stage in self.stages}
+        current = {stage.id: stage for stage in stages}
+        for stage in stages:
+            if stage.id in previous and stage.kind != previous[stage.id].kind:
+                raise FunnelError("Тип сохранённой стадии изменить нельзя.")
+        if any(
+            stage.kind is StageKind.WON and stage.id not in current
+            for stage in self.stages
+        ):
+            raise FunnelError("Успешную стадию нельзя удалить или заменить.")
         if (name, stages) == (self.name, self.stages):
             return
         self.name = name

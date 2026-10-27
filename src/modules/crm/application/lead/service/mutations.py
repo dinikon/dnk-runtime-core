@@ -1,4 +1,10 @@
 from dataclasses import asdict
+from src.modules.crm.application.port.position_history import (
+    PositionHistoryPort,
+    PositionHistoryEntry,
+)
+from src.modules.crm.domain.value_object.funnel_position import FunnelPositionVO
+from src.modules.crm.domain.sales_error import SalesConflictError
 from uuid import UUID
 from src.modules.crm.domain.lead.aggregate import Lead
 from src.modules.crm.domain.lead.repository import LeadRepositoryProtocol
@@ -35,6 +41,7 @@ class LeadMutationService:
         source_points: ContactPointsPort,
         uuid: UUIdGeneratorProtocol,
         clock: ClockPort,
+        history: PositionHistoryPort,
     ) -> None:
         """Принимает порты одного внешнего UoW."""
         self.repository = repository
@@ -45,6 +52,7 @@ class LeadMutationService:
         self.source_points = source_points
         self.uuid = uuid
         self.clock = clock
+        self.history = history
 
     async def create(self, command: CreateLeadCommand) -> tuple[Lead, dict[str, UUID]]:
         """Создаёт владельца, его корзину и points в общей транзакции."""
@@ -102,6 +110,7 @@ class LeadMutationService:
             fields=fields, actor_id=EntityIdVO(command.actor_id), now=self.clock.now()
         )
         await self.repository.add(entity)
+        await self._record(entity, None, "created")
         _, mapping = await self.basket.create(
             entity.id.uuid, command.tenant_id, command.basket, command.locale
         )
@@ -165,7 +174,8 @@ class LeadMutationService:
 
     async def move(self, command: MoveLeadCommand) -> tuple[Lead, dict[str, UUID]]:
         """Перемещает только стадию текущего процесса."""
-        entity = await self._load(command.record_id)
+        entity = await self._load_position(command.record_id)
+        previous = entity.position
         selected = await self.funnels.resolve(
             "crm.lead", entity.position.funnel_id.uuid, command.stage_id
         )
@@ -177,13 +187,15 @@ class LeadMutationService:
             now=self.clock.now(),
         )
         await self.repository.save(entity)
+        await self._record(entity, previous, "manual_move")
         return entity, {}
 
     async def change_funnel(
         self, command: ChangeLeadFunnelCommand
     ) -> tuple[Lead, dict[str, UUID]]:
         """Явно переносит в первую стадию другой воронки."""
-        entity = await self._load(command.record_id)
+        entity = await self._load_position(command.record_id, command.funnel_id)
+        previous = entity.position
         if command.funnel_id == entity.position.funnel_id.uuid:
             selected = entity.position
         else:
@@ -196,4 +208,50 @@ class LeadMutationService:
             now=self.clock.now(),
         )
         await self.repository.save(entity)
+        await self._record(entity, previous, "funnel_changed")
         return entity, {}
+
+    async def _load_position(self, record_id: UUID, target: UUID | None = None) -> Lead:
+        """Блокирует определения до карточки и перепроверяет предварительное чтение."""
+        before = await self.repository.get(EntityIdVO(record_id))
+        if before is None:
+            raise SalesNotFoundError("Карточка не найдена.")
+        await self.funnels.lock(
+            "crm.lead",
+            (before.position.funnel_id.uuid, target or before.position.funnel_id.uuid),
+        )
+        entity = await self._load(record_id)
+        if entity.position != before.position:
+            raise SalesConflictError("Карточка уже перемещена. Обновите положение.")
+        return entity
+
+    async def _record(
+        self, entity: Lead, previous: FunnelPositionVO | None, reason: str
+    ) -> None:
+        """Добавляет историю только реального изменения позиции."""
+        if previous == entity.position:
+            return
+        old = (
+            await self.funnels.describe(
+                "crm.lead", previous.funnel_id.uuid, previous.stage_id.uuid
+            )
+            if previous
+            else None
+        )
+        current = await self.funnels.describe(
+            "crm.lead", entity.position.funnel_id.uuid, entity.position.stage_id.uuid
+        )
+        await self.history.append(
+            PositionHistoryEntry(
+                self.uuid.new(),
+                "crm.lead",
+                entity.id.uuid,
+                old,
+                current,
+                previous.revision if previous else None,
+                entity.position.revision,
+                reason,
+                entity.updated_by.uuid,
+                entity.updated_at,
+            )
+        )

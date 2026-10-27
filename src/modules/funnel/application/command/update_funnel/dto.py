@@ -9,3 +9,4 @@ class UpdateFunnelResultDTO:
     id: UUID
     revision: int
     stage_id_map: dict[str, UUID]
+    moved_cards_count: int

@@ -37,7 +37,11 @@ async def create_funnel(
                 actor_id=actor_id,
                 model_key=payload.model_key,
                 name=payload.name,
-                stages=tuple(StageInput(**s.model_dump()) for s in payload.stages),
+                stages=(
+                    tuple(StageInput(**s.model_dump()) for s in payload.stages)
+                    if payload.stages is not None
+                    else None
+                ),
             )
         )
     except (DomainError, IntegrityError, ValueError) as exc:

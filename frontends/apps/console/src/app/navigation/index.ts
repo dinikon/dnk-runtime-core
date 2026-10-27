@@ -1,4 +1,9 @@
 export { adminNavigation } from "./admin-navigation";
+export { exampleNavigation } from "./example-navigation";
+export type {
+  ExampleNavigationGroup,
+  ExampleNavigationItem,
+} from "./example-navigation";
 export type {
   AdminNavigationGroup,
   AdminNavigationItem,

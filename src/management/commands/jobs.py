@@ -20,6 +20,10 @@ from pathlib import Path
 import signal
 
 from src.config import dnk_config
+from src.modules.channels.presentation.jobs.verify_connection import (
+    ChannelsVerifyConnectionJobHandler,
+)
+from src.modules.channels.infrastructure.jobs import JOB_TYPE as CHANNELS_VERIFY_JOB_TYPE
 from src.modules.reference_data.presentation.jobs.refresh import (
     JOB_TYPE,
     ReferenceDataRefreshJobHandler,
@@ -129,6 +133,9 @@ async def handle_worker(_args: argparse.Namespace) -> int:
     catalog_imports = CatalogImportJobHandler(db_helper.session_factory)
     dispatcher = build_scheduled_job_dispatcher(
         {
+            CHANNELS_VERIFY_JOB_TYPE: ChannelsVerifyConnectionJobHandler(
+                db_helper.session_factory
+            ),
             JOB_TYPE: ReferenceDataRefreshJobHandler(db_helper.session_factory),
             "catalog.import.prepare": catalog_imports,
             "catalog.import.run": catalog_imports,

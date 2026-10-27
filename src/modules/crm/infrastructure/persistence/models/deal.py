@@ -18,6 +18,8 @@ class DealModel(EntityAuditMixin, AudienceMixin, TenantBase):
             ["funnel_id", "stage_id"],
             ["tenant.funnel_stages.funnel_id", "tenant.funnel_stages.id"],
             name="fk_deal_stage",
+            deferrable=True,
+            initially="DEFERRED",
         ),
         sa.CheckConstraint("position_revision>0", name="ck_deal_position_revision"),
         sa.Index("ix_deal_kanban", "funnel_id", "stage_id", "updated_at", "id"),

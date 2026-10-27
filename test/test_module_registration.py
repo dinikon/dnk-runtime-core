@@ -27,14 +27,11 @@ class ModuleRegistrationTests(unittest.TestCase):
     def test_removed_source_modules_are_absent(self) -> None:
         """Backend и Console не содержат исходников удалённых модулей."""
         for relative in (
-            "src/modules/channels",
             "src/modules/inventory",
             "src/modules/warehousing",
             "src/modules/price_lists",
-            "frontends/apps/console/src/modules/channels",
             "frontends/apps/console/src/modules/inventory",
             "frontends/apps/console/src/modules/price-lists",
-            "src/config/feature/channels_config.py",
             "src/config/feature/price_lists_config.py",
         ):
             self.assertFalse((ROOT / relative).exists(), relative)
@@ -44,7 +41,6 @@ class ModuleRegistrationTests(unittest.TestCase):
         schema = create_app().openapi()
         paths = set(schema["paths"])
         for prefix in (
-            "/api/console/channels",
             "/api/channels",
             "/api/console/inventory",
             "/api/console/warehousing",
@@ -56,12 +52,12 @@ class ModuleRegistrationTests(unittest.TestCase):
             any(
                 token in name.lower()
                 for name in schema["components"]["schemas"]
-                for token in ("channel", "pricelist", "partneroffer")
+                for token in ("pricelist", "partneroffer")
             )
         )
         self.assertFalse(
             any(
-                {"channels", "price-lists", "price-list-offers"}.intersection(
+                {"price-lists", "price-list-offers"}.intersection(
                     operation.get("tags", ())
                 )
                 for methods in schema["paths"].values()
@@ -71,6 +67,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         for prefix in (
             "/api/console/catalog",
             "/api/console/files",
+            "/api/console/channels",
             "/api/console/crm/contacts",
             "/api/console/crm/companies",
         ):
@@ -88,6 +85,8 @@ class ModuleRegistrationTests(unittest.TestCase):
                 "files_registry",
                 "users",
                 "tenant_currency_settings",
+                "channels",
+                "channel_connections",
             }
             <= tables
         )
@@ -105,7 +104,7 @@ class ModuleRegistrationTests(unittest.TestCase):
             }.isdisjoint(tables)
         )
         self.assertFalse(
-            any(name.startswith(("channel", "warehousing_")) for name in tables)
+            any(name.startswith("warehousing_") for name in tables)
         )
 
     def test_migrations_extend_independent_schema_baselines(self) -> None:
@@ -139,6 +138,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         from src.management.cli import build_parser
 
         self.assertNotIn("CHANNELS", type(dnk_config).model_fields)
+        self.assertIn("ENCRYPTION", type(dnk_config).model_fields)
         self.assertNotIn("PRICE_LISTS", type(dnk_config).model_fields)
         self.assertEqual(
             build_parser().parse_args(["jobs", "worker"]).handler.__name__,
@@ -148,7 +148,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         self.assertFalse(
             any(
                 isinstance(n, ast.ImportFrom)
-                and {"channels", "price_lists"}.intersection(
+                and {"price_lists"}.intersection(
                     (n.module or "").split(".")
                 )
                 for n in ast.walk(tree)

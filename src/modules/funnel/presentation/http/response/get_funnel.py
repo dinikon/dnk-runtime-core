@@ -10,6 +10,8 @@ class StageResponse(BaseModel):
     name: str
     color: str
     position: int
+    kind: str
+    cards_count: int
 
 
 class GetFunnelResponse(BaseModel):
