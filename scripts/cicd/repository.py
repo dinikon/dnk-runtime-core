@@ -18,6 +18,7 @@ from .common import (
     stable,
     versions,
 )
+from .formatting import PYTHON_PATHS, format_python
 
 
 class Repo:
@@ -120,13 +121,18 @@ class Repo:
             finally:
                 self.git("worktree", "remove", "--force", str(path))
 
-    def bump(self, app, chart, metadata):
-        """Run Commitizen once and refuse to reuse an unrelated version tag."""
+    def bump(self, app: str, chart: str, metadata: dict[str, object]) -> str:
+        """Форматирует Python и создаёт версионный коммит, не заменяя готовый тег."""
         tag = "v" + app
         if self.exists(f"refs/tags/{tag}"):
             if self.metadata(tag) != metadata or self.sha(tag) != self.sha():
                 raise Error(f"Refusing to reuse unrelated tag {tag}")
             return tag
+        self.clean()
+        format_python(self.root)
+        paths = [name for name in PYTHON_PATHS if (self.root / name).is_dir()]
+        if paths:
+            self.git("add", "--update", "--", *paths)
         set_chart_version(self.root, chart)
         run(
             sys.executable,
