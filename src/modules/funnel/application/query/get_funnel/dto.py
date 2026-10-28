@@ -6,6 +6,18 @@ from src.modules.funnel.application.port.read_row import FunnelReadRowDTO
 
 
 @dataclass(frozen=True, slots=True)
+class GetFunnelStageDTO:
+    """Стадия карточки определения с актуальным количеством владельцев."""
+
+    id: UUID
+    name: str
+    color: str
+    position: int
+    kind: str
+    cards_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class GetFunnelResultDTO:
     """Конкретный результат чтения get процесса."""
 
@@ -14,6 +26,6 @@ class GetFunnelResultDTO:
     name: str
     is_default: bool
     revision: int
-    stages: tuple[StageProjection, ...]
+    stages: tuple[GetFunnelStageDTO, ...]
     created_at: datetime
     updated_at: datetime

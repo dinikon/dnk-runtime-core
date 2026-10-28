@@ -1,6 +1,6 @@
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from uuid import UUID
-from sqlalchemy import select, insert, update
+from sqlalchemy import select, insert, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.funnel.domain.aggregate import Funnel
 from src.modules.funnel.infrastructure.persistence.models.funnel import FunnelModel
@@ -66,7 +66,12 @@ class SqlAlchemyFunnelRepository:
     async def _stages(self, entity: Funnel, existing: set[UUID]) -> None:
         """Сохраняет ID существующих стадий; FK карточек остаются неизменны."""
         for position, stage in enumerate(entity.stages):
-            values = dict(name=stage.name, color=stage.color, position=position)
+            values = dict(
+                name=stage.name,
+                color=stage.color.value,
+                kind=stage.kind.value,
+                position=position,
+            )
             if stage.id.uuid in existing:
                 await self._session.execute(
                     update(FunnelStageModel)
@@ -100,3 +105,9 @@ class SqlAlchemyFunnelRepository:
             update(FunnelModel).where(FunnelModel.id == entity.id).values(**values)
         )
         await self._stages(entity, existing)
+        await self._session.execute(
+            delete(FunnelStageModel).where(
+                FunnelStageModel.funnel_id == entity.id,
+                FunnelStageModel.id.not_in([stage.id.uuid for stage in entity.stages]),
+            )
+        )

@@ -1,3 +1,4 @@
+from src.modules.shared.presentation.crypto.depends import CipherDep
 import asyncio
 from uuid import UUID
 from typing import Literal
@@ -74,8 +75,12 @@ async def status(request: Request, uow: UoWDep):
     dependencies=[Depends(require_management)],
 )
 async def provision(
-    request: Request, uow: UoWDep, idempotency_key: str = Header(default="")
-):
+    request: Request,
+    uow: UoWDep,
+    cipher: CipherDep,
+    idempotency_key: str = Header(default=""),
+) -> AttemptResponse:
+    """Принимает установку с общим Cipher и прежней атомарной фиксацией команды."""
     # Manual parsing keeps FastAPI validation responses from echoing secret inputs.
     try:
         content_length = int(request.headers.get("content-length", "0"))
@@ -94,6 +99,7 @@ async def provision(
             uow.session,
             settings(request),
             TenancyAdapter(uow.session, dnk_config.SCHEMA_PREFIX),
+            cipher=cipher,
         )
         result = await AcceptProvisioningCommand(repository, settings(request))(
             command, idempotency_key
@@ -115,10 +121,13 @@ async def provision(
     response_model=AttemptResponse,
     dependencies=[Depends(require_management)],
 )
-async def lookup(attempt_id: UUID, request: Request, uow: UoWDep):
-    result = await ProvisioningRepository(uow.session, settings(request)).lookup(
-        attempt_id
-    )
+async def lookup(
+    attempt_id: UUID, request: Request, uow: UoWDep, cipher: CipherDep
+) -> AttemptResponse:
+    """Читает сохранённую попытку через ту же сборку зависимостей проекта."""
+    result = await ProvisioningRepository(
+        uow.session, settings(request), cipher=cipher
+    ).lookup(attempt_id)
     if result is None:
         raise HTTPException(404, "Attempt not found")
     return result
@@ -148,13 +157,20 @@ async def instance_routing(request: Request):
 
 
 @router.get("/.well-known/dnk/tenant-ready")
-async def public_ready(request: Request, uow: UoWDep):
+async def public_ready(
+    request: Request, uow: UoWDep, cipher: CipherDep
+) -> JSONResponse:
+    """Проверяет готовность, расшифровывая сохранённые данные общим Cipher."""
     config = settings(request)
     if not config.enabled:
         raise HTTPException(503, "Integration is disabled")
     try:
         result = await tenant_ready(
-            uow.session, config, dnk_config.SCHEMA_PREFIX, extract_request_host(request)
+            uow.session,
+            config,
+            dnk_config.SCHEMA_PREFIX,
+            extract_request_host(request),
+            cipher=cipher,
         )
     except Exception:
         await uow.rollback()

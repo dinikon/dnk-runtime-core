@@ -49,6 +49,12 @@ export function safeProductHtml(value: string | null | undefined): string {
   });
 }
 export function productPrice(item: CatalogItem): string {
+  if (item.kind === "variable")
+    return item.mixed_currencies
+      ? "Разные валюты"
+      : item.min_price != null
+        ? `${item.min_price}${item.max_price !== item.min_price ? "–" + item.max_price : ""} ${item.currency ?? ""}`
+        : "Цена вариантов не задана";
   return item.price === null
     ? "Не задано"
     : `${item.price} ${item.price_specification?.currency ?? ""}`.trim();
@@ -80,7 +86,10 @@ export function overviewModel(
     status: statusLabels[item.status]!,
     sku: item.sku,
     price: productPrice(item),
-    stock: stockLabels[item.stock_status ?? ""] ?? "Не задано",
+    stock:
+      item.kind === "variable" && !item.stock.manage_stock
+        ? "Наличие задаётся в вариантах"
+        : (stockLabels[item.stock_status ?? ""] ?? "Не задано"),
     available: item.available_for_sale,
     body: safeProductHtml(item.content?.body),
     images: (item.gallery?.images ?? []).map((v) => ({
@@ -91,4 +100,15 @@ export function overviewModel(
     measurements,
     quantity: item.stock.manage_stock ? item.stock.stock_quantity : null,
   };
+}
+
+/** Выбирает поля формы; эффективное наличие по-прежнему вычисляет Backend. */
+export function stockFormMode(
+  kind: "simple" | "variable" | "variant",
+  own: import("./product.types").ProductStock,
+  parent?: import("./product.types").ProductStock,
+): "quantity" | "manual" | "inherited" | "variants" {
+  if (own.manage_stock) return "quantity";
+  if (kind === "variable") return "variants";
+  return kind === "variant" && parent?.manage_stock ? "inherited" : "manual";
 }

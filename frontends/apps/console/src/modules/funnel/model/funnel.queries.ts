@@ -1,6 +1,6 @@
 import { useScopedQueryCache } from "@/shared/model/use-scoped-query-cache";
 import { funnelKeys } from "./funnel.query-keys";
-import type { Funnel, FunnelPage } from "./funnel.types";
+import type { Funnel, FunnelDetails, FunnelPage } from "./funnel.types";
 import type { UseQueryReturnType } from "@tanstack/vue-query";
 import { computed, type Ref, type ComputedRef } from "vue";
 import { useQuery } from "@tanstack/vue-query";
@@ -31,7 +31,9 @@ export function useFunnels(
       funnelApi.list(modelKey.value, search.value, offset.value, signal),
   });
 }
-export function useFunnel(id: Ref<string>): UseQueryReturnType<Funnel, Error> {
+export function useFunnel(
+  id: Ref<string>,
+): UseQueryReturnType<FunnelDetails, Error> {
   const scope = useFunnelScope();
   return useQuery({
     queryKey: computed(() => funnelKeys.detail(scope.value, id.value)),

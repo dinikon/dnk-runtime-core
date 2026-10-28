@@ -12,6 +12,9 @@ class ResolvedFunnelStageDTO:
     funnel_id: UUID
     stage_id: UUID
     definition_revision: int
+    funnel_name: str
+    stage_name: str
+    kind: str
 
 
 class ResolveFunnelStageService:
@@ -37,4 +40,21 @@ class ResolveFunnelStageService:
         stage = entity.select_stage(
             model_key, EntityIdVO(stage_id) if stage_id else None
         )
-        return ResolvedFunnelStageDTO(entity.id.uuid, stage.id.uuid, entity.revision)
+        return ResolvedFunnelStageDTO(
+            entity.id.uuid,
+            stage.id.uuid,
+            entity.revision,
+            entity.name,
+            stage.name,
+            stage.kind.value,
+        )
+
+    async def lock_definitions(
+        self, model_key: str, funnel_ids: tuple[UUID, ...]
+    ) -> None:
+        """Удерживает shared-блокировки определений в едином порядке до карточек."""
+        for funnel_id in sorted(set(funnel_ids), key=str):
+            entity = await self._repository.get(EntityIdVO(funnel_id))
+            if entity is None:
+                raise FunnelNotFoundError("Воронка не найдена.")
+            entity.select_stage(model_key)

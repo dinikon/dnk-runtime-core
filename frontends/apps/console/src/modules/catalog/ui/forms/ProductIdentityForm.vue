@@ -79,6 +79,7 @@ const { value: virtual, change: changeVirtual } = useProductSectionDraft(
         <ProductFieldError :id="`${item.id}-sku-error`" :error="errors.sku" />
       </Field>
       <Field
+        v-if="item.kind !== 'variable'"
         orientation="horizontal"
         :data-invalid="!!errors.virtual || undefined"
       >

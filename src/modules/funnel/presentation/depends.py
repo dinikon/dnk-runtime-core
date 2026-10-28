@@ -1,3 +1,5 @@
+from src.modules.crm.presentation.depends.funnel_cards import FunnelCardsServiceDep
+from src.modules.funnel.infrastructure.adapter.cards import CrmFunnelCardsAdapter
 from typing import Annotated
 from fastapi import Depends
 from src.modules.shared.presentation.persistence.depends import UoWDep
@@ -30,10 +32,15 @@ from src.modules.funnel.application.command.update_funnel.handler import (
 
 
 def get_update_funnel_handler(
-    uow: UoWDep, uuid: UuidDep, clock: ClockDep
+    uow: UoWDep, uuid: UuidDep, clock: ClockDep, cards: FunnelCardsServiceDep
 ) -> UpdateFunnelHandler:
     """Собирает UpdateFunnel на общей сессии tenant."""
-    return UpdateFunnelHandler(SqlAlchemyFunnelRepository(uow.session), uuid, clock)
+    return UpdateFunnelHandler(
+        SqlAlchemyFunnelRepository(uow.session),
+        uuid,
+        clock,
+        CrmFunnelCardsAdapter(cards),
+    )
 
 
 UpdateFunnelHandlerDep = Annotated[
@@ -42,9 +49,13 @@ UpdateFunnelHandlerDep = Annotated[
 from src.modules.funnel.application.query.get_funnel.handler import GetFunnelHandler
 
 
-def get_get_funnel_handler(uow: UoWDep) -> GetFunnelHandler:
+def get_get_funnel_handler(
+    uow: UoWDep, cards: FunnelCardsServiceDep
+) -> GetFunnelHandler:
     """Собирает GetFunnel на общей сессии tenant."""
-    return GetFunnelHandler(SqlAlchemyFunnelQueryRepository(uow.session))
+    return GetFunnelHandler(
+        SqlAlchemyFunnelQueryRepository(uow.session), CrmFunnelCardsAdapter(cards)
+    )
 
 
 GetFunnelHandlerDep = Annotated[GetFunnelHandler, Depends(get_get_funnel_handler)]

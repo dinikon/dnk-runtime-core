@@ -12,7 +12,10 @@ from src.modules.control_plane.application.contracts import (
     ProvisioningCommand,
 )
 from src.modules.control_plane.application.services import ProvisioningConflict
-from src.modules.control_plane.infrastructure.crypto import CredentialCipher
+from src.modules.shared.application.crypto.cipher import Cipher
+from src.config.deploy.control_plane import ControlPlaneSettings
+from src.modules.control_plane.infrastructure.tenancy_adapter import TenancyAdapter
+from src.modules.identity.application.cloud.port.cloud import CloudConnection
 from src.modules.control_plane.infrastructure.models import (
     AccessProjectionModel,
     CloudConnectionModel,
@@ -59,10 +62,21 @@ def response(
 
 
 class ProvisioningRepository:
-    def __init__(self, session: AsyncSession, settings, resource_inspector=None):
+    """Сохраняет установку и строковые секреты с явно переданным Cipher."""
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        settings: ControlPlaneSettings,
+        resource_inspector: TenancyAdapter | None = None,
+        *,
+        cipher: Cipher,
+    ) -> None:
+        """Принимает общий Cipher проекта от внешней сборки зависимостей."""
         self.session = session
         self.settings = settings
-        self.cipher = CredentialCipher(settings.secret_encryption_key)
+        self.cipher = cipher
+        self.cipher.require_configured()
         self.resource_inspector = resource_inspector
 
     async def accept(
@@ -156,7 +170,9 @@ class ProvisioningRepository:
         )
         if connection is not None and connection.issuer != command.oidc.issuer:
             raise ProvisioningConflict("Tenant issuer is immutable")
-        encrypted = self.cipher.encrypt(command.oidc.client_secret.get_secret_value())
+        encrypted = self.cipher.encrypt_text(
+            command.oidc.client_secret.get_secret_value()
+        )
         if connection is None:
             connection = CloudConnectionModel(
                 runtime_tenant_id=installation.runtime_tenant_id,
@@ -175,7 +191,7 @@ class ProvisioningRepository:
             operation_id=command.operation_id,
             core_tenant_id=command.tenant_id,
             command_hash=digest,
-            encrypted_command=self.cipher.encrypt(replay_json),
+            encrypted_command=self.cipher.encrypt_text(replay_json),
             state="queued",
             resources_state="absent",
             step="accepted",
@@ -212,15 +228,15 @@ class ProvisioningRepository:
 
 
 class CloudConnectionReader:
-    def __init__(self, session: AsyncSession, cipher: CredentialCipher | None = None):
-        if cipher is None:
-            from src.config import dnk_config
+    """Читает OIDC-подключение с общей реализацией шифрования проекта."""
 
-            cipher = CredentialCipher(dnk_config.CONTROL_PLANE.secret_encryption_key)
+    def __init__(self, session: AsyncSession, cipher: Cipher) -> None:
+        """Использует тот же Cipher, что установка tenant и остальные модули."""
+        cipher.require_configured()
         self.session, self.cipher = session, cipher
 
-    async def get(self, tenant_id: UUID):
-        from src.modules.identity.application.cloud.port.cloud import CloudConnection
+    async def get(self, tenant_id: UUID) -> CloudConnection | None:
+        """Расшифровывает существующий строковый секрет без изменения формата хранения."""
 
         connection = await self.session.get(CloudConnectionModel, tenant_id)
         if connection is None:
@@ -230,7 +246,7 @@ class CloudConnectionReader:
             issuer=connection.issuer,
             client_id=connection.client_id,
             callback=connection.callback,
-            client_secret=self.cipher.decrypt(connection.encrypted_secret),
+            client_secret=self.cipher.decrypt_text(connection.encrypted_secret),
         )
 
 

@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "content": {
+    "items": [
+      {
+        "sync_source_id": 107,
+        "price_offer_id": "7372",
+        "item_id": 114053,
+        "rz_item_id": null,
+        "name_ua": "Фільтр",
+        "name_ru": "Фильтр",
+        "article": "2348400",
+        "price": 450,
+        "available": 2,
+        "stock_quantity": 0,
+        "upload_status": 11,
+        "unknown_native": {
+          "keep": true
+        }
+      }
+    ],
+    "_meta": {
+      "currentPage": 1,
+      "pageCount": 1
+    }
+  }
+}

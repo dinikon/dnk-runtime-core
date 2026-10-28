@@ -24,6 +24,11 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | quote }}
 {{- $source := $.Values -}}{{- range (splitList "." $path) -}}{{- $source = index $source . -}}{{- end -}}
 {{- $_ := set $bindings $env (dict "source" $source "name" $name "key" $env) -}}
 {{- end -}}
+{{- $encryption := .Values.application.encryption.key -}}
+{{- if and .Values.controlPlane.enabled (not (or $encryption.value $encryption.existingSecret.name)) -}}
+{{- $source := dict "value" "" "existingSecret" (dict "name" .Values.controlPlane.credentialsSecret "key" "encryption.key") -}}
+{{- $_ := set $bindings "ENCRYPTION__KEY" (dict "source" $source "name" .Values.controlPlane.credentialsSecret "key" "encryption.key") -}}
+{{- end -}}
 {{- if .Values.minio.enabled -}}
 {{- $minioName := printf "%s-auth" (include "dnk.runtime.dependencyName" (dict "root" . "values" .Values.minio "service" "minio")) -}}
 {{- $_ := set $bindings "FILES__ACCESS_KEY" (dict "source" .Values.minio.auth.accessKey "name" $minioName "key" "access-key") -}}
@@ -77,7 +82,6 @@ SQLALCHEMY_DATABASE_URI_SCHEME: "postgresql+asyncpg"
 {{- end }}
 {{- end }}
 {{- if .Values.controlPlane.enabled }}
-CONTROL_PLANE__ENCRYPTION_KEY_PATH: "/var/run/dnk/control-plane/encryption.key"
 CONTROL_PLANE__CLIENT_CERT_PATH: "/var/run/dnk/control-plane/tls.crt"
 CONTROL_PLANE__CLIENT_KEY_PATH: "/var/run/dnk/control-plane/tls.key"
 CONTROL_PLANE__CA_BUNDLE_PATH: "/var/run/dnk/control-plane/ca.crt"
@@ -105,6 +109,7 @@ EVENT_BUS__PUBLISHER_WORKER_ENABLED: {{ .Values.workers.publisher.enabled | quot
 {{- $port := regexFind ":[0-9]+$" $url.host | trimPrefix ":" -}}
 {{- if and $port (or (lt (int $port) 1) (gt (int $port) 65535)) -}}{{- fail "application.server.publicOrigin port must be between 1 and 65535" -}}{{- end -}}
 {{- if and (eq $app.server.environment "PRODUCTION") (ne $url.scheme "https") -}}{{- fail "production application.server.publicOrigin requires HTTPS" -}}{{- end -}}
+{{- include "dnk.runtime.validateSecret" (dict "secret" $app.encryption.key "path" "application.encryption.key" "required" false) -}}
 {{- include "dnk.runtime.validateControlPlane" . -}}
 {{- if .Values.minio.enabled -}}
 {{- include "dnk.minio.validate" (dict "Values" .Values.minio) -}}

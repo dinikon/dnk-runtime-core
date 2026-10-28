@@ -3,6 +3,12 @@
 Run: python -m src.modules.control_plane.worker [--healthcheck]
 """
 
+from src.modules.shared.application.crypto.cipher import Cipher
+from src.modules.shared.presentation.crypto.depends import get_cipher
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from src.config.deploy.control_plane import ControlPlaneSettings
+
+
 import argparse
 import asyncio
 import logging
@@ -48,7 +54,18 @@ EXCHANGE = BrokerExchange(name="dnk.runtime.control-plane", type="direct", durab
 
 
 class RuntimeWorker:
-    def __init__(self, session_factory, settings, schema_prefix, provider=None):
+    """Координирует процессы Control Plane с общими зависимостями runtime."""
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        settings: ControlPlaneSettings,
+        schema_prefix: str,
+        provider: RabbitMQBrokerProvider | None = None,
+        *,
+        cipher: Cipher,
+    ) -> None:
+        """Передаёт единый Cipher проекта исполнителю установки tenant."""
         self.sessions, self.settings = session_factory, settings
         self.provider = provider or RabbitMQBrokerProvider(
             RabbitMQSettings(
@@ -67,7 +84,9 @@ class RuntimeWorker:
         )
 
         self.roles = RoleProjectionSync(session_factory, settings, schema_prefix)
-        self.installer = Installer(session_factory, settings, schema_prefix)
+        self.installer = Installer(
+            session_factory, settings, schema_prefix, cipher=cipher
+        )
         self.access = AccessDelivery(session_factory, settings)
         self.install_queue = BrokerQueue(
             name=settings.install_queue, durable=True, routing_key="install"
@@ -281,11 +300,17 @@ async def main(
             return 0
         if reconcile_attempt is not None:
             await Installer(
-                db_helper.session_factory, config, dnk_config.SCHEMA_PREFIX
+                db_helper.session_factory,
+                config,
+                dnk_config.SCHEMA_PREFIX,
+                cipher=get_cipher(),
             ).run(reconcile_attempt)
             return 0
         await RuntimeWorker(
-            db_helper.session_factory, config, dnk_config.SCHEMA_PREFIX
+            db_helper.session_factory,
+            config,
+            dnk_config.SCHEMA_PREFIX,
+            cipher=get_cipher(),
         ).run()
         return 0
     finally:

@@ -1,11 +1,12 @@
 import { computed } from "vue";
+import { funnelSaveMutationKey } from "./funnel.query-keys";
 import { useFunnelScope } from "./funnel.queries";
 import type { UseMutationReturnType } from "@tanstack/vue-query";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { funnelApi } from "../api/funnel.api";
-import type { FunnelDraft } from "./funnel.types";
+import type { FunnelDraft, SaveFunnelResult } from "./funnel.types";
 export function useSaveFunnel(): UseMutationReturnType<
-  { id: string },
+  SaveFunnelResult,
   Error,
   { id?: string; draft: FunnelDraft; revision?: number },
   unknown
@@ -13,17 +14,21 @@ export function useSaveFunnel(): UseMutationReturnType<
   const client = useQueryClient(),
     scope = useFunnelScope();
   return useMutation({
-    mutationKey: computed(() => ["funnel-save", ...scope.value]),
+    mutationKey: computed(() => [funnelSaveMutationKey, ...scope.value]),
     mutationFn: (v: { id?: string; draft: FunnelDraft; revision?: number }) =>
       v.id
         ? funnelApi.update(v.id, v.draft, v.revision!)
         : funnelApi.create(v.draft),
-    onSuccess: async () => {
+    onMutate: () => [...scope.value],
+    onSuccess: async (_result, _variables, context) => {
+      const submittedScope = context as (string | null)[];
       await client.invalidateQueries({
         predicate: (q) =>
-          q.queryKey[0] === "funnel" ||
-          q.queryKey[0] === "funnels" ||
-          q.queryKey[0] === "funnel-options",
+          ["funnel", "funnels", "funnel-options"].includes(
+            String(q.queryKey[0]),
+          ) &&
+          q.queryKey[1] === submittedScope[0] &&
+          q.queryKey[2] === submittedScope[1],
       });
     },
   });

@@ -9,6 +9,7 @@ export type SessionStatus = "idle" | "loading" | "ready" | "error";
 export const useUserStore = defineStore("user", () => {
   const user = ref<ConsoleUser | null>(null);
   const sessionStatus = ref<SessionStatus>("idle");
+  const sessionRevision = ref(0);
   let sessionPromise: Promise<ConsoleUser> | null = null;
 
   const primaryEmail = computed(
@@ -54,6 +55,7 @@ export const useUserStore = defineStore("user", () => {
   }
 
   function clearUser() {
+    sessionRevision.value += 1;
     user.value = null;
     sessionStatus.value = "idle";
     sessionPromise = null;
@@ -88,6 +90,7 @@ export const useUserStore = defineStore("user", () => {
   }
 
   return {
+    sessionRevision,
     avatarUrl,
     clearUser,
     displayName,

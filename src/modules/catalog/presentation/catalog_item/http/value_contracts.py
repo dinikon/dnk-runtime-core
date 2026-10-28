@@ -165,6 +165,12 @@ class SchemaResponse(BaseModel):
 class ListItemResponse(BaseModel):
     """Краткие поля списка товаров без собственного контента и внутренних связей."""
 
+    kind: Literal["simple", "variable", "variant"] = "simple"
+    parent_id: UUID | None = None
+    variant_count: int = 0
+    min_price: Decimal | None = None
+    max_price: Decimal | None = None
+    mixed_currencies: bool = False
     id: UUID
     status: Literal["draft", "active", "archived"]
     sku: str | None

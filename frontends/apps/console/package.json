@@ -11,6 +11,7 @@
     "typecheck": "vue-tsc -b",
     "test:catalog": "node --experimental-transform-types --test test/catalog-*.test.ts",
     "test:auth": "node --experimental-transform-types --test test/auth-*.test.ts",
+    "test:channels": "node --experimental-transform-types --test test/channels-*.test.ts",
     "test:crm": "node --experimental-transform-types --test test/crm-sales.test.ts"
   },
   "dependencies": {

@@ -48,6 +48,8 @@ async def create_catalog_item(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 product=CreateCatalogItemValues(
+                    kind=payload.kind,
+                    variants=tuple(v.to_values() for v in payload.variants),
                     product_type_code=payload.product_type_code,
                     virtual=payload.virtual,
                     status=payload.status,

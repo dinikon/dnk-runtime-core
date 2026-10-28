@@ -18,7 +18,7 @@ from src.modules.control_plane.infrastructure.services import (
     now,
     serialize,
 )
-from src.modules.control_plane.infrastructure.crypto import CredentialCipher
+from src.modules.shared.application.crypto.cipher import Cipher
 from src.modules.control_plane.infrastructure.models import (
     CloudConnectionModel,
     DeliveryModel,
@@ -52,6 +52,8 @@ class Installer:
         settings: ControlPlaneSettings,
         schema_prefix: str,
         adapter_factory: Callable[[AsyncSession, str], TenancyAdapter] = TenancyAdapter,
+        *,
+        cipher: Cipher,
     ) -> None:
         """Принимает внешние фабрики tenant-сессий и межмодульного адаптера."""
         self.sessions, self.settings, self.schema_prefix = (
@@ -60,7 +62,8 @@ class Installer:
             schema_prefix,
         )
         self.adapter_factory = adapter_factory
-        self.cipher = CredentialCipher(settings.secret_encryption_key)
+        self.cipher = cipher
+        self.cipher.require_configured()
 
     async def run(self, attempt_id: UUID) -> None:
         """Запускает одну ограниченную по времени попытку установки."""
@@ -141,7 +144,9 @@ class Installer:
                 attempt, installation = await self._owned(
                     session, claim.attempt_id, claim.token
                 )
-                command = json.loads(self.cipher.decrypt(attempt.encrypted_command))
+                command = json.loads(
+                    self.cipher.decrypt_text(attempt.encrypted_command)
+                )
                 adapter = self.adapter_factory(session, self.schema_prefix)
                 resources = await adapter.inspect(
                     installation.runtime_tenant_id,
@@ -184,7 +189,9 @@ class Installer:
                 cloud = await session.get(
                     CloudConnectionModel, installation.runtime_tenant_id
                 )
-                if cloud is None or not self.cipher.decrypt(cloud.encrypted_secret):
+                if cloud is None or not self.cipher.decrypt_text(
+                    cloud.encrypted_secret
+                ):
                     raise RuntimeError("Missing cloud credential")
                 if not await adapter.ready(installation, command):
                     raise RuntimeError("Local installation is incomplete")

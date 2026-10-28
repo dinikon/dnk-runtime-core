@@ -6,3 +6,5 @@ export const funnelKeys = {
     ["funnels", ...scope, modelKey, search, offset] as const,
   detail: (scope: Scope, id: string) => ["funnel", ...scope, id] as const,
 };
+
+export const funnelSaveMutationKey = "funnel-save";

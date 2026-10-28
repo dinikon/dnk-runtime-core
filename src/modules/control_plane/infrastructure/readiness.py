@@ -1,5 +1,9 @@
 """Fresh local facts and independent public-ingress observations."""
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.config.deploy.control_plane import ControlPlaneSettings
+
+
 import asyncio
 import json
 import ssl
@@ -12,7 +16,7 @@ from src.modules.control_plane.application.contracts import (
     StatusResponse,
 )
 from src.modules.control_plane.infrastructure.services import aware, now
-from src.modules.control_plane.infrastructure.crypto import CredentialCipher
+from src.modules.shared.application.crypto.cipher import Cipher
 from src.modules.control_plane.infrastructure.models import (
     CloudConnectionModel,
     InstallationModel,
@@ -120,7 +124,15 @@ async def instance_status(session, settings) -> StatusResponse:
     return StatusResponse(ready=settings.enabled and fresh_worker, domains=domains)
 
 
-async def tenant_ready(session, settings, schema_prefix, hostname: str):
+async def tenant_ready(
+    session: AsyncSession,
+    settings: ControlPlaneSettings,
+    schema_prefix: str,
+    hostname: str,
+    *,
+    cipher: Cipher,
+) -> dict[str, str | bool] | bool | None:
+    """Проверяет готовность с общим Cipher и прежним форматом сохранённых секретов."""
     installation = await session.scalar(
         select(InstallationModel).where(InstallationModel.hostname == hostname)
     )
@@ -136,17 +148,11 @@ async def tenant_ready(session, settings, schema_prefix, hostname: str):
     ):
         return False
     connection = await session.get(CloudConnectionModel, installation.runtime_tenant_id)
-    if connection is None or not CredentialCipher(
-        settings.secret_encryption_key
-    ).decrypt(connection.encrypted_secret):
+    if connection is None or not cipher.decrypt_text(connection.encrypted_secret):
         return False
     if not await TenancyAdapter(session, schema_prefix).ready(
         installation,
-        json.loads(
-            CredentialCipher(settings.secret_encryption_key).decrypt(
-                attempt.encrypted_command
-            )
-        ),
+        json.loads(cipher.decrypt_text(attempt.encrypted_command)),
         require_active=True,
     ):
         return False

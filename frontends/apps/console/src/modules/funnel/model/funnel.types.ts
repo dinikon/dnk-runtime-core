@@ -1,7 +1,10 @@
+export type StageKind = "in_progress" | "won" | "lost";
+
 export interface FunnelStage {
   id: string;
   name: string;
   color: string;
+  kind: StageKind;
   position: number;
 }
 export interface Funnel {
@@ -17,6 +20,7 @@ export interface FunnelStageDraft {
   clientKey: string;
   name: string;
   color: string;
+  kind: StageKind;
 }
 export interface FunnelDraft {
   name: string;
@@ -28,4 +32,14 @@ export interface FunnelPage {
   total: number;
   offset: number;
   limit: number;
+}
+
+export interface FunnelDetails extends Funnel {
+  stages: (FunnelStage & { cardsCount: number })[];
+}
+export interface SaveFunnelResult {
+  id: string;
+  revision: number;
+  stageIdMap: Record<string, string>;
+  movedCardsCount: number;
 }

@@ -155,8 +155,8 @@ env = {
     "CONTROL_PLANE__ALLOWED_CORE_FINGERPRINTS": json.dumps(
         [fingerprints["core"], fingerprints["core-rotated"]]
     ),
-    "CONTROL_PLANE__ENCRYPTION_KEY_PATH": str(root / "encryption.key"),
-    "CONTROL_PLANE__SECRET_ENCRYPTION_KEY": "",
+    "ENCRYPTION__KEY_PATH": str(root / "encryption.key"),
+    "ENCRYPTION__KEY": "",
     "CONTROL_PLANE__CLIENT_CERT_PATH": str(root / "runtime.crt"),
     "CONTROL_PLANE__CLIENT_KEY_PATH": str(root / "runtime.key"),
     "CONTROL_PLANE__CA_BUNDLE_PATH": str(root / "ca.crt"),

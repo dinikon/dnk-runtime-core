@@ -33,7 +33,7 @@ class CreateFunnelHandler:
         stages = []
         mapping = {}
         keys = set()
-        for value in command.stages:
+        for value in command.stages or ():
             if value.id is not None and value.id not in existing:
                 raise FunnelError("Чужой или неизвестный ID стадии.")
             if value.id is None and (not value.client_key or value.client_key in keys):
@@ -44,7 +44,16 @@ class CreateFunnelHandler:
                 mapping[value.client_key] = stage_id
             stages.append(
                 Stage.create(
-                    stage_id=EntityIdVO(stage_id), name=value.name, color=value.color
+                    stage_id=EntityIdVO(stage_id),
+                    name=value.name,
+                    color=value.color,
+                    kind=value.kind or "in_progress",
+                )
+            )
+        if command.stages is None:
+            stages = list(
+                Funnel.default_stages(
+                    tuple(EntityIdVO(self._uuid.new()) for _ in range(4))
                 )
             )
         entity = Funnel.create(

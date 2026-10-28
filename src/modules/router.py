@@ -37,3 +37,7 @@ router.include_router(leads_router)
 router.include_router(deals_router)
 router.include_router(sales_router)
 router.include_router(funnel_router)
+
+from src.modules.channels.presentation.router import router as channels_router
+
+router.include_router(channels_router)

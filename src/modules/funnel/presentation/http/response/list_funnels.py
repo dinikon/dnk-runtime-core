@@ -10,6 +10,7 @@ class StageResponse(BaseModel):
     name: str
     color: str
     position: int
+    kind: str
 
 
 class FunnelListItemResponse(BaseModel):

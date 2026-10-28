@@ -41,6 +41,27 @@ export interface GalleryDTO {
   primary_image_id: string | null;
 }
 export interface ReadItemDTO {
+  kind: "simple" | "variable" | "variant";
+  parent_id: string | null;
+  stock_source: "own" | "parent";
+  variant_count: number;
+  min_price: string | null;
+  max_price: string | null;
+  currency: string | null;
+  mixed_currencies: boolean;
+  effective_content: Record<string, string> | null;
+  effective_gallery: GalleryDTO | null;
+  effective_stock: StockDTO | null;
+  effective_weight: WeightDTO | null;
+  effective_dimensions: DimensionsDTO | null;
+  sources: {
+    title: string | null;
+    body: string | null;
+    gallery: string | null;
+    weight: string | null;
+    dimensions: string | null;
+    stock: string;
+  } | null;
   id: string;
 
   product_type_id: string;
@@ -106,6 +127,12 @@ export interface DefaultSchemaResponse {
 }
 
 export interface ListItemDTO {
+  kind: "simple" | "variable" | "variant";
+  parent_id: string | null;
+  variant_count: number;
+  min_price: string | null;
+  max_price: string | null;
+  mixed_currencies: boolean;
   id: string;
 
   status: ItemStatus;

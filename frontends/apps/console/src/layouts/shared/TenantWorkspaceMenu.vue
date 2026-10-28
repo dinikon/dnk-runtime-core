@@ -3,6 +3,7 @@ import {
   Check,
   ChevronsUpDown,
   Command,
+  FlaskConical,
   LayoutDashboard,
   Settings2,
 } from "@lucide/vue";
@@ -12,6 +13,7 @@ import { useUserStore } from "@/app/stores/user";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -26,9 +28,15 @@ import {
 import WorkspaceTenantInfo from "@/layouts/workspace/components/WorkspaceTenantInfo.vue";
 
 defineProps<{
-  area: "workspace" | "admin";
+  area: "workspace" | "admin" | "example";
 }>();
 
+const isDev = import.meta.env.DEV;
+const areaLabels = {
+  workspace: "Рабочее пространство",
+  admin: "Администрирование",
+  example: "Example",
+};
 const userStore = useUserStore();
 const { isMobile } = useSidebar();
 </script>
@@ -36,7 +44,7 @@ const { isMobile } = useSidebar();
 <template>
   <SidebarMenu>
     <SidebarMenuItem>
-      <DropdownMenu v-if="userStore.isAdmin">
+      <DropdownMenu v-if="userStore.isAdmin || isDev">
         <DropdownMenuTrigger as-child>
           <SidebarMenuButton
             size="lg"
@@ -47,11 +55,7 @@ const { isMobile } = useSidebar();
             >
               <Command class="size-4" />
             </div>
-            <WorkspaceTenantInfo
-              :subtitle="
-                area === 'admin' ? 'Администрирование' : 'Рабочее пространство'
-              "
-            />
+            <WorkspaceTenantInfo :subtitle="areaLabels[area]" />
             <ChevronsUpDown class="ml-auto size-4 text-muted-foreground" />
           </SidebarMenuButton>
         </DropdownMenuTrigger>
@@ -61,24 +65,35 @@ const { isMobile } = useSidebar();
           align="start"
           :side-offset="8"
         >
-          <DropdownMenuLabel class="font-normal">
-            <WorkspaceTenantInfo />
-          </DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel class="font-normal">
+              <WorkspaceTenantInfo />
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem as-child>
-            <RouterLink to="/dashboard">
-              <LayoutDashboard />
-              <span class="flex-1">Рабочая область</span>
-              <Check v-if="area === 'workspace'" class="size-4" />
-            </RouterLink>
-          </DropdownMenuItem>
-          <DropdownMenuItem as-child>
-            <RouterLink to="/admin/users">
-              <Settings2 />
-              <span class="flex-1">Настройки</span>
-              <Check v-if="area === 'admin'" class="size-4" />
-            </RouterLink>
-          </DropdownMenuItem>
+          <DropdownMenuGroup>
+            <DropdownMenuItem as-child>
+              <RouterLink to="/dashboard">
+                <LayoutDashboard />
+                <span class="flex-1">Рабочая область</span>
+                <Check v-if="area === 'workspace'" />
+              </RouterLink>
+            </DropdownMenuItem>
+            <DropdownMenuItem v-if="userStore.isAdmin" as-child>
+              <RouterLink to="/admin/users">
+                <Settings2 />
+                <span class="flex-1">Настройки</span>
+                <Check v-if="area === 'admin'" />
+              </RouterLink>
+            </DropdownMenuItem>
+            <DropdownMenuItem v-if="isDev" as-child>
+              <RouterLink to="/example">
+                <FlaskConical />
+                <span class="flex-1">Example</span>
+                <Check v-if="area === 'example'" />
+              </RouterLink>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
 

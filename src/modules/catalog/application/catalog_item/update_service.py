@@ -79,8 +79,11 @@ class CatalogItemUpdateService:
             )
         schema = None
         content = None
-        if "content" in command.fields and command.content is not None:
+        if "content" in command.fields and (
+            command.content is not None or item.variants
+        ):
             schema = await self._schemas.get_by_id(item.product_type_id)
+        if "content" in command.fields and command.content is not None:
             rich_codes = {
                 block.code for block in schema.blocks if block.value_type == "rich_text"
             }

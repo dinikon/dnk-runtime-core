@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { CatalogItem } from "../../model/catalog.types";
+import type { ProductStock } from "../../model/product.types";
 import type { ProductSection } from "../../model/product.types";
 import {
   editorGroups,
@@ -38,6 +39,7 @@ import CatalogItemGalleryForm from "../forms/CatalogItemGalleryForm.vue";
 import ProductMeasurementsForm from "../forms/ProductMeasurementsForm.vue";
 const props = defineProps<{
   item: CatalogItem;
+  parentStock?: ProductStock;
   content: Record<string, string>;
   disabled: boolean;
   contentDisabled: boolean;
@@ -110,7 +112,9 @@ function summary(id: EditorGroup, clean: string): string {
 async function navigate(id: EditorGroup, focus = false): Promise<void> {
   revealed[id] = (revealed[id] ?? 0) + 1;
   await nextTick();
-  const target = root.value?.querySelector<HTMLElement>(`#product-${id}`);
+  const target = root.value?.querySelector<HTMLElement>(
+    `#product-${props.item.id}-${id}`,
+  );
   target?.scrollIntoView({ block: "start", behavior: "instant" });
   if (focus) {
     const controls = [
@@ -166,17 +170,21 @@ onMounted(async () => {
       </p>
       <ProductEditorSections @select="navigate" />
       <Field orientation="horizontal" class="w-auto gap-2"
-        ><FieldLabel for="product-status" class="sr-only"
+        ><FieldLabel :for="`product-${item.id}-status`" class="sr-only"
           >Статус товара</FieldLabel
         ><Select
           :model-value="status"
           :disabled="disabled"
           @update:model-value="changeStatus($event as CatalogItem['status'])"
           ><SelectTrigger
-            id="product-status"
+            :id="`product-${item.id}-status`"
             class="min-h-11 w-32"
             :aria-invalid="!!props.errors.status || undefined"
-            :aria-describedby="props.errors.status ? 'status-error' : undefined"
+            :aria-describedby="
+              props.errors.status
+                ? `product-${item.id}-status-error`
+                : undefined
+            "
             ><SelectValue /></SelectTrigger
           ><SelectContent
             ><SelectGroup
@@ -239,14 +247,14 @@ onMounted(async () => {
             @click="navigate(group.id, true)"
             >Перейти к ошибке: {{ group.title }}</Button
           ><ProductFieldError
-            id="status-error"
+            :id="`product-${item.id}-status-error`"
             :error="props.errors.status" /></AlertDescription
       ></Alert>
     </div>
     <div class="product-editor-grid">
       <div class="min-w-0">
         <ProductEditorSection
-          id="product-identity"
+          :id="`product-${item.id}-identity`"
           title="Основные сведения"
           :dirty="groupDirty('identity')"
           :error="groupError('identity')"
@@ -261,13 +269,17 @@ onMounted(async () => {
             @save="(section, value) => emit('save', section, value)"
         /></ProductEditorSection>
         <ProductEditorSection
-          id="product-pricing"
-          title="Цена и наличие"
+          :id="`product-${item.id}-pricing`"
+          :title="item.kind === 'variable' ? 'Общий остаток' : 'Цена и наличие'"
           collapsible
           :summary="
             summary(
               'pricing',
-              `${item.price !== null ? `${item.price} ${item.price_specification?.currency ?? ''}` : 'Цена не задана'} · ${stockLabels[item.stock_status] ?? 'Наличие не задано'}`,
+              item.kind === 'variable'
+                ? item.stock.manage_stock
+                  ? `Количество: ${item.stock.stock_quantity}`
+                  : 'Наличие задаётся в вариантах'
+                : `${item.price !== null ? `${item.price} ${item.price_specification?.currency ?? ''}` : 'Цена не задана'} · ${stockLabels[item.stock_status] ?? 'Наличие не задано'}`,
             )
           "
           :dirty="groupDirty('pricing')"
@@ -275,6 +287,7 @@ onMounted(async () => {
           :reveal="revealed.pricing"
           ><div class="flex min-w-0 flex-col gap-6">
             <ProductPricingForm
+              v-if="item.kind !== 'variable'"
               :id="item.id"
               :value="item.price_specification"
               :current="item.price"
@@ -288,12 +301,14 @@ onMounted(async () => {
               :current="item.stock_status"
               :reset="resets.stock ?? 0"
               :disabled="disabled"
+              :kind="item.kind"
+              :parent-stock="parentStock"
               :error="props.errors.stock"
               @change="emit('save', 'stock', { stock: $event })"
             /></div
         ></ProductEditorSection>
         <ProductEditorSection
-          id="product-media"
+          :id="`product-${item.id}-media`"
           title="Изображения"
           collapsible
           :summary="
@@ -318,12 +333,13 @@ onMounted(async () => {
             @upload="(file, main) => emit('upload', file, main)"
         /></ProductEditorSection>
         <ProductEditorSection
-          id="product-descriptions"
+          :id="`product-${item.id}-descriptions`"
           title="Описание"
           :dirty="groupDirty('descriptions')"
           :error="groupError('descriptions')"
           ><ProductDescriptionsForm
             :content="content"
+            :variant="item.kind === 'variant'"
             :disabled="disabled || contentDisabled"
             :error="props.errors.content"
             @change="(code, value) => emit('content', code, value)"
@@ -331,7 +347,7 @@ onMounted(async () => {
       </div>
       <aside class="min-w-0" aria-label="Дополнительные сведения о товаре">
         <ProductEditorSection
-          id="product-measurements"
+          :id="`product-${item.id}-measurements`"
           title="Вес и размеры"
           collapsible
           :summary="

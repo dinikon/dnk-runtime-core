@@ -13,6 +13,14 @@ fullnameOverride: ''
 # Runtime settings are translated into the environment expected by the published image.
 # Set HTTPS publicOrigin, the API key and a working SMTP server before installing.
 application:
+  # Persistent project-wide Fernet key; never generate a new key during upgrades.
+  # When unset and Control Plane is enabled, reuse credentialsSecret/encryption.key.
+  encryption:
+    key:
+      value: ''
+      existingSecret:
+        name: ''
+        key: ''
   server:
     # Concrete HTTPS origin; tenant routing is configured separately in ingress.hosts.
     publicOrigin: ''

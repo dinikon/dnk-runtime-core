@@ -65,15 +65,17 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         )
 
     def test_creation_and_restore_validate_one_item(self) -> None:
-        """Создание не содержит семейных полей, восстановление проверяет инварианты."""
+        """Простой корень не содержит вариантов; восстановление проверяет инварианты."""
         self.assertFalse(hasattr(self.item, "revision"))
         self.assertEqual(self.item.product_type_id, self.schema.id)
         self.assertFalse(self.item.stock.manage_stock)
         self.assertEqual(self.item.stock.effective_status(), StockStatus.IN_STOCK)
         self.assertFalse(
-            {"kind", "parent_id", "children", "axes", "selection"}
+            {"parent_id", "children", "axes", "selection"}
             & {f.name for f in fields(self.item)}
         )
+        self.assertEqual(self.item.kind.value, "simple")
+        self.assertEqual(self.item.variants, ())
         values = {f.name: getattr(self.item, f.name) for f in fields(self.item)}
         values["identifier"] = values.pop("id")
         restored = CatalogItem.restore(**values)

@@ -5,3 +5,5 @@ export {
   useFunnel,
 } from "./model/funnel.queries";
 export type { Funnel, FunnelStage } from "./model/funnel.types";
+
+export { funnelSaveMutationKey } from "./model/funnel.query-keys";

@@ -5,6 +5,9 @@ Starts a disposable real-Core bridge or uses an existing private metadata file.
 Never prints control tokens, OIDC secrets, database URLs, or certificate material.
 """
 
+from src.modules.shared.infrastructure.crypto.fernet_cipher import FernetCipher
+
+
 import argparse
 import asyncio
 from contextlib import contextmanager
@@ -148,11 +151,11 @@ async def verify(database_url, tls_dir, metadata, core_origin, management_origin
                 management_origin=management_origin,
                 allowed_base_domains=["one.example.test"],
                 instance_id=UUID(fixture["instance_id"]),
-                secret_encryption_key=Fernet.generate_key().decode(),
                 ca_bundle_path=str(tls_dir / "ca.crt"),
                 client_cert_path=str(tls_dir / "runtime.crt"),
                 client_key_path=str(tls_dir / "runtime.key"),
             )
+            cipher = FernetCipher(Fernet.generate_key().decode())
             hostname = f"access-{uuid4().hex}.one.example.test"
             payload = {
                 "tenant_id": str(core_id),
@@ -176,7 +179,7 @@ async def verify(database_url, tls_dir, metadata, core_origin, management_origin
                 await GlobalMigrator().upgrade(connection)
             async with sessions() as session, session.begin():
                 repository = ProvisioningRepository(
-                    session, config, TenancyAdapter(session, "dnk_")
+                    session, config, TenancyAdapter(session, "dnk_"), cipher=cipher
                 )
                 await AcceptProvisioningCommand(repository, config)(
                     ProvisioningCommand.model_validate(payload), payload["attempt_id"]

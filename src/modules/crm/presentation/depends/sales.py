@@ -1,3 +1,6 @@
+from src.modules.crm.infrastructure.persistence.position_history import (
+    SqlAlchemyPositionHistory,
+)
 from dataclasses import dataclass
 from typing import Annotated
 from fastapi import Depends
@@ -121,6 +124,7 @@ def get_sales_dependencies(
 ) -> SalesDependencies:
     """Собирает все участники атомарных сценариев на одной сессии."""
     session = uow.session
+    history = SqlAlchemyPositionHistory(session)
 
     def points(key: str) -> ContactPointsAdapter:
         """Фиксирует доверенный target владельца при сборке."""
@@ -163,6 +167,7 @@ def get_sales_dependencies(
         contact_points,
         uuid,
         clock,
+        history,
     )
     deal_mutations = DealMutationService(
         deals,
@@ -173,6 +178,7 @@ def get_sales_dependencies(
         contact_points,
         uuid,
         clock,
+        history,
     )
     preparation = ConversionPreparationService(
         lead_reader, lead_basket, lead_points, links_reader
@@ -190,6 +196,7 @@ def get_sales_dependencies(
         deal_points,
         uuid,
         clock,
+        history,
     )
     return SalesDependencies(
         lead_mutations,

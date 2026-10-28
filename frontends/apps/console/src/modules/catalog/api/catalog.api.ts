@@ -51,10 +51,14 @@ export const catalogApi = {
     );
     return itemFromDto(data.item);
   },
-  async createItem(virtual = false): Promise<{ id: string }> {
+  async createItem(
+    virtual = false,
+    kind: "simple" | "variable" = "simple",
+  ): Promise<{ id: string }> {
     return (
       await httpClient.post<DTO.CreateItemResponse>(base + "/items", {
         virtual,
+        kind,
       })
     ).data;
   },
@@ -94,6 +98,90 @@ export const catalogApi = {
   },
   imageUrl(id: string, locale: string, imageId: string): string {
     return `/api${base}/items/${encodeURIComponent(id)}/images/${encodeURIComponent(locale)}/${encodeURIComponent(imageId)}/content`;
+  },
+  async listVariants(
+    rootId: string,
+    locale: string,
+    offset = 0,
+    limit = 25,
+    signal?: AbortSignal,
+  ): Promise<CatalogItemsPage> {
+    const { data } = await httpClient.get<DTO.ListItemsResponse>(
+      base + `/items/${encodeURIComponent(rootId)}/variants`,
+      { params: { locale, offset, limit }, signal },
+    );
+    return { ...data, items: data.items.map(listItemFromDto) };
+  },
+  async getVariant(
+    rootId: string,
+    variantId: string,
+    locale: string,
+    signal?: AbortSignal,
+  ): Promise<CatalogItem> {
+    const { data } = await httpClient.get<DTO.GetItemResponse>(
+      base +
+        `/items/${encodeURIComponent(rootId)}/variants/${encodeURIComponent(variantId)}`,
+      { params: { locale }, signal },
+    );
+    return itemFromDto(data.item);
+  },
+  async createVariant(
+    rootId: string,
+  ): Promise<{ id: string; parent_id: string }> {
+    return (
+      await httpClient.post<{ id: string; parent_id: string }>(
+        base + `/items/${encodeURIComponent(rootId)}/variants`,
+        {},
+      )
+    ).data;
+  },
+  async updateVariant(
+    rootId: string,
+    variantId: string,
+    value: ProductPatch,
+    locale: string,
+  ): Promise<{ id: string }> {
+    return (
+      await httpClient.patch<DTO.UpdateItemResponse>(
+        base +
+          `/items/${encodeURIComponent(rootId)}/variants/${encodeURIComponent(variantId)}`,
+        updateItemToDto(value),
+        { params: { locale } },
+      )
+    ).data;
+  },
+  async deleteVariant(rootId: string, variantId: string): Promise<void> {
+    await httpClient.delete(
+      base +
+        `/items/${encodeURIComponent(rootId)}/variants/${encodeURIComponent(variantId)}`,
+    );
+  },
+  async uploadVariantImage(
+    rootId: string,
+    variantId: string,
+    locale: string,
+    file: File,
+    main: boolean,
+  ): Promise<DTO.UploadImageResponse> {
+    const body = new FormData();
+    body.append("image", file);
+    body.append("main", String(main));
+    return (
+      await httpClient.post<DTO.UploadImageResponse>(
+        base +
+          `/items/${encodeURIComponent(rootId)}/variants/${encodeURIComponent(variantId)}/images/${encodeURIComponent(locale)}/upload`,
+        body,
+        { headers: { "Content-Type": undefined } },
+      )
+    ).data;
+  },
+  variantImageUrl(
+    rootId: string,
+    variantId: string,
+    locale: string,
+    imageId: string,
+  ): string {
+    return `/api${base}/items/${encodeURIComponent(rootId)}/variants/${encodeURIComponent(variantId)}/images/${encodeURIComponent(locale)}/${encodeURIComponent(imageId)}/content`;
   },
   async defaultSchema(
     locale: string,

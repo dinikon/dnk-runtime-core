@@ -18,7 +18,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { getApiErrorMessage, getApiErrorStatus } from "@/app/providers/http";
 import { useFunnel, useFunnelScope } from "../model/funnel.queries";
-import type { Funnel, FunnelDraft } from "../model/funnel.types";
+import {
+  acknowledgeFunnelDraft,
+  defaultFunnelDraft,
+  validateFunnelDraft,
+} from "../model/funnel.draft";
+import type { FunnelDetails, FunnelDraft } from "../model/funnel.types";
 import StageEditor from "../ui/StageEditor.vue";
 const route = useRoute(),
   router = useRouter(),
@@ -27,13 +32,9 @@ const route = useRoute(),
   saveMutation = useSaveFunnel(),
   scope = useFunnelScope();
 function empty(): FunnelDraft {
-  return {
-    name: "",
-    modelKey: route.query.type === "crm.deal" ? "crm.deal" : "crm.lead",
-    stages: [
-      { clientKey: crypto.randomUUID(), name: "Новая", color: "neutral" },
-    ],
-  };
+  return defaultFunnelDraft(
+    route.query.type === "crm.deal" ? "crm.deal" : "crm.lead",
+  );
 }
 const revision = ref<number>(),
   conflict = ref(false);
@@ -41,10 +42,21 @@ const draft = ref(empty()),
   baseline = ref(JSON.stringify(draft.value)),
   error = ref(""),
   guard = ref(false);
+const savedDefinition = ref<FunnelDetails>();
+const success = ref("");
+const confirmRemoval = ref(false);
+const confirmedDeletion = ref(false);
+const removedStages = computed(
+  () =>
+    savedDefinition.value?.stages.filter(
+      (s) => !draft.value.stages.some((v) => v.id === s.id),
+    ) ?? [],
+);
 const dirty = computed(() => JSON.stringify(draft.value) !== baseline.value);
 let leaveResolve: ((v: boolean) => void) | null = null;
 let leaveSaving = false;
-function apply(v: Funnel) {
+function apply(v: FunnelDetails): void {
+  savedDefinition.value = JSON.parse(JSON.stringify(v)) as FunnelDetails;
   revision.value = v.revision;
   conflict.value = false;
   draft.value = {
@@ -55,6 +67,7 @@ function apply(v: Funnel) {
       clientKey: s.id,
       name: s.name,
       color: s.color,
+      kind: s.kind,
     })),
   };
   baseline.value = JSON.stringify(draft.value);
@@ -66,32 +79,58 @@ watch(
   },
   { immediate: true },
 );
-async function save() {
+async function save(): Promise<boolean> {
   if (saveMutation.isPending.value) return false;
-  if (
-    !draft.value.name.trim() ||
-    draft.value.stages.some((s) => !s.name.trim())
-  ) {
-    error.value = "Заполните название воронки и всех стадий.";
+  const validation = validateFunnelDraft(draft.value);
+  if (validation) {
+    error.value = validation;
     return false;
   }
+  if (conflict.value) {
+    error.value = "Сначала сверьте актуальное определение.";
+    return false;
+  }
+  if (removedStages.value.length && !confirmedDeletion.value) {
+    confirmRemoval.value = true;
+    return false;
+  }
+  confirmedDeletion.value = false;
   error.value = "";
   const context = scope.value.join("|");
   try {
+    const sent = JSON.parse(JSON.stringify(draft.value)) as FunnelDraft;
+    success.value = "";
     const result = await saveMutation.mutateAsync({
       id: id.value || undefined,
-      draft: JSON.parse(JSON.stringify(draft.value)) as FunnelDraft,
+      draft: sent,
       revision: revision.value,
     });
     if (context !== scope.value.join("|")) return false;
-    baseline.value = JSON.stringify(draft.value);
+    const acknowledged = acknowledgeFunnelDraft(
+      draft.value,
+      sent,
+      result.stageIdMap,
+    );
+    draft.value = acknowledged.current;
+    baseline.value = JSON.stringify(acknowledged.baseline);
+    revision.value = result.revision;
     if (!id.value) {
       leaveSaving = true;
       await router.replace("/funnels/" + result.id);
       leaveSaving = false;
     }
     const fresh = await detail.refetch();
-    if (fresh.data) apply(fresh.data);
+    if (context !== scope.value.join("|")) return false;
+    if (fresh.data) {
+      savedDefinition.value = JSON.parse(
+        JSON.stringify(fresh.data),
+      ) as FunnelDetails;
+      if (!dirty.value && fresh.data.revision === result.revision)
+        apply(fresh.data);
+      if (fresh.data.revision !== result.revision) conflict.value = true;
+    }
+    success.value =
+      "Воронка сохранена. Перемещено карточек: " + result.movedCardsCount + ".";
     return true;
   } catch (e) {
     if (context !== scope.value.join("|")) return false;
@@ -103,24 +142,58 @@ async function save() {
     return false;
   }
 }
-function mergeServer() {
+function mergeServer(): void {
   const value = detail.data.value;
   if (!value) return;
-  const known = new Set(draft.value.stages.map((s) => s.id));
-  draft.value.stages.push(
-    ...value.stages
-      .filter((s) => !known.has(s.id))
-      .map((s) => ({
-        id: s.id,
-        clientKey: s.id,
-        name: s.name,
-        color: s.color,
-      })),
+  const serverIds = new Set(value.stages.map((s) => s.id));
+  if (draft.value.stages.some((s) => s.id && !serverIds.has(s.id))) {
+    error.value =
+      "В черновике есть стадии, удалённые на сервере. Удалите их из черновика перед принятием версии.";
+    return;
+  }
+  const knownIds = new Set(
+    savedDefinition.value?.stages.map((s) => s.id) ?? [],
   );
+  const serverAdditions = value.stages.filter((s) => !knownIds.has(s.id));
+  if (
+    serverAdditions.some((s) => !draft.value.stages.some((v) => v.id === s.id))
+  ) {
+    error.value =
+      "На сервере добавлены стадии. Загрузите серверное определение или добавьте их в черновик кнопкой ниже.";
+    return;
+  }
+  savedDefinition.value = JSON.parse(JSON.stringify(value)) as FunnelDetails;
   revision.value = value.revision;
   conflict.value = false;
-  error.value =
+  error.value = "";
+  success.value =
     "Актуальная версия принята. Проверьте черновик перед сохранением.";
+}
+function addServerStages(): void {
+  const knownIds = new Set(
+    savedDefinition.value?.stages.map((s) => s.id) ?? [],
+  );
+  for (const stage of detail.data.value?.stages ?? []) {
+    if (
+      !knownIds.has(stage.id) &&
+      !draft.value.stages.some((s) => s.id === stage.id)
+    ) {
+      draft.value.stages.push({
+        id: stage.id,
+        clientKey: stage.id,
+        name: stage.name,
+        color: stage.color,
+        kind: stage.kind,
+      });
+    }
+  }
+  const order = { in_progress: 0, won: 1, lost: 2 };
+  draft.value.stages.sort((a, b) => order[a.kind] - order[b.kind]);
+}
+async function confirmSave(): Promise<void> {
+  confirmRemoval.value = false;
+  confirmedDeletion.value = true;
+  if (await save()) finishLeave(true);
 }
 function reset() {
   if (detail.data.value) apply(detail.data.value);
@@ -164,6 +237,11 @@ watch(
     draft.value = empty();
     baseline.value = JSON.stringify(draft.value);
     error.value = "";
+    savedDefinition.value = undefined;
+    revision.value = undefined;
+    conflict.value = false;
+    confirmRemoval.value = false;
+    success.value = "";
   },
 );
 </script>
@@ -198,6 +276,9 @@ watch(
         >
       </div>
     </header>
+    <Alert v-if="success"
+      ><AlertDescription role="status">{{ success }}</AlertDescription></Alert
+    >
     <Alert v-if="error || detail.error.value" variant="destructive"
       ><AlertDescription role="alert"
         >{{
@@ -213,7 +294,7 @@ watch(
     >
     <section
       v-if="conflict && detail.data.value"
-      class="space-y-3 rounded-lg border p-4"
+      class="flex flex-col gap-3 rounded-lg border p-4"
     >
       <h2 class="font-semibold">
         Сверка с актуальной версией {{ detail.data.value.revision }}
@@ -226,8 +307,15 @@ watch(
       </ol>
       <p class="text-sm text-muted-foreground">
         Ваш черновик сохранён ниже. Примите актуальную версию после сверки;
-        новые серверные стадии будут добавлены в конец черновика.
+        изменения не объединяются автоматически; удаления из вашего черновика
+        сохраняются.
       </p>
+      <Button variant="outline" @click="addServerStages"
+        >Добавить новые серверные стадии для сверки</Button
+      >
+      <Button variant="outline" @click="reset"
+        >Загрузить серверное определение</Button
+      >
       <Button variant="outline" @click="mergeServer"
         >Я сверил изменения — принять версию</Button
       >
@@ -262,6 +350,33 @@ watch(
         :disabled="saveMutation.isPending.value"
       />
     </form>
+    <AlertDialog :open="confirmRemoval" @update:open="confirmRemoval = $event">
+      <AlertDialogContent
+        ><AlertDialogHeader
+          ><AlertDialogTitle
+            >Удалить стадии и перенести карточки?</AlertDialogTitle
+          >
+          <AlertDialogDescription
+            >Все карточки удаляемых стадий перейдут в «{{
+              draft.stages[0]?.name
+            }}». Количества приведены по последнему
+            чтению.</AlertDialogDescription
+          ></AlertDialogHeader
+        >
+        <ul class="flex flex-col gap-2">
+          <li v-for="stage in removedStages" :key="stage.id">
+            {{ stage.name }} — {{ stage.cardsCount }} карточек
+          </li>
+        </ul>
+        <AlertDialogFooter
+          ><Button variant="outline" @click="confirmRemoval = false"
+            >Отмена</Button
+          ><Button @click="confirmSave"
+            >Сохранить и перенести</Button
+          ></AlertDialogFooter
+        >
+      </AlertDialogContent>
+    </AlertDialog>
     <AlertDialog :open="guard"
       ><AlertDialogContent
         ><AlertDialogHeader

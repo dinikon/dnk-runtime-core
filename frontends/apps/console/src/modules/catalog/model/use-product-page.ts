@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch, onBeforeUnmount } from "vue";
+import { computed, reactive, ref, watch, onBeforeUnmount, type Ref } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../api/catalog.api";
@@ -11,7 +11,7 @@ import { sectionError, fieldSections } from "./product-validation";
 import { productTabs } from "./product-presentation";
 import { useProductContentDraft } from "./use-product-content-draft";
 
-export function useProductPage(editing: boolean) {
+export function useProductPage(editing: boolean, variantId?: Ref<string>) {
   const state = reactive<AutosaveState>({
     entries: {},
     pending: false,
@@ -45,11 +45,20 @@ export function useProductPage(editing: boolean) {
   const id = computed(() => String(ctx.route.params.itemId));
   const enabled = computed(() => !!ctx.locale.value && !!ctx.tenantId.value);
   const item = useQuery({
-    queryKey: computed(() => ctx.key("get-item", id.value)),
+    queryKey: computed(() =>
+      ctx.key("get-item", id.value, variantId?.value ?? ""),
+    ),
     enabled,
     refetchOnWindowFocus: false,
     queryFn: ({ signal }) =>
-      catalogApi.getItem(id.value, ctx.locale.value, signal),
+      variantId?.value
+        ? catalogApi.getVariant(
+            id.value,
+            variantId.value,
+            ctx.locale.value,
+            signal,
+          )
+        : catalogApi.getItem(id.value, ctx.locale.value, signal),
   });
   const schema = useQuery({
     queryKey: computed(() => ctx.key("product-schema")),
@@ -93,7 +102,14 @@ export function useProductPage(editing: boolean) {
     async (value) => {
       if (!ctx.active.value)
         throw new Error("Запись в неактивную locale запрещена.");
-      return catalogApi.updateItem(id.value, value, ctx.locale.value);
+      return variantId?.value
+        ? catalogApi.updateVariant(
+            id.value,
+            variantId.value,
+            value,
+            ctx.locale.value,
+          )
+        : catalogApi.updateItem(id.value, value, ctx.locale.value);
     },
     async (sections) => {
       const current = ctx.captureSession();
@@ -101,9 +117,9 @@ export function useProductPage(editing: boolean) {
         targetLocale = ctx.locale.value;
       await cache.invalidateQueries({
         queryKey: ["catalog", ctx.tenantId.value],
-        refetchType: "none",
+        refetchType: variantId?.value ? "active" : "none",
       });
-      await item.refetch();
+      if (!variantId?.value) await item.refetch();
       if (
         !current() ||
         id.value !== targetId ||
@@ -135,7 +151,8 @@ export function useProductPage(editing: boolean) {
     },
   );
   const scope = computed(
-    () => `${ctx.sessionKey.value}:${id.value}:${ctx.locale.value}`,
+    () =>
+      `${ctx.sessionKey.value}:${id.value}:${variantId?.value ?? ""}:${ctx.locale.value}`,
   );
   const contentDraft = useProductContentDraft(
     () => item.data.value?.content,
@@ -148,7 +165,7 @@ export function useProductPage(editing: boolean) {
       }),
     () => resetFor("content"),
   );
-  watch(() => [id.value, ctx.locale.value], clear);
+  watch(() => [id.value, variantId?.value, ctx.locale.value], clear);
   onBeforeUnmount(clear);
   function save(section: ProductSection, value: Record<string, unknown>) {
     let patch: ProductPatch;
@@ -161,7 +178,11 @@ export function useProductPage(editing: boolean) {
         price_specification: value.price as ProductPatch["price_specification"],
       };
     else patch = value as ProductPatch;
-    autosave.stage(section, patch, sectionError(section, patch));
+    autosave.stage(
+      section,
+      patch,
+      sectionError(section, patch, !!variantId?.value),
+    );
   }
   function upload(file: File, main: boolean): Promise<void> {
     if (uploadWork) return uploadWork;
@@ -181,7 +202,15 @@ export function useProductPage(editing: boolean) {
           return;
         }
         state.held = true;
-        await catalogApi.uploadImage(targetId, targetLocale, file, main);
+        if (variantId?.value)
+          await catalogApi.uploadVariantImage(
+            targetId,
+            variantId.value,
+            targetLocale,
+            file,
+            main,
+          );
+        else await catalogApi.uploadImage(targetId, targetLocale, file, main);
         if (!relevant()) return;
         await item.refetch();
         if (relevant()) resets.galleries = (resets.galleries ?? 0) + 1;
@@ -250,8 +279,15 @@ export function useProductPage(editing: boolean) {
     const fresh = await item.refetch();
     if (!fresh.isError) autosave.retry();
   };
-  const imageUrl = (imageId: string) =>
-    catalogApi.imageUrl(id.value, ctx.locale.value, imageId);
+  const imageUrl = (imageId: string): string =>
+    variantId?.value
+      ? catalogApi.variantImageUrl(
+          id.value,
+          variantId.value,
+          ctx.locale.value,
+          imageId,
+        )
+      : catalogApi.imageUrl(id.value, ctx.locale.value, imageId);
   return {
     ctx,
     id,
@@ -274,7 +310,22 @@ export function useProductPage(editing: boolean) {
     uploading,
     resets,
     scope,
-    contentValues: contentDraft.values,
+    contentValues: computed(() =>
+      variantId?.value
+        ? {
+            ...item.data.value?.effective_content,
+            ...contentDraft.values.value,
+          }
+        : contentDraft.values.value,
+    ),
+    contentOverrides: contentDraft.values,
+    flush: async (): Promise<boolean> => {
+      await autosave.flush();
+      if (uploadWork) await uploadWork;
+      return (
+        !Object.keys(state.entries).length && !uploading.value && !state.paused
+      );
+    },
     changeContent: contentDraft.change,
   };
 }

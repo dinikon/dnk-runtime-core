@@ -7,6 +7,7 @@ import { getApiErrorMessage } from "@/app/providers/http";
 import { useProductPage } from "../../model/use-product-page";
 import { overviewModel } from "../../model/product-presentation";
 import ProductHeader from "../product/ProductHeader.vue";
+import CatalogVariantsPage from "./CatalogVariantsPage.vue";
 import ProductOverview from "../product/ProductOverview.vue";
 const { ctx, id, item, imageUrl } = useProductPage(false);
 const model = computed(() =>
@@ -58,6 +59,11 @@ function edit() {
         <Skeleton class="aspect-[4/3] w-full" /><Skeleton class="h-72 w-full" />
       </div>
       <ProductOverview v-if="model" :model="model" />
+      <CatalogVariantsPage
+        v-if="item.data.value?.kind === 'variable'"
+        :root-id="id"
+        :parent-stock="item.data.value.stock"
+      />
     </div>
   </div>
 </template>
