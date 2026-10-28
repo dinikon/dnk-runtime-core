@@ -8,6 +8,7 @@ import sys
 from .checks import check
 from .common import Error, ROOT
 from .feature import publish_feature
+from .formatting import format_python
 from .github import GitHub
 from .gitops import publish, start_release
 from .observability import configure_logging, log_context, logger
@@ -15,8 +16,8 @@ from .pipeline import ci
 from .repository import Repo
 
 
-def main():
-    """Parse CLI options and translate actionable failures into a nonzero exit."""
+def main() -> int:
+    """Выполняет команду CI/CD и возвращает ненулевой код при ошибке."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--log-level", choices=("DEBUG", "INFO", "WARNING", "ERROR"), default="INFO"
@@ -24,6 +25,8 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     checks = commands.add_parser("check")
     checks.add_argument("--full", action="store_true")
+    commands.add_parser("format")
+    commands.add_parser("format-check")
     commands.add_parser("release")
     commands.add_parser("publish")
     commands.add_parser("publish-feature")
@@ -39,6 +42,8 @@ def main():
         try:
             if args.command == "check":
                 check(ROOT, args.full)
+            elif args.command in ("format", "format-check"):
+                format_python(ROOT, check=args.command == "format-check")
             elif args.command == "release":
                 start_release(repo)
             elif args.command == "publish":

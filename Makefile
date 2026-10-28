@@ -1,7 +1,13 @@
-.PHONY: check check-cicd check-full release publish publish-feature
+.PHONY: format format-check check check-cicd check-full release publish publish-feature
 
 check:
 	uv run --frozen python -m scripts.cicd check
+
+format:
+	uv run --frozen python -m scripts.cicd format
+
+format-check:
+	uv run --frozen python -m scripts.cicd format-check
 
 check-cicd:
 	uv run --frozen python -m unittest discover -s test/cicd -p 'test_*.py' -v

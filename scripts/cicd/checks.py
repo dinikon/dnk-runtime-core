@@ -10,28 +10,18 @@ from dotenv import dotenv_values
 
 from .check_environment import postgres, integration_stores, snapshot
 from .common import Error, live
+from .formatting import format_python
 from .observability import stage
 
 
-def check(root, full=False):
-    """Run backend, Helm and frontend validation; optionally use disposable Kind."""
+def check(root: Path, full: bool = False) -> None:
+    """Проверяет backend, Helm и frontend; при full использует временный Kind."""
     for tool in ("docker", "helm", "npm") + (
         ("kind", "kubectl", "oras") if full else ()
     ):
         if shutil.which(tool) is None:
             raise Error(f"Install {tool} first; see docs/plan/ci-cd.md")
-    with stage("Python formatting"):
-        live(
-            sys.executable,
-            "-m",
-            "black",
-            "--check",
-            "src",
-            "test",
-            "migrations",
-            "scripts",
-            cwd=root,
-        )
+    format_python(root, check=True)
     with tempfile.TemporaryDirectory(prefix="dnk-check-source-") as directory:
         copy = Path(directory)
         snapshot(root, copy)

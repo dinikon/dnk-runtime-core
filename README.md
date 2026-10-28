@@ -33,7 +33,7 @@ Dynamic object modules are removed. Their earlier documentation is in [history](
 - Run: `uv run fastapi dev src/app.py`.
 - Tests: `uv run python -m unittest discover -s test -p 'test_*.py' -v`.
 - For PostgreSQL integration tests set `TEST_POSTGRES_URL` to a **disposable** PostgreSQL database URL using `postgresql+asyncpg://`.
-- Format: `uv run black --check src test migrations`.
+- Format: `make format`; check without changing files: `make format-check`.
 - Docker: copy `temaplate.env` to `.env`, then `docker compose up --build`.
 
 ## Tenant migrations
@@ -54,13 +54,27 @@ unversioned databases are rejected without adoption or data deletion. Users, ema
 cloud identities and invitations remain tenant-local. See the
 [Runtime v1 deployment guide](docs/deployment/control-plane-v1.md).
 
-## Documentation
+## Version publication
+
+RC and stable version preparation automatically formats Python in `src`, `test`,
+`migrations` and `scripts` with the locked Black version. Formatting changes are
+included in the version commit before its tag is created. `make check` and the
+stable publication check still verify formatting without editing files.
+
+If `make publish` has already stopped at `Validate stable version`, run
+`make format`, review and commit the fixes on the prepared local `main`, then
+retry `make publish`. The publisher reruns validation before moving the local
+stable tag to the corrected commit. It refuses to move a tag already on `origin`,
+to accept rewritten history, or to accept changed application/chart versions.
+Keep `.git/cicd-publish.json` so the same publication can resume.
 
 Publish this project's images from a clean `feature/*` branch with
 `make publish-feature`. Images receive `feat-<first 8 characters of HEAD SHA>`; a matching Helm package
 is published under the `feat` channel for ArgoCD. Docker Buildx and Helm are required;
 ORAS is not needed.
 See [requirements and retries](docs/operations/ci-cd.md#образы-из-feature-ветки).
+
+## Documentation
 
 - [CI/CD: release workflow and artifact publication](docs/plan/ci-cd.md)
 - [CI/CD maintenance: modules, job logs and build cache](docs/operations/ci-cd.md)
