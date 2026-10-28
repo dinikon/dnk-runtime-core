@@ -642,15 +642,11 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "own",
                 "effective",
                 "origins",
-                "kind",
                 "root_id",
                 "root_revision",
-                "parent_id",
                 "axes",
                 "selection",
                 "default_selection",
-                "price_min",
-                "price_max",
             }
             & item.keys()
         )
@@ -662,8 +658,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.request("DELETE", f"/items/{ident}", status=204)
         await self.request("GET", f"/items/{ident}?locale=en", status=404)
 
-    async def test_sql_variable_storage_is_preserved_and_inaccessible(self) -> None:
-        """Роли и parent FK остаются в SQL, но MVP не читает и не меняет семьи."""
+    async def test_sql_variable_storage_is_preserved_and_children_are_nested(
+        self,
+    ) -> None:
+        """Семья читается через родителя, дочерний ID не становится отдельным корнем."""
         from uuid import UUID
 
         parent = await self.create_item()
@@ -684,22 +682,25 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                     "kind": "variant",
                 },
             )
-        for item in (parent, child):
-            await self.request("GET", f"/items/{item['id']}?locale=en", status=404)
-            await self.request(
-                "PATCH", f"/items/{item['id']}", {"sku": "denied"}, status=404
-            )
-            await self.request("DELETE", f"/items/{item['id']}", status=404)
-        self.assertEqual((await self.request("GET", "/items?locale=en"))["total"], 0)
+        read = await self.request("GET", f"/items/{parent['id']}?locale=en")
+        self.assertEqual(read["item"]["kind"], "variable")
+        children = await self.request(
+            "GET", f"/items/{parent['id']}/variants?locale=en"
+        )
+        self.assertEqual(children["total"], 1)
+        await self.request("GET", f"/items/{child['id']}?locale=en", status=404)
+        await self.request(
+            "PATCH", f"/items/{child['id']}", {"sku": "denied"}, status=404
+        )
+        self.assertEqual((await self.request("GET", "/items?locale=en"))["total"], 1)
 
     async def test_removed_api_and_legacy_payloads_are_unavailable(self) -> None:
-        """OpenAPI не рекламирует вариативность, старые body-контракты не принимаются."""
+        """OpenAPI использует вложенные варианты, старые структурные контракты отклоняются."""
         schema = self.app.openapi()
         paths = schema["paths"]
         self.assertNotIn(self.base + "/items/variable", paths)
-        self.assertFalse(
-            any((path.endswith(("/variants", "/structure", "/kind")) for path in paths))
-        )
+        self.assertIn(self.base + "/items/{item_id}/variants", paths)
+        self.assertFalse(any(path.endswith(("/structure", "/kind")) for path in paths))
         parameters = paths[self.base + "/items"]["get"].get("parameters", [])
         self.assertFalse(
             {"kind", "include_variants", "parent_id"} & {p["name"] for p in parameters}
@@ -708,7 +709,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         ident = created["id"]
         for method, path in [
             ("POST", "/items/variable"),
-            ("GET", f"/items/{ident}/variants"),
             ("PUT", f"/items/{ident}/structure"),
             ("PUT", f"/items/{ident}/kind"),
         ]:

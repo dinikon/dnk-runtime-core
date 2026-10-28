@@ -56,7 +56,11 @@ spec:
             - configMapRef:
                 name: {{ $fullname }}-migration-config
           env:
-            {{- include "dnk.runtime.infrastructureSecretEnv" . | nindent 12 }}
+            {{- range $env := (include "dnk.runtime.infrastructureSecretEnv" . | fromYamlArray) }}
+            {{- if ne $env.name "ENCRYPTION__KEY" }}
+            {{- toYaml (list $env) | nindent 12 }}
+            {{- end }}
+            {{- end }}
             {{- with $w.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

@@ -17,3 +17,13 @@ class LeadRepositoryProtocol(Protocol):
     async def save(self, entity: Lead) -> None:
         """Сохраняет агрегат без commit."""
         ...
+
+    async def get(self, record_id: EntityIdVO) -> Lead | None:
+        """Предварительно загружает агрегат для выбора порядка блокировок."""
+        ...
+
+    async def list_in_stages_for_update(
+        self, funnel_id: EntityIdVO, stage_ids: tuple[EntityIdVO, ...]
+    ) -> tuple[Lead, ...]:
+        """Блокирует и загружает агрегаты удаляемых стадий по ID."""
+        ...

@@ -1,3 +1,7 @@
+from src.modules.catalog.domain.catalog_item.value_object.kind import (
+    CatalogItemKind,
+)
+from src.modules.catalog.domain.catalog_item.entity.variant import CatalogVariant
 from src.modules.catalog.domain.product_type.value_object.schema import (
     ProductTypeSchemaSnapshot,
 )
@@ -52,7 +56,9 @@ class CatalogItemMapper:
 
     @staticmethod
     def to_values(
-        row: Mapping[str, Any], parts: Mapping[str, list[dict[str, Any]]]
+        row: Mapping[str, Any],
+        parts: Mapping[str, list[dict[str, Any]]],
+        product_type_id: EntityIdVO | None = None,
     ) -> CatalogItemValuesSnapshot:
         """Строит immutable снимок значений для политики без Aggregate restore."""
         identifier = row["id"]
@@ -97,6 +103,8 @@ class CatalogItemMapper:
         for r in rows("catalog_item_content_values"):
             if r["mode"] == "set":
                 translations[r["locale"]][r["block_code"]] = r["value"]
+            elif row["kind"] == "variant":
+                translations[r["locale"]][r["block_code"]] = ""
         galleries = {}
         images = rows("catalog_item_images")
         for gallery in rows("catalog_item_galleries"):
@@ -123,7 +131,7 @@ class CatalogItemMapper:
             )
         return CatalogItemValuesSnapshot(
             id=CatalogItemIdVO(identifier),
-            product_type_id=EntityIdVO(row["product_type_id"]),
+            product_type_id=product_type_id or EntityIdVO(row["product_type_id"]),
             status=CatalogItemStatus(row["status"]),
             sku=row["sku"],
             virtual=row["virtual"],
@@ -141,11 +149,15 @@ class CatalogItemMapper:
             updated_at=row["updated_at"],
             created_by=EntityIdVO(row["created_by"]),
             updated_by=EntityIdVO(row["updated_by"]),
+            kind=CatalogItemKind(row["kind"]),
+            parent_id=CatalogItemIdVO(row["parent_id"]) if row["parent_id"] else None,
         )
 
     @staticmethod
     def to_domain(
-        value: CatalogItemValuesSnapshot, schema: ProductTypeSchemaSnapshot
+        value: CatalogItemValuesSnapshot,
+        schema: ProductTypeSchemaSnapshot,
+        variants: tuple[CatalogVariant, ...] = (),
     ) -> CatalogItem:
         """Восстанавливает агрегат исключительно через проверяющую фабрику."""
         return CatalogItem.restore(
@@ -165,20 +177,45 @@ class CatalogItemMapper:
             translations=value.translations,
             galleries=value.galleries,
             schema=schema,
+            kind=value.kind,
+            variants=variants,
         )
 
     @staticmethod
-    def to_insert_values(item: CatalogItem) -> dict[str, Any]:
+    def to_variant(value: CatalogItemValuesSnapshot) -> CatalogVariant:
+        """Восстанавливает принадлежащую entity через её фабрику."""
+        return CatalogVariant.restore(
+            identifier=value.id,
+            parent_id=value.parent_id,
+            created_at=value.created_at,
+            updated_at=value.updated_at,
+            created_by=value.created_by,
+            updated_by=value.updated_by,
+            status=value.status,
+            sku=SkuCodeVO(value.sku) if value.sku is not None else None,
+            virtual=value.virtual,
+            price=value.price,
+            stock=value.stock,
+            weight=value.weight,
+            dimensions=value.dimensions,
+            translations=value.translations,
+            galleries=value.galleries,
+        )
+
+    @staticmethod
+    def to_insert_values(item: CatalogItem | CatalogVariant) -> dict[str, Any]:
         """Извлекает центральную строку без вычисления вычисляемых полей."""
         price = item.price
         dimensions = item.dimensions
         stock = item.stock
         return dict(
             id=item.id.uuid,
-            kind="simple",
+            kind="variant" if isinstance(item, CatalogVariant) else item.kind.value,
             revision=1,
-            parent_id=None,
-            product_type_id=item.product_type_id.uuid if item.product_type_id else None,
+            parent_id=item.parent_id.uuid if isinstance(item, CatalogVariant) else None,
+            product_type_id=(
+                None if isinstance(item, CatalogVariant) else item.product_type_id.uuid
+            ),
             status=item.status.value,
             sku=item.sku.value if item.sku else None,
             created_at=item.created_at,
@@ -214,16 +251,14 @@ class CatalogItemMapper:
                 else None
             ),
             manage_stock=stock.manage_stock,
-            stock_quantity=stock.stock_quantity if stock else None,
-            stock_status=(
-                stock.stock_status.value if stock and stock.stock_status else None
-            ),
-            backorders=stock.backorders.value if stock and stock.backorders else None,
+            stock_quantity=stock.stock_quantity,
+            stock_status=(stock.stock_status.value if stock.stock_status else None),
+            backorders=stock.backorders.value,
         )
 
     @staticmethod
     def to_parts(
-        item: CatalogItem, block_ids: Mapping[str, UUID]
+        item: CatalogItem | CatalogVariant, block_ids: Mapping[str, UUID]
     ) -> dict[str, list[dict[str, Any]]]:
         """Разбирает принадлежащие компоненты на нормализованные собственные строки."""
         identifier = item.id.uuid
@@ -246,8 +281,20 @@ class CatalogItemMapper:
                         catalog_item_id=identifier,
                         locale=locale,
                         block_id=block_ids[code],
-                        mode="set",
-                        value=value,
+                        mode=(
+                            "clear"
+                            if isinstance(item, CatalogVariant)
+                            and code == "body"
+                            and value == ""
+                            else "set"
+                        ),
+                        value=(
+                            None
+                            if isinstance(item, CatalogVariant)
+                            and code == "body"
+                            and value == ""
+                            else value
+                        ),
                     )
                 )
         for locale, gallery in item.galleries.items():

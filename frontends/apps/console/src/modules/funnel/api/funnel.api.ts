@@ -1,7 +1,18 @@
 import { httpClient } from "@/app/providers/http";
-import type { FunnelDto, FunnelPageDto, SaveFunnelDto } from "./funnel.dto";
-import { mapFunnel, funnelPayload } from "./funnel.mapper";
-import type { Funnel, FunnelPage, FunnelDraft } from "../model/funnel.types";
+import type { GetFunnelDto, FunnelPageDto, SaveFunnelDto } from "./funnel.dto";
+import {
+  mapFunnel,
+  mapFunnelDetails,
+  mapSaveFunnel,
+  funnelPayload,
+} from "./funnel.mapper";
+import type {
+  Funnel,
+  FunnelDetails,
+  FunnelPage,
+  FunnelDraft,
+  SaveFunnelResult,
+} from "../model/funnel.types";
 export const funnelApi = {
   async list(
     modelKey?: string,
@@ -26,34 +37,38 @@ export const funnelApi = {
     }
     return [...items.values()];
   },
-  async get(id: string, signal?: AbortSignal): Promise<Funnel> {
-    return mapFunnel(
+  async get(id: string, signal?: AbortSignal): Promise<FunnelDetails> {
+    return mapFunnelDetails(
       (
-        await httpClient.get<FunnelDto>(
+        await httpClient.get<GetFunnelDto>(
           "/console/funnels/" + encodeURIComponent(id),
           { signal },
         )
       ).data,
     );
   },
-  async create(v: FunnelDraft): Promise<{ id: string }> {
-    return (
-      await httpClient.post<SaveFunnelDto>("/console/funnels", {
-        ...funnelPayload(v),
-        model_key: v.modelKey,
-      })
-    ).data;
+  async create(v: FunnelDraft): Promise<SaveFunnelResult> {
+    return mapSaveFunnel(
+      (
+        await httpClient.post<SaveFunnelDto>("/console/funnels", {
+          ...funnelPayload(v),
+          model_key: v.modelKey,
+        })
+      ).data,
+    );
   },
   async update(
     id: string,
     v: FunnelDraft,
     revision: number,
-  ): Promise<{ id: string }> {
-    return (
-      await httpClient.put<SaveFunnelDto>(
-        "/console/funnels/" + encodeURIComponent(id),
-        { ...funnelPayload(v), expected_revision: revision },
-      )
-    ).data;
+  ): Promise<SaveFunnelResult> {
+    return mapSaveFunnel(
+      (
+        await httpClient.put<SaveFunnelDto>(
+          "/console/funnels/" + encodeURIComponent(id),
+          { ...funnelPayload(v), expected_revision: revision },
+        )
+      ).data,
+    );
   },
 };

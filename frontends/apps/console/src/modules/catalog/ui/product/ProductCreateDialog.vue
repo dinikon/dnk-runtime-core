@@ -85,8 +85,8 @@ function preventWhilePending(event: Event): void {
           >Создать товар</component
         >
         <component :is="desktop ? DialogDescription : DrawerDescription"
-          >Выберите, с какой карточки начать. Настройки можно изменить
-          позже.</component
+          >Выберите, с какой карточки начать. Тип карточки выбирается при
+          создании.</component
         >
       </component>
       <div class="flex flex-col gap-3" :aria-busy="state.pending">
@@ -96,6 +96,12 @@ function preventWhilePending(event: Event): void {
               id: 'simple' as const,
               title: 'Простой товар',
               text: 'Обычная карточка. Виртуальный товар выключен.',
+              icon: Package,
+            },
+            {
+              id: 'variable' as const,
+              title: 'Вариативный товар',
+              text: 'Общая карточка с отдельными продаваемыми вариантами.',
               icon: Package,
             },
             {

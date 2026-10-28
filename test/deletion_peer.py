@@ -5,6 +5,11 @@ explicitly supplied disposable stores. TLS itself verifies the test client CA;
 the small middleware models the authenticated ingress-to-ASGI handoff.
 """
 
+from cryptography.fernet import Fernet
+from src.modules.shared.infrastructure.crypto.fernet_cipher import FernetCipher
+from src.modules.shared.presentation.crypto.depends import get_cipher
+
+
 import asyncio
 from contextlib import asynccontextmanager, suppress
 import json
@@ -49,7 +54,8 @@ async def main():
             "allowed_base_domains": ["tenant.test"],
         }
     )
-    installer = Installer(sessions, settings, "dnk_")
+    cipher = FernetCipher(Fernet.generate_key().decode())
+    installer = Installer(sessions, settings, "dnk_", cipher=cipher)
     deletion = DeletionWorker(sessions, settings, "dnk_")
 
     async def work():
@@ -75,6 +81,7 @@ async def main():
             await engine.dispose()
 
     app = FastAPI(lifespan=lifespan)
+    app.dependency_overrides[get_cipher] = lambda: cipher
     app.state.db, app.state.control_plane_settings = sessions, settings
     app.include_router(router)
     app.add_middleware(TenantAdmissionMiddleware)

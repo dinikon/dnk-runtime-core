@@ -24,6 +24,12 @@ from src.config.infrastructure.rabbitmq_config import RabbitMQConfig
 from src.config.infrastructure.redis_config import RedisConfig
 from src.config.infrastructure.scheduled_jobs_config import ScheduledJobsConfig
 from src.config.feature.catalog_import_config import CatalogImportConfig
+from src.config.infrastructure.encryption_config import (
+    EncryptionConfig,
+    legacy_encryption_source,
+)
+from pydantic import model_validator
+from typing import Self
 
 # from .deploy import DeploymentConfig
 # from .enterprise import EnterpriseFeatureConfig
@@ -103,6 +109,7 @@ class DnkConfig(
     EmailConfig,
     FilesConfig,
     CatalogImportConfig,
+    EncryptionConfig,
     # Redis config
     RedisConfig,
     # Auth config
@@ -142,6 +149,15 @@ class DnkConfig(
     # for better readability and maintainability.
     # Thanks for your concentration and consideration.
 
+    @model_validator(mode="after")
+    def require_project_encryption_for_control_plane(self) -> Self:
+        """Сохраняет обязательность ключа при включённом Control Plane."""
+        if self.CONTROL_PLANE.enabled and self.ENCRYPTION.resolved_key is None:
+            raise ValueError(
+                "Enabled Control Plane integration requires a project encryption key"
+            )
+        return self
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -161,4 +177,5 @@ class DnkConfig(
                 settings_cls=settings_cls,
                 toml_file=PYPROJECT_TOML_PATH,
             ),
+            legacy_encryption_source(env_settings, dotenv_settings),
         )

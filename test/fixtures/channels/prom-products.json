@@ -1,0 +1,42 @@
+{
+  "products": [
+    {
+      "id": 201,
+      "name": "Футболка чорна M",
+      "name_multilang": {
+        "uk": "Футболка чорна M",
+        "ru": "Футболка чёрная M"
+      },
+      "sku": "BLACK-M",
+      "price": 800,
+      "currency": "USD",
+      "presence": "available",
+      "quantity_in_stock": 7,
+      "is_variation": false,
+      "variation_base_id": null,
+      "variation_group_id": 700,
+      "unknown_native": {
+        "nested": [
+          "keep",
+          0,
+          null
+        ]
+      }
+    },
+    {
+      "id": 202,
+      "name": "Футболка чорна L",
+      "name_multilang": {
+        "uk": "Футболка чорна L"
+      },
+      "sku": "BLACK-L",
+      "price": 850,
+      "currency": "USD",
+      "presence": "available",
+      "quantity_in_stock": 4,
+      "is_variation": true,
+      "variation_base_id": 201,
+      "variation_group_id": 700
+    }
+  ]
+}

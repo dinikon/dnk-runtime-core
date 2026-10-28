@@ -7,6 +7,8 @@ x-backend-common: &backend-common
     - .env
   networks: [default, file-storage]
   environment: &backend-environment
+    ENCRYPTION__KEY: ${ENCRYPTION__KEY:-}
+    ENCRYPTION__KEY_PATH: ${ENCRYPTION__KEY_PATH:-}
     FILES__ENDPOINT: minio:9000
     FILES__ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
     FILES__SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -33,7 +35,7 @@ services:
     environment:
       <<: *backend-environment
       CONTROL_PLANE__ENABLED: "false"
-      CONTROL_PLANE__ENCRYPTION_KEY_PATH: ""
+      ENCRYPTION__KEY_PATH: ""
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,17 +73,17 @@ services:
       timeout: 5s
       retries: 10
 
-  frontend:
-    build:
-      context: ./frontends
-      dockerfile: Dockerfile
-    container_name: dnk-frontend
-    restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-80}:80"
-    depends_on:
-      api:
-        condition: service_healthy
+#  frontend:
+#    build:
+#      context: ./frontends
+#      dockerfile: Dockerfile
+#    container_name: dnk-frontend
+#    restart: unless-stopped
+#    ports:
+#      - "${FRONTEND_PORT:-80}:80"
+#    depends_on:
+#      api:
+#        condition: service_healthy
 
   events-publisher:
     <<: *backend-common

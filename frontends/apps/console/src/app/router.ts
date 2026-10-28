@@ -9,8 +9,10 @@ import { authRoutes } from "@/modules/auth/routes";
 import { catalogRoutes } from "@/modules/catalog/routes";
 import { filesRoutes } from "@/modules/files/routes";
 import { funnelRoutes } from "@/modules/funnel";
+import { channelRoutes } from "@/modules/channels";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
+import { exampleRoutes } from "@/modules/example";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -40,6 +42,7 @@ export const router = createRouter({
         ...catalogRoutes,
         ...crmRoutes,
         ...funnelRoutes,
+        ...channelRoutes,
         {
           path: "settings/members",
           redirect: { name: "admin-users" },
@@ -51,6 +54,16 @@ export const router = createRouter({
         },
       ],
     },
+    ...(import.meta.env.DEV
+      ? [
+          {
+            path: "/example",
+            component: () => import("@/layouts/example/ExampleLayout.vue"),
+            meta: { requiresAuth: true },
+            children: exampleRoutes,
+          },
+        ]
+      : []),
     {
       path: "/admin",
       component: AdminLayout,

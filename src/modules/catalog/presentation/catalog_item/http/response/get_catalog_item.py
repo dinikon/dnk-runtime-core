@@ -12,6 +12,17 @@ from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
 )
 
 
+class CatalogItemSourcesResponse(BaseModel):
+    """Идентичности владельцев эффективных разделов выбранной locale."""
+
+    title: UUID | None
+    body: UUID | None
+    gallery: UUID | None
+    weight: UUID | None
+    dimensions: UUID | None
+    stock: UUID
+
+
 class CatalogItemDetailsResponse(BaseModel):
     """Поля и вычисляемые значения самостоятельного товара выбранной locale."""
 
@@ -36,6 +47,20 @@ class CatalogItemDetailsResponse(BaseModel):
     updated_at: datetime
     created_by: UUID
     updated_by: UUID
+    kind: Literal["simple", "variable", "variant"] = "simple"
+    parent_id: UUID | None = None
+    stock_source: Literal["own", "parent"] = "own"
+    variant_count: int = 0
+    min_price: Decimal | None = None
+    max_price: Decimal | None = None
+    currency: str | None = None
+    mixed_currencies: bool = False
+    effective_content: dict[str, str] | None = None
+    effective_gallery: GalleryValue | None = None
+    effective_stock: StockValue | None = None
+    effective_weight: WeightValue | None = None
+    effective_dimensions: DimensionsValue | None = None
+    sources: CatalogItemSourcesResponse | None = None
 
 
 class GetCatalogItemResponse(BaseModel):

@@ -10,13 +10,21 @@ import type {
   CatalogSchema,
 } from "../model/catalog.types";
 export function itemFromDto(value: ReadItemDTO): CatalogItem {
-  return { ...value, title: value.content?.title ?? null };
+  return {
+    ...value,
+    title: value.effective_content?.title ?? value.content?.title ?? null,
+  };
 }
 
 export function listItemFromDto(value: ListItemDTO): CatalogListItem {
   return {
     id: value.id,
-
+    kind: value.kind,
+    parent_id: value.parent_id,
+    variant_count: value.variant_count,
+    min_price: value.min_price,
+    max_price: value.max_price,
+    mixed_currencies: value.mixed_currencies,
     status: value.status,
     sku: value.sku,
     title: value.title,

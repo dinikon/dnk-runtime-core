@@ -1,3 +1,4 @@
+from src.modules.shared.presentation.crypto.depends import CipherDep
 from fastapi import Depends, Request
 from src.config import dnk_config
 from src.modules.control_plane.infrastructure.services import CloudConnectionReader
@@ -21,8 +22,9 @@ def get_oidc_client(request: Request) -> OidcClientPort:
 OidcClientDep = Annotated[OidcClientPort, Depends(get_oidc_client)]
 
 
-def get_cloud_connections(uow: UoWDep) -> CloudConnectionReaderPort:
-    return CloudConnectionReader(uow.session)
+def get_cloud_connections(uow: UoWDep, cipher: CipherDep) -> CloudConnectionReaderPort:
+    """Собирает чтение облачного подключения с единым Cipher проекта."""
+    return CloudConnectionReader(uow.session, cipher)
 
 
 CloudConnectionsDep = Annotated[

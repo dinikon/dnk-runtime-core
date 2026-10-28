@@ -7,7 +7,8 @@ class StageInput:
     """Значения стадии входного прикладного сценария."""
 
     name: str
-    color: str = "neutral"
+    color: str = "#64748B"
+    kind: str | None = None
     id: UUID | None = None
     client_key: str | None = None
 
@@ -20,3 +21,4 @@ class StageProjection:
     name: str
     color: str
     position: int
+    kind: str

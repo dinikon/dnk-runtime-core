@@ -44,7 +44,7 @@ function filter(values: Record<string, string | number | undefined>) {
   void ctx.router.replace({ query: { ...ctx.route.query, ...values } });
 }
 async function remove(id: string) {
-  if (!window.confirm("Удалить товар?")) return;
+  if (!window.confirm("Удалить товар и все его варианты?")) return;
   pending.value = true;
   error.value = "";
   try {
@@ -140,7 +140,22 @@ async function remove(id: string) {
           <span class="font-medium">{{ item.title ?? "Без перевода" }}</span>
           <p class="text-sm text-muted-foreground">
             {{ item.status }} · {{ item.sku ?? "Без SKU" }} ·
-            {{ item.price ?? "Цена не задана" }} {{ item.currency }}
+            {{
+              item.kind === "variable"
+                ? item.mixed_currencies
+                  ? "Разные валюты"
+                  : item.min_price != null
+                    ? item.min_price +
+                      (item.max_price !== item.min_price
+                        ? "–" + item.max_price
+                        : "")
+                    : "Цена вариантов не задана"
+                : (item.price ?? "Цена не задана")
+            }}
+            {{ item.currency }}
+            <span v-if="item.kind === 'variable'">
+              · Вариантов: {{ item.variant_count }}</span
+            >
           </p></button
         ><Button variant="ghost" :disabled="pending" @click="remove(item.id)"
           >Удалить</Button

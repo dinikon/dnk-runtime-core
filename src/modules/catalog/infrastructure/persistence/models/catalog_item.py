@@ -37,9 +37,6 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
             "(kind='variant' AND parent_id IS NOT NULL AND parent_id<>id AND product_type_id IS NULL) OR (kind IN ('simple','variable') AND parent_id IS NULL AND product_type_id IS NOT NULL)",
             name="ck_catalog_item_role",
         ),
-        sa.CheckConstraint(
-            "kind<>'variable' OR sku IS NULL", name="ck_catalog_item_sku_role"
-        ),
         sa.Index(
             "uq_catalog_item_sku",
             "sku",

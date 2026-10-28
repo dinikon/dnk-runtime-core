@@ -37,7 +37,9 @@ class SqlAlchemyFunnelQueryRepository:
         )
         for s in stages:
             by_id.setdefault(s["funnel_id"], []).append(
-                StageProjection(s["id"], s["name"], s["color"], s["position"])
+                StageProjection(
+                    s["id"], s["name"], s["color"], s["position"], s["kind"]
+                )
             )
         return tuple(
             FunnelReadRowDTO(

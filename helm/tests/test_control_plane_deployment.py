@@ -125,3 +125,44 @@ class ControlPlaneDeploymentTests(HelmContractTests):
                 values = integrated_values()
                 values["controlPlane"][field] = value
                 self.run_helm(RUNTIME, values, success=False)
+
+    def test_project_encryption_key_is_shared_with_cron_without_tls_credentials(self):
+        """API и worker используют один ключ, а миграция и frontend его не получают."""
+        manifests = self.render(integrated_values(), RUNTIME)
+        for manifest in manifests:
+            if manifest["kind"] not in {"Deployment", "Job"}:
+                continue
+            name = component(manifest)
+            container = podspec(manifest)["containers"][0]
+            env = {entry["name"]: entry for entry in container.get("env", [])}
+            if name in {"backend", "cron", "lifecycle", "publisher", "console"}:
+                self.assertEqual(
+                    env["ENCRYPTION__KEY"]["valueFrom"]["secretKeyRef"],
+                    {
+                        "name": "runtime-integration-credentials",
+                        "key": "encryption.key",
+                    },
+                )
+            if name in {"frontend", "migrations"}:
+                self.assertNotIn("ENCRYPTION__KEY", env)
+
+    def test_standalone_channels_can_use_project_key_without_control_plane(self):
+        """Общий ключ доступен без включения Control Plane."""
+        values = runtime_values()
+        values["application"]["encryption"] = {
+            "key": {"existingSecret": {"name": "project-encryption", "key": "fernet"}}
+        }
+        manifests = self.render(values, RUNTIME)
+        for manifest in manifests:
+            if manifest["kind"] == "Deployment" and component(manifest) in {
+                "backend",
+                "cron",
+            }:
+                env = {
+                    entry["name"]: entry
+                    for entry in podspec(manifest)["containers"][0]["env"]
+                }
+                self.assertEqual(
+                    env["ENCRYPTION__KEY"]["valueFrom"]["secretKeyRef"],
+                    {"name": "project-encryption", "key": "fernet"},
+                )

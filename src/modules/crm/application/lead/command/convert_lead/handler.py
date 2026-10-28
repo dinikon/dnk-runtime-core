@@ -1,3 +1,7 @@
+from src.modules.crm.application.port.position_history import (
+    PositionHistoryPort,
+    PositionHistoryEntry,
+)
 import hashlib
 import json
 from dataclasses import asdict
@@ -63,6 +67,7 @@ class ConvertLeadHandler:
         deal_points: ContactPointsPort,
         uuid: UUIdGeneratorProtocol,
         clock: ClockPort,
+        history: PositionHistoryPort,
     ) -> None:
         """Все репозитории и адаптеры собраны на общей сессии внешнего UoW."""
         self._leads = leads
@@ -79,6 +84,7 @@ class ConvertLeadHandler:
         }
         self._uuid = uuid
         self._clock = clock
+        self._history = history
 
     async def _copy_points(
         self,
@@ -121,6 +127,15 @@ class ConvertLeadHandler:
         fingerprint = hashlib.sha256(
             json.dumps(payload, sort_keys=True, default=str).encode()
         ).hexdigest()
+        # Предварительное чтение не блокирует карточку; replay проверяется под её lock.
+        preview = await self._leads.get(EntityIdVO(command.lead_id))
+        if preview is None:
+            raise SalesNotFoundError("Лид не найден.")
+        position = None
+        if preview.conversion_result is None and "deal" in command.mode:
+            position = await self._funnels.resolve(
+                "crm.deal", command.deal.funnel_id if command.deal else None
+            )
         lead = await self._leads.get_for_update(EntityIdVO(command.lead_id))
         if lead is None:
             raise SalesNotFoundError("Лид не найден.")
@@ -238,7 +253,7 @@ class ConvertLeadHandler:
         basket_id = None
         if deal_id:
             draft = command.deal or ConversionDealInput(lead.title)
-            position = await self._funnels.resolve("crm.deal", draft.funnel_id)
+            assert position is not None
             deal = Deal.create(
                 record_id=EntityIdVO(deal_id),
                 title=draft.title,
@@ -268,6 +283,23 @@ class ConvertLeadHandler:
                 },
             )
             await self._deals.add(deal)
+            snapshot = await self._funnels.describe(
+                "crm.deal", position.funnel_id.uuid, position.stage_id.uuid
+            )
+            await self._history.append(
+                PositionHistoryEntry(
+                    self._uuid.new(),
+                    "crm.deal",
+                    deal.id.uuid,
+                    None,
+                    snapshot,
+                    None,
+                    deal.position.revision,
+                    "created",
+                    command.actor_id,
+                    now,
+                )
+            )
             basket_id = await self._baskets.copy(source, deal_id)
         for kind, target in (
             ("contact", contact_id),

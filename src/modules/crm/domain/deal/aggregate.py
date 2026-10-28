@@ -143,3 +143,20 @@ class Deal:
         self.ensure_editable()
         self.updated_at = now
         self.updated_by = EntityIdVO.from_value(actor_id)
+
+    def relocate_after_stage_deletion(
+        self,
+        *,
+        funnel_id: EntityIdVO,
+        stage_id: EntityIdVO,
+        actor_id: EntityIdVO,
+        now: datetime,
+    ) -> None:
+        """Системно меняет только позицию и аудит, сохраняя жизненный цикл."""
+        if self.position.funnel_id != EntityIdVO.from_value(funnel_id):
+            raise SalesConflictError("Карточка уже находится в другой воронке.")
+        position = self.position.move(funnel_id, stage_id, self.position.revision)
+        if position != self.position:
+            self.position = position
+            self.updated_at = now
+            self.updated_by = EntityIdVO.from_value(actor_id)

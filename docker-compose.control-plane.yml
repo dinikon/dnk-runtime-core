@@ -15,7 +15,7 @@ x-integration-environment: &integration-environment
   CONTROL_PLANE__ALLOWED_CORE_FINGERPRINTS: ${CONTROL_PLANE__ALLOWED_CORE_FINGERPRINTS}
   CONTROL_PLANE__TRUSTED_PROXY_NETWORKS: '["172.30.66.2/32"]'
   CONTROL_PLANE__INGRESS_PROBE_ADDRESS: runtime-ingress:443
-  CONTROL_PLANE__ENCRYPTION_KEY_PATH: /var/run/dnk/control-plane/encryption.key
+  ENCRYPTION__KEY_PATH: /var/run/dnk/control-plane/encryption.key
   CONTROL_PLANE__CLIENT_CERT_PATH: /var/run/dnk/control-plane/tls.crt
   CONTROL_PLANE__CLIENT_KEY_PATH: /var/run/dnk/control-plane/tls.key
   CONTROL_PLANE__CA_BUNDLE_PATH: /var/run/dnk/control-plane/ca.crt
@@ -42,6 +42,24 @@ services:
     networks:
       default: {}
       runtime-ingress: {}
+
+  cron-worker:
+    environment:
+      ENCRYPTION__KEY_PATH: /var/run/dnk/control-plane/encryption.key
+    volumes:
+      - ${CONTROL_PLANE_SECRET_DIRECTORY}/encryption.key:/var/run/dnk/control-plane/encryption.key:ro
+
+  events-publisher:
+    environment:
+      ENCRYPTION__KEY_PATH: /var/run/dnk/control-plane/encryption.key
+    volumes:
+      - ${CONTROL_PLANE_SECRET_DIRECTORY}/encryption.key:/var/run/dnk/control-plane/encryption.key:ro
+
+  events-console-worker:
+    environment:
+      ENCRYPTION__KEY_PATH: /var/run/dnk/control-plane/encryption.key
+    volumes:
+      - ${CONTROL_PLANE_SECRET_DIRECTORY}/encryption.key:/var/run/dnk/control-plane/encryption.key:ro
 
   lifecycle-worker:
     build:

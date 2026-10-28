@@ -90,19 +90,6 @@ function drop(stageId: string) {
 function stageName(id: string) {
   return props.stages.find((s) => s.id === id)?.name ?? "Стадия";
 }
-function stageColor(color: string): string {
-  return (
-    (
-      {
-        blue: "bg-blue-500",
-        green: "bg-green-500",
-        amber: "bg-amber-500",
-        red: "bg-red-500",
-        violet: "bg-violet-500",
-      } as Record<string, string>
-    )[color] ?? "bg-muted-foreground"
-  );
-}
 </script>
 <template>
   <div
@@ -123,7 +110,7 @@ function stageColor(color: string): string {
           <span
             aria-hidden="true"
             class="size-2 shrink-0 rounded-full"
-            :class="stageColor(column.stage.color)"
+            :style="{ backgroundColor: column.stage.color }"
           />{{ column.stage.name }}
         </h2>
         <span

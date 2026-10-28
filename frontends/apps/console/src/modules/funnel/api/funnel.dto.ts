@@ -1,4 +1,5 @@
 export interface FunnelStageDto {
+  kind: "in_progress" | "won" | "lost";
   id: string;
   name: string;
   color: string;
@@ -22,9 +23,20 @@ export interface SaveFunnelDto {
   id: string;
   revision: number;
   stage_id_map: Record<string, string>;
+  moved_cards_count?: number;
 }
 
 export interface FunnelDefinitionInputDto {
   name: string;
-  stages: { id?: string; client_key?: string; name: string; color: string }[];
+  stages: {
+    id?: string;
+    client_key?: string;
+    name: string;
+    color: string;
+    kind: "in_progress" | "won" | "lost";
+  }[];
+}
+
+export interface GetFunnelDto extends Omit<FunnelDto, "stages"> {
+  stages: (FunnelStageDto & { cards_count: number })[];
 }

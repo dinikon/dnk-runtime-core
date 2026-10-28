@@ -23,7 +23,8 @@ from src.modules.control_plane.application.services import (
     ProvisioningConflict,
 )
 from src.modules.control_plane.application.worker_engine import LostLease
-from src.modules.control_plane.infrastructure.crypto import CredentialCipher
+from src.modules.shared.infrastructure.crypto.fernet_cipher import FernetCipher
+from src.modules.shared.presentation.crypto.depends import get_cipher
 from src.modules.control_plane.infrastructure.models import (
     AccessProjectionModel,
     CloudConnectionModel,
@@ -61,14 +62,14 @@ from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
 )
 
 
-def configuration():
+def configuration() -> ControlPlaneSettings:
+    """Создаёт настройки интеграции без отдельного ключа шифрования модуля."""
     return ControlPlaneSettings(
         public_origin="https://core.example.test",
         management_origin="https://management.core.example.test",
         management_host="manage.runtime.example.test",
         instance_id=uuid4(),
         allowed_base_domains=["one.example.test", "two.example.test"],
-        secret_encryption_key=Fernet.generate_key().decode(),
     )
 
 
@@ -149,6 +150,7 @@ class ContractTests(unittest.IsolatedAsyncioTestCase):
 class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.config = configuration()
+        self.cipher = FernetCipher(Fernet.generate_key().decode())
         self.engine = create_async_engine(os.environ["TEST_CP_POSTGRES_URL"])
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         async with self.engine.begin() as connection:
@@ -202,7 +204,10 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             self.core_ids.append(core_id)
         async with self.sessions() as session, session.begin():
             repository = ProvisioningRepository(
-                session, self.config, TenancyAdapter(session, "dnk_")
+                session,
+                self.config,
+                TenancyAdapter(session, "dnk_"),
+                cipher=self.cipher,
             )
             result = await AcceptProvisioningCommand(repository, self.config)(
                 ProvisioningCommand.model_validate(payload), payload["attempt_id"]
@@ -257,9 +262,9 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 await release.wait()
 
         task = asyncio.create_task(
-            Installer(self.sessions, self.config, "dnk_", SlowAdapter).run(
-                UUID(payload["attempt_id"])
-            )
+            Installer(
+                self.sessions, self.config, "dnk_", SlowAdapter, cipher=self.cipher
+            ).run(UUID(payload["attempt_id"]))
         )
         try:
             await asyncio.wait_for(started.wait(), timeout=5)
@@ -271,15 +276,15 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_install_real_schema_owner_secret_projection_and_replay(self):
         payload, _ = await self.accept()
-        installer = Installer(self.sessions, self.config, "dnk_")
+        installer = Installer(self.sessions, self.config, "dnk_", cipher=self.cipher)
         await asyncio.gather(
             installer.run(UUID(payload["attempt_id"])),
             installer.run(UUID(payload["attempt_id"])),
         )
         async with self.sessions() as session:
-            result = await ProvisioningRepository(session, self.config).lookup(
-                UUID(payload["attempt_id"])
-            )
+            result = await ProvisioningRepository(
+                session, self.config, cipher=self.cipher
+            ).lookup(UUID(payload["attempt_id"]))
             self.assertEqual(
                 (result.state, result.resources_state), ("succeeded", "present"), result
             )
@@ -293,13 +298,17 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 CloudConnectionModel, installation.runtime_tenant_id
             )
             self.assertEqual(
-                CredentialCipher(self.config.secret_encryption_key).decrypt(
-                    connection.encrypted_secret
-                ),
+                self.cipher.decrypt_text(connection.encrypted_secret),
                 payload["oidc"]["client_secret"],
             )
             self.assertEqual(
-                await tenant_ready(session, self.config, "dnk_", payload["hostname"]),
+                await tenant_ready(
+                    session,
+                    self.config,
+                    "dnk_",
+                    payload["hostname"],
+                    cipher=self.cipher,
+                ),
                 {
                     "tenant_id": payload["tenant_id"],
                     "hostname": payload["hostname"],
@@ -308,7 +317,11 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIsNone(
                 await tenant_ready(
-                    session, self.config, "dnk_", "unknown.one.example.test"
+                    session,
+                    self.config,
+                    "dnk_",
+                    "unknown.one.example.test",
+                    cipher=self.cipher,
                 )
             )
             projection = await session.get(
@@ -351,13 +364,13 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 await super().install(installation, command)
                 raise RuntimeError("Injected failure with fake-secret")
 
-        await Installer(self.sessions, self.config, "dnk_", FailingAdapter).run(
-            UUID(payload["attempt_id"])
-        )
+        await Installer(
+            self.sessions, self.config, "dnk_", FailingAdapter, cipher=self.cipher
+        ).run(UUID(payload["attempt_id"]))
         async with self.sessions() as session:
-            result = await ProvisioningRepository(session, self.config).lookup(
-                UUID(payload["attempt_id"])
-            )
+            result = await ProvisioningRepository(
+                session, self.config, cipher=self.cipher
+            ).lookup(UUID(payload["attempt_id"]))
             self.assertEqual(
                 (result.state, result.resources_state), ("failed", "absent")
             )
@@ -377,15 +390,15 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         retry = copy.deepcopy(payload)
         retry["attempt_id"] = str(uuid4())
         await self.accept(retry)
-        await Installer(self.sessions, self.config, "dnk_").run(
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
             UUID(retry["attempt_id"])
         )
         async with self.sessions() as session:
             self.assertEqual(
                 (
-                    await ProvisioningRepository(session, self.config).lookup(
-                        UUID(retry["attempt_id"])
-                    )
+                    await ProvisioningRepository(
+                        session, self.config, cipher=self.cipher
+                    ).lookup(UUID(retry["attempt_id"]))
                 ).state,
                 "succeeded",
             )
@@ -404,11 +417,13 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             "provision_storage",
             AsyncMock(side_effect=StorageUnavailableError()),
         ):
-            await Installer(self.sessions, self.config, "dnk_").run(attempt_id)
-        async with self.sessions() as session:
-            result = await ProvisioningRepository(session, self.config).lookup(
+            await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
                 attempt_id
             )
+        async with self.sessions() as session:
+            result = await ProvisioningRepository(
+                session, self.config, cipher=self.cipher
+            ).lookup(attempt_id)
             self.assertEqual(
                 (result.state, result.resources_state), ("failed", "present")
             )
@@ -423,11 +438,13 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(
                 await session.get(CloudConnectionModel, installation.runtime_tenant_id)
             )
-        await Installer(self.sessions, self.config, "dnk_").run(attempt_id)
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
+            attempt_id
+        )
         async with self.sessions() as session:
-            result = await ProvisioningRepository(session, self.config).lookup(
-                attempt_id
-            )
+            result = await ProvisioningRepository(
+                session, self.config, cipher=self.cipher
+            ).lookup(attempt_id)
             self.assertEqual(result.state, "succeeded")
             self.assertEqual(
                 (await session.get(TenantModel, installation.runtime_tenant_id)).status,
@@ -436,7 +453,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_missing_attempt_record_never_recreates_registered_tenant(self):
         payload, _ = await self.accept()
-        await Installer(self.sessions, self.config, "dnk_").run(
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
             UUID(payload["attempt_id"])
         )
         async with self.sessions() as session, session.begin():
@@ -450,7 +467,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_expired_worker_fence_rolls_back_entire_installation(self):
         payload, _ = await self.accept()
-        installer = Installer(self.sessions, self.config, "dnk_")
+        installer = Installer(self.sessions, self.config, "dnk_", cipher=self.cipher)
         claim = await installer.claim(UUID(payload["attempt_id"]))
         async with self.sessions() as session, session.begin():
             await session.execute(
@@ -464,9 +481,9 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.sessions() as session:
             self.assertEqual(
                 (
-                    await ProvisioningRepository(session, self.config).lookup(
-                        claim.attempt_id
-                    )
+                    await ProvisioningRepository(
+                        session, self.config, cipher=self.cipher
+                    ).lookup(claim.attempt_id)
                 ).state,
                 "succeeded",
             )
@@ -485,9 +502,9 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
                 return ready
 
-        await Installer(self.sessions, self.config, "dnk_", ExpiringAdapter).run(
-            attempt_id
-        )
+        await Installer(
+            self.sessions, self.config, "dnk_", ExpiringAdapter, cipher=self.cipher
+        ).run(attempt_id)
         async with self.sessions() as session, session.begin():
             installation = await session.get(
                 InstallationModel, UUID(payload["tenant_id"])
@@ -511,20 +528,22 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 .where(ProvisioningAttemptModel.attempt_id == attempt_id)
                 .values(lease_until=now() - timedelta(seconds=1))
             )
-        await Installer(self.sessions, self.config, "dnk_").run(attempt_id)
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
+            attempt_id
+        )
         async with self.sessions() as session:
             self.assertEqual(
                 (
-                    await ProvisioningRepository(session, self.config).lookup(
-                        attempt_id
-                    )
+                    await ProvisioningRepository(
+                        session, self.config, cipher=self.cipher
+                    ).lookup(attempt_id)
                 ).state,
                 "succeeded",
             )
 
     async def test_replaced_fencing_token_cannot_update_current_attempt(self):
         payload, _ = await self.accept()
-        installer = Installer(self.sessions, self.config, "dnk_")
+        installer = Installer(self.sessions, self.config, "dnk_", cipher=self.cipher)
         first = await installer.claim(UUID(payload["attempt_id"]))
         async with self.sessions() as session, session.begin():
             await session.execute(
@@ -540,9 +559,9 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.sessions() as session:
             self.assertEqual(
                 (
-                    await ProvisioningRepository(session, self.config).lookup(
-                        first.attempt_id
-                    )
+                    await ProvisioningRepository(
+                        session, self.config, cipher=self.cipher
+                    ).lookup(first.attempt_id)
                 ).state,
                 "succeeded",
             )
@@ -556,13 +575,13 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             async def inspect(self, *args):
                 raise RuntimeError("No authoritative observation")
 
-        await Installer(self.sessions, self.config, "dnk_", UnknownAdapter).run(
-            UUID(payload["attempt_id"])
-        )
+        await Installer(
+            self.sessions, self.config, "dnk_", UnknownAdapter, cipher=self.cipher
+        ).run(UUID(payload["attempt_id"]))
         async with self.sessions() as session:
-            result = await ProvisioningRepository(session, self.config).lookup(
-                UUID(payload["attempt_id"])
-            )
+            result = await ProvisioningRepository(
+                session, self.config, cipher=self.cipher
+            ).lookup(UUID(payload["attempt_id"]))
             self.assertEqual(
                 (result.state, result.resources_state), ("failed", "unknown")
             )
@@ -571,20 +590,20 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ProvisioningConflict):
             await self.accept(changed)
         # Reconciliation proves absence but does not silently restart installation.
-        await Installer(self.sessions, self.config, "dnk_").run(
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
             UUID(payload["attempt_id"])
         )
         async with self.sessions() as session:
-            result = await ProvisioningRepository(session, self.config).lookup(
-                UUID(payload["attempt_id"])
-            )
+            result = await ProvisioningRepository(
+                session, self.config, cipher=self.cipher
+            ).lookup(UUID(payload["attempt_id"]))
             self.assertEqual(
                 (result.state, result.resources_state), ("failed", "absent")
             )
 
     async def test_access_version_survives_revoke_relink_and_http_classification(self):
         payload, _ = await self.accept()
-        await Installer(self.sessions, self.config, "dnk_").run(
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
             UUID(payload["attempt_id"])
         )
         core_id, user_id = UUID(payload["tenant_id"]), UUID(payload["owner"]["sub"])
@@ -684,7 +703,9 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
             broker = Broker()
 
         payload, _ = await self.accept()
-        worker = RuntimeWorker(self.sessions, self.config, "dnk_", provider=Provider())
+        worker = RuntimeWorker(
+            self.sessions, self.config, "dnk_", provider=Provider(), cipher=self.cipher
+        )
         worker.publish = AsyncMock(side_effect=OSError("Broker unavailable"))
         await worker.dispatch()
         async with self.sessions() as session, session.begin():
@@ -714,7 +735,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.control_plane.infrastructure.metrics import render_metrics
 
         payload, _ = await self.accept()
-        await Installer(self.sessions, self.config, "dnk_").run(
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
             UUID(payload["attempt_id"])
         )
         async with self.sessions() as session:
@@ -743,7 +764,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
                 "access_queue": f"dnk.test.access.{suffix}",
             }
         )
-        worker = RuntimeWorker(self.sessions, config, "dnk_")
+        worker = RuntimeWorker(self.sessions, config, "dnk_", cipher=self.cipher)
         deliveries = []
 
         def core(request):
@@ -839,11 +860,12 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         )
 
         payload, _ = await self.accept()
-        await Installer(self.sessions, self.config, "dnk_").run(
+        await Installer(self.sessions, self.config, "dnk_", cipher=self.cipher).run(
             UUID(payload["attempt_id"])
         )
         config = self.config.model_copy(update={"enabled": True})
         app = FastAPI()
+        app.dependency_overrides[get_cipher] = lambda: self.cipher
         app.state.db, app.state.control_plane_settings = self.sessions, config
         app.include_router(router)
         async with httpx.AsyncClient(
@@ -882,6 +904,7 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.control_plane.presentation.router import router
 
         app = FastAPI()
+        app.dependency_overrides[get_cipher] = lambda: self.cipher
         app.state.db = self.sessions
         app.state.control_plane_settings = self.config.model_copy(
             update={"enabled": True}

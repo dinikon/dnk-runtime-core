@@ -1,4 +1,7 @@
 from dataclasses import dataclass, field
+from src.modules.catalog.domain.catalog_item.value_object.kind import (
+    CatalogItemKind,
+)
 from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
@@ -24,6 +27,21 @@ class CreateCatalogItemTranslation:
 
 
 @dataclass(frozen=True, slots=True)
+class CreateCatalogVariantValues:
+    """Собственные значения варианта, отсутствующие разделы наследуются."""
+
+    status: CatalogItemStatus = CatalogItemStatus.DRAFT
+    sku: str | None = None
+    virtual: bool = False
+    price_specification: PriceSpecificationVO | None = None
+    stock: StockSpecificationVO = field(default_factory=StockSpecificationVO)
+    weight: WeightVO | None = None
+    dimensions: DimensionsVO | None = None
+    translations: dict[str, CreateCatalogItemTranslation] = field(default_factory=dict)
+    galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class CreateCatalogItemValues:
     """Описывает исходные значения самостоятельного товара без внешнего источника."""
 
@@ -37,3 +55,5 @@ class CreateCatalogItemValues:
     dimensions: DimensionsVO | None = None
     translations: dict[str, CreateCatalogItemTranslation] = field(default_factory=dict)
     galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
+    kind: CatalogItemKind = CatalogItemKind.SIMPLE
+    variants: tuple[CreateCatalogVariantValues, ...] = ()

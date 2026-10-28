@@ -1,3 +1,11 @@
+## v3.5.0-rc.1 (2026-10-28)
+
+### Feat
+
+- **catalog**: add variant support with services, UI, and migration
+- **channels**: remove channel module completely
+- **channels**: introduce CRUD operations, API integration, and persistence for channels
+
 ## v3.4.0 (2026-10-26)
 
 ### Feat

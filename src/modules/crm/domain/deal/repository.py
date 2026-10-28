@@ -17,3 +17,13 @@ class DealRepositoryProtocol(Protocol):
     async def save(self, entity: Deal) -> None:
         """Сохраняет агрегат без commit."""
         ...
+
+    async def get(self, record_id: EntityIdVO) -> Deal | None:
+        """Предварительно загружает агрегат для выбора порядка блокировок."""
+        ...
+
+    async def list_in_stages_for_update(
+        self, funnel_id: EntityIdVO, stage_ids: tuple[EntityIdVO, ...]
+    ) -> tuple[Deal, ...]:
+        """Блокирует и загружает агрегаты удаляемых стадий по ID."""
+        ...

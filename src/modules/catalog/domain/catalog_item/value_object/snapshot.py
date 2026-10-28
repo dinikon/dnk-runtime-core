@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from src.modules.catalog.domain.catalog_item.value_object.kind import (
+    CatalogItemKind,
+)
 from datetime import datetime
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
@@ -39,3 +42,5 @@ class CatalogItemValuesSnapshot:
     updated_by: EntityIdVO
     translations: dict[str, dict[str, str]]
     galleries: dict[str, CatalogItemGallery]
+    kind: CatalogItemKind = CatalogItemKind.SIMPLE
+    parent_id: CatalogItemIdVO | None = None

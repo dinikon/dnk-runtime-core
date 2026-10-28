@@ -37,6 +37,18 @@ class CatalogItemDetailsGalleryDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class CatalogItemSourcesDTO:
+    """Владельцы эффективных разделов выбранной locale."""
+
+    title: UUID | None
+    body: UUID | None
+    gallery: UUID | None
+    weight: UUID | None
+    dimensions: UUID | None
+    stock: UUID
+
+
+@dataclass(frozen=True, slots=True)
 class CatalogItemDetailsDTO:
     """Проекция самостоятельного товара для сценария get_catalog_item."""
 
@@ -61,6 +73,21 @@ class CatalogItemDetailsDTO:
     updated_at: datetime
     created_by: UUID
     updated_by: UUID
+
+    kind: str = "simple"
+    parent_id: UUID | None = None
+    stock_source: str = "own"
+    variant_count: int = 0
+    min_price: Decimal | None = None
+    max_price: Decimal | None = None
+    currency: str | None = None
+    mixed_currencies: bool = False
+    effective_content: dict[str, str] | None = None
+    effective_gallery: CatalogItemDetailsGalleryDTO | None = None
+    effective_stock: StockSpecificationVO | None = None
+    effective_weight: WeightVO | None = None
+    effective_dimensions: DimensionsVO | None = None
+    sources: CatalogItemSourcesDTO | None = None
 
 
 @dataclass(frozen=True, slots=True)

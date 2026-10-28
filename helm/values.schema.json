@@ -475,6 +475,43 @@
               "minimum": 1
             }
           }
+        },
+        "encryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "existingSecret"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "existingSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "key"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+                    },
+                    "key": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._-]*$"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },

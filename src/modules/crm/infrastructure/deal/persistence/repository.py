@@ -93,3 +93,46 @@ class SqlAlchemyDealRepository:
                     insert(model),
                     [{"deal_id": entity.id.uuid, field: i.uuid} for i in ids],
                 )
+
+    async def get(self, record_id: EntityIdVO) -> Deal | None:
+        """Восстанавливает агрегат для предварительного решения о блокировках."""
+        row = (
+            (
+                await self._session.execute(
+                    select(DealModel.__table__).where(DealModel.id == record_id.uuid)
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return (
+            DealMapper.to_domain(row, **await self._participants(record_id.uuid))
+            if row is not None
+            else None
+        )
+
+    async def list_in_stages_for_update(
+        self, funnel_id: EntityIdVO, stage_ids: tuple[EntityIdVO, ...]
+    ) -> tuple[Deal, ...]:
+        """Получает агрегаты в стабильном порядке на сессии внешнего UoW."""
+        ids = (
+            (
+                await self._session.execute(
+                    select(DealModel.id)
+                    .where(
+                        DealModel.funnel_id == funnel_id.uuid,
+                        DealModel.stage_id.in_([value.uuid for value in stage_ids]),
+                    )
+                    .order_by(DealModel.id)
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        entities = []
+        for record_id in ids:
+            entity = await self.get_for_update(EntityIdVO(record_id))
+            if entity is not None:
+                entities.append(entity)
+        return tuple(entities)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import {
   Field,
   FieldContent,
@@ -18,10 +19,12 @@ import {
 } from "@/components/ui/select";
 import type { ProductStock } from "../../model/product.types";
 import { useProductSectionDraft } from "../../model/use-product-section-draft";
-import { stockLabels } from "../../model/product-presentation";
+import { stockLabels, stockFormMode } from "../../model/product-presentation";
 import ProductFieldError from "../product/ProductFieldError.vue";
 const props = defineProps<{
   value: ProductStock;
+  kind?: "simple" | "variable" | "variant";
+  parentStock?: ProductStock;
   reset: number;
   disabled: boolean;
   error?: string;
@@ -33,6 +36,9 @@ const { value: stock, change } = useProductSectionDraft(
   () => props.value,
   () => props.reset,
   (value) => emit("change", value),
+);
+const mode = computed(() =>
+  stockFormMode(props.kind ?? "simple", stock.value, props.parentStock),
 );
 function managed(value: boolean): void {
   change(
@@ -64,11 +70,20 @@ function quantity(value: string | number): void {
     <FieldGroup class="gap-4">
       <Field orientation="horizontal"
         ><FieldContent
-          ><FieldLabel :for="`${id}-manage-stock`"
-            >Учитывать количество</FieldLabel
-          ><FieldDescription
-            >Или укажите наличие вручную.</FieldDescription
-          ></FieldContent
+          ><FieldLabel :for="`${id}-manage-stock`">{{
+            kind === "variant"
+              ? "Учитывать собственное количество"
+              : kind === "variable"
+                ? "Учитывать общее количество"
+                : "Учитывать количество"
+          }}</FieldLabel
+          ><FieldDescription>{{
+            kind === "variable"
+              ? "Общее количество для вариантов без собственного учёта."
+              : kind === "variant"
+                ? "Без собственного учёта используется общее количество или ручное наличие."
+                : "Или укажите наличие вручную."
+          }}</FieldDescription></FieldContent
         ><label class="product-switch-target" :for="`${id}-manage-stock`"
           ><Switch
             :id="`${id}-manage-stock`"
@@ -89,7 +104,7 @@ function quantity(value: string | number): void {
           :aria-describedby="error ? `${id}-stock-error` : undefined"
           @update:model-value="quantity"
       /></Field>
-      <Field v-else
+      <Field v-else-if="mode === 'manual'"
         ><FieldLabel :for="`${id}-stock-status`">Наличие</FieldLabel
         ><Select
           :model-value="stock.stock_status ?? 'in_stock'"
@@ -114,6 +129,14 @@ function quantity(value: string | number): void {
           ></Select
         ></Field
       >
+      <FieldDescription v-if="mode === 'variants'"
+        >Наличие задаётся в вариантах.</FieldDescription
+      >
+      <FieldDescription v-if="mode === 'inherited'" role="status">
+        Используется общее количество карточки:
+        {{ parentStock?.stock_quantity }}. Включите собственный учёт, чтобы
+        задать количество этого варианта.
+      </FieldDescription>
       <Field v-if="stock.manage_stock"
         ><FieldLabel :for="`${id}-backorders`">Предзаказ</FieldLabel
         ><Select
@@ -139,7 +162,7 @@ function quantity(value: string | number): void {
       <ProductFieldError
         :id="`${id}-stock-error`"
         :error="error"
-      /><FieldDescription
+      /><FieldDescription v-if="mode !== 'variants'"
         >Подтверждённое наличие:
         {{ stockLabels[current] ?? "Не задано" }}</FieldDescription
       >

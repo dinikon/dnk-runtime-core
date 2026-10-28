@@ -1,17 +1,31 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from "vue";
+import type { PrimitiveProps } from "reka-ui";
+import { Primitive } from "reka-ui";
 import { cn } from "@/lib/utils";
 
-const props = defineProps<{
+interface Props extends PrimitiveProps {
   class?: HTMLAttributes["class"];
-}>();
+  size?: "default" | "lg";
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  as: "div",
+  size: "default",
+});
 </script>
 
 <template>
-  <div
+  <Primitive
+    :as="props.as"
+    :as-child="props.asChild"
     data-slot="empty-title"
-    :class="cn('text-lg font-medium tracking-tight', props.class)"
+    :class="cn(
+      'tracking-tight',
+      props.size === 'lg' ? 'text-xl font-semibold' : 'text-lg font-medium',
+      props.class,
+    )"
   >
     <slot />
-  </div>
+  </Primitive>
 </template>

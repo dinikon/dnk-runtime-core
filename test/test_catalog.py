@@ -73,6 +73,7 @@ class CatalogArchitectureTests(unittest.TestCase):
                 scenario, aggregate = path.parent.name, path.parents[2].name
                 if scenario in {
                     "find_used_image_files",
+                    "get_catalog_product_snapshot",
                     "prepare_catalog_import",
                     "process_catalog_import_row",
                     "process_catalog_import_batch",
@@ -89,7 +90,10 @@ class CatalogArchitectureTests(unittest.TestCase):
                 )
                 if has_result:
                     self.assertTrue((path.parent / "dto.py").exists(), str(path))
-                    if scenario != "get_catalog_item_image_content":
+                    if scenario not in {
+                        "get_catalog_item_image_content",
+                        "get_catalog_variant_image_content",
+                    }:
                         self.assertTrue(
                             (http / "response" / f"{scenario}.py").exists(), str(path)
                         )
