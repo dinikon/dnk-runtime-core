@@ -37,6 +37,8 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "contacts",
         "channels",
         "channel_connections",
+        "channel_sync_runs",
+        "channel_external_publications",
         "crm_position_history",
         "crm_leads",
         "crm_deals",
@@ -100,5 +102,7 @@ import src.modules.catalog.infrastructure.persistence.models.catalog_import_medi
 
 import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.connection  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.sync_run  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.external_publication  # noqa: F401
 
 import src.modules.crm.infrastructure.persistence.models.position_history  # noqa: F401

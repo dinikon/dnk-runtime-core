@@ -2,4 +2,4 @@
 
 from typing import Literal
 
-type Capability = Literal["verify_connection"]
+type Capability = Literal["verify_connection", "publications"]

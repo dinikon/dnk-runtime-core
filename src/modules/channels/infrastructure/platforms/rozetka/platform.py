@@ -1,8 +1,15 @@
-import base64
 import json
 
 from pydantic import ValidationError
 
+from src.modules.channels.application.sync_run.port.source import (
+    PublicationCheckpoint,
+    PublicationObservation,
+    PublicationPage,
+)
+from src.modules.channels.infrastructure.platforms.rozetka.publications import (
+    RozetkaPublicationReader,
+)
 from src.modules.channels.application.error import ChannelInputError
 from src.modules.channels.application.error import VerificationFailure
 from src.modules.channels.application.port.platform import (
@@ -10,10 +17,10 @@ from src.modules.channels.application.port.platform import (
     ValidatedConnection,
 )
 from src.modules.channels.domain.types import JsonObject
-from src.modules.channels.domain.value_object.connection_config import (
+from src.modules.channels.domain.channel.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.value_object.resource_identity import (
+from src.modules.channels.domain.channel.value_object.resource_identity import (
     ResourceIdentityVO,
 )
 from src.modules.channels.infrastructure.http import JsonHttp
@@ -36,7 +43,8 @@ class RozetkaPlatform:
             config_version=1,
             config_schema=RozetkaConfig.model_json_schema(),
             credentials_schema=RozetkaCredentials.model_json_schema(),
-            supported_capabilities=("verify_connection",),
+            supported_capabilities=("verify_connection", "publications"),
+            publication_parent_kind=None,
         )
 
     def decode_config(self, config: ConnectionConfigVO) -> RozetkaConfig:
@@ -72,13 +80,13 @@ class RozetkaPlatform:
                 secret = RozetkaCredentials.model_validate(credentials)
             except ValidationError as error:
                 path = error.errors(include_input=False)[0]["loc"]
-                location = str(path[0]) if path and path[0] in {"password"} else ""
+                location = str(path[0]) if path and path[0] in {"token"} else ""
                 raise ChannelInputError(
                     "credentials_invalid",
                     field="credentials" + ("." + location if location else ""),
                 ) from None
             encoded = json.dumps(
-                {"password": secret.password.get_secret_value()},
+                {"token": secret.token.get_secret_value()},
                 ensure_ascii=False,
                 separators=(",", ":"),
             ).encode("utf-8")
@@ -89,23 +97,20 @@ class RozetkaPlatform:
                 settings=typed.settings.model_dump(mode="json"),
             ),
             credentials=encoded,
+            currency=typed.settings.currency,
+            locales=typed.settings.locales,
         )
 
     async def verify(
         self, config: ConnectionConfigVO, credentials: bytes
     ) -> ResourceIdentityVO:
-        """Авторизуется без пробных операций с товарами и заказами."""
+        """Получает identity по постоянному токену без парольной авторизации."""
         settings = self.decode_config(config)
         secret = RozetkaCredentials.model_validate_json(credentials)
         data = await self.http.request(
-            "POST",
-            settings.endpoint + "/sites",
-            body={
-                "username": settings.settings.username,
-                "password": base64.b64encode(
-                    secret.password.get_secret_value().encode()
-                ).decode(),
-            },
+            "GET",
+            settings.endpoint + "/sites/get-auth-data",
+            headers={"Authorization": "Bearer " + secret.token.get_secret_value()},
         )
         response = RozetkaLogin.model_validate(data)
         if not response.success:
@@ -115,3 +120,30 @@ class RozetkaPlatform:
         return ResourceIdentityVO(
             namespace="rozetka.market", key=str(response.content.market.id)
         )
+
+    async def read_publications(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        checkpoint: PublicationCheckpoint,
+        parent_external_id: str | None = None,
+    ) -> PublicationPage:
+        """Восстанавливает конкретные настройки и читает один шаг источника."""
+        return await RozetkaPublicationReader(self.http).read(
+            config=self.decode_config(config),
+            credentials=RozetkaCredentials.model_validate_json(credentials),
+            checkpoint=checkpoint,
+        )
+
+    async def read_publication_dependencies(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        keys: tuple[tuple[str, str], ...],
+    ) -> tuple[PublicationObservation, ...]:
+        """Дозагружает подтверждённые зависимости изменения структуры."""
+        if keys:
+            raise VerificationFailure("publication_structure_changed")
+        return ()

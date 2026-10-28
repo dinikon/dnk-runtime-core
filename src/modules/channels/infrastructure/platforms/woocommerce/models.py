@@ -1,11 +1,16 @@
 from typing import Literal
+
 from pydantic import BaseModel, Field, SecretStr, field_validator
+
 from src.modules.channels.infrastructure.platforms.base import StrictModel
 from src.modules.channels.infrastructure.platforms.url import normalize_endpoint
 
 
 class WooCommerceSettings(StrictModel):
-    """Дополнительных настроек для проверки WooCommerce нет."""
+    """Единственная валюта и язык интерпретации контента магазина."""
+
+    currency: Literal["UAH", "USD", "EUR"] = Field(default="UAH", title="Валюта")
+    locale: Literal["uk", "ru", "en"] = Field(default="uk", title="Язык")
 
 
 class WooCommerceConfig(StrictModel):

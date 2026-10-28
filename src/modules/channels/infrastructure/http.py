@@ -1,6 +1,7 @@
 import asyncio
 import ipaddress
 import socket
+from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
@@ -9,6 +10,14 @@ from pydantic import TypeAdapter
 from src.modules.channels.application.error import VerificationFailure
 from src.modules.channels.domain.types import JsonObject
 from src.modules.channels.domain.types import JsonValue
+
+
+@dataclass(frozen=True, slots=True)
+class JsonHttpResponse:
+    """Данные ответа и заголовки пагинации без транспортного клиента."""
+
+    data: JsonValue
+    headers: dict[str, str]
 
 
 class JsonHttp(Protocol):
@@ -23,6 +32,17 @@ class JsonHttp(Protocol):
         body: JsonObject | None = None,
     ) -> JsonValue:
         """Возвращает ограниченный JSON либо безопасную ошибку."""
+        ...
+
+    async def request_response(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        body: JsonObject | None = None,
+    ) -> JsonHttpResponse:
+        """Возвращает JSON вместе с заголовками для страничных API."""
         ...
 
 
@@ -57,7 +77,7 @@ class PublicHttpsTransport(httpx.AsyncBaseTransport):
             chunks, size = [], 0
             async for chunk in response.aiter_bytes():
                 size += len(chunk)
-                if size > 2 * 1024 * 1024:
+                if size > 10 * 1024 * 1024:
                     raise VerificationFailure("provider_response_invalid")
                 chunks.append(chunk)
             return httpx.Response(
@@ -85,6 +105,19 @@ class SafeJsonHttp:
         headers: dict[str, str] | None = None,
         body: JsonObject | None = None,
     ) -> JsonValue:
+        """Сохраняет существующий контракт verifier без HTTP-метаданных."""
+        return (
+            await self.request_response(method, url, headers=headers, body=body)
+        ).data
+
+    async def request_response(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        body: JsonObject | None = None,
+    ) -> JsonHttpResponse:
         """Выполняет запрос без redirect, proxy из окружения и логирования payload."""
         try:
             async with httpx.AsyncClient(
@@ -106,7 +139,10 @@ class SafeJsonHttp:
                 raise VerificationFailure("endpoint_redirected")
             if response.status_code != 200:
                 raise VerificationFailure("provider_response_invalid")
-            return TypeAdapter(JsonValue).validate_json(response.content)
+            return JsonHttpResponse(
+                TypeAdapter(JsonValue).validate_json(response.content),
+                {key.lower(): value for key, value in response.headers.items()},
+            )
         except (httpx.TimeoutException, TimeoutError):
             raise VerificationFailure("network_timeout", retryable=True) from None
         except (httpx.RequestError, OSError):

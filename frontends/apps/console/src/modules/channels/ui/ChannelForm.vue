@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Field,
   FieldGroup,
   FieldLabel,
@@ -45,6 +52,20 @@ function value(
     ...props.draft,
     [section]: { ...props.draft[section], [key]: String(next) },
   });
+}
+function settingValue(key: string): string {
+  const current = props.draft.settings[key];
+  return typeof current === "string" ? current : "";
+}
+function settingLabel(value: unknown): string {
+  const labels: Record<string, string> = {
+    uk: "Українська",
+    ru: "Русский",
+    en: "English",
+  };
+  return Array.isArray(value)
+    ? value.map((item) => labels[String(item)] ?? String(item)).join(" / ")
+    : (labels[String(value)] ?? String(value ?? ""));
 }
 </script>
 <template>
@@ -98,10 +119,38 @@ function value(
       ><Field v-for="field in settings" :key="field.key"
         ><FieldLabel :for="uid + '-setting-' + field.key">{{
           field.title
-        }}</FieldLabel
-        ><Input
+        }}</FieldLabel>
+        <output
+          v-if="field.readOnly"
+          class="block rounded-md border bg-muted/30 px-3 py-2 text-sm"
           :id="uid + '-setting-' + field.key"
-          :model-value="draft.settings[field.key]"
+        >
+          {{ settingLabel(draft.settings[field.key]) }}
+        </output>
+        <Select
+          v-else-if="field.options.length"
+          :model-value="settingValue(field.key)"
+          :disabled="busy"
+          @update:model-value="
+            $event && value('settings', field.key, String($event))
+          "
+        >
+          <SelectTrigger :id="uid + '-setting-' + field.key"
+            ><SelectValue
+          /></SelectTrigger>
+          <SelectContent
+            ><SelectItem
+              v-for="option in field.options"
+              :key="option"
+              :value="option"
+              >{{ settingLabel(option) }}</SelectItem
+            ></SelectContent
+          >
+        </Select>
+        <Input
+          v-else
+          :id="uid + '-setting-' + field.key"
+          :model-value="settingValue(field.key)"
           :required="field.required"
           :disabled="busy"
           :maxlength="field.maxLength"

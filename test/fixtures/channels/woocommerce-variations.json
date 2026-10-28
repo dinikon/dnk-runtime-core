@@ -1,0 +1,27 @@
+[
+  {
+    "id": 511,
+    "sku": "BLACK-M",
+    "price": "800.00",
+    "regular_price": "900.00",
+    "sale_price": "800.00",
+    "manage_stock": true,
+    "stock_quantity": 7,
+    "stock_status": "instock",
+    "attributes": [
+      {
+        "id": 1,
+        "name": "Size",
+        "option": "M"
+      }
+    ]
+  },
+  {
+    "id": 512,
+    "sku": "WHITE-L",
+    "price": "850.00",
+    "manage_stock": "parent",
+    "stock_quantity": 20,
+    "stock_status": "instock"
+  }
+]

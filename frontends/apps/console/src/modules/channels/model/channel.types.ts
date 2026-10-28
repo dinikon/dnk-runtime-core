@@ -45,7 +45,7 @@ export interface ChannelDraft {
   name: string;
   platformKind: string;
   endpoint: string;
-  settings: Record<string, string>;
+  settings: JsonObject;
   credentials: Record<string, string>;
   replaceCredentials: boolean;
 }
@@ -72,7 +72,8 @@ export interface SchemaField {
   required: boolean;
   secret: boolean;
   readOnly: boolean;
-  defaultValue: string;
+  defaultValue: JsonValue;
+  options: string[];
   maxLength?: number;
   format?: string;
 }

@@ -38,7 +38,12 @@ export function schemaFields(
         required: required.includes(key),
         secret: field.writeOnly === true || field.format === "password",
         readOnly: field.const !== undefined || field.readOnly === true,
-        defaultValue: String(field.const ?? field.default ?? ""),
+        defaultValue: field.const ?? field.default ?? "",
+        options: Array.isArray(field.enum)
+          ? field.enum.filter(
+              (value): value is string => typeof value === "string",
+            )
+          : [],
         maxLength:
           typeof field.maxLength === "number" ? field.maxLength : undefined,
         format: typeof field.format === "string" ? field.format : undefined,
@@ -51,15 +56,20 @@ export function draftFor(platform: Platform, channel?: Channel): ChannelDraft {
     platformKind: platform.kind,
     endpoint:
       channel?.config.endpoint ??
-      schemaFields(platform.configSchema).find((f) => f.key === "endpoint")
-        ?.defaultValue ??
+      schemaFields(platform.configSchema)
+        .find((f) => f.key === "endpoint")
+        ?.defaultValue?.toString() ??
       "",
-    settings: Object.fromEntries(
-      schemaFields(platform.configSchema, "settings").map((field) => [
-        field.key,
-        String(channel?.config.settings[field.key] ?? field.defaultValue),
-      ]),
-    ),
+    settings: JSON.parse(
+      JSON.stringify(
+        Object.fromEntries(
+          schemaFields(platform.configSchema, "settings").map((field) => [
+            field.key,
+            channel?.config.settings[field.key] ?? field.defaultValue,
+          ]),
+        ),
+      ),
+    ) as JsonObject,
     credentials: Object.fromEntries(
       schemaFields(platform.credentialsSchema).map((field) => [field.key, ""]),
     ),
@@ -76,7 +86,7 @@ export function saveDraft(
     config: {
       version: platform.configVersion,
       endpoint: draft.endpoint,
-      settings: { ...draft.settings },
+      settings: JSON.parse(JSON.stringify(draft.settings)) as JsonObject,
     },
     ...(draft.replaceCredentials
       ? { credentials: { ...draft.credentials } }

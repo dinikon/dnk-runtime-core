@@ -6,22 +6,24 @@ from datetime import UTC, datetime, timedelta
 import unittest
 from uuid import uuid4
 
-from src.modules.channels.domain.aggregate import Channel
-from src.modules.channels.domain.connection import Connection
-from src.modules.channels.domain.enum.verification_status import VerificationStatus
-from src.modules.channels.domain.error import (
+from src.modules.channels.domain.channel.aggregate import Channel
+from src.modules.channels.domain.channel.connection import Connection
+from src.modules.channels.domain.channel.enum.verification_status import (
+    VerificationStatus,
+)
+from src.modules.channels.domain.channel.error import (
     InvalidChannelNameError,
     InvalidChannelStateError,
     InvalidResourceIdentityError,
 )
-from src.modules.channels.domain.value_object.channel_name import ChannelNameVO
-from src.modules.channels.domain.value_object.connection_config import (
+from src.modules.channels.domain.channel.value_object.channel_name import ChannelNameVO
+from src.modules.channels.domain.channel.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.value_object.resource_identity import (
+from src.modules.channels.domain.channel.value_object.resource_identity import (
     ResourceIdentityVO,
 )
-from src.modules.channels.domain.value_object.verification import VerificationVO
+from src.modules.channels.domain.channel.value_object.verification import VerificationVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 

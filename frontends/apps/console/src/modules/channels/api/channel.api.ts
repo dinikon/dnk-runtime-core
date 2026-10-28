@@ -22,7 +22,7 @@ import {
   createPayload,
   updatePayload,
 } from "./channel.mapper";
-async function safe<T>(request: () => Promise<T>): Promise<T> {
+export async function channelRequest<T>(request: () => Promise<T>): Promise<T> {
   try {
     return await request();
   } catch (error: unknown) {
@@ -41,7 +41,7 @@ const root = "/console/channels";
 const item = (id: string): string => root + "/" + encodeURIComponent(id);
 export const channelApi = {
   async platforms(signal?: AbortSignal): Promise<Platform[]> {
-    return safe(async () =>
+    return channelRequest(async () =>
       (
         await httpClient.get<{ items: PlatformDto[] }>(root + "/platforms", {
           signal,
@@ -53,7 +53,7 @@ export const channelApi = {
     filters: ChannelFilters,
     signal?: AbortSignal,
   ): Promise<ChannelPage> {
-    return safe(async () => {
+    return channelRequest(async () => {
       const { data } = await httpClient.get<ChannelPageDto>(root, {
         params: {
           search: filters.search,
@@ -68,7 +68,7 @@ export const channelApi = {
     });
   },
   async get(id: string, signal?: AbortSignal): Promise<Channel> {
-    return safe(async () =>
+    return channelRequest(async () =>
       mapChannel((await httpClient.get<ChannelDto>(item(id), { signal })).data),
     );
   },
@@ -76,7 +76,7 @@ export const channelApi = {
     value: ChannelSave,
     signal?: AbortSignal,
   ): Promise<ChannelSaved> {
-    return safe(async () =>
+    return channelRequest(async () =>
       mapSaved(
         (
           await httpClient.post<SavedChannelDto>(root, createPayload(value), {
@@ -92,7 +92,7 @@ export const channelApi = {
     revision: number,
     signal?: AbortSignal,
   ): Promise<ChannelSaved> {
-    return safe(async () =>
+    return channelRequest(async () =>
       mapSaved(
         (
           await httpClient.patch<SavedChannelDto>(
@@ -105,7 +105,7 @@ export const channelApi = {
     );
   },
   async verify(id: string, signal?: AbortSignal): Promise<ChannelSaved> {
-    return safe(async () =>
+    return channelRequest(async () =>
       mapSaved(
         (
           await httpClient.post<SavedChannelDto>(
@@ -122,7 +122,7 @@ export const channelApi = {
     revision: number,
     signal?: AbortSignal,
   ): Promise<void> {
-    return safe(async () => {
+    return channelRequest(async () => {
       await httpClient.delete(item(id), {
         params: { expected_revision: revision },
         signal,

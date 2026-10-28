@@ -16,22 +16,22 @@ from src.modules.channels.application.error import (
     ChannelInputError,
     VerificationFailure,
 )
-from src.modules.channels.domain.aggregate import Channel
-from src.modules.channels.domain.connection import Connection
-from src.modules.channels.domain.error import (
+from src.modules.channels.domain.channel.aggregate import Channel
+from src.modules.channels.domain.channel.connection import Connection
+from src.modules.channels.domain.channel.error import (
     ChannelNotFoundError,
     InvalidChannelNameError,
     InvalidChannelStateError,
     InvalidResourceIdentityError,
 )
-from src.modules.channels.domain.error import (
+from src.modules.channels.domain.channel.error import (
     ChannelRevisionConflictError,
 )
-from src.modules.channels.domain.value_object.channel_name import ChannelNameVO
-from src.modules.channels.domain.value_object.connection_config import (
+from src.modules.channels.domain.channel.value_object.channel_name import ChannelNameVO
+from src.modules.channels.domain.channel.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.value_object.resource_identity import (
+from src.modules.channels.domain.channel.value_object.resource_identity import (
     ResourceIdentityVO,
 )
 from src.modules.channels.infrastructure.http import PublicHttpsTransport, SafeJsonHttp
@@ -44,7 +44,7 @@ from src.modules.channels.infrastructure.platforms.woocommerce.models import (
 )
 from src.modules.channels.infrastructure.registry import InstalledPlatforms
 from src.modules.channels.presentation.http.access import channel_http_error
-from src.modules.channels.presentation.http.request.update_channel import (
+from src.modules.channels.presentation.channel.http.request.update_channel import (
     UpdateChannelRequest,
 )
 from src.modules.shared.application.crypto.error import (
@@ -90,8 +90,8 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             (
                 "rozetka",
                 "https://api-seller.rozetka.com.ua",
-                {"username": "seller"},
-                {"password": "secret-roz"},
+                {},
+                {"token": "secret-roz"},
                 "rozetka-login.json",
                 ResourceIdentityVO(namespace="rozetka.market", key="1086"),
             ),
@@ -119,7 +119,8 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
                 await platform.verify(validated.config, validated.credentials), expected
             )
             self.assertEqual(
-                platform.manifest.supported_capabilities, ("verify_connection",)
+                platform.manifest.supported_capabilities,
+                ("verify_connection", "publications"),
             )
             self.assertNotIn("secret-", repr(validated))
             self.assertNotIn("secret-", repr(platform.manifest))
@@ -136,8 +137,8 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
                 "rozetka",
                 RozetkaConfig,
                 "https://api-seller.rozetka.com.ua",
-                {"username": "seller"},
-                {"password": "секрет-rozetka"},
+                {},
+                {"token": "секрет-rozetka"},
             ),
             (
                 "woocommerce",
@@ -219,9 +220,9 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             ConnectionConfigVO.create(
                 version=1,
                 endpoint="https://api-seller.rozetka.com.ua",
-                settings={"username": "seller"},
+                settings={},
             ),
-            {"password": "secret"},
+            {"token": "secret"},
         )
         with self.assertRaises(VerificationFailure) as error:
             await p.verify(v.config, v.credentials)

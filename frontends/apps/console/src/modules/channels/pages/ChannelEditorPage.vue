@@ -22,6 +22,8 @@ import { useChannelScope } from "../model/use-channel-scope";
 import { draftFor, saveDraft, shouldPoll } from "../model/channel.schema";
 import { channelErrorMessage } from "../model/channel.errors";
 import type { ChannelDraft } from "../model/channel.types";
+import type { PageHeaderAction } from "@/components/custom-ui/page-header";
+import ChannelHeader from "../ui/ChannelHeader.vue";
 const route = useRoute(),
   router = useRouter(),
   scope = useChannelScope();
@@ -106,6 +108,31 @@ const dirty = computed(
 const error = computed(
   () => saveAction.error.value || verifyAction.error.value,
 );
+const headerActions = computed<PageHeaderAction[]>(() => [
+  { id: "channels", label: "Все каналы", variant: "outline" },
+  ...(query.data.value
+    ? [
+        {
+          id: "delete",
+          label: "Удалить канал",
+          variant: "outline" as const,
+          disabled: busy.value,
+        },
+      ]
+    : []),
+]);
+function changeTab(value: "settings" | "publications"): void {
+  if (value === "publications")
+    void router.push({
+      name: "channel-publications",
+      params: { id: id.value },
+      query: route.query,
+    });
+}
+function headerAction(value: string): void {
+  if (value === "channels") void router.push("/channels");
+  else if (value === "delete") deleteOpen.value = true;
+}
 function changePlatform(kind: string): void {
   const next = platforms.data.value?.find((p) => p.kind === kind);
   if (!next || id.value || !draft.value) return;
@@ -143,7 +170,16 @@ async function remove(): Promise<void> {
 </script>
 <template>
   <div class="flex min-h-0 flex-col gap-5 overflow-auto pb-6">
-    <header class="flex flex-wrap items-start justify-between gap-3">
+    <ChannelHeader
+      v-if="id"
+      :title="query.data.value?.name ?? 'Канал'"
+      description="Настройки подключения"
+      active-tab="settings"
+      :actions="headerActions"
+      @tab="changeTab"
+      @action="headerAction"
+    />
+    <header v-else class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <Button variant="link" class="px-0" @click="router.push('/channels')"
           >Все каналы</Button

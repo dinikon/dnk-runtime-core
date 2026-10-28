@@ -1,0 +1,17 @@
+{
+  "product": {
+    "id": 202,
+    "name": "Футболка чорна L",
+    "name_multilang": {
+      "uk": "Футболка чорна L"
+    },
+    "sku": "BLACK-L",
+    "price": 850,
+    "currency": "USD",
+    "presence": "available",
+    "quantity_in_stock": 4,
+    "is_variation": true,
+    "variation_base_id": 201,
+    "variation_group_id": 700
+  }
+}

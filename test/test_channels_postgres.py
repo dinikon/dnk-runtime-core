@@ -15,7 +15,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 from src.config import dnk_config
 from src.modules.channels.presentation.router import router
-from src.modules.channels.presentation.jobs.verify_connection import (
+from src.modules.channels.presentation.channel.jobs.verify_connection import (
     ChannelsVerifyConnectionJobHandler,
 )
 from src.modules.channels.infrastructure.registry import InstalledPlatforms
@@ -28,7 +28,7 @@ from src.modules.channels.infrastructure.persistence.models.channel import Chann
 from src.modules.channels.infrastructure.persistence.models.connection import (
     ConnectionModel,
 )
-from src.modules.channels.infrastructure.jobs import SharedVerificationJobs
+from src.modules.channels.infrastructure.channel.jobs import SharedVerificationJobs
 from src.modules.channels.application.error import VerificationFailure
 from src.modules.shared.infrastructure.jobs.scheduled_job_model import ScheduledJobModel
 from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
@@ -50,6 +50,16 @@ from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from test.crm_company_support import company_app
 from test.test_channels import FixtureHttp
+from src.modules.reference_data.infrastructure.persistence.models.currency import (
+    CurrencyModel,
+)
+from src.modules.reference_data.infrastructure.persistence.models.locale import (
+    LocaleModel,
+)
+from src.modules.reference_data.infrastructure.persistence.models.country import (
+    CountryModel,
+)
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 TEST_URL = os.environ.get("TEST_POSTGRES_URL")
 
@@ -71,9 +81,27 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
             for value in (self.tenant, self.other)
         ]
         async with self.engine.begin() as connection:
-            for table in (TenantModel.__table__, ScheduledJobModel.__table__):
+            for table in (
+                TenantModel.__table__,
+                ScheduledJobModel.__table__,
+                CountryModel.__table__,
+                CurrencyModel.__table__,
+                LocaleModel.__table__,
+            ):
                 await connection.run_sync(
                     lambda c, table=table: table.create(c, checkfirst=True)
+                )
+            for code in ("UAH", "USD", "EUR"):
+                await connection.execute(
+                    pg_insert(CurrencyModel)
+                    .values(code=code, name=code, minor_units=2, active=True)
+                    .on_conflict_do_nothing()
+                )
+            for code in ("uk", "ru", "en"):
+                await connection.execute(
+                    pg_insert(LocaleModel)
+                    .values(code=code, language_code=code, name=code, active=True)
+                    .on_conflict_do_nothing()
                 )
             for tenant, schema in zip((self.tenant, self.other), self.schemas):
                 await connection.execute(
@@ -96,7 +124,7 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.app.include_router(router, prefix="/api/console")
         self.cipher = FernetCipher(Fernet.generate_key().decode())
         self.cipher_patch = patch(
-            "src.modules.channels.presentation.depends.get_cipher",
+            "src.modules.channels.presentation.channel.depends.get_cipher",
             return_value=self.cipher,
         )
         self.cipher_patch.start()
@@ -173,7 +201,7 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 lock_token="channels-test-worker",
             )
             await session.commit()
-            return jobs
+            return [job for job in jobs if job.job_type == "channels.verify_connection"]
 
     def worker(self, http: FixtureHttp) -> ChannelsVerifyConnectionJobHandler:
         """Собирает настоящий обработчик с тестовым HTTP-портом."""
@@ -442,8 +470,8 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
             (
                 "rozetka",
                 "https://api-seller.rozetka.com.ua",
-                {"username": "seller"},
-                {"password": "test-password"},
+                {},
+                {"token": "test-token"},
                 {"success": True, "content": {"id": 11, "market": {"id": 22}}},
                 "22",
             ),
@@ -497,7 +525,7 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         detail = await self.detail(created["id"])
         self.assertEqual(detail["verification"]["error_code"], "credentials_unreadable")
         with patch(
-            "src.modules.channels.presentation.depends.get_cipher",
+            "src.modules.channels.presentation.channel.depends.get_cipher",
             return_value=FernetCipher(None),
         ):
             failed = await self.client.post(

@@ -30,6 +30,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: "update:page", value: number): void;
   (event: "update:limit", value: number): void;
+  (event: "change", value: { page: number; limit: number }): void;
 }>();
 
 const safeLimit = computed(() => Math.max(1, props.limit));
@@ -62,13 +63,14 @@ const to = computed(() => {
   return Math.min(normalizedPage.value * safeLimit.value, safeTotal.value);
 });
 
-function goToPage(page: number) {
+function goToPage(page: number): void {
   const nextPage = Math.min(Math.max(page, 1), totalPages.value);
 
   emit("update:page", nextPage);
+  emit("change", { page: nextPage, limit: safeLimit.value });
 }
 
-function changeLimit(value: unknown) {
+function changeLimit(value: unknown): void {
   if (typeof value !== "string" && typeof value !== "number") {
     return;
   }
@@ -81,6 +83,7 @@ function changeLimit(value: unknown) {
 
   emit("update:limit", nextLimit);
   emit("update:page", 1);
+  emit("change", { page: 1, limit: nextLimit });
 }
 </script>
 
@@ -93,14 +96,16 @@ function changeLimit(value: unknown) {
       {{ locale === "ru" ? "из" : "of" }} {{ safeTotal }}
     </p>
 
-    <div class="flex flex-wrap items-center gap-2">
+    <div
+      class="grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:flex-wrap"
+    >
       <Select
         :model-value="String(limit)"
         :disabled="disabled"
         @update:model-value="changeLimit"
       >
         <SelectTrigger
-          class="h-9 w-32"
+          class="col-span-3 h-9 w-full sm:col-span-1 sm:w-32"
           :aria-label="locale === 'ru' ? 'Строк на странице' : 'Rows per page'"
         >
           <SelectValue />
@@ -128,7 +133,9 @@ function changeLimit(value: unknown) {
         {{ locale === "ru" ? "Назад" : "Previous" }}
       </Button>
 
-      <span class="min-w-24 text-center text-sm text-muted-foreground">
+      <span
+        class="min-w-16 text-center text-sm tabular-nums text-muted-foreground"
+      >
         {{ normalizedPage }} / {{ totalPages }}
       </span>
 

@@ -1,4 +1,18 @@
 from __future__ import annotations
+
+import argparse
+import asyncio
+import logging
+from pathlib import Path
+import signal
+from datetime import UTC, datetime
+
+from src.modules.channels.presentation.sync_run.jobs.sync_publications import (
+    ChannelsSyncPublicationsJobHandler,
+)
+from src.modules.channels.infrastructure.sync_run.jobs import (
+    JOB_TYPE as CHANNELS_SYNC_JOB_TYPE,
+)
 from src.modules.files.presentation.jobs.empty_trash import (
     FilesEmptyTrashJobHandler,
     JOB_TYPE as FILES_EMPTY_TRASH_JOB_TYPE,
@@ -12,24 +26,18 @@ from src.modules.files.presentation.jobs.trash_cleanup import (
     ensure_trash_cleanup_jobs,
     JOB_TYPE as FILES_TRASH_JOB_TYPE,
 )
-
-import argparse
-import asyncio
-import logging
-from pathlib import Path
-import signal
-
 from src.config import dnk_config
-from src.modules.channels.presentation.jobs.verify_connection import (
+from src.modules.channels.presentation.channel.jobs.verify_connection import (
     ChannelsVerifyConnectionJobHandler,
 )
-from src.modules.channels.infrastructure.jobs import JOB_TYPE as CHANNELS_VERIFY_JOB_TYPE
+from src.modules.channels.infrastructure.channel.jobs import (
+    JOB_TYPE as CHANNELS_VERIFY_JOB_TYPE,
+)
 from src.modules.reference_data.presentation.jobs.refresh import (
     JOB_TYPE,
     ReferenceDataRefreshJobHandler,
     ensure_weekly_jobs,
 )
-from datetime import UTC, datetime
 from src.management.job_healthcheck import main as probe_main
 from src.modules.shared.application.jobs import (
     ProcessDueScheduledJobsCommand,
@@ -133,6 +141,9 @@ async def handle_worker(_args: argparse.Namespace) -> int:
     catalog_imports = CatalogImportJobHandler(db_helper.session_factory)
     dispatcher = build_scheduled_job_dispatcher(
         {
+            CHANNELS_SYNC_JOB_TYPE: ChannelsSyncPublicationsJobHandler(
+                db_helper.session_factory
+            ),
             CHANNELS_VERIFY_JOB_TYPE: ChannelsVerifyConnectionJobHandler(
                 db_helper.session_factory
             ),

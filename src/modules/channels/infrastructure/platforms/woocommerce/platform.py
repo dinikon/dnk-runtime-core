@@ -3,16 +3,28 @@ import json
 
 from pydantic import ValidationError
 
+from src.modules.channels.application.error import VerificationFailure
+from src.modules.channels.application.sync_run.port.source import (
+    PublicationCheckpoint,
+    PublicationObservation,
+    PublicationPage,
+)
+from src.modules.channels.domain.external_publication.value_object import (
+    PublicationKind,
+)
+from src.modules.channels.infrastructure.platforms.woocommerce.publications import (
+    WooPublicationReader,
+)
 from src.modules.channels.application.error import ChannelInputError
 from src.modules.channels.application.port.platform import (
     PlatformManifest,
     ValidatedConnection,
 )
 from src.modules.channels.domain.types import JsonObject
-from src.modules.channels.domain.value_object.connection_config import (
+from src.modules.channels.domain.channel.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.value_object.resource_identity import (
+from src.modules.channels.domain.channel.value_object.resource_identity import (
     ResourceIdentityVO,
 )
 from src.modules.channels.infrastructure.http import JsonHttp
@@ -36,7 +48,8 @@ class WooCommercePlatform:
             config_version=1,
             config_schema=WooCommerceConfig.model_json_schema(),
             credentials_schema=WooCommerceCredentials.model_json_schema(),
-            supported_capabilities=("verify_connection",),
+            supported_capabilities=("verify_connection", "publications"),
+            publication_parent_kind=PublicationKind.VARIABLE,
         )
 
     def decode_config(self, config: ConnectionConfigVO) -> WooCommerceConfig:
@@ -96,6 +109,8 @@ class WooCommercePlatform:
                 settings=typed.settings.model_dump(mode="json"),
             ),
             credentials=encoded,
+            currency=typed.settings.currency,
+            locales=(typed.settings.locale,),
         )
 
     async def verify(
@@ -121,3 +136,31 @@ class WooCommercePlatform:
             namespace="woocommerce.site",
             key=normalize_endpoint(response.environment.site_url),
         )
+
+    async def read_publications(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        checkpoint: PublicationCheckpoint,
+        parent_external_id: str | None = None,
+    ) -> PublicationPage:
+        """Восстанавливает конкретные настройки и читает один шаг источника."""
+        return await WooPublicationReader(self.http).read(
+            config=self.decode_config(config),
+            credentials=WooCommerceCredentials.model_validate_json(credentials),
+            checkpoint=checkpoint,
+            parent_external_id=parent_external_id,
+        )
+
+    async def read_publication_dependencies(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        keys: tuple[tuple[str, str], ...],
+    ) -> tuple[PublicationObservation, ...]:
+        """Дозагружает подтверждённые зависимости изменения структуры."""
+        if keys:
+            raise VerificationFailure("publication_structure_changed")
+        return ()

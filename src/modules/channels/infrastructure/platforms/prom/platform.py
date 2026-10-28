@@ -3,6 +3,17 @@ from urllib.parse import urlencode
 
 from pydantic import ValidationError
 
+from src.modules.channels.application.sync_run.port.source import (
+    PublicationCheckpoint,
+    PublicationObservation,
+    PublicationPage,
+)
+from src.modules.channels.domain.external_publication.value_object import (
+    PublicationKind,
+)
+from src.modules.channels.infrastructure.platforms.prom.publications import (
+    PromPublicationReader,
+)
 from src.modules.channels.application.error import ChannelInputError
 from src.modules.channels.application.error import VerificationFailure
 from src.modules.channels.application.port.platform import (
@@ -10,10 +21,10 @@ from src.modules.channels.application.port.platform import (
     ValidatedConnection,
 )
 from src.modules.channels.domain.types import JsonObject
-from src.modules.channels.domain.value_object.connection_config import (
+from src.modules.channels.domain.channel.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.value_object.resource_identity import (
+from src.modules.channels.domain.channel.value_object.resource_identity import (
     ResourceIdentityVO,
 )
 from src.modules.channels.infrastructure.http import JsonHttp
@@ -36,7 +47,8 @@ class PromPlatform:
             config_version=1,
             config_schema=PromConfig.model_json_schema(),
             credentials_schema=PromCredentials.model_json_schema(),
-            supported_capabilities=("verify_connection",),
+            supported_capabilities=("verify_connection", "publications"),
+            publication_parent_kind=PublicationKind.SIMPLE,
         )
 
     def decode_config(self, config: ConnectionConfigVO) -> PromConfig:
@@ -89,6 +101,8 @@ class PromPlatform:
                 settings=typed.settings.model_dump(mode="json"),
             ),
             credentials=encoded,
+            currency=typed.settings.currency,
+            locales=typed.settings.locales,
         )
 
     async def verify(
@@ -129,3 +143,32 @@ class PromPlatform:
                 raise VerificationFailure("resource_identity_unavailable")
             last_id = ids[-1]
         raise VerificationFailure("resource_identity_unavailable")
+
+    async def read_publications(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        checkpoint: PublicationCheckpoint,
+        parent_external_id: str | None = None,
+    ) -> PublicationPage:
+        """Восстанавливает конкретные настройки и читает один шаг источника."""
+        return await PromPublicationReader(self.http).read(
+            config=self.decode_config(config),
+            credentials=PromCredentials.model_validate_json(credentials),
+            checkpoint=checkpoint,
+        )
+
+    async def read_publication_dependencies(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        keys: tuple[tuple[str, str], ...],
+    ) -> tuple[PublicationObservation, ...]:
+        """Дозагружает подтверждённые зависимости изменения структуры."""
+        return await PromPublicationReader(self.http).read_dependencies(
+            config=self.decode_config(config),
+            credentials=PromCredentials.model_validate_json(credentials),
+            keys=keys,
+        )
