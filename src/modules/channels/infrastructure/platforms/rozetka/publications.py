@@ -142,7 +142,7 @@ class RozetkaPublicationReader:
         credentials: RozetkaCredentials,
         checkpoint: PublicationCheckpoint,
     ) -> PublicationPage:
-        """Читает все состояния наличия и затем архив."""
+        """Читает страницу списка или архива без фильтра наличия."""
         cursor = RozetkaPublicationCursor.model_validate(checkpoint.cursor or {})
         query = urlencode({"page": cursor.page, "pageSize": 100})
         response = await self.http.request(
