@@ -69,6 +69,7 @@ const variant: PublicationItem = {
 const card: PublicationCard = {
   id: "root",
   rootKind: "simple",
+  bindings: [],
   rootExternalId: "201",
   rootSku: "PARENT",
   rootMainImageUrl: "https://cdn.example/parent.jpg",
@@ -114,6 +115,7 @@ test("WooCommerce renders a single variation under Variants and never injects th
   const html = await render({
     ...card,
     rootKind: "variable",
+    bindings: [],
     items: [variant],
   });
   assert.match(html, /aria-label="Варианты"/);
@@ -122,7 +124,12 @@ test("WooCommerce renders a single variation under Variants and never injects th
     1,
   );
   assert.doesNotMatch(html, /SKU-BASE|Основная позиция/);
-  const empty = await render({ ...card, rootKind: "variable", items: [] });
+  const empty = await render({
+    ...card,
+    rootKind: "variable",
+    bindings: [],
+    items: [],
+  });
   assert.match(empty, /Разновидности этой карточки ещё не получены/);
 });
 test("Simple publication keeps one details card, unknown values and safe links", async () => {
@@ -148,7 +155,12 @@ test("Simple publication keeps one details card, unknown values and safe links",
 });
 
 test("WooCommerce list displays the parent SKU or parent external ID, without leaking the first variant SKU", async () => {
-  const parentCard = { ...card, rootKind: "variable", items: [variant] };
+  const parentCard = {
+    ...card,
+    rootKind: "variable",
+    bindings: [],
+    items: [variant],
+  };
   const html = await renderToString(
     createSSRApp(Table, { items: [parentCard] }),
   );

@@ -130,6 +130,10 @@ class SqlAlchemyCatalogItemQueryRepository:
             table.c.kind.in_(("simple", "variable")),
             table.c.parent_id.is_(None),
         ]
+        if query.kind is not None:
+            if query.kind not in {"simple", "variable"}:
+                raise InvalidCatalogValueError("Некорректный тип карточки.")
+            filters.append(table.c.kind == query.kind)
         if query.status is not None:
             filters.append(table.c.status == query.status.value)
         if query.search:
@@ -338,3 +342,43 @@ class SqlAlchemyCatalogItemQueryRepository:
             for own in children
         )
         return GetCatalogProductSnapshotResultDTO(root, variants, query.locale, as_of)
+
+    async def snapshots(
+        self, identifiers: tuple[UUID, ...], locale: str, as_of: datetime
+    ) -> tuple[GetCatalogProductSnapshotResultDTO, ...]:
+        """Читает семьи пакетно для публичного Application контракта."""
+        if not identifiers:
+            return ()
+        table = CatalogItemModel.__table__
+        rows = (
+            (
+                await self._session.execute(
+                    select(table).where(
+                        table.c.id.in_(identifiers),
+                        table.c.parent_id.is_(None),
+                        table.c.kind.in_(("simple", "variable")),
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        parents = await self._values(rows, locale)
+        children = await self._child_values(rows, locale, include_parts=True)
+        return tuple(
+            GetCatalogProductSnapshotResultDTO(
+                CatalogItemQueryMapper.family_details(
+                    CatalogItemQueryMapper.details(parent, locale, as_of),
+                    tuple(v for v in children if v.parent_id == parent.id),
+                    as_of,
+                ),
+                tuple(
+                    CatalogItemQueryMapper.variant(parent, v, locale, as_of)
+                    for v in children
+                    if v.parent_id == parent.id
+                ),
+                locale,
+                as_of,
+            )
+            for parent in parents
+        )

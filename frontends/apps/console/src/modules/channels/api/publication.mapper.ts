@@ -47,6 +47,13 @@ export function mapPublicationCard(dto: PublicationCardDto): PublicationCard {
   return {
     id: dto.id,
     rootKind: dto.root_kind,
+    bindings: (dto.bindings ?? []).map((v) => ({
+      id: v.id,
+      catalogRootId: v.catalog_root_id,
+      catalogTitle: v.catalog_title,
+      mode: v.mode,
+      state: v.state,
+    })),
     rootExternalId: dto.root_external_id,
     rootSku: dto.root_sku,
     rootMainImageUrl: dto.root_main_image_url,

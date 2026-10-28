@@ -8,6 +8,7 @@ import {
 } from "./publication.filters";
 interface PublicationsPageState {
   filters: ComputedRef<PublicationFilters>;
+  setBinding(value: string): void;
   setSearch(value: string): void;
   setLocale(value: string): void;
   setPagination(value: { page: number; limit: number }): void;
@@ -20,6 +21,15 @@ export function usePublicationsPageState(
   const filters = computed<PublicationFilters>(() =>
     parsePublicationFilters(route.query),
   );
+  function setBinding(value: string): void {
+    void router.replace({
+      query: {
+        ...route.query,
+        binding_filter: value || undefined,
+        offset: undefined,
+      },
+    });
+  }
   function setSearch(value: string): void {
     void router.replace({
       query: { ...route.query, q: value || undefined, offset: undefined },
@@ -46,5 +56,5 @@ export function usePublicationsPageState(
     },
     { immediate: true },
   );
-  return { filters, setSearch, setLocale, setPagination };
+  return { filters, setBinding, setSearch, setLocale, setPagination };
 }

@@ -58,6 +58,16 @@ class PublicationItemFields(BaseModel):
         )
 
 
+class PublicationBindingFields(BaseModel):
+    """Явные публичные поля локальной связи."""
+
+    id: UUID
+    catalog_root_id: UUID
+    catalog_title: str | None
+    mode: str
+    state: str
+
+
 class PublicationCardFields(BaseModel):
     """Перечисляет поддержанные публичные поля компонента ответа."""
 
@@ -73,6 +83,7 @@ class PublicationCardFields(BaseModel):
     root_external_id: str
     root_sku: str | None
     root_main_image_url: str | None
+    bindings: list[PublicationBindingFields]
 
     @classmethod
     def from_view(cls, view: PublicationCardView) -> "PublicationCardFields":
@@ -83,6 +94,16 @@ class PublicationCardFields(BaseModel):
             root_external_id=view.root_external_id,
             root_sku=view.root_sku,
             root_main_image_url=view.root_main_image_url,
+            bindings=[
+                PublicationBindingFields(
+                    id=v.id,
+                    catalog_root_id=v.catalog_root_id,
+                    catalog_title=v.catalog_title,
+                    mode=v.mode,
+                    state=v.state,
+                )
+                for v in view.bindings
+            ],
             title=view.title,
             selected_publication_id=view.selected_publication_id,
             items=[PublicationItemFields.from_view(item) for item in view.items],

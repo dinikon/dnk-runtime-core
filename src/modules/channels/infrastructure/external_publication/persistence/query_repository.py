@@ -1,8 +1,16 @@
 """SQL read-side карточек с пагинацией до загрузки разновидностей."""
 
+from src.modules.channels.infrastructure.persistence.models.catalog_binding_group import (
+    CatalogBindingGroupModel,
+)
+from src.modules.channels.infrastructure.persistence.models.catalog_binding_item import (
+    CatalogBindingItemModel,
+)
+
+
 from uuid import UUID
 
-from sqlalchemy import select, func, or_, Select
+from sqlalchemy import select, func, or_, Select, exists
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,11 +89,36 @@ class SqlAlchemyPublicationQueryRepository:
         ).join(SyncRunModel, SyncRunModel.id == p.last_sync_run_id)
 
     async def list_roots(
-        self, connection_id: UUID, search: str, offset: int, limit: int
+        self,
+        connection_id: UUID,
+        search: str,
+        offset: int,
+        limit: int,
+        binding: str = "",
     ) -> tuple[tuple[PublicationReadRow, ...], int]:
         """Ищет участников, затем пагинирует их уникальные корни."""
         p = ExternalPublicationModel
         filters = [p.connection_id == connection_id, p.parent_id.is_(None)]
+        if binding:
+            member = p.__table__.alias("binding_member")
+            g, i = CatalogBindingGroupModel, CatalogBindingItemModel
+            family = (
+                select(member.c.id)
+                .where(or_(member.c.id == p.id, member.c.parent_id == p.id))
+                .correlate(p)
+            )
+            linked = exists(
+                select(g.id).where(
+                    g.connection_id == connection_id,
+                    or_(
+                        g.publication_root_id.in_(family),
+                        g.id.in_(
+                            select(i.group_id).where(i.publication_id.in_(family))
+                        ),
+                    ),
+                )
+            )
+            filters.append(linked if binding == "linked" else ~linked)
         if search:
             escaped = (
                 search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

@@ -18,7 +18,15 @@ export interface PublicationItemDto {
   last_seen_at: string;
   stale_configuration: boolean;
 }
+export interface PublicationBindingDto {
+  id: string;
+  catalog_root_id: string;
+  catalog_title: string | null;
+  mode: string;
+  state: string;
+}
 export interface PublicationCardDto {
+  bindings: PublicationBindingDto[];
   id: string;
   root_kind: string;
   root_external_id: string;

@@ -7,6 +7,8 @@ import { usePublication } from "../model/publication.queries";
 import { usePublicationsPageState } from "../model/use-publications-page-state";
 import { channelErrorMessage } from "../model/channel.errors";
 import PublicationsToolbar from "../ui/PublicationsToolbar.vue";
+import { bindingPublicationPositions } from "../model/bindings/binding.matching";
+import CatalogBindingsPage from "./CatalogBindingsPage.vue";
 import PublicationDetailsBody from "../ui/PublicationDetailsBody.vue";
 const route = useRoute(),
   router = useRouter();
@@ -59,6 +61,20 @@ const channel = useChannel(id),
       "
       @retry="publication.refetch()"
       :requested-publication-id="publicationId"
+    />
+    <CatalogBindingsPage
+      v-if="publication.data.value"
+      :key="`${id}:${publication.data.value.card.id}`"
+      :channel-id="id"
+      :publication-id="publication.data.value.card.id"
+      :initial-publications="
+        bindingPublicationPositions(publication.data.value.card)
+      "
+      :publication-has-variants="
+        publication.data.value.card.rootKind === 'variable' ||
+        publication.data.value.card.items.some((v) => v.kind === 'variant')
+      "
+      :locale="locale"
     />
   </div>
 </template>

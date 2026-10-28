@@ -135,6 +135,9 @@ function action(value: string): void {
         :error="syncError"
       />
       <PublicationsToolbar
+        show-bindings
+        :binding="state.filters.value.binding"
+        @binding="state.setBinding"
         :search="state.filters.value.search"
         :locale="publications.data.value?.locale ?? state.filters.value.locale"
         :locales="publications.data.value?.locales ?? []"

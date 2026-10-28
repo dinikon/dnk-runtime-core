@@ -1,3 +1,9 @@
+from src.modules.channels.application.catalog_binding.publication_views import (
+    BindingPublicationViews,
+)
+from src.modules.channels.presentation.catalog_binding.depends import BindingRuntimeDep
+from src.modules.shared.presentation.time.depends import ClockDep
+
 """Сборка read-side публикаций без подключения worker."""
 
 from typing import Annotated
@@ -17,10 +23,15 @@ from src.modules.channels.infrastructure.external_publication.persistence.query_
 )
 
 
-def get_list_publications_handler(uow: UoWDep) -> ListPublicationsHandler:
+def get_list_publications_handler(
+    uow: UoWDep, runtime: BindingRuntimeDep, clock: ClockDep
+) -> ListPublicationsHandler:
     """Собирает список карточек на общей tenant-сессии."""
     return ListPublicationsHandler(
-        SqlAlchemyPublicationQueryRepository(uow.session), get_platforms()
+        SqlAlchemyPublicationQueryRepository(uow.session),
+        get_platforms(),
+        BindingPublicationViews(runtime.queries.read, runtime.queries.views),
+        clock,
     )
 
 
@@ -29,10 +40,15 @@ ListPublicationsHandlerDep = Annotated[
 ]
 
 
-def get_get_publication_handler(uow: UoWDep) -> GetPublicationHandler:
+def get_get_publication_handler(
+    uow: UoWDep, runtime: BindingRuntimeDep, clock: ClockDep
+) -> GetPublicationHandler:
     """Собирает чтение карточки и выбранной разновидности."""
     return GetPublicationHandler(
-        SqlAlchemyPublicationQueryRepository(uow.session), get_platforms()
+        SqlAlchemyPublicationQueryRepository(uow.session),
+        get_platforms(),
+        BindingPublicationViews(runtime.queries.read, runtime.queries.views),
+        clock,
     )
 
 

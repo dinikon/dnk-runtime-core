@@ -13,6 +13,7 @@ class ListCatalogItemsQuery:
 
     tenant_id: EntityIdVO
     locale: str
+    kind: str | None = None
     status: CatalogItemStatus | None = None
     search: str | None = None
     offset: int = 0

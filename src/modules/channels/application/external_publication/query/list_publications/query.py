@@ -13,3 +13,4 @@ class ListPublicationsQuery:
     offset: int = 0
     limit: int = 25
     locale: str | None = None
+    binding: str = ""

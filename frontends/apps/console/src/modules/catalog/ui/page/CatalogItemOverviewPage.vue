@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { CatalogBindingsPage } from "@/modules/channels";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,9 +60,36 @@ function edit() {
       >
         <Skeleton class="aspect-[4/3] w-full" /><Skeleton class="h-72 w-full" />
       </div>
-      <ProductOverview v-if="model" :model="model" />
+      <Tabs
+        v-if="model"
+        :model-value="
+          ctx.route.query.tab === 'publications' ? 'publications' : 'general'
+        "
+        @update:model-value="
+          ctx.router.replace({
+            query: { ...ctx.route.query, tab: String($event) },
+          })
+        "
+        ><TabsList aria-label="Разделы товара"
+          ><TabsTrigger value="general">Товар</TabsTrigger
+          ><TabsTrigger value="publications">Публикации</TabsTrigger></TabsList
+        ></Tabs
+      >
+      <CatalogBindingsPage
+        v-if="model && ctx.route.query.tab === 'publications'"
+        :catalog-root-id="id"
+        :catalog-kind="item.data.value?.kind"
+        :locale="ctx.locale.value"
+      />
+      <ProductOverview
+        v-if="model && ctx.route.query.tab !== 'publications'"
+        :model="model"
+      />
       <CatalogVariantsPage
-        v-if="item.data.value?.kind === 'variable'"
+        v-if="
+          item.data.value?.kind === 'variable' &&
+          ctx.route.query.tab !== 'publications'
+        "
         :root-id="id"
         :parent-stock="item.data.value.stock"
       />

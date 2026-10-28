@@ -16,6 +16,9 @@ export function parsePublicationFilters(
     ? Math.min(2147483600, Math.max(0, Math.floor(requestedOffset)))
     : 0;
   return {
+    ...(query.binding_filter === "linked" || query.binding_filter === "unlinked"
+      ? { binding: query.binding_filter }
+      : {}),
     search: typeof query.q === "string" ? query.q : "",
     locale: typeof query.locale === "string" ? query.locale : "",
     limit,

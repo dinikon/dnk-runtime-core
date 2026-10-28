@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { PublicationCard } from "../model/publication.types";
+import { bindingStates } from "../model/bindings/binding.types";
 import { publicationThumbnail } from "../model/publication.thumbnail";
 import PublicationThumbnail from "./PublicationThumbnail.vue";
 
@@ -48,6 +49,21 @@ function itemLabel(card: PublicationCard): string {
                 {{ card.title ?? "Перевод не получен" }}
               </button>
               <p class="text-xs text-muted-foreground">{{ itemLabel(card) }}</p>
+              <span
+                class="text-xs"
+                :class="
+                  card.bindings?.some((v) => v.state === 'conflict')
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                "
+                >{{
+                  card.bindings?.length
+                    ? card.bindings
+                        .map((v) => bindingStates[v.state] ?? v.state)
+                        .join(" · ")
+                    : "Без привязки к Catalog"
+                }}</span
+              >
               <Badge
                 v-if="card.items.some((item) => item.staleConfiguration)"
                 variant="outline"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CatalogBindingsPage } from "@/modules/channels";
 import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -110,9 +111,13 @@ function focused(): void {
       >
       <Skeleton v-if="item.isPending.value" class="h-96 w-full" />
       <Tabs
-        v-if="item.data.value?.kind === 'variable'"
+        v-if="item.data.value"
         :model-value="
-          ctx.route.query.tab === 'variants' ? 'variants' : 'general'
+          ctx.route.query.tab === 'publications'
+            ? 'publications'
+            : ctx.route.query.tab === 'variants'
+              ? 'variants'
+              : 'general'
         "
         @update:model-value="
           ctx.router.replace({
@@ -123,11 +128,13 @@ function focused(): void {
             },
           })
         "
-        ><TabsList aria-label="Разделы вариативного товара"
+        ><TabsList aria-label="Разделы товара"
           ><TabsTrigger value="general">Товар</TabsTrigger
-          ><TabsTrigger value="variants"
+          ><TabsTrigger
+            v-if="item.data.value.kind === 'variable'"
+            value="variants"
             >Варианты · {{ item.data.value.variant_count ?? 0 }}</TabsTrigger
-          ></TabsList
+          ><TabsTrigger value="publications">Публикации</TabsTrigger></TabsList
         ></Tabs
       >
       <CatalogVariantsPage
@@ -138,9 +145,16 @@ function focused(): void {
         :root-id="id"
         :parent-stock="item.data.value.stock"
       />
+      <CatalogBindingsPage
+        v-if="item.data.value && ctx.route.query.tab === 'publications'"
+        :catalog-root-id="id"
+        :catalog-kind="item.data.value.kind"
+        :locale="ctx.locale.value"
+      />
       <ProductEditor
         v-if="item.data.value"
         v-show="
+          ctx.route.query.tab !== 'publications' &&
           !(
             item.data.value.kind === 'variable' &&
             ctx.route.query.tab === 'variants'

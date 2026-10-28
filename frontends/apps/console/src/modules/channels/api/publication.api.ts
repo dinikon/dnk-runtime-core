@@ -36,6 +36,7 @@ export const publicationApi = {
             {
               params: {
                 search: filters.search,
+                binding: filters.binding,
                 offset: filters.offset,
                 limit: filters.limit,
                 locale: filters.locale || undefined,

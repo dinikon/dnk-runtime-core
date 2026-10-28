@@ -18,7 +18,15 @@ export interface PublicationItem {
   lastSeenAt: string;
   staleConfiguration: boolean;
 }
+export interface PublicationBinding {
+  id: string;
+  catalogRootId: string;
+  catalogTitle: string | null;
+  mode: string;
+  state: string;
+}
 export interface PublicationCard {
+  bindings: PublicationBinding[];
   id: string;
   rootKind: string;
   rootExternalId: string;
@@ -46,6 +54,7 @@ export interface PublicationDetails {
   locales: string[];
 }
 export interface PublicationFilters {
+  binding?: "linked" | "unlinked";
   search: string;
   offset: number;
   limit: number;

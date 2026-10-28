@@ -38,6 +38,7 @@ async def list_publications(
     context: AuthenticatedRequestContextDep,
     authorization: AuthorizationServiceDep,
     locale: str | None = Query(default=None, max_length=8),
+    binding: str = Query(default="", max_length=16),
     search: str = Query(default="", max_length=255),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=100),
@@ -50,6 +51,7 @@ async def list_publications(
                 channel_id=channel_id,
                 locale=locale,
                 search=search,
+                binding=binding,
                 offset=offset,
                 limit=limit,
             )

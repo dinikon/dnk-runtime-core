@@ -1,3 +1,4 @@
+from uuid import UUID
 from src.modules.catalog.application.catalog_item.query.get_catalog_variant.query import (
     GetCatalogVariantQuery,
 )
@@ -63,4 +64,10 @@ class CatalogItemQueryRepositoryProtocol(Protocol):
         self, query: GetCatalogProductSnapshotQuery, as_of: datetime
     ) -> GetCatalogProductSnapshotResultDTO:
         """Читает конкретную проекцию семьи на согласованный момент."""
+        ...
+
+    async def snapshots(
+        self, identifiers: tuple[UUID, ...], locale: str, as_of: datetime
+    ) -> tuple[GetCatalogProductSnapshotResultDTO, ...]:
+        """Передаёт пакетные публичные снимки без восстановления агрегатов."""
         ...

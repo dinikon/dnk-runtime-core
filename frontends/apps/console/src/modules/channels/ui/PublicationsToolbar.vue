@@ -8,9 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-defineProps<{ search: string; locale: string; locales: string[] }>();
+defineProps<{
+  search: string;
+  locale: string;
+  locales: string[];
+  binding?: string;
+  showBindings?: boolean;
+}>();
 const emit = defineEmits<{
   search: [value: string];
+  binding: [value: string];
   locale: [value: string];
 }>();
 const labels: Record<string, string> = {
@@ -28,6 +35,17 @@ const labels: Record<string, string> = {
       :model-value="search"
       @update:model-value="emit('search', String($event))"
     />
+    <select
+      v-if="showBindings"
+      class="border-input bg-background h-9 rounded-md border px-3 text-sm"
+      aria-label="Связь с Catalog"
+      :value="binding ?? ''"
+      @change="emit('binding', ($event.target as HTMLSelectElement).value)"
+    >
+      <option value="">Все связи</option>
+      <option value="linked">С привязкой</option>
+      <option value="unlinked">Без привязки</option>
+    </select>
     <Select
       v-if="locales.length > 1"
       :model-value="locale"

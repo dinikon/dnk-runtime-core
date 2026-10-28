@@ -46,7 +46,12 @@ class PublicationQueryRepository(Protocol):
         ...
 
     async def list_roots(
-        self, connection_id: UUID, search: str, offset: int, limit: int
+        self,
+        connection_id: UUID,
+        search: str,
+        offset: int,
+        limit: int,
+        binding: str = "",
     ) -> tuple[tuple[PublicationReadRow, ...], int]:
         """Пагинирует по корням, включая совпадения поиска среди детей."""
         ...

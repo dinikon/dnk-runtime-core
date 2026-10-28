@@ -101,6 +101,7 @@ test("Card mapping uses server membership without injecting a WooCommerce parent
   const result = mapPublicationCard({
     id: "root",
     root_kind: "variable",
+    bindings: [],
     root_external_id: "201",
     root_sku: "PARENT",
     root_main_image_url: "https://cdn.example/parent.jpg",
@@ -193,6 +194,7 @@ test("Pagination changes reset to page one with the new size in a single URL pat
 const thumbnailCard: PublicationCard = {
   id: "root",
   rootKind: "simple",
+  bindings: [],
   rootExternalId: "201",
   rootSku: "PARENT",
   rootMainImageUrl: "https://cdn.example/parent.jpg",

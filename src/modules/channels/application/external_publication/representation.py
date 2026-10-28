@@ -40,6 +40,17 @@ class PublicationItemView:
 
 
 @dataclass(frozen=True, slots=True)
+class PublicationBindingView:
+    """Краткая ссылка на локальную группу с вычисляемым состоянием."""
+
+    id: UUID
+    catalog_root_id: UUID
+    catalog_title: str | None
+    mode: str
+    state: str
+
+
+@dataclass(frozen=True, slots=True)
 class PublicationCardView:
     """Карточка Console с уже определённым составом продаваемых позиций."""
 
@@ -55,6 +66,7 @@ class PublicationCardView:
     root_external_id: str
     root_sku: str | None
     root_main_image_url: str | None
+    bindings: tuple[PublicationBindingView, ...] = ()
 
 
 def build_card(
@@ -64,6 +76,7 @@ def build_card(
     locale: str,
     config_revision: int,
     selected_id: UUID | None = None,
+    bindings: tuple[PublicationBindingView, ...] = (),
 ) -> PublicationCardView:
     """Включает продаваемый корень Prom и исключает контейнер WooCommerce."""
     members = (root, *children) if root.kind is PublicationKind.SIMPLE else children
@@ -162,4 +175,5 @@ def build_card(
         root.external_id,
         root.data.sku,
         root.data.main_image_url,
+        bindings,
     )
