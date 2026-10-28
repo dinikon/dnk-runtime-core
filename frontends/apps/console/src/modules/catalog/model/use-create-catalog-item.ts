@@ -30,7 +30,7 @@ export function useCreateCatalogItem(
   );
   const creation = new ProductCreation(
     state,
-    (virtual) => catalogApi.createItem(virtual),
+    (virtual, kind) => catalogApi.createItem(virtual, kind),
     async (id) => {
       const current = ctx.captureSession();
       await cache.invalidateQueries({

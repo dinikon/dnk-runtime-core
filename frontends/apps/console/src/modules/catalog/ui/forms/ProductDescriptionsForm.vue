@@ -5,6 +5,7 @@ import ProductRichText from "../product/ProductRichText.vue";
 import ProductFieldError from "../product/ProductFieldError.vue";
 defineProps<{
   content: Record<string, string>;
+  variant?: boolean;
   disabled: boolean;
   error?: string;
 }>();
@@ -24,7 +25,7 @@ const emit = defineEmits<{
         @update:model-value="emit('change', 'body', $event)"
       />
       <Button
-        v-if="content.body !== undefined"
+        v-if="content.body !== undefined && !variant"
         type="button"
         variant="ghost"
         class="self-start"

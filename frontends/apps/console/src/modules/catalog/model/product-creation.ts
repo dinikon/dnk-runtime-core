@@ -1,4 +1,4 @@
-export type ProductPreset = "simple" | "service";
+export type ProductPreset = "simple" | "service" | "variable";
 
 export interface ProductCreationState {
   pending: boolean;
@@ -24,7 +24,10 @@ export class ProductCreation {
 
   constructor(
     readonly state: ProductCreationState,
-    private readonly send: (virtual: boolean) => Promise<{ id: string }>,
+    private readonly send: (
+      virtual: boolean,
+      kind?: "simple" | "variable",
+    ) => Promise<{ id: string }>,
     private readonly open: (id: string) => Promise<void>,
     private readonly failure: (error: unknown) => {
       message: string;
@@ -45,7 +48,10 @@ export class ProductCreation {
     this.state.preset = this.state.createdId ? this.state.preset : preset;
     try {
       if (!this.state.createdId) {
-        const result = await this.send(preset === "service");
+        const result = await this.send(
+          preset === "service",
+          preset === "variable" ? "variable" : "simple",
+        );
         if (epoch !== this.epoch) return;
         this.state.createdId = result.id;
       }

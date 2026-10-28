@@ -200,11 +200,19 @@ class SqlAlchemyImportRows:
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
             {"key": schema + ":catalog-import-sku:" + sku},
         )
-        return await self.session.scalar(
-            select(CatalogItemModel.id).where(
-                CatalogItemModel.sku == sku, CatalogItemModel.kind == "simple"
+        row = (
+            await self.session.execute(
+                select(CatalogItemModel.id, CatalogItemModel.kind).where(
+                    CatalogItemModel.sku == sku
+                )
             )
-        )
+        ).one_or_none()
+        if row is not None and row.kind != "simple":
+            raise CatalogConflictError(
+                "SKU принадлежит вариативной карточке или варианту; импорт поддерживает только simple.",
+                ("sku",),
+            )
+        return row.id if row else None
 
 
 class SqlAlchemyImportRead:

@@ -728,6 +728,10 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
             TenantMigrator,
         )
 
+        async with self.engine.connect() as connection:
+            original_version = await TenantMigrator().current(
+                connection, self.schemas[0]
+            )
         first = await self.create_import()
         await self.execute_current(first)
         second = await self.create_import()
@@ -743,7 +747,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             self.assertEqual(
                 await TenantMigrator().current(connection, self.schemas[0]),
-                ("0005_catalog_import_limits",),
+                original_version,
             )
         await self.client.post(
             f"{self.base}/imports/{second}/cancel", headers=self.headers

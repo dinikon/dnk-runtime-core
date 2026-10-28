@@ -7,6 +7,8 @@ import { getApiErrorMessage } from "@/app/providers/http";
 import { useProductPage } from "../../model/use-product-page";
 import { tabGroup } from "../../model/product-editor-layout";
 import type { ProductSection } from "../../model/product.types";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CatalogVariantsPage from "./CatalogVariantsPage.vue";
 import ProductHeader from "../product/ProductHeader.vue";
 import ProductEditor from "../product/ProductEditor.vue";
 const {
@@ -107,8 +109,43 @@ function focused(): void {
         ></Alert
       >
       <Skeleton v-if="item.isPending.value" class="h-96 w-full" />
+      <Tabs
+        v-if="item.data.value?.kind === 'variable'"
+        :model-value="
+          ctx.route.query.tab === 'variants' ? 'variants' : 'general'
+        "
+        @update:model-value="
+          ctx.router.replace({
+            query: {
+              ...ctx.route.query,
+              tab: String($event),
+              variant: undefined,
+            },
+          })
+        "
+        ><TabsList aria-label="Разделы вариативного товара"
+          ><TabsTrigger value="general">Товар</TabsTrigger
+          ><TabsTrigger value="variants"
+            >Варианты · {{ item.data.value.variant_count ?? 0 }}</TabsTrigger
+          ></TabsList
+        ></Tabs
+      >
+      <CatalogVariantsPage
+        v-if="
+          item.data.value?.kind === 'variable' &&
+          ctx.route.query.tab === 'variants'
+        "
+        :root-id="id"
+        :parent-stock="item.data.value.stock"
+      />
       <ProductEditor
         v-if="item.data.value"
+        v-show="
+          !(
+            item.data.value.kind === 'variable' &&
+            ctx.route.query.tab === 'variants'
+          )
+        "
         :key="scope"
         :item="item.data.value"
         :content="contentValues"
@@ -121,7 +158,11 @@ function focused(): void {
         :uploading="uploading"
         :save-status="saveStatus"
         :error="error"
-        :initial-group="ctx.route.query.tab ? tabGroup[tab] : undefined"
+        :initial-group="
+          ctx.route.query.tab && ctx.route.query.tab !== 'variants'
+            ? tabGroup[tab]
+            : undefined
+        "
         :focus-title="ctx.route.query.focus === 'title'"
         :image-url="imageUrl"
         @content="changeContent"

@@ -17,10 +17,14 @@ function decimal(value: string): bigint | null {
 export function sectionError(
   section: ProductSection,
   patch: ProductPatch,
+  allowInheritedTitle = false,
 ): string {
   if (section === "content" && patch.content) {
     const name = patch.content.values.title ?? "";
-    if (!name.trim() || name.length > 255)
+    if (
+      (!allowInheritedTitle || patch.content.values.title !== undefined) &&
+      (!name.trim() || name.length > 255)
+    )
       return "Введите название до 255 символов.";
   }
   if (section === "sku" && patch.sku && patch.sku.length > 128)

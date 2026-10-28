@@ -37,3 +37,9 @@ class CatalogItemListRowDTO:
     available_for_sale: bool
     weight: WeightVO | None
     dimensions: DimensionsVO | None
+    kind: str = "simple"
+    parent_id: UUID | None = None
+    variant_count: int = 0
+    min_price: Decimal | None = None
+    max_price: Decimal | None = None
+    mixed_currencies: bool = False

@@ -1,6 +1,12 @@
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Self
+from src.modules.catalog.domain.catalog_item.value_object.kind import CatalogItemKind
+from src.modules.catalog.domain.catalog_item.entity.variant import CatalogVariant
+from src.modules.catalog.domain.catalog_item.policy.validation import (
+    validate_content,
+    validate_gallery,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
@@ -30,6 +36,7 @@ from src.modules.catalog.domain.product_type.value_object.schema import (
 from src.modules.catalog.domain.value_object.locale import LocaleVO
 from src.modules.catalog.domain.error import (
     CatalogConflictError,
+    CatalogNotFoundError,
     InvalidCatalogValueError,
 )
 
@@ -53,6 +60,8 @@ class CatalogItem:
     updated_by: EntityIdVO
     translations: dict[str, dict[str, str]] = field(default_factory=dict)
     galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
+    kind: CatalogItemKind = CatalogItemKind.SIMPLE
+    variants: tuple[CatalogVariant, ...] = ()
 
     @classmethod
     def create(
@@ -100,6 +109,8 @@ class CatalogItem:
         translations: dict[str, dict[str, str]] | None = None,
         galleries: dict[str, CatalogItemGallery] | None = None,
         schema: ProductTypeSchemaSnapshot | None = None,
+        kind: CatalogItemKind = CatalogItemKind.SIMPLE,
+        variants: tuple[CatalogVariant, ...] = (),
     ) -> Self:
         """Восстанавливает самостоятельный товар и проверяет его инварианты."""
         item = cls(
@@ -118,15 +129,33 @@ class CatalogItem:
             updated_by=updated_by,
             translations={k: dict(v) for k, v in (translations or {}).items()},
             galleries=dict(galleries or {}),
+            kind=kind,
+            variants=tuple(variants),
         )
         item._validate()
-        if item.translations:
+        if item.translations or any(v.translations for v in item.variants):
             if schema is None or schema.id != product_type_id:
                 raise InvalidCatalogValueError(
                     "Для восстановления контента нужна схема товара."
                 )
             for values in item.translations.values():
                 schema.validate_content(values)
+        item._validate_variants(schema)
+        return item
+
+    @classmethod
+    def create_variable(
+        cls,
+        *,
+        identifier: CatalogItemIdVO,
+        actor: EntityIdVO,
+        now: datetime,
+        product_type_id: EntityIdVO,
+    ) -> "CatalogItem":
+        """Создаёт контейнер без продаваемого родителя и без скрытого варианта."""
+        item = cls.create(identifier, actor, now, product_type_id)
+        item.kind = CatalogItemKind.VARIABLE
+        item._validate()
         return item
 
     def snapshot(self) -> CatalogItemValuesSnapshot:
@@ -147,6 +176,7 @@ class CatalogItem:
             updated_by=self.updated_by,
             translations={k: dict(v) for k, v in self.translations.items()},
             galleries=dict(self.galleries),
+            kind=self.kind,
         )
 
     def _validate(self) -> None:
@@ -190,71 +220,19 @@ class CatalogItem:
             )
         if not isinstance(self.stock, StockSpecificationVO):
             raise InvalidCatalogValueError("Настройки наличия обязательны.", ("stock",))
+        self._validate_variants()
         for locale, values in self.translations.items():
             LocaleVO(locale)
-            self._validate_content(values)
+            validate_content(values)
         for locale, gallery in self.galleries.items():
             LocaleVO(locale)
-            self._validate_gallery(gallery)
+            validate_gallery(gallery)
         image_ids = [
             image.id for gallery in self.galleries.values() for image in gallery.images
         ]
         if len(set(image_ids)) != len(image_ids):
             raise InvalidCatalogValueError(
                 "ID изображений уникальны во всех locale товара."
-            )
-
-    @staticmethod
-    def _validate_content(values: dict[str, str]) -> None:
-        """Проверяет форму сохранённых текстовых значений и каноническое имя товара."""
-        if any(
-            (
-                not isinstance(value, str) or len(value) > 1000000
-                for value in values.values()
-            )
-        ):
-            raise InvalidCatalogValueError(
-                "Контент требует текст до 1000000 символов.", ("content",)
-            )
-        if (
-            "title" not in values
-            or not values["title"].strip()
-            or len(values["title"]) > 255
-        ):
-            raise InvalidCatalogValueError(
-                "Title должен быть непустым текстом до 255 символов.", ("content",)
-            )
-
-    @staticmethod
-    def _validate_gallery(gallery: CatalogItemGallery) -> None:
-        """Проверяет идентичности, порядок и главное изображение всего набора."""
-        images = gallery.images
-        if (
-            len(images) > 100
-            or len({i.id for i in images}) != len(images)
-            or len({i.file_id for i in images}) != len(images)
-            or (len({i.position for i in images}) != len(images))
-            or any(
-                (
-                    type(i.position) is not int
-                    or i.position < 0
-                    or not isinstance(i.id, EntityIdVO)
-                    or not isinstance(i.file_id, EntityIdVO)
-                    or (len(i.alt) > 1000)
-                    or (len(i.caption) > 5000)
-                    for i in images
-                )
-            )
-        ):
-            raise InvalidCatalogValueError(
-                "Некорректный состав или порядок галереи.", ("gallery",)
-            )
-        if bool(images) != (gallery.primary_image_id is not None) or (
-            images and gallery.primary_image_id not in {i.id for i in images}
-        ):
-            raise InvalidCatalogValueError(
-                "Непустая галерея требует главное изображение из своего набора.",
-                ("gallery",),
             )
 
     def update(
@@ -342,11 +320,20 @@ class CatalogItem:
                 else:
                     galleries[locale.value] = gallery
                 changes["galleries"] = galleries
+        if (
+            "content" in fields
+            and any(v.translations for v in self.variants)
+            and schema is None
+        ):
+            raise InvalidCatalogValueError(
+                "Для проверки наследуемого контента нужна схема.", ("content",)
+            )
         candidate = replace(self, **changes)
         if candidate != self:
             candidate.updated_by = actor
             candidate.updated_at = now
         candidate._validate()
+        candidate._validate_variants(schema)
         if candidate == self:
             return
         for name in self.__dataclass_fields__:
@@ -386,3 +373,128 @@ class CatalogItem:
             actor=actor,
             now=now,
         )
+
+    def _validate_variants(
+        self, schema: ProductTypeSchemaSnapshot | None = None
+    ) -> None:
+        """Проверяет роли, принадлежность и согласованность всей семьи."""
+        if not isinstance(self.kind, CatalogItemKind) or self.kind not in (
+            CatalogItemKind.SIMPLE,
+            CatalogItemKind.VARIABLE,
+        ):
+            raise InvalidCatalogValueError("Вариант не является корнем агрегата.")
+        if self.kind is CatalogItemKind.SIMPLE and self.variants:
+            raise InvalidCatalogValueError("Простой товар не содержит вариантов.")
+        if self.kind is CatalogItemKind.VARIABLE:
+            if self.price is not None or self.virtual:
+                raise InvalidCatalogValueError("Контейнер не имеет цены и virtual.")
+            if self.status is CatalogItemStatus.ACTIVE and not any(
+                v.status is not CatalogItemStatus.ARCHIVED for v in self.variants
+            ):
+                raise InvalidCatalogValueError(
+                    "Для Active нужен неархивный вариант.", ("status",)
+                )
+        identifiers = [self.id, *(v.id for v in self.variants)]
+        if len(set(identifiers)) != len(identifiers):
+            raise InvalidCatalogValueError(
+                "Идентификаторы семьи должны быть уникальны."
+            )
+        skus = [
+            value.value
+            for value in (self.sku, *(v.sku for v in self.variants))
+            if value is not None
+        ]
+        if len(set(skus)) != len(skus):
+            raise CatalogConflictError("SKU уже используется в карточке.", ("sku",))
+        image_ids = [
+            i.id
+            for item in (self, *self.variants)
+            for g in item.galleries.values()
+            for i in g.images
+        ]
+        if len(set(image_ids)) != len(image_ids):
+            raise InvalidCatalogValueError(
+                "ID изображений семьи должны быть уникальны."
+            )
+        if schema is not None and schema.id != self.product_type_id:
+            raise InvalidCatalogValueError(
+                "Схема не принадлежит карточке.", ("content",)
+            )
+        for variant in self.variants:
+            if variant.parent_id != self.id:
+                raise InvalidCatalogValueError("Вариант принадлежит другому родителю.")
+            variant.validate()
+            if schema is not None:
+                for locale, own in variant.translations.items():
+                    effective = {**self.translations.get(locale, {}), **own}
+                    schema.validate_content(effective)
+
+    def variant(self, identifier: CatalogItemIdVO) -> CatalogVariant:
+        """Возвращает только собственную entity или сообщает об отсутствии."""
+
+        for variant in self.variants:
+            if variant.id == identifier:
+                return variant
+        raise CatalogNotFoundError("Вариант отсутствует в карточке.")
+
+    def add_variant(
+        self,
+        *,
+        variant: CatalogVariant,
+        actor: EntityIdVO,
+        now: datetime,
+        schema: ProductTypeSchemaSnapshot,
+    ) -> None:
+        """Атомарно добавляет полностью проверенный вариант."""
+        if self.kind is not CatalogItemKind.VARIABLE:
+            raise InvalidCatalogValueError("Варианты доступны только variable.")
+        self._replace_variants((*self.variants, variant), actor, now, schema)
+
+    def change_variant(
+        self,
+        *,
+        variant: CatalogVariant,
+        actor: EntityIdVO,
+        now: datetime,
+        schema: ProductTypeSchemaSnapshot | None = None,
+    ) -> None:
+        """Проверяет кандидата и заменяет только принадлежащую карточке позицию."""
+        previous = self.variant(variant.id)
+        if (
+            variant.translations != previous.translations
+            and variant.translations
+            and schema is None
+        ):
+            raise InvalidCatalogValueError(
+                "Для проверки контента варианта нужна схема.", ("content",)
+            )
+        self._replace_variants(
+            tuple(variant if v.id == variant.id else v for v in self.variants),
+            actor,
+            now,
+            schema,
+        )
+
+    def remove_variant(
+        self, *, identifier: CatalogItemIdVO, actor: EntityIdVO, now: datetime
+    ) -> None:
+        """Удаляет entity с проверкой последнего варианта Active-карточки."""
+        self.variant(identifier)
+        self._replace_variants(
+            tuple(v for v in self.variants if v.id != identifier), actor, now
+        )
+
+    def _replace_variants(
+        self,
+        variants: tuple[CatalogVariant, ...],
+        actor: EntityIdVO,
+        now: datetime,
+        schema: ProductTypeSchemaSnapshot | None = None,
+    ) -> None:
+        """Проверяет полное кандидатное состояние до изменения агрегата."""
+        candidate = replace(self, variants=variants)
+        candidate._validate()
+        candidate._validate_variants(schema)
+        if candidate != self:
+            self.variants = variants
+            self.updated_by, self.updated_at = actor, now

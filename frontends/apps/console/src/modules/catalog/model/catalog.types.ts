@@ -10,10 +10,32 @@ export interface LocaleOption {
   name: string;
   active: boolean;
 }
+export interface CatalogItemSources {
+  title: string | null;
+  body: string | null;
+  gallery: string | null;
+  weight: string | null;
+  dimensions: string | null;
+  stock: string;
+}
 export interface CatalogItem {
   id: string;
   title: string | null;
 
+  kind?: "simple" | "variable" | "variant";
+  parent_id?: string | null;
+  stock_source?: "own" | "parent";
+  variant_count?: number;
+  min_price?: string | null;
+  max_price?: string | null;
+  currency?: string | null;
+  mixed_currencies?: boolean;
+  effective_content?: Record<string, string> | null;
+  effective_gallery?: ProductGallery | null;
+  effective_stock?: ProductStock | null;
+  effective_weight?: ProductWeight | null;
+  effective_dimensions?: ProductDimensions | null;
+  sources?: CatalogItemSources | null;
   product_type_id: string;
   status: "draft" | "active" | "archived";
   sku: string | null;
@@ -37,6 +59,12 @@ export interface CatalogItem {
 }
 
 export interface CatalogListItem {
+  kind?: "simple" | "variable" | "variant";
+  parent_id?: string | null;
+  variant_count?: number;
+  min_price?: string | null;
+  max_price?: string | null;
+  mixed_currencies?: boolean;
   id: string;
   status: import("./product.types").ProductStatus;
   sku: string | null;

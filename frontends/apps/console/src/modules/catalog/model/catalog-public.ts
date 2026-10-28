@@ -36,20 +36,24 @@ export async function searchSalesCatalog(
     undefined,
     signal,
   );
-  return page.items.map((i) => ({
-    id: i.id,
-    title: i.title ?? "",
-    price: i.price ?? null,
-    currency: i.currency ?? null,
-    kind: "product",
-    sku: i.sku ?? null,
-  }));
+  return page.items
+    .filter((i) => i.kind !== "variable")
+    .map((i) => ({
+      id: i.id,
+      title: i.title ?? "",
+      price: i.price ?? null,
+      currency: i.currency ?? null,
+      kind: "product",
+      sku: i.sku ?? null,
+    }));
 }
 export async function readSalesCatalog(
   id: string,
 ): Promise<SalesCatalogChoice> {
   const { catalogApi } = await import("../api/catalog.api");
   const item = await catalogApi.getItem(id, "uk");
+  if (item.kind === "variable")
+    throw new Error("Контейнер не является продаваемой позицией.");
   return {
     id: item.id,
     title: item.title ?? "",
