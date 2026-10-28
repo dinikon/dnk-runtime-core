@@ -103,9 +103,7 @@ class ModuleRegistrationTests(unittest.TestCase):
                 "partner_offer_states",
             }.isdisjoint(tables)
         )
-        self.assertFalse(
-            any(name.startswith("warehousing_") for name in tables)
-        )
+        self.assertFalse(any(name.startswith("warehousing_") for name in tables))
 
     def test_migrations_extend_independent_schema_baselines(self) -> None:
         """Каждая цепочка имеет свою baseline и линейные независимые продолжения."""
@@ -148,9 +146,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         self.assertFalse(
             any(
                 isinstance(n, ast.ImportFrom)
-                and {"price_lists"}.intersection(
-                    (n.module or "").split(".")
-                )
+                and {"price_lists"}.intersection((n.module or "").split("."))
                 for n in ast.walk(tree)
             )
         )

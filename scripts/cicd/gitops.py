@@ -4,9 +4,12 @@ import json
 from pathlib import Path
 import sys
 import time
+from collections.abc import Callable
 
 from .common import Error, RC, patch, run, stable, versions, write_json
+from .github import GitHub
 from .observability import logger, stage
+from .repository import Repo
 
 
 def start_release(repo):
@@ -164,8 +167,14 @@ def wait_prerelease(repo, github, branch, source, timeout=3600):
         time.sleep(10)
 
 
-def publish(repo, github, check):
-    """Resume a durable local transaction; network writes happen only at atomic push."""
+def require_unpublished_tag(repo: Repo, tag: str) -> None:
+    """Запрещает перенос тега, уже существующего на origin."""
+    if repo.git("ls-remote", "origin", "refs/tags/" + tag).stdout.strip():
+        raise Error(f"Tag {tag} is already on origin; refusing to move a published tag")
+
+
+def publish(repo: Repo, github: GitHub, check: Callable[[], None]) -> None:
+    """Продолжает локальную публикацию с повторной проверкой исправляющих коммитов."""
     journal = Path(
         repo.git("rev-parse", "--git-path", "cicd-publish.json").stdout.strip()
     )
@@ -279,11 +288,43 @@ def publish(repo, github, check):
         with stage("Validate stable version", tag=tag):
             repo.git("switch", "main")
             if repo.sha() != state["main_sha"]:
-                raise Error(
-                    "Prepared main changed; refusing to publish an unchecked version"
-                )
+                tag_sha = state.get("tag_sha", state["main_sha"])
+                if (
+                    not repo.ancestor(state["main_sha"], "HEAD")
+                    or repo.sha(tag) != tag_sha
+                    or repo.metadata(tag) != metadata
+                    or versions(repo.root) != (state["app"], state["chart"])
+                ):
+                    raise Error(
+                        "Prepared main changed incompatibly; preserve the journal"
+                    )
+                require_unpublished_tag(repo, tag)
+                state.update(tag_sha=tag_sha, main_sha=repo.sha())
+                write_json(journal, state)
             check()
             repo.clean()
+            if repo.sha() != state["main_sha"]:
+                raise Error("Main changed during validation; retry make publish")
+            state["phase"] = "retag" if "tag_sha" in state else "backmerge"
+            write_json(journal, state)
+    if state["phase"] == "retag":
+        with stage("Update unpublished stable tag", tag=tag):
+            if (
+                repo.sha("main") != state["main_sha"]
+                or repo.sha(tag) not in (state["tag_sha"], state["main_sha"])
+                or repo.metadata(tag) != metadata
+            ):
+                raise Error("Prepared refs changed; refusing to move the stable tag")
+            require_unpublished_tag(repo, tag)
+            repo.git(
+                "tag",
+                "--force",
+                "-a",
+                tag,
+                state["main_sha"],
+                "-m",
+                json.dumps(metadata, sort_keys=True),
+            )
             state["phase"] = "backmerge"
             write_json(journal, state)
     if state["phase"] == "backmerge":

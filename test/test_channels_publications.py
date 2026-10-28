@@ -6,6 +6,7 @@ from decimal import Decimal
 import json
 from pathlib import Path
 import unittest
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from src.modules.channels.application.error import (
@@ -503,7 +504,7 @@ class PublicationPlatformTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(finished.done)
 
     async def test_rozetka_token_identity_and_full_scope(self) -> None:
-        """Читает профиль токеном, все состояния и архив без обязательного rz_item_id."""
+        """Читает профиль, список и архив без фильтра наличия и обязательного rz_item_id."""
         http = PageHttp(
             [
                 {"success": True, "content": {"market": {"id": 1086}, "id": 1}},
@@ -529,7 +530,7 @@ class PublicationPlatformTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(page.done)
         self.assertEqual(page.items[0].external_id, "107:7372")
         self.assertIsNone(page.items[0].platform_data["rz_item_id"])
-        self.assertIn("available=0%2C1%2C2", http.calls[1][1])
+        self.assertNotIn("available", parse_qs(urlsplit(http.calls[1][1]).query))
         archive = await platform.read_publications(
             config=validated.config,
             credentials=validated.credentials,
@@ -537,6 +538,36 @@ class PublicationPlatformTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(archive.done)
         self.assertEqual(archive.items[0].external_id, page.items[0].external_id)
+        self.assertEqual(urlsplit(http.calls[2][1]).path, "/goods/archive")
+        self.assertNotIn("available", parse_qs(urlsplit(http.calls[2][1]).query))
+
+    async def test_rozetka_resumed_pages_do_not_filter_availability(self) -> None:
+        """Продолжение обоих потоков передаёт только параметры пагинации."""
+        for stream in ("all", "archive"):
+            with self.subTest(stream=stream):
+                response = fixture("rozetka-products.json")
+                response["content"]["_meta"] = {"currentPage": 2, "pageCount": 3}
+                http = PageHttp([response])
+                platform = InstalledPlatforms(http).get("rozetka")
+                validated = platform.validate(
+                    self.config("rozetka"), {"token": "private-token"}
+                )
+                page = await platform.read_publications(
+                    config=validated.config,
+                    credentials=validated.credentials,
+                    checkpoint=PublicationCheckpoint(
+                        cursor={"stream": stream, "page": 2}
+                    ),
+                )
+                request = urlsplit(http.calls[0][1])
+                self.assertEqual(request.path, "/goods/" + stream)
+                self.assertEqual(
+                    parse_qs(request.query),
+                    {"page": ["2"], "pageSize": ["100"]},
+                )
+                self.assertFalse(page.done)
+                self.assertEqual(page.checkpoint.cursor, {"stream": stream, "page": 3})
+                self.assertEqual(page.items[0].data.availability, "removed")
 
     async def test_invalid_source_does_not_become_empty_success(self) -> None:
         """Не принимает отказ с HTTP 200 за пустой успешный обход."""
