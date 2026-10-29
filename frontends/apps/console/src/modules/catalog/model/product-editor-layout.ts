@@ -9,9 +9,9 @@ export const editorGroups = [
   },
   { id: "pricing", title: "Цены", sections: ["price"] },
   { id: "stock", title: "Наличие", sections: ["stock"] },
-  { id: "media", title: "Изображения", sections: ["galleries"] },
   { id: "descriptions", title: "Описание", sections: ["content"] },
   { id: "measurements", title: "Вес и размеры", sections: ["measurements"] },
+  { id: "media", title: "Галерея", sections: ["galleries"] },
 ] as const satisfies readonly {
   id: string;
   title: string;

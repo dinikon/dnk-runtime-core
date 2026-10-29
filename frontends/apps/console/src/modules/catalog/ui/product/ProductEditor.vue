@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import "./product.css";
-import { FileText, Images, Layers, Radio } from "@lucide/vue";
+import { FileText, Layers, Radio } from "@lucide/vue";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ProductEditorTab } from "../../model/product-editor-state";
@@ -116,8 +116,8 @@ watch(
 );
 async function navigate(id: EditorGroup, focus = false): Promise<void> {
   if (!availableGroups.value.some((group) => group.id === id)) return;
-  if (id === "media" || id === "descriptions") {
-    const tab = id === "media" ? "media" : "description";
+  if (id === "descriptions") {
+    const tab = "description";
     if (props.activeTab !== tab) {
       pendingNavigation = { id, focus };
       emit("tab", tab);
@@ -321,6 +321,26 @@ onMounted(async () => {
             @change="emit('save', 'measurements', { ...$event })"
           />
         </ProductEditorSection>
+        <ProductEditorSection
+          :id="`product-${item.id}-media`"
+          title="Галерея"
+          collapsible
+          default-open
+          :dirty="groupDirty('media')"
+          :error="groupError('media')"
+          :reveal="revealed.media"
+        >
+          <CatalogItemGalleryForm
+            :value="item.gallery"
+            :pending="disabled || uploading"
+            :uploading="uploading"
+            :reset="resets.galleries ?? 0"
+            :validation-error="props.errors.galleries"
+            :image-url="imageUrl"
+            @save="emit('save', 'galleries', { gallery: $event })"
+            @upload="(file, main) => emit('upload', file, main)"
+          />
+        </ProductEditorSection>
       </div>
     </section>
     <Tabs
@@ -335,14 +355,6 @@ onMounted(async () => {
           <TabsTrigger value="description" variant="line"
             ><FileText class="mr-2 size-4" aria-hidden="true" />Описание<Badge
               v-if="props.errors.content"
-              variant="destructive"
-              class="ml-2"
-              >!</Badge
-            ></TabsTrigger
-          >
-          <TabsTrigger value="media" variant="line"
-            ><Images class="mr-2 size-4" aria-hidden="true" />Изображения<Badge
-              v-if="props.errors.galleries"
               variant="destructive"
               class="ml-2"
               >!</Badge
@@ -384,30 +396,6 @@ onMounted(async () => {
             :disabled="disabled || contentDisabled"
             :error="props.errors.content"
             @change="(code, value) => emit('content', code, value)"
-          />
-        </ProductEditorSection>
-      </TabsContent>
-      <TabsContent
-        value="media"
-        force-mount
-        v-show="activeTab === 'media'"
-        class="product-workspace-panel"
-      >
-        <ProductEditorSection
-          :id="`product-${item.id}-media`"
-          title="Изображения"
-          :dirty="groupDirty('media')"
-          :error="groupError('media')"
-        >
-          <CatalogItemGalleryForm
-            :value="item.gallery"
-            :pending="disabled || uploading"
-            :uploading="uploading"
-            :reset="resets.galleries ?? 0"
-            :validation-error="props.errors.galleries"
-            :image-url="imageUrl"
-            @save="emit('save', 'galleries', { gallery: $event })"
-            @upload="(file, main) => emit('upload', file, main)"
           />
         </ProductEditorSection>
       </TabsContent>

@@ -7,7 +7,6 @@ import {
   FieldDescription,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -173,15 +172,6 @@ function dateField(
       >
       <FieldDescription v-if="!filled"
         >Без цены товар недоступен для продажи.</FieldDescription
-      >
-      <Button
-        v-else
-        type="button"
-        variant="ghost"
-        class="self-start"
-        :disabled="disabled"
-        @click="change(emptyPrice())"
-        >Убрать цену</Button
       >
     </FieldGroup>
   </fieldset>

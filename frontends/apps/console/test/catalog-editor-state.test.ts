@@ -11,13 +11,14 @@ test("editor tabs only expose sections available to the product", () => {
   assert.equal(productEditorTab("variants", false), "description");
   assert.equal(productEditorTab("publications", false), "publications");
   assert.equal(productEditorTab("publications", false, false), "description");
-  assert.equal(productEditorTab("media", false, false), "media");
+  assert.equal(productEditorTab("media", false, false), "description");
   for (const value of [undefined, "general", "unknown", ["variants"]]) {
     assert.equal(productEditorTab(value, true), "description");
   }
 });
 
 test("old section links still target editable fields", () => {
+  assert.equal(productEditorGroup("media"), "media");
   assert.equal(productEditorGroup("general"), "identity");
   assert.equal(productEditorGroup("inventory"), "stock");
   assert.equal(productEditorGroup("shipping"), "measurements");
