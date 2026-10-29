@@ -1,0 +1,22 @@
+{
+  "libraries": {
+    "@lobehub/icons-static-svg": "1.101.0 (MIT)",
+    "simple-icons": "11.15.0 (CC0-1.0)"
+  },
+  "icons": {
+    "anthropic": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/anthropic.svg",
+    "google": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/google-color.svg",
+    "nvidia": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/nvidia-color.svg",
+    "openai": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/openai.svg",
+    "microsoft": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/microsoft-color.svg",
+    "notion": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/notion.svg",
+    "figma": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/figma-color.svg",
+    "github": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.101.0/icons/github.svg",
+    "stripe": "https://cdn.jsdelivr.net/npm/simple-icons@11.15.0/icons/stripe.svg",
+    "linkedin": "https://cdn.jsdelivr.net/npm/simple-icons@11.15.0/icons/linkedin.svg",
+    "amazon": "https://cdn.jsdelivr.net/npm/simple-icons@11.15.0/icons/amazon.svg",
+    "airbnb": "https://cdn.jsdelivr.net/npm/simple-icons@11.15.0/icons/airbnb.svg",
+    "spacex": "https://cdn.jsdelivr.net/npm/simple-icons@11.15.0/icons/spacex.svg",
+    "slack": "https://cdn.jsdelivr.net/npm/simple-icons@11.15.0/icons/slack.svg"
+  }
+}

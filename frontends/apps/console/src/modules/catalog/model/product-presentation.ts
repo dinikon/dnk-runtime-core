@@ -1,16 +1,8 @@
 import DOMPurify from "dompurify";
 import type { CatalogItem } from "./catalog.types";
 import type { ProductOverviewModel } from "./product.types";
-export const statusLabels: Record<string, string> = {
-  draft: "Черновик",
-  active: "Активный",
-  archived: "В архиве",
-};
-export const stockLabels: Record<string, string> = {
-  in_stock: "В наличии",
-  out_of_stock: "Нет в наличии",
-  on_backorder: "Предзаказ",
-};
+import { statusLabels, stockLabels } from "./product-labels.ts";
+export { statusLabels, stockLabels } from "./product-labels.ts";
 export const sectionTitles: Record<string, string> = {
   content: "Тексты товара",
   status: "Статус",

@@ -72,6 +72,8 @@ export interface CatalogListItem {
   price: string | null;
   currency: string | null;
   availableForSale: boolean;
+  stockStatus?: ProductStock["stock_status"];
+  primaryImage?: ProductGallery["images"][number] | null;
 }
 export interface CatalogItemsPage {
   items: CatalogListItem[];

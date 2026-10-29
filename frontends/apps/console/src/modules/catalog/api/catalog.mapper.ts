@@ -31,6 +31,13 @@ export function listItemFromDto(value: ListItemDTO): CatalogListItem {
     price: value.price,
     currency: value.currency,
     availableForSale: value.available_for_sale,
+    stockStatus:
+      value.stock_status === "in_stock" ||
+      value.stock_status === "out_of_stock" ||
+      value.stock_status === "on_backorder"
+        ? value.stock_status
+        : null,
+    primaryImage: value.primary_image,
   };
 }
 

@@ -17,6 +17,11 @@ export const exampleRoutes: RouteRecordRaw[] = import.meta.env.DEV
         },
       },
       {
+        path: "companies",
+        name: "example-companies",
+        component: () => import("./pages/CompaniesExamplePage.vue"),
+      },
+      {
         path: "headers",
         redirect: { name: "example-header-2" },
       },

@@ -8,6 +8,9 @@ export const badgeVariants = cva(
   {
     variants: {
       variant: {
+        entity:
+          "rounded-md border-transparent bg-muted/60 text-foreground px-1.5 text-sm font-normal",
+        link: "border-border bg-muted/20 text-foreground px-2 py-0 text-sm font-normal [a&]:hover:bg-accent",
         default:
           "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
         secondary:
