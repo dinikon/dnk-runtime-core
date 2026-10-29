@@ -17,11 +17,13 @@ const props = defineProps<{
   content: Record<string, string>;
   disabled: boolean;
   contentDisabled?: boolean;
+  virtual: boolean;
   errors: Partial<Record<ProductSection, string>>;
   resets: Partial<Record<ProductSection, number>>;
 }>();
 const emit = defineEmits<{
   title: [value: string];
+  virtual: [value: boolean];
   save: [section: ProductSection, value: Record<string, unknown>];
 }>();
 const { value: sku, change: changeSku } = useProductSectionDraft(
@@ -29,17 +31,15 @@ const { value: sku, change: changeSku } = useProductSectionDraft(
   () => props.resets.sku ?? 0,
   (value) => emit("save", "sku", { sku: value || null }),
 );
-const { value: virtual, change: changeVirtual } = useProductSectionDraft(
-  () => props.item.virtual,
-  () => props.resets.virtual ?? 0,
-  (value) => emit("save", "virtual", { virtual: value }),
-);
 </script>
 <template>
   <fieldset :disabled="disabled" class="min-w-0">
     <legend class="sr-only">Основные сведения</legend>
-    <FieldGroup class="gap-5">
-      <Field :data-invalid="!!errors.content || undefined">
+    <FieldGroup class="gap-3">
+      <Field
+        class="product-property-field"
+        :data-invalid="!!errors.content || undefined"
+      >
         <FieldLabel :for="`${item.id}-title`"
           >Название <span aria-hidden="true">*</span></FieldLabel
         >
@@ -62,7 +62,10 @@ const { value: virtual, change: changeVirtual } = useProductSectionDraft(
           :error="errors.content"
         />
       </Field>
-      <Field :data-invalid="!!errors.sku || undefined">
+      <Field
+        class="product-property-field"
+        :data-invalid="!!errors.sku || undefined"
+      >
         <FieldLabel :for="`${item.id}-sku`">Артикул</FieldLabel>
         <Input
           :id="`${item.id}-sku`"
@@ -73,7 +76,7 @@ const { value: virtual, change: changeVirtual } = useProductSectionDraft(
           :aria-describedby="`${item.id}-sku-hint ${errors.sku ? `${item.id}-sku-error` : ''}`"
           @update:model-value="changeSku(String($event))"
         />
-        <FieldDescription :id="`${item.id}-sku-hint`"
+        <FieldDescription :id="`${item.id}-sku-hint`" class="sr-only"
           >Уникальный артикул для поиска и учёта.</FieldDescription
         >
         <ProductFieldError :id="`${item.id}-sku-error`" :error="errors.sku" />
@@ -85,7 +88,7 @@ const { value: virtual, change: changeVirtual } = useProductSectionDraft(
       >
         <FieldContent
           ><FieldLabel :for="`${item.id}-virtual`">Виртуальный товар</FieldLabel
-          ><FieldDescription :id="`${item.id}-virtual-hint`"
+          ><FieldDescription :id="`${item.id}-virtual-hint`" class="sr-only"
             >Можно изменить в любой момент.</FieldDescription
           ></FieldContent
         >
@@ -96,7 +99,7 @@ const { value: virtual, change: changeVirtual } = useProductSectionDraft(
             :disabled="disabled"
             :aria-invalid="!!errors.virtual || undefined"
             :aria-describedby="`${item.id}-virtual-hint ${errors.virtual ? `${item.id}-virtual-error` : ''}`"
-            @update:model-value="changeVirtual"
+            @update:model-value="emit('virtual', $event)"
         /></label>
       </Field>
       <ProductFieldError

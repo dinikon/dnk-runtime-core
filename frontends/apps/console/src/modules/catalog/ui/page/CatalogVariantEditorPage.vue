@@ -12,13 +12,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import ProductEditor from "../product/ProductEditor.vue";
 import VariantInheritanceControls from "../product/VariantInheritanceControls.vue";
+import { useProductEditorPageState } from "../../model/use-product-editor-page-state";
 import { useProductPage } from "../../model/use-product-page";
 import type { ProductSection } from "../../model/product.types";
 import type { ProductStock } from "../../model/product.types";
 const props = defineProps<{ variantId: string; parentStock: ProductStock }>();
 const emit = defineEmits<{ close: [] }>();
-const page = useProductPage(true, toRef(props, "variantId"));
+const page = useProductPage(toRef(props, "variantId"));
 const { item, contentValues, contentOverrides, blocked, pending } = page;
+const pageState = useProductEditorPageState(() => false, true);
 const sections: ProductSection[] = [
   "content",
   "status",
@@ -37,7 +39,7 @@ const dirty = computed(() => sections.filter(page.isDirty));
 <template>
   <Sheet :open="true" @update:open="!$event && emit('close')"
     ><SheetContent
-      class="flex w-full min-w-0 flex-col gap-4 overflow-y-auto sm:max-w-[min(95vw,1100px)]"
+      class="flex w-full min-w-0 flex-col gap-4 overflow-y-auto sm:max-w-[min(75%)]"
     >
       <SheetHeader
         ><SheetTitle>Редактирование варианта</SheetTitle
@@ -82,7 +84,10 @@ const dirty = computed(() => sections.filter(page.isDirty));
           @measurements="page.save('measurements', { [$event]: null })"
         />
         <ProductEditor
-          class="px-4"
+          class="product-variant-workspace shrink-0"
+          :active-tab="pageState.tab.value"
+          :initial-group="pageState.initialGroup.value"
+          @tab="pageState.selectTab"
           :key="page.scope.value"
           :item="item.data.value"
           :parent-stock="parentStock"

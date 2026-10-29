@@ -1,12 +1,14 @@
-import type { ProductSection, ProductTab } from "./product.types";
+import type { ProductSection } from "./product.types";
 
 export const editorGroups = [
+  { id: "status", title: "Статус", sections: ["status"] },
   {
     id: "identity",
     title: "Основные сведения",
     sections: ["content", "sku", "virtual"],
   },
-  { id: "pricing", title: "Цена и наличие", sections: ["price", "stock"] },
+  { id: "pricing", title: "Цены", sections: ["price"] },
+  { id: "stock", title: "Наличие", sections: ["stock"] },
   { id: "media", title: "Изображения", sections: ["galleries"] },
   { id: "descriptions", title: "Описание", sections: ["content"] },
   { id: "measurements", title: "Вес и размеры", sections: ["measurements"] },
@@ -16,8 +18,3 @@ export const editorGroups = [
   sections: readonly ProductSection[];
 }[];
 export type EditorGroup = (typeof editorGroups)[number]["id"];
-export const tabGroup: Record<ProductTab, EditorGroup> = {
-  general: "identity",
-  inventory: "pricing",
-  shipping: "measurements",
-};

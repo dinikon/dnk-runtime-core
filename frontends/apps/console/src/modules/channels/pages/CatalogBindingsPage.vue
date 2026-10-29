@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import OffsetPagination from "@/shared/pagination/OffsetPagination.vue";
 import BindingCandidates from "../ui/bindings/BindingCandidates.vue";
-import BindingGroupsList from "../ui/bindings/BindingGroupsList.vue";
+import BindingGroupsBody from "../ui/bindings/BindingGroupsBody.vue";
 import BindingPairsForm from "../ui/bindings/BindingPairsForm.vue";
 import { usePublicationSync } from "../model/publication.queries";
 import { useChannels, useChannel } from "../model/channel.queries";
@@ -471,8 +471,11 @@ function goPublication(group: CatalogBinding): void {
 }
 </script>
 <template>
-  <section class="min-w-0 space-y-4" aria-label="Связи публикаций с Catalog">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+  <section
+    class="flex min-h-0 min-w-0 flex-1 flex-col gap-4"
+    aria-label="Связи публикаций с Catalog"
+  >
+    <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="text-xl font-semibold">
           {{ catalogRootId ? "Публикации" : "Связь с Catalog" }}
@@ -497,28 +500,23 @@ function goPublication(group: CatalogBinding): void {
         >
       </div>
     </div>
-    <p v-if="groups.isPending.value" role="status">Загрузка связей…</p>
-    <Alert v-if="groups.error.value" variant="destructive"
-      ><AlertDescription
-        >{{ bindingError(groups.error.value) }}
-        <Button variant="outline" @click="groups.refetch()"
-          >Повторить</Button
-        ></AlertDescription
-      ></Alert
-    >
-    <p
-      v-if="groups.data.value && !groups.data.value.total"
-      class="text-muted-foreground py-5 text-sm"
-    >
-      Связей пока нет. Выберите карточку и явно сопоставьте позиции.
-    </p>
     <p v-if="sourceAlreadyBound" class="text-muted-foreground text-sm">
       Публикация закреплена за группой. Для привязки к другой карточке сначала
       снимите существующую связь.
     </p>
-    <BindingGroupsList
-      v-if="groups.data.value?.items.length"
-      :items="groups.data.value.items"
+    <BindingGroupsBody
+      :items="groups.data.value?.items ?? []"
+      :loading="groups.isPending.value"
+      :error="groups.error.value ? bindingError(groups.error.value) : ''"
+      :show-catalog="!catalogRootId"
+      :out-of-range="state.offset.value > 0"
+      :can-create="
+        !busy &&
+        (!publicationId || (!!groups.data.value && !sourceAlreadyBound))
+      "
+      @retry="groups.refetch()"
+      @create="open()"
+      @first-page="state.paginate(1, state.limit.value)"
       :busy="busy"
       @edit="open"
       @remove="
@@ -529,6 +527,7 @@ function goPublication(group: CatalogBinding): void {
       @publication="goPublication"
     />
     <OffsetPagination
+      class="shrink-0"
       locale="ru"
       :total="groups.data.value?.total ?? 0"
       :page="Math.floor(state.offset.value / state.limit.value) + 1"

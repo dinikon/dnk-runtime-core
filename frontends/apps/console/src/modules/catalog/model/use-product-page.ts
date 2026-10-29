@@ -3,15 +3,14 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../api/catalog.api";
 import { useCatalogContext } from "./use-catalog-context";
-import type { ProductSection, ProductTab } from "./product.types";
+import type { ProductSection } from "./product.types";
 import axios from "axios";
 import type { ProductPatch } from "./product.types";
 import { ProductAutosave, type AutosaveState } from "./product-autosave";
 import { sectionError, fieldSections } from "./product-validation";
-import { productTabs } from "./product-presentation";
 import { useProductContentDraft } from "./use-product-content-draft";
 
-export function useProductPage(editing: boolean, variantId?: Ref<string>) {
+export function useProductPage(variantId?: Ref<string>) {
   const state = reactive<AutosaveState>({
     entries: {},
     pending: false,
@@ -62,17 +61,9 @@ export function useProductPage(editing: boolean, variantId?: Ref<string>) {
   });
   const schema = useQuery({
     queryKey: computed(() => ctx.key("product-schema")),
-    enabled: computed(() => enabled.value && editing),
+    enabled,
     queryFn: ({ signal }) => catalogApi.defaultSchema(ctx.locale.value, signal),
   });
-  const tab = computed<ProductTab>(() =>
-    productTabs.some((t) => t.id === ctx.route.query.tab)
-      ? (ctx.route.query.tab as ProductTab)
-      : "general",
-  );
-  function selectTab(value: string) {
-    void ctx.router.replace({ query: { ...ctx.route.query, tab: value } });
-  }
   const isDirty = (section: ProductSection) => !!state.entries[section];
   const resetFor = (section: ProductSection) => resets[section] ?? 0;
   const fieldError = (section: ProductSection) =>
@@ -293,8 +284,6 @@ export function useProductPage(editing: boolean, variantId?: Ref<string>) {
     id,
     item,
     schema,
-    tab,
-    selectTab,
     pending,
     error,
     blocked,

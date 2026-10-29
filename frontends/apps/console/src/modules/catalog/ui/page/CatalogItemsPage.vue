@@ -56,9 +56,9 @@ watch(ctx.sessionKey, () => {
   deleteTarget.value = null;
 });
 
-function open(id: string, edit = false): void {
+function open(id: string): void {
   void ctx.router.push({
-    path: `/catalog/items/${encodeURIComponent(id)}${edit ? "/edit" : ""}`,
+    path: `/catalog/items/${encodeURIComponent(id)}`,
     query: { locale: ctx.locale.value },
   });
 }
@@ -154,7 +154,6 @@ async function remove(): Promise<void> {
       :can-create="canCreate"
       :image-url="imageUrl"
       @open="open($event)"
-      @edit="open($event, true)"
       @remove="askDelete"
       @retry="items.refetch()"
       @reset="pageState.clear"

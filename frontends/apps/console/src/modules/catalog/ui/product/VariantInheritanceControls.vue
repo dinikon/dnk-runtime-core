@@ -94,7 +94,7 @@ const emit = defineEmits<{
         />
       </div>
       <div
-        v-for="name in ['weight', 'dimensions'] as const"
+        v-for="name in item.virtual ? [] : (['weight', 'dimensions'] as const)"
         :key="name"
         class="flex flex-wrap items-center gap-2 text-sm"
       >

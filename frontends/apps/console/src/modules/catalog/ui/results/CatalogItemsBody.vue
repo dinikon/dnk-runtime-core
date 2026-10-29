@@ -19,7 +19,6 @@ defineProps<{
 }>();
 const emit = defineEmits<{
   open: [id: string];
-  edit: [id: string];
   remove: [item: CatalogListItem];
   retry: [];
   reset: [];
@@ -57,7 +56,6 @@ const emit = defineEmits<{
       :disabled="disabled"
       :image-url="imageUrl"
       @open="emit('open', $event)"
-      @edit="emit('edit', $event)"
       @remove="emit('remove', $event)"
     />
     <div v-else-if="!error && outOfRange" class="min-h-0 flex-1 overflow-auto">

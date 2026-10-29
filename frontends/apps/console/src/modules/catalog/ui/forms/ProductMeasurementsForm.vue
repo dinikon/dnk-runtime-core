@@ -33,7 +33,7 @@ const { value: measurements, change } = useProductSectionDraft(
     :aria-describedby="error ? 'measurements-error' : undefined"
   >
     <legend class="sr-only">Вес и размеры</legend>
-    <FieldGroup class="gap-4"
+    <FieldGroup class="gap-3"
       ><CatalogMeasurementField
         :model-value="measurements.weight"
         label="Вес"

@@ -41,7 +41,7 @@ export function useCreateCatalogItem(
       navigating.value = true;
       try {
         const target = {
-          path: `/catalog/items/${id}/edit`,
+          path: `/catalog/items/${encodeURIComponent(id)}`,
           query: { locale: ctx.locale.value, focus: "title" },
         };
         const result = await (direct

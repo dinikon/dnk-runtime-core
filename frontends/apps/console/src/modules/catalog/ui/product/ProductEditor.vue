@@ -1,24 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
-import { Check, LoaderCircle, MoreHorizontal } from "@lucide/vue";
+import "./product.css";
+import { FileText, Images, Layers, Radio } from "@lucide/vue";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import type { ProductEditorTab } from "../../model/product-editor-state";
+import { useProductSectionDraft } from "../../model/use-product-section-draft";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Field, FieldLabel } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type { CatalogItem } from "../../model/catalog.types";
 import type { ProductStock } from "../../model/product.types";
 import type { ProductSection } from "../../model/product.types";
@@ -26,12 +15,10 @@ import {
   editorGroups,
   type EditorGroup,
 } from "../../model/product-editor-layout";
-import { useProductSectionDraft } from "../../model/use-product-section-draft";
-import { statusLabels, stockLabels } from "../../model/product-presentation";
+
 import ProductEditorSection from "./ProductEditorSection.vue";
-import ProductEditorSections from "./ProductEditorSections.vue";
-import ProductFieldError from "./ProductFieldError.vue";
 import ProductIdentityForm from "../forms/ProductIdentityForm.vue";
+import ProductStatusForm from "../forms/ProductStatusForm.vue";
 import ProductPricingForm from "../forms/ProductPricingForm.vue";
 import ProductStockForm from "../forms/ProductStockForm.vue";
 import ProductDescriptionsForm from "../forms/ProductDescriptionsForm.vue";
@@ -50,6 +37,7 @@ const props = defineProps<{
   uploading: boolean;
   saveStatus: string;
   error: string;
+  activeTab: ProductEditorTab;
   initialGroup?: EditorGroup;
   focusTitle?: boolean;
   imageUrl: (id: string) => string;
@@ -61,7 +49,20 @@ const emit = defineEmits<{
   reload: [];
   retry: [];
   focused: [];
+  tab: [value: ProductEditorTab];
 }>();
+const { value: virtual, change: changeVirtual } = useProductSectionDraft(
+  () => props.item.virtual,
+  () => props.resets.virtual ?? 0,
+  (value) => emit("save", "virtual", { virtual: value }),
+);
+const availableGroups = computed(() =>
+  editorGroups.filter(
+    (group) =>
+      !(group.id === "measurements" && virtual.value) &&
+      !(group.id === "pricing" && props.item.kind === "variable"),
+  ),
+);
 const root = ref<HTMLElement | null>(null);
 const revealed = reactive<Partial<Record<EditorGroup, number>>>({});
 let titleFocused = false;
@@ -89,11 +90,6 @@ watch(
     void focusTitleField();
   },
 );
-const { value: status, change: changeStatus } = useProductSectionDraft(
-  () => props.item.status,
-  () => props.resets.status ?? 0,
-  (value) => emit("save", "status", { status: value }),
-);
 const groupDirty = (id: EditorGroup): boolean =>
   editorGroups
     .find((g) => g.id === id)
@@ -104,18 +100,54 @@ const groupError = (id: EditorGroup): string =>
     ?.sections.map((s) => props.errors[s])
     .find(Boolean) ?? "";
 const invalidGroups = computed(() =>
-  editorGroups.filter((g) => groupError(g.id) && g.id !== "descriptions"),
+  availableGroups.value.filter(
+    (g) => groupError(g.id) && g.id !== "descriptions",
+  ),
 );
-function summary(id: EditorGroup, clean: string): string {
-  return groupDirty(id) ? "Есть несохранённые изменения" : clean;
-}
+let pendingNavigation: { id: EditorGroup; focus: boolean } | undefined;
+watch(
+  () => props.activeTab,
+  () => {
+    if (!pendingNavigation) return;
+    const target = pendingNavigation;
+    pendingNavigation = undefined;
+    void navigate(target.id, target.focus);
+  },
+);
 async function navigate(id: EditorGroup, focus = false): Promise<void> {
+  if (!availableGroups.value.some((group) => group.id === id)) return;
+  if (id === "media" || id === "descriptions") {
+    const tab = id === "media" ? "media" : "description";
+    if (props.activeTab !== tab) {
+      pendingNavigation = { id, focus };
+      emit("tab", tab);
+      return;
+    }
+  }
   revealed[id] = (revealed[id] ?? 0) + 1;
   await nextTick();
   const target = root.value?.querySelector<HTMLElement>(
     `#product-${props.item.id}-${id}`,
   );
-  target?.scrollIntoView({ block: "start", behavior: "instant" });
+  // Scroll the editor pane only; scrollIntoView can also move the app shell.
+  let container = target?.parentElement;
+  while (target && container) {
+    if (
+      ["auto", "scroll"].includes(getComputedStyle(container).overflowY) &&
+      container.scrollHeight > container.clientHeight
+    ) {
+      container.scrollTo({
+        top:
+          container.scrollTop +
+          target.getBoundingClientRect().top -
+          container.getBoundingClientRect().top -
+          16,
+        behavior: "instant",
+      });
+      break;
+    }
+    container = container.parentElement;
+  }
   if (focus) {
     const controls = [
       ...Array.from(
@@ -148,181 +180,226 @@ onMounted(async () => {
 });
 </script>
 <template>
-  <div ref="root" class="min-w-0">
-    <div
-      class="product-savebar flex flex-wrap items-center gap-3 border-y bg-background py-3"
+  <div
+    ref="root"
+    class="product-editor product-workspace min-h-0 min-w-0 flex-1"
+  >
+    <section
+      class="product-workspace-fields"
+      aria-label="Основная информация о товаре"
     >
-      <p
-        role="status"
-        aria-live="polite"
-        data-testid="autosave-status"
-        class="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
-      >
-        <LoaderCircle
-          v-if="pending"
-          class="size-4 shrink-0 animate-spin"
-          aria-hidden="true"
-        /><Check
-          v-else-if="!dirty.length && !error"
-          class="size-4 shrink-0"
-          aria-hidden="true"
-        />{{ saveStatus }}
-      </p>
-      <ProductEditorSections @select="navigate" />
-      <Field orientation="horizontal" class="w-auto gap-2"
-        ><FieldLabel :for="`product-${item.id}-status`" class="sr-only"
-          >Статус товара</FieldLabel
-        ><Select
-          :model-value="status"
-          :disabled="disabled"
-          @update:model-value="changeStatus($event as CatalogItem['status'])"
-          ><SelectTrigger
-            :id="`product-${item.id}-status`"
-            class="min-h-11 w-32"
-            :aria-invalid="!!props.errors.status || undefined"
-            :aria-describedby="
-              props.errors.status
-                ? `product-${item.id}-status-error`
-                : undefined
-            "
-            ><SelectValue /></SelectTrigger
-          ><SelectContent
-            ><SelectGroup
-              ><SelectItem
-                v-for="(label, key) in statusLabels"
-                :key="key"
-                :value="key"
-                >{{ label }}</SelectItem
-              ></SelectGroup
-            ></SelectContent
-          ></Select
-        ></Field
-      >
-      <DropdownMenu
-        ><DropdownMenuTrigger as-child
-          ><Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            class="min-h-11 min-w-11"
-            aria-label="Действия с карточкой"
-            ><MoreHorizontal /></Button></DropdownMenuTrigger
-        ><DropdownMenuContent align="end"
-          ><DropdownMenuGroup
-            ><DropdownMenuItem
+      <div v-if="error || invalidGroups.length" class="px-4 pt-3">
+        <Alert variant="destructive">
+          <AlertTitle>{{
+            error ? "Не удалось сохранить изменения" : "Проверьте поля"
+          }}</AlertTitle>
+          <AlertDescription>
+            <p>
+              {{
+                error || "Ввод сохранён в редакторе. Исправьте отмеченные поля."
+              }}
+            </p>
+            <Button
+              v-if="error"
+              type="button"
+              variant="outline"
               :disabled="pending"
-              class="min-h-11"
-              @select="emit('reload')"
-              >Обновить данные товара</DropdownMenuItem
-            ></DropdownMenuGroup
-          ></DropdownMenuContent
-        ></DropdownMenu
-      >
-    </div>
-    <div
-      v-if="error || invalidGroups.length || props.errors.status"
-      class="pt-5"
-    >
-      <Alert variant="destructive"
-        ><AlertTitle>{{
-          error ? "Не удалось сохранить изменения" : "Проверьте поля"
-        }}</AlertTitle
-        ><AlertDescription
-          ><p v-if="error">{{ error }}</p>
-          <p v-else>Ввод сохранён в карточке. Исправьте отмеченные поля.</p>
-          <Button
-            v-if="error"
-            type="button"
-            variant="outline"
-            class="min-h-11"
-            :disabled="pending"
-            @click="emit('retry')"
-            >Повторить</Button
-          ><Button
-            v-for="group in invalidGroups"
-            :key="group.id"
-            type="button"
-            variant="link"
-            class="h-auto min-h-11 whitespace-normal px-0 text-left"
-            @click="navigate(group.id, true)"
-            >Перейти к ошибке: {{ group.title }}</Button
-          ><ProductFieldError
-            :id="`product-${item.id}-status-error`"
-            :error="props.errors.status" /></AlertDescription
-      ></Alert>
-    </div>
-    <div class="product-editor-grid">
-      <div class="min-w-0">
+              @click="emit('retry')"
+              >Повторить</Button
+            >
+            <Button
+              v-for="group in invalidGroups"
+              :key="group.id"
+              type="button"
+              variant="link"
+              class="h-auto whitespace-normal px-0 text-left"
+              @click="navigate(group.id, true)"
+              >Перейти к ошибке: {{ group.title }}</Button
+            >
+          </AlertDescription>
+        </Alert>
+      </div>
+      <div class="px-4 pb-4">
+        <ProductEditorSection
+          :id="`product-${item.id}-status`"
+          title="Статус"
+          :dirty="groupDirty('status')"
+          :error="groupError('status')"
+          :reveal="revealed.status"
+        >
+          <ProductStatusForm
+            :id="item.id"
+            :status="item.status"
+            :disabled="disabled"
+            :pending="pending || (groupDirty('status') && !props.errors.status)"
+            :error="props.errors.status"
+            @change="emit('save', 'status', { status: $event })"
+          />
+        </ProductEditorSection>
         <ProductEditorSection
           :id="`product-${item.id}-identity`"
           title="Основные сведения"
+          collapsible
+          default-open
           :dirty="groupDirty('identity')"
           :error="groupError('identity')"
-          ><ProductIdentityForm
+          :reveal="revealed.identity"
+        >
+          <ProductIdentityForm
             :item="item"
+            :virtual="virtual"
             :content="content"
             :disabled="disabled"
             :content-disabled="contentDisabled"
             :errors="props.errors"
             :resets="resets"
             @title="emit('content', 'title', $event)"
+            @virtual="changeVirtual"
             @save="(section, value) => emit('save', section, value)"
-        /></ProductEditorSection>
+          />
+        </ProductEditorSection>
         <ProductEditorSection
+          v-if="item.kind !== 'variable'"
           :id="`product-${item.id}-pricing`"
-          :title="item.kind === 'variable' ? 'Общий остаток' : 'Цена и наличие'"
+          title="Цены"
           collapsible
-          :summary="
-            summary(
-              'pricing',
-              item.kind === 'variable'
-                ? item.stock.manage_stock
-                  ? `Количество: ${item.stock.stock_quantity}`
-                  : 'Наличие задаётся в вариантах'
-                : `${item.price !== null ? `${item.price} ${item.price_specification?.currency ?? ''}` : 'Цена не задана'} · ${stockLabels[item.stock_status] ?? 'Наличие не задано'}`,
-            )
-          "
+          default-open
           :dirty="groupDirty('pricing')"
           :error="groupError('pricing')"
           :reveal="revealed.pricing"
-          ><div class="flex min-w-0 flex-col gap-6">
-            <ProductPricingForm
-              v-if="item.kind !== 'variable'"
-              :id="item.id"
-              :value="item.price_specification"
-              :current="item.price"
-              :reset="resets.price ?? 0"
-              :disabled="disabled"
-              :error="props.errors.price"
-              @change="emit('save', 'price', { price: $event })"
-            /><ProductStockForm
-              :id="item.id"
-              :value="item.stock"
-              :current="item.stock_status"
-              :reset="resets.stock ?? 0"
-              :disabled="disabled"
-              :kind="item.kind"
-              :parent-stock="parentStock"
-              :error="props.errors.stock"
-              @change="emit('save', 'stock', { stock: $event })"
-            /></div
-        ></ProductEditorSection>
+        >
+          <ProductPricingForm
+            :id="item.id"
+            :value="item.price_specification"
+            :current="item.price"
+            :reset="resets.price ?? 0"
+            :disabled="disabled"
+            :error="props.errors.price"
+            @change="emit('save', 'price', { price: $event })"
+          />
+        </ProductEditorSection>
+        <ProductEditorSection
+          :id="`product-${item.id}-stock`"
+          :title="item.kind === 'variable' ? 'Общий остаток' : 'Наличие'"
+          collapsible
+          default-open
+          :dirty="groupDirty('stock')"
+          :error="groupError('stock')"
+          :reveal="revealed.stock"
+        >
+          <ProductStockForm
+            :id="item.id"
+            :value="item.stock"
+            :current="item.stock_status"
+            :reset="resets.stock ?? 0"
+            :disabled="disabled"
+            :kind="item.kind"
+            :parent-stock="parentStock"
+            :error="props.errors.stock"
+            @change="emit('save', 'stock', { stock: $event })"
+          />
+        </ProductEditorSection>
+        <ProductEditorSection
+          v-show="!virtual"
+          :id="`product-${item.id}-measurements`"
+          title="Вес и размеры"
+          collapsible
+          :summary="
+            item.weight || Object.values(item.dimensions ?? {}).some(Boolean)
+              ? 'Есть заполненные значения'
+              : 'Не заданы'
+          "
+          :dirty="groupDirty('measurements')"
+          :error="groupError('measurements')"
+          :reveal="revealed.measurements"
+        >
+          <ProductMeasurementsForm
+            :item="item"
+            :disabled="disabled"
+            :reset="resets.measurements ?? 0"
+            :error="props.errors.measurements"
+            @change="emit('save', 'measurements', { ...$event })"
+          />
+        </ProductEditorSection>
+      </div>
+    </section>
+    <Tabs
+      :model-value="activeTab"
+      class="product-workspace-related min-w-0 gap-0"
+      @update:model-value="emit('tab', $event as ProductEditorTab)"
+    >
+      <div
+        class="product-workspace-tabs min-w-0 shrink-0 overflow-x-auto bg-background"
+      >
+        <TabsList variant="line" aria-label="Данные товара">
+          <TabsTrigger value="description" variant="line"
+            ><FileText class="mr-2 size-4" aria-hidden="true" />Описание<Badge
+              v-if="props.errors.content"
+              variant="destructive"
+              class="ml-2"
+              >!</Badge
+            ></TabsTrigger
+          >
+          <TabsTrigger value="media" variant="line"
+            ><Images class="mr-2 size-4" aria-hidden="true" />Изображения<Badge
+              v-if="props.errors.galleries"
+              variant="destructive"
+              class="ml-2"
+              >!</Badge
+            ></TabsTrigger
+          >
+          <TabsTrigger
+            v-if="$slots.variants && item.kind === 'variable'"
+            value="variants"
+            variant="line"
+            ><Layers class="mr-2 size-4" aria-hidden="true" />Варианты ·
+            {{ item.variant_count ?? 0 }}</TabsTrigger
+          >
+          <TabsTrigger
+            v-if="$slots.publications"
+            value="publications"
+            variant="line"
+            ><Radio
+              class="mr-2 size-4"
+              aria-hidden="true"
+            />Публикации</TabsTrigger
+          >
+        </TabsList>
+      </div>
+      <TabsContent
+        value="description"
+        force-mount
+        v-show="activeTab === 'description'"
+        class="product-workspace-panel"
+      >
+        <ProductEditorSection
+          :id="`product-${item.id}-descriptions`"
+          title="Описание"
+          :dirty="groupDirty('descriptions')"
+          :error="groupError('descriptions')"
+        >
+          <ProductDescriptionsForm
+            :content="content"
+            :variant="item.kind === 'variant'"
+            :disabled="disabled || contentDisabled"
+            :error="props.errors.content"
+            @change="(code, value) => emit('content', code, value)"
+          />
+        </ProductEditorSection>
+      </TabsContent>
+      <TabsContent
+        value="media"
+        force-mount
+        v-show="activeTab === 'media'"
+        class="product-workspace-panel"
+      >
         <ProductEditorSection
           :id="`product-${item.id}-media`"
           title="Изображения"
-          collapsible
-          :summary="
-            summary(
-              'media',
-              item.gallery?.images.length
-                ? `Изображений: ${item.gallery.images.length}`
-                : 'Добавить изображения',
-            )
-          "
           :dirty="groupDirty('media')"
           :error="groupError('media')"
-          :reveal="revealed.media"
-          ><CatalogItemGalleryForm
+        >
+          <CatalogItemGalleryForm
             :value="item.gallery"
             :pending="disabled || uploading"
             :uploading="uploading"
@@ -331,44 +408,21 @@ onMounted(async () => {
             :image-url="imageUrl"
             @save="emit('save', 'galleries', { gallery: $event })"
             @upload="(file, main) => emit('upload', file, main)"
-        /></ProductEditorSection>
-        <ProductEditorSection
-          :id="`product-${item.id}-descriptions`"
-          title="Описание"
-          :dirty="groupDirty('descriptions')"
-          :error="groupError('descriptions')"
-          ><ProductDescriptionsForm
-            :content="content"
-            :variant="item.kind === 'variant'"
-            :disabled="disabled || contentDisabled"
-            :error="props.errors.content"
-            @change="(code, value) => emit('content', code, value)"
-        /></ProductEditorSection>
-      </div>
-      <aside class="min-w-0" aria-label="Дополнительные сведения о товаре">
-        <ProductEditorSection
-          :id="`product-${item.id}-measurements`"
-          title="Вес и размеры"
-          collapsible
-          :summary="
-            summary(
-              'measurements',
-              item.weight || Object.values(item.dimensions ?? {}).some(Boolean)
-                ? 'Есть заполненные значения'
-                : 'Не заданы',
-            )
-          "
-          :dirty="groupDirty('measurements')"
-          :error="groupError('measurements')"
-          :reveal="revealed.measurements"
-          ><ProductMeasurementsForm
-            :item="item"
-            :disabled="disabled"
-            :reset="resets.measurements ?? 0"
-            :error="props.errors.measurements"
-            @change="emit('save', 'measurements', { ...$event })"
-        /></ProductEditorSection>
-      </aside>
-    </div>
+          />
+        </ProductEditorSection>
+      </TabsContent>
+      <TabsContent
+        v-if="$slots.variants && item.kind === 'variable'"
+        value="variants"
+        class="product-workspace-panel product-workspace-variants"
+        ><slot name="variants"
+      /></TabsContent>
+      <TabsContent
+        v-if="$slots.publications"
+        value="publications"
+        class="product-workspace-panel product-workspace-publications"
+        ><slot name="publications"
+      /></TabsContent>
+    </Tabs>
   </div>
 </template>

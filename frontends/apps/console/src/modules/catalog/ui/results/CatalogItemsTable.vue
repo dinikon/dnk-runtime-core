@@ -1,12 +1,9 @@
 <script setup lang="ts">
+import { Ellipsis, Package, Pencil, Trash2 } from "@lucide/vue";
 import {
-  Ellipsis,
-  Package,
-  Pencil,
-  SquareArrowOutUpRight,
-  Trash2,
-} from "@lucide/vue";
-import { DataTable } from "@/components/custom-ui/data-table";
+  DataTable,
+  type DataTableColumn,
+} from "@/components/custom-ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,16 +17,23 @@ import {
 import type { CatalogListItem } from "../../model/catalog.types";
 import { statusLabels, stockLabels } from "../../model/product-labels";
 import { catalogListPrice } from "../../model/catalog-list.presentation";
-import { catalogItemsColumns } from "./catalog-items.columns";
+import {
+  catalogItemsColumns,
+  type CatalogItemsColumn,
+} from "./catalog-items.columns";
 
-defineProps<{
-  items: readonly CatalogListItem[];
-  disabled: boolean;
-  imageUrl: (item: CatalogListItem) => string | undefined;
-}>();
+withDefaults(
+  defineProps<{
+    items: readonly CatalogListItem[];
+    disabled: boolean;
+    imageUrl: (item: CatalogListItem) => string | undefined;
+    columns?: readonly DataTableColumn<CatalogItemsColumn>[];
+    caption?: string;
+  }>(),
+  { columns: () => catalogItemsColumns, caption: "Товары" },
+);
 const emit = defineEmits<{
   open: [id: string];
-  edit: [id: string];
   remove: [item: CatalogListItem];
 }>();
 </script>
@@ -37,9 +41,9 @@ const emit = defineEmits<{
 <template>
   <DataTable
     :rows="items"
-    :columns="catalogItemsColumns"
+    :columns="columns"
     :row-key="(item) => item.id"
-    caption="Товары"
+    :caption="caption"
     @row-activate="emit('open', $event.id)"
   >
     <template #header="{ column }">
@@ -124,9 +128,6 @@ const emit = defineEmits<{
         <DropdownMenuContent align="end" class="w-48">
           <DropdownMenuGroup>
             <DropdownMenuItem @select="emit('open', item.id)"
-              ><SquareArrowOutUpRight />Открыть</DropdownMenuItem
-            >
-            <DropdownMenuItem @select="emit('edit', item.id)"
               ><Pencil />Редактировать</DropdownMenuItem
             >
           </DropdownMenuGroup>
