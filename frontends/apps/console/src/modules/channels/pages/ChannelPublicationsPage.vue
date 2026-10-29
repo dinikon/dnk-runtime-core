@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, watch, ref, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
 import type { PageHeaderAction } from "@/components/custom-ui/page-header";
+import { toast } from "vue-sonner";
+import { useCreatePublicationCatalog } from "../model/use-create-publication-catalog";
+import { publicationCatalogError } from "../model/catalog-creation.errors";
+import type { PublicationCreationState } from "../model/catalog-creation.types";
 import { useChannel } from "../model/channel.queries";
 import { useChannelScope } from "../model/use-channel-scope";
 import {
@@ -23,6 +27,77 @@ const route = useRoute(),
   client = useQueryClient(),
   scope = useChannelScope();
 const id = computed(() => String(route.params.id ?? ""));
+const creation = useCreatePublicationCatalog();
+const creationState = ref<Record<string, PublicationCreationState>>({});
+let mounted = true;
+onBeforeUnmount(() => {
+  mounted = false;
+});
+watch(
+  () => JSON.stringify([scope.value, id.value]),
+  () => {
+    creationState.value = {};
+  },
+);
+function openCatalog(itemId: string): void {
+  void router.push({
+    path: `/catalog/items/${encodeURIComponent(itemId)}`,
+    query: {
+      locale:
+        publications.data.value?.locale ||
+        state.filters.value.locale ||
+        undefined,
+    },
+  });
+}
+async function createCatalog(publicationId: string): Promise<void> {
+  if (creationState.value[publicationId]?.pending) return;
+  const captured = JSON.stringify([scope.value, id.value]);
+  creationState.value[publicationId] = {
+    pending: true,
+    error: "",
+    catalogItemId: null,
+    warnings: [],
+  };
+  const relevant = () =>
+    mounted && captured === JSON.stringify([scope.value, id.value]);
+  try {
+    const result = await creation.mutateAsync({
+      channelId: id.value,
+      publicationId,
+    });
+    if (!relevant()) return;
+    creationState.value[publicationId] = {
+      pending: false,
+      error: "",
+      catalogItemId: result.catalogItemId,
+      warnings: result.warnings,
+    };
+    toast.success(
+      result.created
+        ? "Товар создан и связан с публикацией"
+        : "Публикация уже связана с товаром",
+      {
+        description: result.warnings.join(" "),
+        action: {
+          label: "Открыть товар",
+          onClick: () => {
+            if (relevant()) openCatalog(result.catalogItemId);
+          },
+        },
+      },
+    );
+  } catch (cause) {
+    if (relevant())
+      creationState.value[publicationId] = {
+        pending: false,
+        error: publicationCatalogError(cause),
+        catalogItemId: null,
+        warnings: [],
+      };
+  }
+}
+
 const channel = useChannel(id),
   state = usePublicationsPageState(channel.data),
   sync = usePublicationSync(id),
@@ -149,6 +224,9 @@ function action(value: string): void {
         :pending="publications.isPending.value"
         :error="error"
         :scroll-key="scrollKey"
+        :creation="creationState"
+        @create="createCatalog"
+        @open-catalog="openCatalog"
         @retry="
           publications.refetch();
           channel.refetch();

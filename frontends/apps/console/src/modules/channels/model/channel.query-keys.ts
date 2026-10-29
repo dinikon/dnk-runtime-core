@@ -9,3 +9,5 @@ export const channelKeys = {
   detail: (scope: ChannelScope, id: string) =>
     [...channelKeys.root(scope), "detail", id] as const,
 };
+
+export const publicationCatalogMutationKey = "channels.create-catalog";

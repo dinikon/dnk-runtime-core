@@ -1,3 +1,10 @@
+from src.modules.channels.infrastructure.platforms.rozetka.details import (
+    RozetkaDetailsReader,
+)
+from src.modules.channels.application.external_publication.catalog_details import (
+    PublicationLookup,
+    PublicationDetails,
+)
 import json
 
 from pydantic import ValidationError
@@ -147,3 +154,17 @@ class RozetkaPlatform:
         if keys:
             raise VerificationFailure("publication_structure_changed")
         return ()
+
+    async def get_details(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publications: tuple[PublicationLookup, ...],
+    ) -> PublicationDetails:
+        """Восстанавливает конкретные типы пакета и читает полное семейство."""
+        return await RozetkaDetailsReader(self.http).read(
+            config=self.decode_config(config),
+            credentials=RozetkaCredentials.model_validate_json(credentials),
+            publications=publications,
+        )

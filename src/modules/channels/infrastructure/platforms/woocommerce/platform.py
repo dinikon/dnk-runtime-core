@@ -1,3 +1,10 @@
+from src.modules.channels.infrastructure.platforms.woocommerce.details import (
+    WooDetailsReader,
+)
+from src.modules.channels.application.external_publication.catalog_details import (
+    PublicationLookup,
+    PublicationDetails,
+)
 import base64
 import json
 
@@ -164,3 +171,17 @@ class WooCommercePlatform:
         if keys:
             raise VerificationFailure("publication_structure_changed")
         return ()
+
+    async def get_details(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publications: tuple[PublicationLookup, ...],
+    ) -> PublicationDetails:
+        """Восстанавливает конкретные типы пакета и читает полное семейство."""
+        return await WooDetailsReader(self.http).read(
+            config=self.decode_config(config),
+            credentials=WooCommerceCredentials.model_validate_json(credentials),
+            publications=publications,
+        )

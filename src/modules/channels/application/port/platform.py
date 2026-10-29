@@ -1,3 +1,8 @@
+from src.modules.channels.application.external_publication.catalog_details import (
+    PublicationLookup,
+    PublicationDetails,
+)
+
 """Контракт платформенного пакета без импорта его моделей в ядро."""
 
 from dataclasses import dataclass, field
@@ -80,6 +85,16 @@ class Platform(Protocol):
         keys: tuple[tuple[str, str], ...],
     ) -> tuple[PublicationObservation, ...]:
         """Дозагружает изменяемое дерево перед сменой ролей публикаций."""
+        ...
+
+    async def get_details(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publications: tuple["PublicationLookup", ...],
+    ) -> "PublicationDetails":
+        """Получает актуальное полное семейство вне SQL транзакции."""
         ...
 
 

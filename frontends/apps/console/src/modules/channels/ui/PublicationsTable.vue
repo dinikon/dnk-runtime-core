@@ -7,14 +7,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import type { PublicationCreationState } from "../model/catalog-creation.types";
 import { Badge } from "@/components/ui/badge";
 import type { PublicationCard } from "../model/publication.types";
 import { bindingStates } from "../model/bindings/binding.types";
 import { publicationThumbnail } from "../model/publication.thumbnail";
 import PublicationThumbnail from "./PublicationThumbnail.vue";
 
-defineProps<{ items: PublicationCard[] }>();
-const emit = defineEmits<{ open: [id: string] }>();
+defineProps<{
+  items: PublicationCard[];
+  creation?: Record<string, PublicationCreationState>;
+}>();
+const emit = defineEmits<{
+  open: [id: string];
+  create: [id: string];
+  openCatalog: [id: string];
+}>();
 function itemLabel(card: PublicationCard): string {
   if (card.rootKind === "variable")
     return card.rootSku?.trim() || card.rootExternalId;
@@ -33,6 +42,7 @@ function itemLabel(card: PublicationCard): string {
         <TableHead class="px-3 text-right">Позиции</TableHead>
         <TableHead class="px-3 text-right">Цена</TableHead>
         <TableHead class="px-3">Получено</TableHead>
+        <TableHead class="px-3">Действия</TableHead>
       </TableRow>
     </TableHeader>
     <TableBody>
@@ -87,6 +97,45 @@ function itemLabel(card: PublicationCard): string {
         <TableCell class="whitespace-nowrap px-3 text-muted-foreground">{{
           new Date(card.lastSeenAt).toLocaleString("ru-RU")
         }}</TableCell>
+        <TableCell
+          class="min-w-44 space-y-2 whitespace-normal break-words px-3"
+        >
+          <Button
+            v-if="creation?.[card.id]?.catalogItemId"
+            size="sm"
+            variant="outline"
+            @click="emit('openCatalog', creation[card.id]!.catalogItemId!)"
+            >Открыть товар</Button
+          >
+          <Button
+            v-else-if="!card.bindings?.length"
+            size="sm"
+            variant="outline"
+            :disabled="creation?.[card.id]?.pending"
+            @click="emit('create', card.id)"
+            >{{
+              creation?.[card.id]?.pending ? "Создание…" : "Создать товар"
+            }}</Button
+          >
+          <span v-else class="text-xs text-muted-foreground"
+            >Связано с Catalog</span
+          >
+          <p
+            v-if="creation?.[card.id]?.error"
+            role="alert"
+            class="max-w-72 text-xs text-destructive"
+          >
+            {{ creation[card.id]?.error }}
+          </p>
+          <p
+            v-for="warning in creation?.[card.id]?.warnings ?? []"
+            :key="warning"
+            role="status"
+            class="max-w-72 text-xs text-muted-foreground"
+          >
+            {{ warning }}
+          </p>
+        </TableCell>
       </TableRow>
     </TableBody>
   </Table>

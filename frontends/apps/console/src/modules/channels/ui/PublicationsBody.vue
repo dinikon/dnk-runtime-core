@@ -9,6 +9,7 @@ import {
   EmptyDescription,
 } from "@/components/ui/empty";
 import type { PublicationCard } from "../model/publication.types";
+import type { PublicationCreationState } from "../model/catalog-creation.types";
 import PublicationsTable from "./PublicationsTable.vue";
 
 defineProps<{
@@ -16,8 +17,14 @@ defineProps<{
   pending: boolean;
   error: string;
   scrollKey: string;
+  creation?: Record<string, PublicationCreationState>;
 }>();
-const emit = defineEmits<{ retry: []; open: [id: string] }>();
+const emit = defineEmits<{
+  retry: [];
+  open: [id: string];
+  create: [id: string];
+  openCatalog: [id: string];
+}>();
 </script>
 
 <template>
@@ -41,6 +48,9 @@ const emit = defineEmits<{ retry: []; open: [id: string] }>();
         v-if="items.length"
         :key="scrollKey"
         :items="items"
+        :creation="creation"
+        @create="emit('create', $event)"
+        @open-catalog="emit('openCatalog', $event)"
         @open="emit('open', $event)"
       />
       <div

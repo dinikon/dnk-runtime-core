@@ -38,3 +38,23 @@ router.add_api_route(
     response_model=GetPublicationResponse,
     dependencies=[Depends(require_authenticated_request_context)],
 )
+
+from src.modules.identity.presentation.auth.http.csrf import require_csrf
+from src.modules.channels.presentation.external_publication.http.controller.create_catalog_from_publication import (
+    create_catalog_from_publication,
+)
+from src.modules.channels.presentation.external_publication.http.response.create_catalog_from_publication import (
+    CreateCatalogFromPublicationResponse,
+)
+
+router.add_api_route(
+    "/publications/{publication_id}/catalog-item",
+    create_catalog_from_publication,
+    methods=["POST"],
+    status_code=201,
+    response_model=CreateCatalogFromPublicationResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)

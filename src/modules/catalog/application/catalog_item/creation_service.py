@@ -72,6 +72,8 @@ class CatalogItemCreationService:
         tenant_id: EntityIdVO,
         actor_id: EntityIdVO,
         values: CreateCatalogItemValues,
+        *,
+        identifier: CatalogItemIdVO | None = None,
     ) -> CatalogItem:
         """Проверяет внешние ссылки и применяет значения через фабрику и методы Domain."""
         schema = await self.schemas.get_by_code(values.product_type_code)
@@ -92,7 +94,7 @@ class CatalogItemCreationService:
             if values.variants:
                 raise InvalidCatalogValueError("Простой товар не содержит вариантов.")
             item = CatalogItem.create(
-                CatalogItemIdVO(self.uuid.new()),
+                identifier or CatalogItemIdVO(self.uuid.new()),
                 actor_id,
                 now,
                 schema.id,
@@ -102,7 +104,7 @@ class CatalogItemCreationService:
             if values.virtual or values.price_specification is not None:
                 raise InvalidCatalogValueError("У контейнера нет цены и virtual.")
             item = CatalogItem.create_variable(
-                identifier=CatalogItemIdVO(self.uuid.new()),
+                identifier=identifier or CatalogItemIdVO(self.uuid.new()),
                 actor=actor_id,
                 now=now,
                 product_type_id=schema.id,

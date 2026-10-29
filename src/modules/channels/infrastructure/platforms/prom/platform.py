@@ -1,3 +1,8 @@
+from src.modules.channels.infrastructure.platforms.prom.details import PromDetailsReader
+from src.modules.channels.application.external_publication.catalog_details import (
+    PublicationLookup,
+    PublicationDetails,
+)
 import json
 from urllib.parse import urlencode
 
@@ -171,4 +176,18 @@ class PromPlatform:
             config=self.decode_config(config),
             credentials=PromCredentials.model_validate_json(credentials),
             keys=keys,
+        )
+
+    async def get_details(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publications: tuple[PublicationLookup, ...],
+    ) -> PublicationDetails:
+        """Восстанавливает конкретные типы пакета и читает полное семейство."""
+        return await PromDetailsReader(self.http).read(
+            config=self.decode_config(config),
+            credentials=PromCredentials.model_validate_json(credentials),
+            publications=publications,
         )
