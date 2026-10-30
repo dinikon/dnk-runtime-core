@@ -21,6 +21,7 @@ from src.modules.channels.application.content_delivery.contracts import (
     ContentDeliveryResult,
     ContentReconciliationResult,
     ContentWriteOutcome,
+    ContentMediaChecksum,
 )
 from src.modules.channels.application.content_delivery.service import (
     ContentDeliveryDeferred,
@@ -28,6 +29,7 @@ from src.modules.channels.application.content_delivery.service import (
 from src.modules.channels.application.port.platform import PlatformRegistry
 from src.modules.channels.domain.catalog_binding.error import CatalogBindingError
 from src.modules.channels.domain.channel.error import ChannelNotFoundError
+from src.modules.channels.domain.content_media.error import ContentMediaError
 from src.modules.channels.infrastructure.channel.gate import channel_write_gate
 from src.modules.channels.infrastructure.content_delivery.jobs import JOB_TYPE
 from src.modules.channels.infrastructure.registry import InstalledPlatforms
@@ -35,7 +37,10 @@ from src.modules.channels.presentation.content_delivery.assembly import (
     ContentDeliveryRuntime,
     build_content_delivery_runtime,
 )
-from src.modules.files.application.port.storage import StorageResolverProtocol
+from src.modules.files.application.port.storage import (
+    StorageResolverProtocol,
+    StorageUnavailableError,
+)
 from src.modules.files.infrastructure.assembly import get_storage_resolver
 from src.modules.identity.application.access.authorization_service_protocol import (
     AuthorizationServiceProtocol,
@@ -167,9 +172,8 @@ class ChannelsContentDeliveryJobHandler:
                     connection, tenant_id, payload.channel_id
                 ):
                     async with UnitOfWork(sessions) as uow:
-                        allowed = await self._runtime(
-                            uow, tenant_id, base_url
-                        ).authorize.execute(
+                        runtime = self._runtime(uow, tenant_id, base_url)
+                        allowed = await runtime.authorize.execute(
                             AuthorizeContentDeliveryCommand(
                                 tenant_id, snapshot, scheduled.lock_token
                             )
@@ -192,10 +196,30 @@ class ChannelsContentDeliveryJobHandler:
                             )
                             platform = self._platforms.get(snapshot.platform_kind)
                             if snapshot.reconcile:
+                                checksums: tuple[ContentMediaChecksum, ...] = ()
+                                if snapshot.media_sources:
+                                    try:
+                                        files = await runtime.files.checksums(
+                                            tuple(
+                                                v.file for v in snapshot.media_sources
+                                            )
+                                        )
+                                        by_file = {v.file_id: v.sha256 for v in files}
+                                        checksums = tuple(
+                                            ContentMediaChecksum(
+                                                v.media_id, by_file[v.file.file_id]
+                                            )
+                                            for v in snapshot.media_sources
+                                        )
+                                    except (ContentMediaError, StorageUnavailableError):
+                                        # Недоступный исходник не становится доказательством успеха.
+                                        pass
                                 result = await platform.reconcile_content(
                                     config=snapshot.config,
                                     credentials=credentials,
                                     request=snapshot.request,
+                                    known_media=snapshot.known_media,
+                                    media_checksums=checksums,
                                 )
                             else:
                                 result = await platform.send_content(

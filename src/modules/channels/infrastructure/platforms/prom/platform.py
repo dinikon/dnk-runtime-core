@@ -3,6 +3,8 @@ from src.modules.channels.application.content_delivery.contracts import (
     PreparedContentRequest,
     ContentDeliveryResult,
     ContentReconciliationResult,
+    ContentMediaResult,
+    ContentMediaChecksum,
 )
 from src.modules.channels.application.content_media.contracts import PreparedGallery
 from src.modules.channels.domain.content_delivery.value_object import DeliveryContextVO
@@ -294,6 +296,8 @@ class PromPlatform:
         config: ConnectionConfigVO,
         credentials: bytes,
         request: PreparedContentRequest,
+        known_media: tuple[ContentMediaResult, ...] = (),
+        media_checksums: tuple[ContentMediaChecksum, ...] = (),
     ) -> ContentReconciliationResult:
         """Не выполняет сверку чужого формата платформы."""
         raise ContentDeliveryError("content_platform_unsupported")

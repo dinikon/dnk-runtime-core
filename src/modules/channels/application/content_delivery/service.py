@@ -8,6 +8,8 @@ from src.modules.channels.application.content_delivery.contracts import (
     ContentWorkSnapshot,
     ContentWriteOutcome,
     PreparedContentRequest,
+    ContentMediaResult,
+    ContentMediaSource,
 )
 from src.modules.channels.application.content_delivery.planning import (
     content_fingerprint,
@@ -41,6 +43,7 @@ from src.modules.channels.domain.content_delivery.value_object import (
     DeliveryContextVO,
     DeliveryMediaVO,
     DeliveryStatus,
+    DeliveryFieldIssueVO,
 )
 from src.modules.channels.domain.content_media.error import ContentMediaError
 from src.modules.channels.domain.content_media.value_object import MediaTransferStatus
@@ -285,6 +288,45 @@ class ContentDeliveries:
             tenant_id=tenant_id, channel_id=channel_id, group_id=group_id
         )
 
+    async def resolve(
+        self,
+        *,
+        tenant_id: UUID,
+        actor_id: UUID,
+        channel_id: UUID,
+        group_id: UUID,
+        publication_id: UUID,
+        expected_revision: int,
+        acknowledge_unconfirmed: bool,
+    ) -> tuple[ContentDeliveryRow, ...]:
+        """Завершает unknown по явному решению; media и последний успех не подменяются."""
+        if acknowledge_unconfirmed is not True:
+            raise ContentDeliveryError("content_resolution_confirmation_required")
+        context, _ = await self.galleries.writes.lock_context(
+            tenant_id=tenant_id, channel_id=channel_id, group_id=group_id
+        )
+        if context.state.id is None:
+            raise ContentDeliveryError("content_delivery_not_found")
+        await self.authorization.require(
+            actor_id=actor_id, channel_id=channel_id, file_ids=()
+        )
+        delivery = await self.deliveries.get(
+            EntityIdVO(context.state.id), EntityIdVO(publication_id)
+        )
+        if delivery is None:
+            raise ContentDeliveryError("content_delivery_not_found")
+        if await self.jobs.active(
+            tenant_id=tenant_id, job_id=delivery.current_job_id.uuid
+        ):
+            raise ContentDeliveryError("content_attempt_active", conflict=True)
+        delivery.resolve_uncertainty(
+            expected_revision=expected_revision, now=self.clock.now()
+        )
+        await self.deliveries.save(delivery)
+        return await self.read(
+            tenant_id=tenant_id, channel_id=channel_id, group_id=group_id
+        )
+
     async def prepare(
         self,
         *,
@@ -409,8 +451,14 @@ class ContentDeliveries:
             )
             images = {v.media_id: v for v in gallery.images} if gallery else {}
             if any(
-                v.transfer_status
-                in {MediaTransferStatus.IN_FLIGHT, MediaTransferStatus.UNKNOWN}
+                v.transfer_status is MediaTransferStatus.UNKNOWN
+                for v in images.values()
+            ):
+                raise ContentDeliveryError(
+                    "content_media_reconciliation_required", conflict=True
+                )
+            if any(
+                v.transfer_status is MediaTransferStatus.IN_FLIGHT
                 for v in images.values()
             ):
                 raise ContentDeliveryDeferred()
@@ -519,7 +567,9 @@ class ContentDeliveries:
                 await self.authorization.require(
                     actor_id=snapshot.context.actor_id.uuid,
                     channel_id=snapshot.context.channel_id.uuid,
-                    file_ids=(),
+                    file_ids=tuple(
+                        sorted({v.file.file_id for v in snapshot.media_sources})
+                    ),
                 )
                 return True
             context = await self.galleries.reader.load(
@@ -627,8 +677,19 @@ class ContentDeliveries:
         references: list[DeliveryMediaVO] = []
         for reference in delivery.prepared_media:
             identifier = observed.get(reference.media_id.uuid)
+            existing = await self.galleries.media.get(reference.media_id)
+            if (
+                existing is not None
+                and existing.revision == reference.revision
+                and existing.transfer_status is MediaTransferStatus.READY
+                and (identifier is None or identifier == existing.remote_media_id)
+            ):
+                references.append(reference)
+                continue
             missing = (
-                result.outcome is ContentWriteOutcome.CONFIRMED and identifier is None
+                result.outcome
+                in {ContentWriteOutcome.CONFIRMED, ContentWriteOutcome.PARTIAL}
+                and identifier is None
             )
             applied = await self.transfers.record(
                 channel_id=snapshot.context.channel_id.uuid,
@@ -639,8 +700,12 @@ class ContentDeliveries:
                 media_id=reference.media_id.uuid,
                 expected_revision=reference.revision,
                 remote_id=identifier,
-                error=("content_media_unconfirmed" if missing else error),
-                uncertain=uncertain or missing,
+                error=(
+                    None
+                    if identifier is not None
+                    else ("content_media_unconfirmed" if missing else error)
+                ),
+                uncertain=identifier is None and (uncertain or missing),
             )
             media = await self.galleries.media.get(EntityIdVO(reference.media_id.uuid))
             if not applied or media is None:
@@ -654,14 +719,24 @@ class ContentDeliveries:
                 )
             if missing:
                 uncertain, error = True, "content_media_unconfirmed"
+        fields, issues = result.fields, result.issues
+        if uncertain and error in {
+            "content_media_unconfirmed",
+            "content_media_changed",
+        }:
+            fields = tuple(v for v in fields if v != "gallery")
+            issues = tuple(v for v in issues if v.field != "gallery") + (
+                DeliveryFieldIssueVO("gallery", error),
+            )
         accepted = delivery.complete_attempt(
             job_id=EntityIdVO(snapshot.job_id),
             generation=snapshot.generation,
             content_hash=snapshot.request.content_hash,
-            fields=result.fields,
+            fields=fields,
             error_code=error,
             uncertain=uncertain,
             media=tuple(references),
+            issues=issues,
             now=self.clock.now(),
         )
         if not accepted:
@@ -724,6 +799,30 @@ class ContentDeliveries:
             )
             await self.deliveries.save(delivery)
             return None
+        known_media: list[ContentMediaResult] = []
+        media_sources: list[ContentMediaSource] = []
+        if reconcile:
+            for reference in delivery.prepared_media:
+                media = await self.galleries.media.get(reference.media_id)
+                if (
+                    media is None
+                    or media.connection_id != context.connection_id
+                    or media.revision != reference.revision
+                    or media.access_revoked_at is not None
+                ):
+                    continue
+                if media.remote_media_id is not None:
+                    known_media.append(
+                        ContentMediaResult(media.id.uuid, media.remote_media_id)
+                    )
+                else:
+                    try:
+                        files = await self.galleries.files.describe(
+                            (media.file_id.uuid,)
+                        )
+                    except ContentMediaError:
+                        continue
+                    media_sources.append(ContentMediaSource(media.id.uuid, files[0]))
         return ContentWorkSnapshot(
             representation_id=delivery.representation_id.uuid,
             publication_id=delivery.publication_id.uuid,
@@ -737,6 +836,8 @@ class ContentDeliveries:
                 delivery.prepared_schema, payload, delivery.prepared_hash
             ),
             reconcile=reconcile,
+            known_media=tuple(known_media),
+            media_sources=tuple(media_sources),
         )
 
     def _require_export(

@@ -104,3 +104,20 @@ def get_get_content_deliveries_handler(
 GetContentDeliveriesHandlerDep = Annotated[
     GetContentDeliveriesHandler, Depends(get_get_content_deliveries_handler)
 ]
+
+
+from src.modules.channels.application.content_delivery.command.resolve_content_uncertainty.handler import (
+    ResolveContentUncertaintyHandler,
+)
+
+
+def get_resolve_content_uncertainty_handler(
+    runtime: ContentDeliveryRuntimeDep,
+) -> ResolveContentUncertaintyHandler:
+    """Собирает отдельный обработчик явного завершения неподтверждённой попытки."""
+    return runtime.resolve
+
+
+ResolveContentUncertaintyHandlerDep = Annotated[
+    ResolveContentUncertaintyHandler, Depends(get_resolve_content_uncertainty_handler)
+]

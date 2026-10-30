@@ -23,5 +23,24 @@ export function contentDeliverySummary(items: ContentDelivery[]): string {
     return "Обновление выполняется";
   const completed = items.filter((item) => item.status === "succeeded").length;
   if (completed === items.length) return "Все цели обновлены";
-  return completed ? "Обновлено частично" : "Обновление не завершено";
+  return completed || items.some((item) => item.confirmedFields.length)
+    ? "Обновлено частично"
+    : "Обновление не завершено";
+}
+
+export function contentDeliveryTargetStatus(item: ContentDelivery): string {
+  return item.status === "failed" && item.confirmedFields.length
+    ? "Обновлено частично"
+    : contentDeliveryStatus(item.status);
+}
+
+export function contentFieldLabel(field: string): string {
+  return (
+    (
+      { title: "Название", body: "Описание", gallery: "Изображения" } as Record<
+        string,
+        string
+      >
+    )[field] ?? "Поле"
+  );
 }

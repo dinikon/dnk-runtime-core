@@ -21,6 +21,10 @@ export interface ContentDeliveryTargetDto {
   completed_at: string | null;
   content_fingerprint: string;
   recovery_required: boolean;
+  field_issues: { field: string; code: string }[];
+  initial_error_code: string | null;
+  last_success_at: string | null;
+  applied_content_fingerprint: string | null;
 }
 
 export interface GetContentDeliveriesResponseDto {
@@ -31,6 +35,15 @@ export interface RequestContentDeliveryResponseDto {
 }
 export interface RequestContentReconciliationResponseDto {
   items: ContentDeliveryTargetDto[];
+}
+
+export interface ResolveContentUncertaintyResponseDto {
+  items: ContentDeliveryTargetDto[];
+}
+
+export interface ResolveContentUncertaintyDto {
+  expected_revision: number;
+  acknowledge_unconfirmed: true;
 }
 
 export interface RequestContentDeliveryDto {

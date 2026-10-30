@@ -6,6 +6,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.channels.application.content_delivery.service import ContentDeliveries
+from src.modules.channels.application.content_delivery.command.resolve_content_uncertainty.handler import (
+    ResolveContentUncertaintyHandler,
+)
+from src.modules.channels.application.content_media.port.files import MediaFilesPort
 from src.modules.channels.application.content_delivery.command.request_content_delivery.handler import (
     RequestContentDeliveryHandler,
 )
@@ -67,6 +71,8 @@ class ContentDeliveryRuntime:
     apply: ApplyContentDeliveryHandler
     apply_reconciliation: ApplyContentReconciliationHandler
     read: GetContentDeliveriesHandler
+    files: MediaFilesPort
+    resolve: ResolveContentUncertaintyHandler
 
 
 def build_content_delivery_runtime(
@@ -117,4 +123,6 @@ def build_content_delivery_runtime(
         ApplyContentDeliveryHandler(service),
         ApplyContentReconciliationHandler(service),
         GetContentDeliveriesHandler(service),
+        media.galleries.files,
+        ResolveContentUncertaintyHandler(service),
     )

@@ -3,6 +3,8 @@ import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { useContentDeliveries } from "../model/use-content-deliveries";
 import { useRequestContentDelivery } from "../model/use-request-content-delivery";
 import { useReconcileContentDelivery } from "../model/use-reconcile-content-delivery";
+import { useResolveContentUncertainty } from "../model/use-resolve-content-uncertainty";
+import ResolveContentDeliveryDialog from "../ui/bindings/ResolveContentDeliveryDialog.vue";
 import {
   contentDeliveryError,
   contentDeliveryIssue,
@@ -55,6 +57,9 @@ const save = useSaveRepresentation(),
   disable = useDisableRepresentationExport();
 const outgoing = useRequestContentDelivery(),
   reconcileDelivery = useReconcileContentDelivery();
+const resolveDelivery = useResolveContentUncertainty();
+const resolutionTarget = ref<ContentDelivery | null>(null);
+const resolutionError = ref("");
 const deliveryEnabled = computed(
   () => savedPreview.data.value?.platform === "woocommerce",
 );
@@ -78,7 +83,8 @@ const busy = computed(
     enable.isPending.value ||
     disable.isPending.value ||
     outgoing.isPending.value ||
-    reconcileDelivery.isPending.value,
+    reconcileDelivery.isPending.value ||
+    resolveDelivery.isPending.value,
 );
 const flagsBusy = computed(
   () => enable.isPending.value || disable.isPending.value,
@@ -353,6 +359,10 @@ const deliveryErrors = computed(() =>
 watch([() => savedPreview.data.value?.contentFingerprint, contextKey], () => {
   reviewedFingerprint.value = "";
 });
+watch(contextKey, () => {
+  resolutionTarget.value = null;
+  resolutionError.value = "";
+});
 async function deliver(): Promise<void> {
   if (!canDeliver.value || !version.value || busy.value) return;
   const captured = contextKey();
@@ -386,6 +396,28 @@ async function reconcile(item: ContentDelivery): Promise<void> {
   } catch (error) {
     if (active && captured === contextKey())
       actionError.value = contentDeliveryError(error);
+  }
+}
+async function resolveUncertainty(): Promise<void> {
+  const item = resolutionTarget.value;
+  if (!item || busy.value) return;
+  const captured = contextKey();
+  resolutionError.value = "";
+  try {
+    await resolveDelivery.mutateAsync({
+      channelId: channelId.value,
+      groupId: groupId.value,
+      publicationId: item.publicationId,
+      expectedRevision: item.revision,
+      acknowledgeUnconfirmed: true,
+    });
+    if (active && captured === contextKey()) {
+      resolutionTarget.value = null;
+      reviewedFingerprint.value = "";
+    }
+  } catch (error) {
+    if (active && captured === contextKey())
+      resolutionError.value = contentDeliveryError(error);
   }
 }
 const canEnable = computed(
@@ -545,7 +577,19 @@ const canEnable = computed(
             "
             @request="deliver"
             @reconcile="reconcile"
+            @resolve="
+              resolutionTarget = $event;
+              resolutionError = '';
+            "
             @refresh="deliveries.refetch()"
+          />
+          <ResolveContentDeliveryDialog
+            :open="!!resolutionTarget"
+            :external-id="resolutionTarget?.externalId ?? ''"
+            :busy="resolveDelivery.isPending.value"
+            :error="resolutionError"
+            @update:open="!$event && (resolutionTarget = null)"
+            @confirm="resolveUncertainty"
           />
         </template>
       </section>

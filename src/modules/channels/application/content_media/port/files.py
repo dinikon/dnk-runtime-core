@@ -3,6 +3,7 @@ from uuid import UUID
 
 from src.modules.channels.application.content_media.contracts import (
     MediaFile,
+    MediaFileChecksum,
     OpenMediaContent,
 )
 
@@ -18,6 +19,12 @@ class MediaFilesPort(Protocol):
 
     async def inspect(self, files: tuple[MediaFile, ...]) -> None:
         """Вне транзакции подтверждает наличие, ownership, размер и фактический MIME."""
+        ...
+
+    async def checksums(
+        self, files: tuple[MediaFile, ...]
+    ) -> tuple[MediaFileChecksum, ...]:
+        """Вне SQL проверяет каждый файл и вычисляет SHA-256 всех исходных bytes."""
         ...
 
     async def open(self, file: MediaFile) -> OpenMediaContent:

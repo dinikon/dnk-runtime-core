@@ -6,6 +6,13 @@ from src.modules.channels.application.content_delivery.contracts import (
 )
 
 
+class ContentDeliveryFieldIssueResponse(BaseModel):
+    """Имя неподтверждённого поля и безопасная причина расхождения."""
+
+    field: str
+    code: str
+
+
 class ContentDeliveryTargetResponse(BaseModel):
     """Публичные поля цели без запроса, токенов и credentials."""
 
@@ -24,6 +31,10 @@ class ContentDeliveryTargetResponse(BaseModel):
     completed_at: datetime | None
     content_fingerprint: str
     recovery_required: bool
+    field_issues: tuple[ContentDeliveryFieldIssueResponse, ...]
+    initial_error_code: str | None
+    last_success_at: datetime | None
+    applied_content_fingerprint: str | None
 
     @classmethod
     def from_row(cls, value: ContentDeliveryRow) -> "ContentDeliveryTargetResponse":
@@ -44,4 +55,11 @@ class ContentDeliveryTargetResponse(BaseModel):
             completed_at=value.completed_at,
             content_fingerprint=value.content_fingerprint,
             recovery_required=value.recovery_required,
+            field_issues=tuple(
+                ContentDeliveryFieldIssueResponse(field=v.field, code=v.code)
+                for v in value.field_issues
+            ),
+            initial_error_code=value.initial_error_code,
+            last_success_at=value.last_success_at,
+            applied_content_fingerprint=value.applied_content_fingerprint,
         )

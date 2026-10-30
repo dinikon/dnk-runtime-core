@@ -18,6 +18,14 @@ class MediaFile:
 
 
 @dataclass(frozen=True, slots=True)
+class MediaFileChecksum:
+    """Контрольная сумма полностью прочитанного и проверенного owned-файла."""
+
+    file_id: UUID
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedGalleryImage:
     """Одна позиция без потери порядка и метаданных представления."""
 

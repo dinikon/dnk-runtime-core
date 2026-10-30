@@ -9,6 +9,7 @@ from src.modules.channels.domain.content_delivery.aggregate import ContentDelive
 from src.modules.channels.domain.content_delivery.value_object import (
     DeliveryMediaVO,
     DeliveryStatus,
+    DeliveryFieldIssueVO,
 )
 from src.modules.channels.infrastructure.content_delivery.document import (
     context_from_document,
@@ -65,6 +66,17 @@ class ContentDeliveryMapper:
                 if result["completed_at"]
                 else None
             ),
+            field_issues=tuple(
+                DeliveryFieldIssueVO(v["field"], v["code"])
+                for v in result.get("field_issues", ())
+            ),
+            initial_error_code=result.get("initial_error_code", row["error_code"]),
+            last_success_at=(
+                datetime.fromisoformat(result["last_success_at"])
+                if result.get("last_success_at")
+                else None
+            ),
+            applied_content_fingerprint=result.get("applied_content_fingerprint"),
         )
 
     @staticmethod
@@ -102,6 +114,14 @@ class ContentDeliveryMapper:
             "result": {
                 "schema": "content_result.v1",
                 "confirmed_fields": list(value.confirmed_fields),
+                "field_issues": [
+                    {"field": v.field, "code": v.code} for v in value.field_issues
+                ],
+                "initial_error_code": value.initial_error_code,
+                "last_success_at": (
+                    value.last_success_at.isoformat() if value.last_success_at else None
+                ),
+                "applied_content_fingerprint": value.applied_content_fingerprint,
                 "completed_at": (
                     value.completed_at.isoformat() if value.completed_at else None
                 ),
@@ -115,6 +135,7 @@ class ContentDeliveryMapper:
     def to_projection(row: Mapping[str, Any]) -> ContentDeliveryRow:
         """Выбирает только публичные поля без восстановления агрегата."""
         context, result = row["requested_context"], row["result"]
+        prepared = row["prepared_context"]
         return ContentDeliveryRow(
             publication_id=row["publication_id"],
             external_id=context["external_id"],
@@ -133,6 +154,21 @@ class ContentDeliveryMapper:
                 if result["completed_at"]
                 else None
             ),
-            content_fingerprint=context["content_fingerprint"],
+            content_fingerprint=(
+                prepared["context"]["content_fingerprint"]
+                if prepared
+                else context["content_fingerprint"]
+            ),
             current_job_id=row["current_job_id"],
+            field_issues=tuple(
+                DeliveryFieldIssueVO(v["field"], v["code"])
+                for v in result.get("field_issues", ())
+            ),
+            initial_error_code=result.get("initial_error_code", row["error_code"]),
+            last_success_at=(
+                datetime.fromisoformat(result["last_success_at"])
+                if result.get("last_success_at")
+                else None
+            ),
+            applied_content_fingerprint=result.get("applied_content_fingerprint"),
         )

@@ -1,6 +1,7 @@
 import json
 import base64
 import re
+import logging
 from hashlib import sha256
 from uuid import UUID
 
@@ -11,11 +12,15 @@ from src.modules.channels.application.content_delivery.contracts import (
     ContentMediaResult,
     ContentWriteOutcome,
     PreparedContentRequest,
+    ContentMediaChecksum,
 )
 from src.modules.channels.application.content_media.contracts import PreparedGallery
 from src.modules.channels.application.error import VerificationFailure
 from src.modules.channels.domain.content_delivery.error import ContentDeliveryError
-from src.modules.channels.domain.content_delivery.value_object import DeliveryContextVO
+from src.modules.channels.domain.content_delivery.value_object import (
+    DeliveryContextVO,
+    DeliveryFieldIssueVO,
+)
 from src.modules.channels.domain.product_representation.value_object import (
     ContentOrigin,
     LocalizedContent,
@@ -30,6 +35,8 @@ from src.modules.channels.infrastructure.platforms.woocommerce.models import (
     WooCommerceConfig,
     WooCommerceCredentials,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class WooContentImage(BaseModel):
@@ -82,6 +89,7 @@ class WooObservedImage(BaseModel):
 
     id: int = Field(gt=0, strict=True)
     alt: str = ""
+    src: str | None = Field(default=None, repr=False)
 
 
 class WooObservedProduct(BaseModel):
@@ -304,6 +312,8 @@ class WooContentAdapter:
         credentials: WooCommerceCredentials,
         request: PreparedContentRequest,
         reconcile: bool,
+        known_media: tuple[ContentMediaResult, ...] = (),
+        media_checksums: tuple[ContentMediaChecksum, ...] = (),
     ) -> ContentDeliveryResult:
         """GET до записи проверяет адресата; любой неясный исход PUT остаётся unknown."""
         value = self.decode(request)
@@ -324,13 +334,23 @@ class WooContentAdapter:
         sent = reconcile
         try:
             observed = await self._http.request("GET", url, headers=headers)
-            result = self.compare(value, observed, accept_new_media=False)
-            if result is not None:
+            trusted = {v.media_id: int(v.remote_id) for v in known_media}
+            if reconcile:
+                trusted.update(
+                    await self._recover_media(value, observed, media_checksums)
+                )
+            result = self._assess(
+                value, observed, accept_new_media=False, known_media=trusted
+            )
+            if result.outcome is ContentWriteOutcome.CONFIRMED:
                 return result
             if reconcile:
                 return ContentDeliveryResult(
                     ContentWriteOutcome.UNKNOWN,
-                    error_code="content_reconciliation_required",
+                    fields=result.fields,
+                    media=result.media,
+                    error_code=result.error_code,
+                    issues=result.issues,
                 )
             patch = value.variation if value.kind == "variant" else value.product
             assert patch is not None
@@ -341,13 +361,20 @@ class WooContentAdapter:
                 headers=headers,
                 body=patch.model_dump(mode="json", exclude_none=True),
             )
-            result = self.compare(value, response, accept_new_media=True)
-            if result is not None:
-                return result
-            return ContentDeliveryResult(
-                ContentWriteOutcome.UNKNOWN,
-                error_code="content_provider_response_mismatch",
-            )
+            result = self._assess(value, response, accept_new_media=True)
+            if result.issues:
+                logger.info(
+                    "WooCommerce content differs: product_id=%s fields=%s",
+                    value.external_id,
+                    ",".join(v.field for v in result.issues),
+                    extra={
+                        "event": "channels.content.fields_mismatch",
+                        "publication_external_id": str(value.external_id),
+                        "reason_code": result.error_code,
+                        "confirmed_fields": result.fields,
+                    },
+                )
+            return result
         except VerificationFailure as error:
             # Даже HTTP 4xx может следовать за частичной загрузкой media в WordPress.
             outcome = (
@@ -368,8 +395,21 @@ class WooContentAdapter:
     def compare(
         self, desired: WooPreparedContent, response: object, *, accept_new_media: bool
     ) -> ContentDeliveryResult | None:
-        """Сверяет адрес, отправленные поля и порядок; alt не доказывает новую загрузку."""
+        """Возвращает только полное подтверждение; частные факты сохраняет assess."""
+        result = self._assess(desired, response, accept_new_media=accept_new_media)
+        return result if result.outcome is ContentWriteOutcome.CONFIRMED else None
+
+    def _assess(
+        self,
+        desired: WooPreparedContent,
+        response: object,
+        *,
+        accept_new_media: bool,
+        known_media: dict[UUID, int] | None = None,
+    ) -> ContentDeliveryResult:
+        """Проверяет каждое поле независимо и сохраняет доказанные media при частичном отказе."""
         fields: list[str] = []
+        issues: list[DeliveryFieldIssueVO] = []
         if desired.kind == "variant":
             observed = WooObservedVariation.model_validate(response)
             patch = desired.variation
@@ -384,8 +424,9 @@ class WooContentAdapter:
                 if woo_description(observed.description) != woo_description(
                     patch.description
                 ):
-                    return None
-                fields.append("body")
+                    issues.append(DeliveryFieldIssueVO("body", "content_body_mismatch"))
+                else:
+                    fields.append("body")
             images = (observed.image,) if observed.image else ()
             wanted = (patch.image,) if patch.image and patch.image.id != 0 else ()
             has_gallery = patch.image is not None
@@ -400,14 +441,18 @@ class WooContentAdapter:
                 raise ContentDeliveryError("content_target_changed")
             if product.name is not None:
                 if observed_product.name != product.name:
-                    return None
-                fields.append("title")
+                    issues.append(
+                        DeliveryFieldIssueVO("title", "content_title_mismatch")
+                    )
+                else:
+                    fields.append("title")
             if product.description is not None:
                 if woo_description(observed_product.description) != woo_description(
                     product.description
                 ):
-                    return None
-                fields.append("body")
+                    issues.append(DeliveryFieldIssueVO("body", "content_body_mismatch"))
+                else:
+                    fields.append("body")
             images, wanted, has_gallery = (
                 observed_product.images,
                 product.images or (),
@@ -415,20 +460,73 @@ class WooContentAdapter:
             )
         media: list[ContentMediaResult] = []
         if has_gallery:
-            if len(images) != len(wanted) or len(images) != len(desired.media):
-                return None
+            exact_count = len(images) == len(wanted) == len(desired.media)
+            gallery_matches = exact_count
+            used_ids: set[int] = set()
             for actual, expected, reference in zip(images, wanted, desired.media):
-                if (
-                    actual.alt != (expected.alt or "")
-                    or (
-                        reference.remote_id is not None
-                        and actual.id != reference.remote_id
-                    )
-                    or (reference.remote_id is None and not accept_new_media)
-                ):
-                    return None
-                media.append(ContentMediaResult(reference.media_id, str(actual.id)))
-            fields.append("gallery")
+                remote_id = reference.remote_id or (known_media or {}).get(
+                    reference.media_id
+                )
+                alt_matches = actual.alt == (expected.alt or "")
+                proved = (
+                    actual.id == remote_id
+                    if remote_id is not None
+                    else accept_new_media and exact_count and alt_matches
+                )
+                if proved and actual.id not in used_ids:
+                    media.append(ContentMediaResult(reference.media_id, str(actual.id)))
+                    used_ids.add(actual.id)
+                else:
+                    gallery_matches = False
+                if not alt_matches:
+                    gallery_matches = False
+            if gallery_matches:
+                fields.append("gallery")
+            else:
+                issues.append(
+                    DeliveryFieldIssueVO("gallery", "content_media_unconfirmed")
+                )
         return ContentDeliveryResult(
-            ContentWriteOutcome.CONFIRMED, tuple(fields), tuple(media)
+            ContentWriteOutcome.PARTIAL if issues else ContentWriteOutcome.CONFIRMED,
+            tuple(fields),
+            tuple(media),
+            issues[0].code if issues else None,
+            tuple(issues),
         )
+
+    async def _recover_media(
+        self,
+        desired: WooPreparedContent,
+        response: object,
+        checksums: tuple[ContentMediaChecksum, ...],
+    ) -> dict[UUID, int]:
+        """Доказывает Files → attachment сравнением исходных bytes без повторной загрузки."""
+        if not checksums:
+            return {}
+        if desired.kind == "variant":
+            observed = WooObservedVariation.model_validate(response)
+            if (
+                observed.id != desired.external_id
+                or observed.parent_id != desired.parent_external_id
+                or observed.type != "variation"
+            ):
+                raise ContentDeliveryError("content_target_changed")
+            images = (observed.image,) if observed.image else ()
+        else:
+            product = WooObservedProduct.model_validate(response)
+            if product.id != desired.external_id or product.type != desired.kind:
+                raise ContentDeliveryError("content_target_changed")
+            images = product.images
+        by_media = {v.media_id: v.sha256 for v in checksums}
+        result: dict[UUID, int] = {}
+        for actual, reference in zip(images, desired.media):
+            digest = by_media.get(reference.media_id)
+            if reference.remote_id is not None or not actual.src or digest is None:
+                continue
+            try:
+                data = await self._http.request_bytes(actual.src)
+            except VerificationFailure:
+                continue
+            if sha256(data).hexdigest() == digest:
+                result[reference.media_id] = actual.id
+        return result

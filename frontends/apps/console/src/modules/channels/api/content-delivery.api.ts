@@ -3,16 +3,19 @@ import type {
   ContentDelivery,
   RequestContentDeliveryInput,
   ReconcileContentDeliveryInput,
+  ResolveContentUncertaintyInput,
 } from "../model/content-delivery.types";
 import type {
   GetContentDeliveriesResponseDto,
   RequestContentDeliveryResponseDto,
   RequestContentReconciliationResponseDto,
+  ResolveContentUncertaintyResponseDto,
 } from "./content-delivery.dto";
 import {
   contentDelivery,
   contentDeliveryPayload,
   contentReconciliationPayload,
+  contentResolutionPayload,
 } from "./content-delivery.mapper";
 
 function path(channelId: string, groupId: string): string {
@@ -49,5 +52,15 @@ export async function requestContentReconciliation(
       `${path(input.channelId, input.groupId)}/${encodeURIComponent(input.publicationId)}/reconcile`,
       contentReconciliationPayload(input),
     );
+  return data.items.map(contentDelivery);
+}
+
+export async function resolveContentUncertainty(
+  input: ResolveContentUncertaintyInput,
+): Promise<ContentDelivery[]> {
+  const { data } = await httpClient.post<ResolveContentUncertaintyResponseDto>(
+    `${path(input.channelId, input.groupId)}/${encodeURIComponent(input.publicationId)}/resolve`,
+    contentResolutionPayload(input),
+  );
   return data.items.map(contentDelivery);
 }

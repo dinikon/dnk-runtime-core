@@ -25,6 +25,10 @@ export interface ContentDelivery {
   completedAt: string | null;
   contentFingerprint: string;
   recoveryRequired: boolean;
+  fieldIssues: { field: string; code: string }[];
+  initialErrorCode: string | null;
+  lastSuccessAt: string | null;
+  appliedContentFingerprint: string | null;
 }
 
 export interface RequestContentDeliveryInput extends RepresentationWriteInput {
@@ -36,4 +40,12 @@ export interface ReconcileContentDeliveryInput {
   groupId: string;
   publicationId: string;
   expectedRevision: number;
+}
+
+export interface ResolveContentUncertaintyInput {
+  channelId: string;
+  groupId: string;
+  publicationId: string;
+  expectedRevision: number;
+  acknowledgeUnconfirmed: true;
 }

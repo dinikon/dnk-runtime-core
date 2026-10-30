@@ -5,6 +5,7 @@ from anyio import CancelScope
 
 from src.modules.channels.application.content_media.contracts import (
     MediaFile,
+    MediaFileChecksum,
     OpenMediaContent,
 )
 from src.modules.channels.domain.content_media.error import ContentMediaError
@@ -148,11 +149,21 @@ class FilesMediaGateway:
 
     async def inspect(self, files: tuple[MediaFile, ...]) -> None:
         """Читает ограниченный префикс каждого изображения без удержания SQL locks."""
+        await self.checksums(files)
+
+    async def checksums(
+        self, files: tuple[MediaFile, ...]
+    ) -> tuple[MediaFileChecksum, ...]:
+        """Хеширует проверенный поток целиком и закрывает его при любом исходе."""
+        result: list[MediaFileChecksum] = []
         for file in files:
             content = await self.open(file)
+            digest = hashlib.sha256()
             try:
-                async for _ in content.stream:
-                    pass
+                async for chunk in content.stream:
+                    digest.update(chunk)
             finally:
                 with CancelScope(shield=True):
                     await content.stream.aclose()
+            result.append(MediaFileChecksum(file.file_id, digest.hexdigest()))
+        return tuple(result)

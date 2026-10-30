@@ -44,6 +44,10 @@ class JsonHttp(Protocol):
         """Возвращает JSON вместе с заголовками для страничных API."""
         ...
 
+    async def request_bytes(self, url: str) -> bytes:
+        """Читает публичный файл без credentials, redirect и неограниченного тела."""
+        ...
+
 
 class PublicHttpsTransport(httpx.AsyncBaseTransport):
     """Закрепляет проверенный публичный IP и сохраняет исходные Host и TLS SNI."""
@@ -95,6 +99,24 @@ class PublicHttpsTransport(httpx.AsyncBaseTransport):
 
 class SafeJsonHttp:
     """HTTP-клиент с ограничениями времени, тела и безопасным отображением ошибок."""
+
+    async def request_bytes(self, url: str) -> bytes:
+        """Использует тот же HTTPS/DNS guard; секреты API не передаются на media host."""
+        try:
+            async with httpx.AsyncClient(
+                transport=PublicHttpsTransport(),
+                trust_env=False,
+                follow_redirects=False,
+                timeout=10,
+            ) as client:
+                response = await client.get(url)
+            if response.status_code != 200:
+                raise VerificationFailure("content_media_unconfirmed")
+            return response.content
+        except (httpx.TimeoutException, TimeoutError):
+            raise VerificationFailure("network_timeout", retryable=True) from None
+        except (httpx.RequestError, OSError, ValueError):
+            raise VerificationFailure("content_media_unconfirmed") from None
 
     async def request(
         self,

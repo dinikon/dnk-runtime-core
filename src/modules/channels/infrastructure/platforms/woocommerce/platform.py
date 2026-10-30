@@ -6,6 +6,8 @@ from src.modules.channels.application.content_delivery.contracts import (
     PreparedContentRequest,
     ContentDeliveryResult,
     ContentReconciliationResult,
+    ContentMediaResult,
+    ContentMediaChecksum,
 )
 from src.modules.channels.application.content_media.contracts import PreparedGallery
 from src.modules.channels.domain.content_delivery.value_object import DeliveryContextVO
@@ -312,6 +314,8 @@ class WooCommercePlatform:
         config: ConnectionConfigVO,
         credentials: bytes,
         request: PreparedContentRequest,
+        known_media: tuple[ContentMediaResult, ...] = (),
+        media_checksums: tuple[ContentMediaChecksum, ...] = (),
     ) -> ContentReconciliationResult:
         """Сверяет сохранённый запрос, не выполняя PUT."""
         result = await WooContentAdapter(self.http).execute(
@@ -319,6 +323,8 @@ class WooCommercePlatform:
             credentials=WooCommerceCredentials.model_validate_json(credentials),
             request=request,
             reconcile=True,
+            known_media=known_media,
+            media_checksums=media_checksums,
         )
 
         return ContentReconciliationResult(
@@ -326,4 +332,5 @@ class WooCommercePlatform:
             fields=result.fields,
             media=result.media,
             error_code=result.error_code,
+            issues=result.issues,
         )

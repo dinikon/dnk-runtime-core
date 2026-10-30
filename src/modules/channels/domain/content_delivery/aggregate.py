@@ -7,6 +7,7 @@ from src.modules.channels.domain.content_delivery.value_object import (
     DeliveryContextVO,
     DeliveryMediaVO,
     DeliveryStatus,
+    DeliveryFieldIssueVO,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
@@ -35,6 +36,10 @@ class ContentDelivery:
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    field_issues: tuple[DeliveryFieldIssueVO, ...] = ()
+    initial_error_code: str | None = None
+    last_success_at: datetime | None = None
+    applied_content_fingerprint: str | None = None
 
     @classmethod
     def create(
@@ -94,6 +99,10 @@ class ContentDelivery:
         created_at: datetime,
         updated_at: datetime,
         completed_at: datetime | None,
+        field_issues: tuple[DeliveryFieldIssueVO, ...] = (),
+        initial_error_code: str | None = None,
+        last_success_at: datetime | None = None,
+        applied_content_fingerprint: str | None = None,
     ) -> "ContentDelivery":
         """Проверяет сохранённое состояние целиком без исправления противоречий."""
         if (
@@ -120,7 +129,7 @@ class ContentDelivery:
             or any(
                 v is not None
                 and (not isinstance(v, str) or re.fullmatch(r"[0-9a-f]{64}", v) is None)
-                for v in (prepared_hash, last_applied_hash)
+                for v in (prepared_hash, last_applied_hash, applied_content_fingerprint)
             )
             or (
                 error_code is not None
@@ -132,6 +141,17 @@ class ContentDelivery:
             or not isinstance(confirmed_fields, tuple)
             or any(v not in {"title", "body", "gallery"} for v in confirmed_fields)
             or len(set(confirmed_fields)) != len(confirmed_fields)
+            or not isinstance(field_issues, tuple)
+            or any(not isinstance(v, DeliveryFieldIssueVO) for v in field_issues)
+            or len({v.field for v in field_issues}) != len(field_issues)
+            or any(v.field in confirmed_fields for v in field_issues)
+            or (
+                initial_error_code is not None
+                and (
+                    not isinstance(initial_error_code, str)
+                    or re.fullmatch(r"[a-z][a-z0-9_]{0,99}", initial_error_code) is None
+                )
+            )
         ):
             raise ContentDeliveryError("content_state_invalid")
         prepared = prepared_context is not None
@@ -174,6 +194,10 @@ class ContentDelivery:
             )
             != (error_code is not None)
             or (applied_generation is None) != (last_applied_hash is None)
+            or (
+                (last_success_at is not None or applied_content_fingerprint is not None)
+                and applied_generation is None
+            )
             or (
                 status
                 in {
@@ -219,6 +243,14 @@ class ContentDelivery:
             )
             or updated_at < created_at
             or (
+                last_success_at is not None
+                and (
+                    not isinstance(last_success_at, datetime)
+                    or last_success_at.utcoffset() is None
+                    or not created_at <= last_success_at <= updated_at
+                )
+            )
+            or (
                 completed_at is not None
                 and (
                     not isinstance(completed_at, datetime)
@@ -249,6 +281,10 @@ class ContentDelivery:
             created_at=created_at,
             updated_at=updated_at,
             completed_at=completed_at,
+            field_issues=field_issues,
+            initial_error_code=initial_error_code,
+            last_success_at=last_success_at,
+            applied_content_fingerprint=applied_content_fingerprint,
         )
 
     def request_update(
@@ -309,6 +345,9 @@ class ContentDelivery:
         self.sending_generation = self.requested_generation
         self.status = DeliveryStatus.IN_FLIGHT
         self.error_code = None
+        self.initial_error_code = None
+        self.field_issues = ()
+        self.confirmed_fields = ()
         self.completed_at = None
         self.revision += 1
         self.updated_at = now
@@ -325,6 +364,7 @@ class ContentDelivery:
         uncertain: bool,
         now: datetime,
         media: tuple[DeliveryMediaVO, ...] | None = None,
+        issues: tuple[DeliveryFieldIssueVO, ...] = (),
     ) -> bool:
         """Применяет только текущую попытку; новое намерение не считается выполненным."""
         self._require_time(now)
@@ -348,6 +388,11 @@ class ContentDelivery:
             or not isinstance(fields, tuple)
             or any(v not in {"title", "body", "gallery"} for v in fields)
             or len(set(fields)) != len(fields)
+            or not isinstance(issues, tuple)
+            or any(not isinstance(v, DeliveryFieldIssueVO) for v in issues)
+            or len({v.field for v in issues}) != len(issues)
+            or any(v.field in fields for v in issues)
+            or (error_code is None and bool(issues))
         ):
             raise ContentDeliveryError("content_result_invalid")
         if media is not None and (
@@ -363,16 +408,34 @@ class ContentDelivery:
             else (DeliveryStatus.FAILED if error_code else DeliveryStatus.SUCCEEDED)
         )
         self.error_code = error_code
-        self.confirmed_fields = fields if error_code is None else ()
+        self.initial_error_code = self.initial_error_code or error_code
+        self.confirmed_fields = fields
+        self.field_issues = issues
         if media is not None:
             self.prepared_media = media
         if error_code is None:
             self.applied_generation = generation
             self.last_applied_hash = content_hash
+            self.last_success_at = now
+            assert self.prepared_context is not None
+            self.applied_content_fingerprint = self.prepared_context.content_fingerprint
         self.completed_at = now
         self.revision += 1
         self.updated_at = now
         return True
+
+    def resolve_uncertainty(self, *, expected_revision: int, now: datetime) -> None:
+        """Явно завершает неопределённую попытку без признания её успешной или записи наружу."""
+        self._require_time(now)
+        if type(expected_revision) is not int or expected_revision != self.revision:
+            raise ContentDeliveryError("content_revision_conflict", conflict=True)
+        if self.status is not DeliveryStatus.UNKNOWN:
+            raise ContentDeliveryError("content_resolution_unavailable", conflict=True)
+        self.status = DeliveryStatus.FAILED
+        self.error_code = "content_manually_resolved"
+        self.completed_at = now
+        self.updated_at = now
+        self.revision += 1
 
     def queue_next(self, *, job_id: EntityIdVO, now: datetime) -> bool:
         """Продолжает только явно запрошенное новое поколение после известного исхода."""
@@ -439,6 +502,7 @@ class ContentDelivery:
             raise ContentDeliveryError("content_result_invalid")
         self.status = DeliveryStatus.BLOCKED
         self.error_code = code
+        self.initial_error_code = code
         self.revision += 1
         self.updated_at = now
 
@@ -454,6 +518,9 @@ class ContentDelivery:
         self.prepared_hash = None
         self.error_code = None
         self.completed_at = None
+        self.initial_error_code = None
+        self.field_issues = ()
+        self.confirmed_fields = ()
 
     def _require_time(self, now: datetime) -> None:
         """Проверяет аудит до первого изменения состояния."""

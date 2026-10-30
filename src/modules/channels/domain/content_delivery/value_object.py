@@ -19,6 +19,23 @@ class DeliveryStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class DeliveryFieldIssueVO:
+    """Безопасная причина неподтверждённого поля без копии внешнего контента."""
+
+    field: str
+    code: str
+
+    def __post_init__(self) -> None:
+        """Проверяет закрытый набор полей и формат кода причины."""
+        if (
+            self.field not in {"title", "body", "gallery"}
+            or not isinstance(self.code, str)
+            or re.fullmatch(r"[a-z][a-z0-9_]{0,99}", self.code) is None
+        ):
+            raise ContentDeliveryError("content_result_invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class DeliveryContextVO:
     """Подтверждённое пользователем намерение без секретов и копии Catalog."""
 

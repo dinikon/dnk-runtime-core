@@ -1,4 +1,10 @@
 from fastapi import APIRouter, Depends
+from src.modules.channels.presentation.content_delivery.http.controller.resolve_content_uncertainty import (
+    resolve_content_uncertainty,
+)
+from src.modules.channels.presentation.content_delivery.http.response.resolve_content_uncertainty import (
+    ResolveContentUncertaintyResponse,
+)
 from src.modules.channels.presentation.content_delivery.http.route import (
     ContentDeliveryRoute,
 )
@@ -27,6 +33,16 @@ from src.modules.identity.presentation.auth.http.csrf import require_csrf
 
 router = APIRouter(
     prefix="/channels", tags=["content-deliveries"], route_class=ContentDeliveryRoute
+)
+router.add_api_route(
+    "/{channel_id}/catalog-bindings/{group_id}/content-deliveries/{publication_id}/resolve",
+    resolve_content_uncertainty,
+    methods=["POST"],
+    response_model=ResolveContentUncertaintyResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
 )
 router.add_api_route(
     "/{channel_id}/catalog-bindings/{group_id}/content-deliveries",
