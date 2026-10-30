@@ -8,9 +8,7 @@ import { stockErrorMessage } from "../model/stock.errors";
 import { bindingKeys } from "../model/bindings/binding.query-keys";
 import { publicationKeys } from "../model/publication.query-keys";
 import BindingStockPanel from "../ui/bindings/BindingStockPanel.vue";
-import RepresentationPreviewPanel from "../ui/bindings/RepresentationPreviewPanel.vue";
-import { useRepresentationPreview } from "../model/representation.queries";
-import { representationErrorMessage } from "../model/representation.errors";
+import RepresentationEditorPage from "./RepresentationEditorPage.vue";
 import { useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -80,10 +78,16 @@ const stockGroup = ref<CatalogBinding | null>(null),
   stockSelected = ref<string[]>([]),
   stockActionError = ref("");
 const representationGroup = ref<CatalogBinding | null>(null);
-const representation = useRepresentationPreview(
-  computed(() => representationGroup.value?.channelId ?? ""),
-  computed(() => representationGroup.value?.id ?? ""),
-);
+const representationDirty = ref(false),
+  representationBusy = ref(false);
+function closeRepresentation(): void {
+  if (representationBusy.value) return;
+  if (
+    !representationDirty.value ||
+    window.confirm("Изменения представления не сохранены. Закрыть редактор?")
+  )
+    representationGroup.value = null;
+}
 const stockChannel = computed(() => stockGroup.value?.channelId ?? ""),
   stockGroupId = computed(() => stockGroup.value?.id ?? "");
 const stock = useBindingStock(stockChannel, stockGroupId);
@@ -656,9 +660,9 @@ function goPublication(group: CatalogBinding): void {
     />
     <Sheet
       :open="!!representationGroup"
-      @update:open="!$event && (representationGroup = null)"
+      @update:open="!$event && closeRepresentation()"
     >
-      <SheetContent class="w-full sm:max-w-3xl">
+      <SheetContent class="w-full sm:max-w-6xl">
         <SheetHeader
           ><SheetTitle>Представление публикации</SheetTitle
           ><SheetDescription
@@ -669,18 +673,17 @@ function goPublication(group: CatalogBinding): void {
             }}</SheetDescription
           ></SheetHeader
         >
-        <RepresentationPreviewPanel
+        <RepresentationEditorPage
           v-if="representationGroup"
           :key="representationGroup.id"
-          :preview="representation.data.value"
+          :group="representationGroup"
           :locale="locale"
-          :loading="representation.isFetching.value"
-          :error="
-            representation.error.value
-              ? representationErrorMessage(representation.error.value)
-              : ''
+          @state="
+            (changed, pending) => {
+              representationDirty = changed;
+              representationBusy = pending;
+            }
           "
-          @retry="representation.refetch()"
         />
       </SheetContent>
     </Sheet>

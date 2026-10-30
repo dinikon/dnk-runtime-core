@@ -1,3 +1,4 @@
+from src.modules.files.application.stored_file.port.usage import FileUsagePort
 from src.modules.shared.domain.time.clock_port import ClockPort
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.application.uuid.uuid_port import UUIdGeneratorProtocol
@@ -19,14 +20,19 @@ class RequestFilePurgeHandler:
         queue: FilePurgeQueueProtocol,
         clock: ClockPort,
         uuid_generator: UUIdGeneratorProtocol,
+        usage: FileUsagePort,
     ) -> None:
         """Принимает порты одной транзакции, часы и генератор job ID."""
+        self._usage = usage
         self._files, self._queue = files, queue
         self._clock, self._uuid = clock, uuid_generator
 
     async def execute(self, command: RequestFilePurgeCommand) -> None:
         """Выполняет доменный переход под lock; повтор не меняет job или даты."""
         file = await self._files.get_for_update(EntityIdVO.from_value(command.file_id))
+        file.ensure_unused(
+            in_use=bool(await self._usage.used(command.tenant_id, (file.id.uuid,)))
+        )
         previous_job = file.purge_job_id
         job = previous_job or EntityIdVO.from_value(self._uuid.new())
         now = self._clock.now()

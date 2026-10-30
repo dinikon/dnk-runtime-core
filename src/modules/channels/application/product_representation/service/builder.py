@@ -18,6 +18,9 @@ from src.modules.channels.domain.product_representation.value_object import (
     PublicationContentSnapshot,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.channels.domain.product_representation.overrides import (
+    RepresentationOverridesVO,
+)
 
 
 class RepresentationBuilder:
@@ -39,6 +42,8 @@ class RepresentationBuilder:
         config_revision: int,
         locales: tuple[str, ...],
         as_of: datetime,
+        overrides: RepresentationOverridesVO = RepresentationOverridesVO(),
+        unavailable_files: tuple[EntityIdVO, ...] = (),
     ) -> PreparedRepresentation:
         """Читает семью целиком, оставляя правила сопоставления и готовности Domain."""
         family = await self._catalog.family(
@@ -93,6 +98,8 @@ class RepresentationBuilder:
                 for value in nodes
             ),
             claims=claims,
+            overrides=overrides,
+            unavailable_files=unavailable_files,
         )
         return PreparedRepresentation(
             channel_id=channel_id,

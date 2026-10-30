@@ -1,3 +1,4 @@
+import hashlib
 from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
 from src.modules.channels.infrastructure.platforms.woocommerce.stock import WooStock
 from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
@@ -65,10 +66,22 @@ class WooCommercePlatform:
                 "write_stock",
             ),
             publication_parent_kind=PublicationKind.VARIABLE,
+            media_remote_ids=True,
+            media_supported_types=(
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "image/gif",
+                "image/bmp",
+            ),
             stock_features=StockFeaturesVO(
                 True, ("in_stock", "out_of_stock", "on_order"), ("no", "notify", "yes")
             ),
         )
+
+    def media_metadata_fingerprint(self, alt: str) -> str:
+        """Разделяет внешние attachment по alt; XML использует только исходный файл."""
+        return hashlib.sha256(alt.encode("utf-8")).hexdigest()
 
     def decode_config(self, config: ConnectionConfigVO) -> WooCommerceConfig:
         """Восстанавливает конкретную модель настроек WooCommerce."""

@@ -1506,7 +1506,7 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
                 }
                 & columns
             )
-        self.assertEqual(revision, "0010_channels_stock_sync")
+        self.assertEqual(revision, TenantMigrator().head())
         settings = (await self.detail(channel))["config"]["settings"].copy()
         settings.pop("stock_sync")
         self.assertEqual(settings, platform_settings)

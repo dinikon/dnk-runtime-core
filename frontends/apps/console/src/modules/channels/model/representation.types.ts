@@ -1,7 +1,12 @@
 import type { BindingMode } from "./bindings/binding.types";
 
 export interface RepresentationFieldOrigin {
-  kind: "catalog" | "catalog_parent" | "missing";
+  kind:
+    | "catalog"
+    | "catalog_parent"
+    | "missing"
+    | "group_override"
+    | "item_override";
   catalogPositionId: string | null;
 }
 export interface RepresentationContent {
@@ -30,6 +35,7 @@ export interface RepresentationTarget {
   catalogPositionId: string;
   role: "container" | "position";
   content: RepresentationContent[];
+  catalogContent: RepresentationContent[];
   ready: boolean;
   issues: RepresentationIssue[];
 }
@@ -46,4 +52,53 @@ export interface RepresentationPreview {
   bindingState: "linked" | "partial" | "conflict";
   issues: RepresentationIssue[];
   targets: RepresentationTarget[];
+  exportBlockers: string[];
+  draft: boolean;
+}
+
+export interface RepresentationImage {
+  fileId: string;
+  alt: string;
+  caption: string;
+}
+export interface LocalizedOverrides {
+  title?: string | null;
+  body?: string | null;
+  gallery?: RepresentationImage[] | null;
+}
+export interface RepresentationOverrides {
+  common: Record<string, LocalizedOverrides>;
+  items: Record<string, Record<string, LocalizedOverrides>>;
+}
+export interface RepresentationState {
+  id: string | null;
+  revision: number;
+  exportEnabled: boolean;
+  overrides: RepresentationOverrides;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+}
+export interface RepresentationDetails {
+  state: RepresentationState;
+  bindingRevision: number;
+  configRevision: number;
+  locales: string[];
+  items: { id: string; catalogPositionId: string; publicationId: string }[];
+}
+export interface RepresentationVersion {
+  expectedRevision: number;
+  expectedBindingRevision: number;
+  expectedConfigRevision: number;
+}
+export interface RepresentationDraftInput extends RepresentationVersion {
+  overrides: RepresentationOverrides;
+}
+export interface RepresentationWriteInput extends RepresentationVersion {
+  channelId: string;
+  groupId: string;
+}
+export interface SaveRepresentationInput extends RepresentationWriteInput {
+  overrides: RepresentationOverrides;
 }

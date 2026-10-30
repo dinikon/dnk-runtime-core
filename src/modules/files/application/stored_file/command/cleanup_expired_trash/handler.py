@@ -1,3 +1,4 @@
+from src.modules.files.application.stored_file.port.usage import FileUsagePort
 from src.modules.files.application.stored_file.command.cleanup_expired_trash.command import (
     CleanupExpiredTrashCommand,
 )
@@ -27,8 +28,10 @@ class CleanupExpiredTrashHandler:
         queries: StoredFileQueryRepositoryProtocol,
         queue: FilePurgeQueueProtocol,
         uuids: UUIdGeneratorProtocol,
+        usage: FileUsagePort,
     ) -> None:
         """Принимает порты одной транзакции и генератор новых идентификаторов."""
+        self._usage = usage
         self._files, self._queries, self._queue, self._uuids = (
             files,
             queries,
@@ -61,8 +64,15 @@ class CleanupExpiredTrashHandler:
             if file.status == StoredFileStatus.PURGING
         )
         stopped = await self._queue.terminal_or_missing(command.tenant_id, job_ids)
+        used = set(
+            await self._usage.used(
+                command.tenant_id, tuple(file.id.uuid for file in files)
+            )
+        )
         queued, requeued = 0, 0
         for file in files:
+            if file.id.uuid in used:
+                continue
             if file.status == StoredFileStatus.TRASHED:
                 job_id = EntityIdVO.from_value(self._uuids.new())
                 try:

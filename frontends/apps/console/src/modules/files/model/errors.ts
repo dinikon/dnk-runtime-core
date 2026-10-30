@@ -1,6 +1,13 @@
 import { getApiErrorMessage, getApiErrorStatus } from "@/app/providers/http";
+import axios from "axios";
 export function fileError(cause: unknown): string {
   const status = getApiErrorStatus(cause);
+  if (
+    status === 409 &&
+    axios.isAxiosError(cause) &&
+    cause.response?.data?.detail?.code === "file_in_use"
+  )
+    return "Файл используется. Удалите его из галерей каталога и каналов или дождитесь завершения передачи.";
   const messages: Record<number, string> = {
     403: "Недостаточно прав или истекла защита сессии. Обновите страницу.",
     404: "Файл или диск больше недоступен. Обновите список.",

@@ -41,6 +41,9 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "channel_catalog_binding_items",
         "channel_sync_runs",
         "channel_external_publications",
+        "channel_stock_sync_states",
+        "channel_product_representations",
+        "channel_content_media",
         "crm_position_history",
         "crm_leads",
         "crm_deals",
@@ -113,3 +116,5 @@ import src.modules.channels.infrastructure.persistence.models.catalog_binding_gr
 import src.modules.channels.infrastructure.persistence.models.catalog_binding_item  # noqa: F401
 
 import src.modules.channels.infrastructure.persistence.models.stock_sync  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.product_representation  # noqa: F401
+import src.modules.channels.infrastructure.persistence.models.content_media  # noqa: F401

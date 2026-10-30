@@ -13,6 +13,9 @@ from src.modules.channels.domain.catalog_binding.value_object import BindingMode
 from src.modules.channels.domain.channel.repository import ChannelRepositoryProtocol
 from src.modules.shared.application.uuid.uuid_port import UUIdGeneratorProtocol
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.channels.domain.product_representation.repository import (
+    ProductRepresentationRepositoryProtocol,
+)
 
 
 class BindingWrites:
@@ -25,6 +28,7 @@ class BindingWrites:
         channels: ChannelRepositoryProtocol,
         views: BindingViews,
         uuid: UUIdGeneratorProtocol,
+        representations: ProductRepresentationRepositoryProtocol,
     ) -> None:
         """Получает порты общего внешнего UoW."""
         self.catalog, self.groups, self.channels, self.views, self.uuid = (
@@ -34,6 +38,7 @@ class BindingWrites:
             views,
             uuid,
         )
+        self.representations = representations
 
     async def create(
         self,
@@ -104,7 +109,9 @@ class BindingWrites:
         channel = await self.channels.get(EntityIdVO(channel_id), for_update=True)
         if channel is None:
             raise CatalogBindingError("channel_not_found")
-        group = await self.groups.get(channel.connection.id, EntityIdVO(group_id))
+        group = await self.groups.get(
+            channel.connection.id, EntityIdVO(group_id), for_update=True
+        )
         if group is None:
             raise CatalogBindingError("binding_not_found")
         group.require_revision(expected_revision)
@@ -118,6 +125,8 @@ class BindingWrites:
             now,
             proposed_items,
         )
+        representation = await self.representations.get(group.id)
+        previous_revision = group.revision
         group.change_items(
             items=proposed_items,
             expected_revision=expected_revision,
@@ -125,6 +134,13 @@ class BindingWrites:
             now=now,
         )
         await self.groups.save(group)
+        if representation is not None and group.revision != previous_revision:
+            representation.reconcile_binding_items(
+                retained_ids=tuple(item.id for item in group.items),
+                actor=EntityIdVO(actor_id),
+                now=now,
+            )
+            await self.representations.save(representation)
         return group
 
     async def delete(

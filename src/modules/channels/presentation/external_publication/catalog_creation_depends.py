@@ -1,4 +1,7 @@
 from typing import Annotated
+from src.modules.channels.infrastructure.product_representation.repository import (
+    SqlAlchemyProductRepresentationRepository,
+)
 from fastapi import Depends
 from src.config import dnk_config
 from src.modules.shared.presentation.persistence.depends import UoWDep
@@ -148,7 +151,12 @@ def get_create_catalog_from_publication_handler(
         bindings=read,
         views=views,
         writes=BindingWrites(
-            catalog, SqlAlchemyCatalogBindingRepository(session), channels, views, uuid
+            catalog,
+            SqlAlchemyCatalogBindingRepository(session),
+            channels,
+            views,
+            uuid,
+            SqlAlchemyProductRepresentationRepository(session),
         ),
         uow=uow,
         uuid=uuid,

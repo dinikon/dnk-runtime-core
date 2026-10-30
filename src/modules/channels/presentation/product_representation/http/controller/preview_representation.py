@@ -37,7 +37,17 @@ async def preview_representation(
     try:
         result = await handler.execute(
             PreviewRepresentationQuery(
-                channel_id=channel_id, group_id=group_id, locales=payload.locales
+                channel_id=channel_id,
+                group_id=group_id,
+                locales=payload.locales,
+                overrides=(
+                    payload.overrides.to_value()
+                    if payload.overrides is not None
+                    else None
+                ),
+                expected_revision=payload.expected_revision,
+                expected_binding_revision=payload.expected_binding_revision,
+                expected_config_revision=payload.expected_config_revision,
             )
         )
     except (ChannelError, ChannelInputError) as error:

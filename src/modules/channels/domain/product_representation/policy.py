@@ -12,8 +12,22 @@ from src.modules.channels.domain.product_representation.value_object import (
     PublicationContentSnapshot,
     RepresentationIssue,
     RepresentationPreparation,
+    LocalizedContent,
+    ContentOrigins,
+    ContentOrigin,
+    FieldOrigin,
+)
+from src.modules.channels.domain.product_representation.overrides import (
+    RepresentationOverridesVO,
+    LocalizedOverridesVO,
+)
+from src.modules.channels.domain.product_representation.error import (
+    ProductRepresentationError,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+
+
+from dataclasses import replace
 
 
 class RepresentationPolicy:
@@ -32,6 +46,8 @@ class RepresentationPolicy:
         items: tuple[CatalogBindingItem, ...],
         publications: tuple[PublicationContentSnapshot, ...],
         claims: tuple[BindingClaim, ...],
+        overrides: RepresentationOverridesVO = RepresentationOverridesVO(),
+        unavailable_files: tuple[EntityIdVO, ...] = (),
     ) -> RepresentationPreparation:
         """Не скрывает конфликтные пары; общий Woo-контейнер требует полной семьи."""
         assessment = BindingStructurePolicy().assess(
@@ -76,6 +92,8 @@ class RepresentationPolicy:
                     binding_item_id=None,
                     role=ContentTargetRole.CONTAINER,
                     issues=blockers,
+                    overrides=overrides,
+                    unavailable_files=unavailable_files,
                 )
             )
         for item in items:
@@ -93,6 +111,8 @@ class RepresentationPolicy:
                     binding_item_id=item.id,
                     role=ContentTargetRole.POSITION,
                     issues=blockers,
+                    overrides=overrides,
+                    unavailable_files=unavailable_files,
                 )
             )
         return RepresentationPreparation(assessment, tuple(targets), issues)
@@ -107,6 +127,8 @@ class RepresentationPolicy:
         binding_item_id: EntityIdVO | None,
         role: ContentTargetRole,
         issues: tuple[RepresentationIssue, ...],
+        overrides: RepresentationOverridesVO,
+        unavailable_files: tuple[EntityIdVO, ...],
     ) -> PreparedPublicationContent:
         """Оставляет отсутствующий контент отсутствующим, не подставляя данные площадки."""
         blockers = list(issues)
@@ -126,8 +148,34 @@ class RepresentationPolicy:
             blockers.append(
                 RepresentationIssue("representation_catalog_missing", publication_id)
             )
-        else:
+        content: list[LocalizedContent] = []
+        if catalog is not None:
             for value in catalog.content:
+                value = RepresentationPolicy.apply_override(
+                    content=value,
+                    override=overrides.common_for(value.locale),
+                    origin=ContentOrigin.GROUP_OVERRIDE,
+                )
+                if binding_item_id is not None:
+                    value = RepresentationPolicy.apply_override(
+                        content=value,
+                        override=overrides.item_for(
+                            binding_item_id=binding_item_id, locale=value.locale
+                        ),
+                        origin=ContentOrigin.ITEM_OVERRIDE,
+                    )
+                content.append(value)
+                if any(
+                    image.file_id in unavailable_files for image in value.gallery or ()
+                ):
+                    blockers.append(
+                        RepresentationIssue(
+                            "representation_image_unavailable",
+                            publication_id,
+                            "gallery",
+                            value.locale,
+                        )
+                    )
                 if value.title is None or not value.title.strip():
                     blockers.append(
                         RepresentationIssue(
@@ -147,6 +195,111 @@ class RepresentationPolicy:
             binding_item_id=binding_item_id,
             catalog_position_id=catalog_position_id,
             role=role,
-            content=catalog.content if catalog else (),
+            content=tuple(content),
             issues=tuple(blockers),
+            catalog_content=catalog.content if catalog else (),
         )
+
+    @staticmethod
+    def with_unavailable_files(
+        *, preparation: RepresentationPreparation, unavailable: tuple[EntityIdVO, ...]
+    ) -> RepresentationPreparation:
+        """Применяет факты Files ко всей эффективной галерее, включая Catalog."""
+        targets = []
+        for target in preparation.targets:
+            issues = tuple(
+                RepresentationIssue(
+                    "representation_image_unavailable",
+                    target.publication_id,
+                    "gallery",
+                    content.locale,
+                )
+                for content in target.content
+                if any(image.file_id in unavailable for image in content.gallery or ())
+            )
+            targets.append(
+                replace(target, issues=tuple(dict.fromkeys((*target.issues, *issues))))
+            )
+        return replace(preparation, targets=tuple(targets))
+
+    @staticmethod
+    def apply_override(
+        *,
+        content: LocalizedContent,
+        override: LocalizedOverridesVO | None,
+        origin: ContentOrigin,
+    ) -> LocalizedContent:
+        """Накладывает одно значение без потери пустой строки или галереи."""
+        if override is None:
+            return content
+        source = FieldOrigin(origin, None)
+        return LocalizedContent(
+            locale=content.locale,
+            title=override.title if override.title is not None else content.title,
+            body=override.body if override.body is not None else content.body,
+            gallery=(
+                override.gallery if override.gallery is not None else content.gallery
+            ),
+            origins=ContentOrigins(
+                source if override.title is not None else content.origins.title,
+                source if override.body is not None else content.origins.body,
+                source if override.gallery is not None else content.origins.gallery,
+            ),
+        )
+
+    @staticmethod
+    def ensure_overrides_scope(
+        *,
+        overrides: RepresentationOverridesVO,
+        item_ids: tuple[EntityIdVO, ...],
+        locales: tuple[str, ...],
+        previous: RepresentationOverridesVO = RepresentationOverridesVO(),
+    ) -> None:
+        """Не допускает чужие пары и новые изменения неактивных локалей."""
+        if any(item.binding_item_id not in item_ids for item in overrides.items):
+            raise ProductRepresentationError("representation_item_not_in_group")
+        for value in overrides.common:
+            if value.locale not in locales and value != previous.common_for(
+                value.locale
+            ):
+                raise ProductRepresentationError("representation_locale_inactive")
+        for item in overrides.items:
+            for value in item.content:
+                if value.locale not in locales and value != previous.item_for(
+                    binding_item_id=item.binding_item_id, locale=value.locale
+                ):
+                    raise ProductRepresentationError("representation_locale_inactive")
+
+    @staticmethod
+    def export_blockers(
+        *,
+        preparation: RepresentationPreparation,
+        mode: BindingMode,
+        verification_status: str,
+        verification_revision: int,
+        config_revision: int,
+        has_identity: bool,
+        unavailable_files: bool,
+    ) -> tuple[str, ...]:
+        """Отделяет пользовательское разрешение от текущей готовности к экспорту."""
+        blockers: list[str] = []
+        if (
+            verification_status != "verified"
+            or verification_revision != config_revision
+            or not has_identity
+        ):
+            blockers.append("representation_connection_unverified")
+        if (
+            mode is BindingMode.VARIABLE_TO_VARIABLE
+            and preparation.assessment.state != "linked"
+        ):
+            blockers.append("representation_family_incomplete")
+        blockers.extend(issue.code for issue in preparation.issues)
+        blockers.extend(
+            issue.code for target in preparation.targets for issue in target.issues
+        )
+        if not preparation.targets:
+            blockers.append("representation_targets_empty")
+        if unavailable_files:
+            blockers.append("representation_image_unavailable")
+        return tuple(dict.fromkeys(blockers))

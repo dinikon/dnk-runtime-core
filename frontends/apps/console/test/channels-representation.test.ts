@@ -6,11 +6,31 @@ import vue from "@vitejs/plugin-vue";
 import { createSSRApp, type Component } from "vue";
 import { renderToString } from "vue/server-renderer";
 import type { PreviewRepresentationResponseDto } from "../src/modules/channels/api/representation.dto.ts";
-import { representationPreview } from "../src/modules/channels/api/representation.mapper.ts";
+import {
+  representationPreview,
+  representationDraftPayload,
+  representationDetails,
+} from "../src/modules/channels/api/representation.mapper.ts";
+import {
+  normalizeRepresentationOverrides,
+  representationDraftKey,
+} from "../src/modules/channels/model/representation.draft.ts";
 
 function fixture(): PreviewRepresentationResponseDto {
   const origin = { kind: "catalog" as const, catalog_position_id: "product" };
   return {
+    state: {
+      id: null,
+      revision: 0,
+      export_enabled: false,
+      overrides: { common: {}, items: {} },
+      created_at: null,
+      updated_at: null,
+      created_by: null,
+      updated_by: null,
+    },
+    export_blockers: ["representation_title_missing"],
+    draft: false,
     representation: {
       channel_id: "channel",
       connection_id: "connection",
@@ -32,6 +52,15 @@ function fixture(): PreviewRepresentationResponseDto {
           binding_item_id: "pair",
           catalog_position_id: "product",
           role: "position",
+          catalog_content: [
+            {
+              locale: "uk",
+              title: "Catalog source",
+              body: "Source body",
+              gallery: [],
+              origins: { title: origin, body: origin, gallery: origin },
+            },
+          ],
           ready: false,
           issues: [
             {
@@ -70,6 +99,8 @@ function fixture(): PreviewRepresentationResponseDto {
 test("mapping preserves locales, stable pair IDs, missing and explicitly cleared fields", () => {
   const dto = fixture();
   const value = representationPreview(dto);
+  assert.equal(value.targets[0]?.catalogContent[0]?.title, "Catalog source");
+  assert.deepEqual(value.exportBlockers, ["representation_title_missing"]);
   assert.equal(value.targets[0]?.bindingItemId, "pair");
   assert.equal(value.targets[0]?.content[0]?.body, "");
   assert.deepEqual(value.targets[0]?.content[0]?.gallery, []);
@@ -87,6 +118,84 @@ test("mapping preserves locales, stable pair IDs, missing and explicitly cleared
     value.targets[0]?.content[0]?.origins.title.catalogPositionId,
     "product",
   );
+});
+
+test("complete override payload keeps revisions, independent languages and explicit clears", () => {
+  const overrides = {
+    common: { uk: { title: "Group", body: null }, ru: { body: "" } },
+    items: { pair: { uk: { gallery: [] } } },
+  };
+  const payload = representationDraftPayload({
+    expectedRevision: 0,
+    expectedBindingRevision: 2,
+    expectedConfigRevision: 3,
+    overrides,
+  });
+  assert.deepEqual(payload, {
+    expected_revision: 0,
+    expected_binding_revision: 2,
+    expected_config_revision: 3,
+    overrides: {
+      common: { uk: { title: "Group" }, ru: { body: "" } },
+      items: { pair: { uk: { gallery: [] } } },
+    },
+  });
+  overrides.common.uk.title = "Typed while saving";
+  assert.equal(payload.overrides.common.uk?.title, "Group");
+  assert.doesNotMatch(
+    JSON.stringify(payload),
+    /export_enabled|channel_id|credentials/,
+  );
+});
+
+test("draft normalization removes only inheritance and isolates gallery edits", () => {
+  const gallery = [{ fileId: "file", alt: "A", caption: "B" }];
+  const input = {
+    common: { ru: {}, uk: { title: null, gallery } },
+    items: { removed: { uk: {} }, pair: { ru: { body: "", gallery: [] } } },
+  };
+  const draft = normalizeRepresentationOverrides(input);
+  gallery[0]!.alt = "Changed";
+  assert.equal(draft.common.uk?.gallery?.[0]?.alt, "A");
+  assert.equal("ru" in draft.common, false);
+  assert.equal("removed" in draft.items, false);
+  assert.equal(draft.items.pair?.ru?.body, "");
+  assert.deepEqual(draft.items.pair?.ru?.gallery, []);
+  assert.equal(
+    representationDraftKey({ common: { ru: {}, uk: {} }, items: {} }),
+    representationDraftKey({ common: {}, items: {} }),
+  );
+});
+
+test("saved state mapping preserves permissions, revision zero and stable binding items", () => {
+  const value = representationDetails({
+    state: {
+      id: null,
+      revision: 0,
+      export_enabled: false,
+      overrides: { common: {}, items: {} },
+      created_at: null,
+      updated_at: null,
+      created_by: null,
+      updated_by: null,
+    },
+    binding_revision: 7,
+    config_revision: 3,
+    locales: ["uk"],
+    items: [
+      {
+        id: "pair",
+        catalog_position_id: "catalog",
+        publication_id: "publication",
+      },
+    ],
+  });
+  assert.equal(value.state.revision, 0);
+  assert.equal(value.state.exportEnabled, false);
+  assert.equal(value.bindingRevision, 7);
+  assert.deepEqual(value.items, [
+    { id: "pair", catalogPositionId: "catalog", publicationId: "publication" },
+  ]);
 });
 
 let server: ViteDevServer;

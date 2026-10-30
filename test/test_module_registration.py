@@ -41,13 +41,16 @@ class ModuleRegistrationTests(unittest.TestCase):
         schema = create_app().openapi()
         paths = set(schema["paths"])
         for prefix in (
-            "/api/channels",
             "/api/console/inventory",
             "/api/console/warehousing",
             "/api/console/price-lists",
             "/api/console/price-list-offers",
         ):
             self.assertFalse(any(path.startswith(prefix) for path in paths), prefix)
+        self.assertEqual(
+            {path for path in paths if path.startswith("/api/channels")},
+            {"/api/channels/content-media/{media_id}/image.{extension}"},
+        )
         self.assertFalse(
             any(
                 token in name.lower()

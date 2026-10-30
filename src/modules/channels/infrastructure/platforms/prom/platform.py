@@ -1,3 +1,4 @@
+import hashlib
 from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
 from src.modules.channels.infrastructure.platforms.prom.stock import PromStock
 from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
@@ -66,6 +67,10 @@ class PromPlatform:
                 False, ("in_stock", "out_of_stock", "on_order"), ("no", "notify", "yes")
             ),
         )
+
+    def media_metadata_fingerprint(self, alt: str) -> str:
+        """Разделяет внешние attachment по alt; XML использует только исходный файл."""
+        return hashlib.sha256(b"").hexdigest()
 
     def decode_config(self, config: ConnectionConfigVO) -> PromConfig:
         """Восстанавливает конкретную модель настроек Prom."""

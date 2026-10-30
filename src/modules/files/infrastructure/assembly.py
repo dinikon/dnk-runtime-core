@@ -1,4 +1,18 @@
 from src.modules.files.application.artifact.service import ArtifactFilesService
+from src.modules.files.application.stored_file.port.usage import FileUsagePort
+from src.modules.files.infrastructure.file_usage import ConsumerFileUsage
+from src.modules.catalog.application.catalog_item.query.find_used_image_files.handler import (
+    FindUsedImageFilesHandler as CatalogImages,
+)
+from src.modules.catalog.infrastructure.catalog_item.image_usage import (
+    SqlAlchemyCatalogImageUsage,
+)
+from src.modules.channels.application.content_media.query.find_used_image_files.handler import (
+    FindUsedImageFilesHandler as ChannelImages,
+)
+from src.modules.channels.infrastructure.content_media.query_repository import (
+    SqlAlchemyContentMediaQueryRepository,
+)
 from src.modules.files.application.stored_file.command.lock_ready_file.handler import (
     LockReadyFileHandler,
 )
@@ -137,6 +151,7 @@ def build_files_handlers(
     *,
     clock: ClockPort | None = None,
     uuid_generator: UUIdGeneratorProtocol | None = None,
+    usage: FileUsagePort | None = None,
 ) -> FilesHandlers:
     """Подключает все репозитории процесса к сессии внешнего UoW."""
     providers = SqlAlchemyStorageProviderRepository(session)
@@ -147,6 +162,7 @@ def build_files_handlers(
     resolver = storage if storage is not None else get_storage_resolver()
     actual_clock = clock if clock is not None else UtcClock()
     actual_uuid = uuid_generator if uuid_generator is not None else UUID7Generator()
+    file_usage = usage if usage is not None else build_file_usage(session)
     jobs = build_scheduled_job_repository(session)
     queue = ScheduledFilePurgeQueue(
         ScheduleScheduledJobUseCase(
@@ -168,14 +184,16 @@ def build_files_handlers(
         ListFilesHandler(file_queries),
         ListTrashedFilesHandler(file_queries),
         GetFilesOverviewHandler(file_queries),
-        TrashFileHandler(files, actual_clock),
+        TrashFileHandler(files, actual_clock, file_usage),
         RestoreFileHandler(files, buckets, providers, resolver, actual_clock),
-        RequestFilePurgeHandler(files, queue, actual_clock, actual_uuid),
-        PurgeFileHandler(files, buckets, providers, resolver),
-        CleanupExpiredTrashHandler(files, file_queries, queue, actual_uuid),
+        RequestFilePurgeHandler(files, queue, actual_clock, actual_uuid, file_usage),
+        PurgeFileHandler(files, buckets, providers, resolver, file_usage),
+        CleanupExpiredTrashHandler(files, file_queries, queue, actual_uuid, file_usage),
         GetFilePreviewHandler(queries, resolver),
         RequestTrashEmptyHandler(queue, actual_clock, actual_uuid),
-        EmptyTrashHandler(files, file_queries, queue, actual_clock, actual_uuid),
+        EmptyTrashHandler(
+            files, file_queries, queue, actual_clock, actual_uuid, file_usage
+        ),
         LockReadyFileHandler(files),
     )
 
@@ -187,4 +205,12 @@ def build_artifact_files_facade(session: AsyncSession) -> ArtifactFilesService:
         SqlAlchemyBucketRepository(session),
         SqlAlchemyStorageProviderRepository(session),
         SqlAlchemyStorageQueryRepository(session),
+    )
+
+
+def build_file_usage(session: AsyncSession) -> FileUsagePort:
+    """Подключает владельцев ссылок на внешней границе Files без опционального bypass."""
+    return ConsumerFileUsage(
+        catalog=CatalogImages(SqlAlchemyCatalogImageUsage(session)),
+        channels=ChannelImages(SqlAlchemyContentMediaQueryRepository(session)),
     )

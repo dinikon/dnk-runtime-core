@@ -3,6 +3,9 @@ from datetime import datetime
 from uuid import UUID
 
 from src.modules.channels.domain.catalog_binding.value_object import BindingMode
+from src.modules.channels.domain.product_representation.overrides import (
+    RepresentationOverridesVO,
+)
 from src.modules.channels.domain.product_representation.value_object import (
     CatalogContentSnapshot,
     RepresentationPreparation,
@@ -53,3 +56,17 @@ class PreparedRepresentation:
     locales: tuple[str, ...]
     as_of: datetime
     preparation: RepresentationPreparation
+
+
+@dataclass(frozen=True, slots=True)
+class RepresentationState:
+    """Публичная проекция сохранённого намерения или ещё не сохранённых defaults."""
+
+    id: UUID | None = None
+    revision: int = 0
+    export_enabled: bool = False
+    overrides: RepresentationOverridesVO = RepresentationOverridesVO()
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_by: UUID | None = None

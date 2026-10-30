@@ -1,3 +1,4 @@
+from src.modules.files.application.stored_file.port.usage import FileUsagePort
 from src.modules.files.application.bucket.location import storage_location
 from src.modules.files.application.port.storage import StorageResolverProtocol
 from src.modules.files.application.stored_file.command.purge_file.command import (
@@ -21,8 +22,10 @@ class PurgeFileHandler:
         buckets: BucketRepositoryProtocol,
         providers: StorageProviderRepositoryProtocol,
         storage: StorageResolverProtocol,
+        usage: FileUsagePort,
     ) -> None:
         """Принимает порты одной внешней транзакции и приватного хранилища."""
+        self._usage = usage
         self._files, self._buckets, self._providers, self._storage = (
             files,
             buckets,
@@ -41,6 +44,9 @@ class PurgeFileHandler:
         job_id = EntityIdVO.from_value(command.job_id)
         if not file.is_current_purge_job(job_id):
             return
+        file.ensure_unused(
+            in_use=bool(await self._usage.used(command.tenant_id, (file.id.uuid,)))
+        )
         bucket = await self._buckets.get(file.bucket_id)
         bucket.ensure_ready()
         provider = await self._providers.get(bucket.provider_id)

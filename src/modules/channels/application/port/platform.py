@@ -40,6 +40,8 @@ class PlatformManifest:
     supported_capabilities: tuple[Capability, ...]
     publication_parent_kind: PublicationKind | None = None
     stock_features: StockFeaturesVO = StockFeaturesVO()
+    media_remote_ids: bool = False
+    media_supported_types: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +64,10 @@ class Platform(Protocol):
         self, config: ConnectionConfigVO, credentials: JsonObject | None
     ) -> ValidatedConnection:
         """Проверяет локальные модели, возвращая безопасную общую границу."""
+        ...
+
+    def media_metadata_fingerprint(self, alt: str) -> str:
+        """Возвращает ключ метаданных, принадлежащих внешнему attachment."""
         ...
 
     async def verify(

@@ -1,3 +1,4 @@
+import hashlib
 from src.modules.channels.infrastructure.platforms.rozetka.stock import (
     known_stock_target,
 )
@@ -65,6 +66,10 @@ class RozetkaPlatform:
             publication_parent_kind=None,
             stock_features=StockFeaturesVO(),
         )
+
+    def media_metadata_fingerprint(self, alt: str) -> str:
+        """Разделяет внешние attachment по alt; XML использует только исходный файл."""
+        return hashlib.sha256(b"").hexdigest()
 
     def decode_config(self, config: ConnectionConfigVO) -> RozetkaConfig:
         """Восстанавливает конкретную модель настроек Rozetka."""

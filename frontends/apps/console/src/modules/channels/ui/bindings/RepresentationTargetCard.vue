@@ -8,9 +8,16 @@ import type {
 } from "../../model/representation.types";
 import { representationIssueMessage } from "../../model/representation.errors";
 
-const props = defineProps<{ target: RepresentationTarget; locale: string }>();
+const props = defineProps<{
+  target: RepresentationTarget;
+  locale: string;
+  view?: "catalog" | "effective";
+}>();
 const content = computed(() =>
-  props.target.content.find((value) => value.locale === props.locale),
+  (props.view === "catalog"
+    ? props.target.catalogContent
+    : props.target.content
+  ).find((value) => value.locale === props.locale),
 );
 const body = computed(() =>
   DOMPurify.sanitize(content.value?.body ?? "", {
@@ -35,6 +42,8 @@ const body = computed(() =>
   }),
 );
 function source(value: RepresentationFieldOrigin): string {
+  if (value.kind === "group_override") return "Общее переопределение";
+  if (value.kind === "item_override") return "Переопределение позиции";
   return value.kind === "catalog"
     ? "Из Catalog"
     : value.kind === "catalog_parent"

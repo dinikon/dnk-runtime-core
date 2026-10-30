@@ -1,6 +1,9 @@
 from src.modules.channels.infrastructure.catalog_binding.query_repository import (
     SqlAlchemyCatalogBindingQueryRepository,
 )
+from src.modules.channels.infrastructure.product_representation.repository import (
+    SqlAlchemyProductRepresentationRepository,
+)
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -83,6 +86,7 @@ def get_binding_runtime(
             SqlAlchemyChannelRepository(uow.session, tenant_id_from_context(context)),
             views,
             uuid,
+            SqlAlchemyProductRepresentationRepository(uow.session),
         ),
         BindingQueries(read, catalog, views),
     )

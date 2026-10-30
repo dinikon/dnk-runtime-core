@@ -24,9 +24,9 @@ defineEmits<{ close: []; confirm: [] }>();
           ><span class="block font-medium text-foreground">{{
             file?.name
           }}</span
-          >Файл станет недоступен в связанных модулях. Его можно восстановить в
-          течение 30 дней; затем начнётся автоматическое
-          удаление.</AlertDialogDescription
+          >Неиспользуемый файл будет храниться в корзине 30 дней. Если файл
+          используется в каталоге или каналах, перенос будет
+          отклонён.</AlertDialogDescription
         ></AlertDialogHeader
       ><Alert v-if="error" variant="destructive"
         ><AlertDescription>{{ error }}</AlertDescription></Alert

@@ -35,6 +35,8 @@ from src.modules.channels.application.channel.port.query_repository import (
 from src.modules.channels.application.error import ChannelInputError
 from src.modules.channels.application.product_representation.contracts import (
     RepresentationBindingSource,
+    RepresentationState,
+    PreparedRepresentation,
 )
 from src.modules.channels.application.product_representation.port.query_repository import (
     RepresentationQueryRepositoryProtocol,
@@ -48,6 +50,13 @@ from src.modules.channels.application.product_representation.query.preview_repre
 from src.modules.channels.application.product_representation.service.builder import (
     RepresentationBuilder,
 )
+from src.modules.channels.application.product_representation.service.reader import (
+    RepresentationReader,
+)
+from src.modules.channels.application.product_representation.service.drafts import (
+    RepresentationDrafts,
+)
+from src.modules.channels.domain.catalog_binding.value_object import BindingAssessment
 from src.modules.channels.domain.catalog_binding.entity import CatalogBindingItem
 from src.modules.channels.domain.catalog_binding.error import CatalogBindingError
 from src.modules.channels.domain.catalog_binding.value_object import (
@@ -399,15 +408,38 @@ class PreviewRepresentationHandlerTests(IsolatedAsyncioTestCase):
             )
         )
         self.builder = Mock(spec=RepresentationBuilder)
-        self.builder.build = AsyncMock(return_value="prepared-result")
+        self.prepared = PreparedRepresentation(
+            self.channel,
+            uuid4(),
+            self.group,
+            1,
+            1,
+            "prom",
+            BindingMode.SIMPLE_TO_SIMPLE,
+            ("uk", "ru"),
+            self.now,
+            RepresentationPreparation(
+                BindingAssessment("partial", (), 0, 0, 0), (), ()
+            ),
+        )
+        self.builder.build = AsyncMock(return_value=self.prepared)
+        self.read.state = AsyncMock(return_value=RepresentationState())
         self.clock = Mock()
         self.clock.now.return_value = self.now
         self.http = Mock()
+        files = Mock()
+        files.unavailable = AsyncMock(return_value=())
+        rich_text = Mock()
+        rich_text.clean.side_effect = lambda value: value
         self.handler = PreviewRepresentationHandler(
-            channels=self.channels,
-            representations=self.read,
-            platforms=InstalledPlatforms(self.http),
-            builder=self.builder,
+            reader=RepresentationReader(
+                channels=self.channels,
+                representations=self.read,
+                platforms=InstalledPlatforms(self.http),
+            ),
+            drafts=RepresentationDrafts(
+                builder=self.builder, files=files, rich_text=rich_text
+            ),
             clock=self.clock,
         )
 
@@ -418,7 +450,7 @@ class PreviewRepresentationHandlerTests(IsolatedAsyncioTestCase):
         result = await self.handler.execute(
             PreviewRepresentationQuery(self.channel, self.group)
         )
-        self.assertEqual(result.representation, "prepared-result")
+        self.assertEqual(result.representation, self.prepared)
         self.assertEqual(self.builder.build.call_args.kwargs["locales"], ("uk", "ru"))
         self.assertEqual(self.builder.build.call_args.kwargs["as_of"], self.now)
         self.http.request.assert_not_called()
@@ -480,6 +512,7 @@ class RepresentationArchitectureTests(TestCase):
                             )
                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         self.assertIsNotNone(node.returns, f"{path}: {node.name}")
-                        self.assertNotEqual(node.name, "__post_init__")
+                        if node.name == "__post_init__":
+                            self.assertEqual(path.name, "overrides.py")
         for path in root.glob("*/product_representation/**/__init__.py"):
             self.assertEqual(path.read_text(), "", str(path))

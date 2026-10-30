@@ -7,7 +7,11 @@ class CatalogBindingRepository(Protocol):
     """Хранит только корень группы в общем внешнем UoW."""
 
     async def get(
-        self, connection_id: EntityIdVO, group_id: EntityIdVO
+        self,
+        connection_id: EntityIdVO,
+        group_id: EntityIdVO,
+        *,
+        for_update: bool = False,
     ) -> CatalogBindingGroup | None:
         """Восстанавливает группу или сообщает об отсутствии."""
         ...

@@ -2,6 +2,9 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
+from src.modules.channels.presentation.product_representation.http.response.fields import (
+    RepresentationStateResponse,
+)
 
 from src.modules.channels.application.product_representation.query.preview_representation.dto import (
     PreviewRepresentationResultDTO,
@@ -114,6 +117,7 @@ class PreviewPublicationContentResponse(BaseModel):
     content: tuple[PreviewLocalizedContentResponse, ...]
     ready: bool
     issues: tuple[PreviewRepresentationIssueResponse, ...]
+    catalog_content: tuple[PreviewLocalizedContentResponse, ...] = ()
 
 
 class PreviewPreparedRepresentationResponse(BaseModel):
@@ -137,6 +141,9 @@ class PreviewRepresentationResponse(BaseModel):
     """Публичный контракт сценария preview_representation."""
 
     representation: PreviewPreparedRepresentationResponse
+    state: RepresentationStateResponse
+    export_blockers: tuple[str, ...]
+    draft: bool
 
     @classmethod
     def from_dto(
@@ -145,6 +152,9 @@ class PreviewRepresentationResponse(BaseModel):
         """Явно выбирает поля результата; не раскрывает настройки и сырые наблюдения."""
         value = result.representation
         return cls(
+            state=RepresentationStateResponse.from_state(result.state),
+            export_blockers=result.export_blockers,
+            draft=result.draft,
             representation=PreviewPreparedRepresentationResponse(
                 channel_id=value.channel_id,
                 connection_id=value.connection_id,
@@ -182,6 +192,10 @@ class PreviewRepresentationResponse(BaseModel):
                             for content in target.content
                         ),
                         ready=target.ready,
+                        catalog_content=tuple(
+                            PreviewLocalizedContentResponse.from_content(content)
+                            for content in target.catalog_content
+                        ),
                         issues=tuple(
                             PreviewRepresentationIssueResponse.from_issue(issue)
                             for issue in target.issues
@@ -189,5 +203,5 @@ class PreviewRepresentationResponse(BaseModel):
                     )
                     for target in value.preparation.targets
                 ),
-            )
+            ),
         )

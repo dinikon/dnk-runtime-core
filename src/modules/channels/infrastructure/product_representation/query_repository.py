@@ -6,6 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.channels.application.product_representation.contracts import (
     RepresentationBindingItem,
     RepresentationBindingSource,
+    RepresentationState,
+)
+from src.modules.channels.infrastructure.persistence.models.product_representation import (
+    ProductRepresentationModel,
+)
+from src.modules.channels.infrastructure.product_representation.mapper import (
+    ProductRepresentationMapper,
 )
 from src.modules.channels.domain.catalog_binding.value_object import BindingMode
 from src.modules.channels.infrastructure.persistence.models.catalog_binding_group import (
@@ -20,11 +27,27 @@ from src.modules.channels.infrastructure.persistence.models.connection import (
 
 
 class SqlAlchemyRepresentationQueryRepository:
-    """Читает существующие таблицы Channels без нового хранения representation."""
+    """Читает проекции связей и представлений без восстановления Aggregate Roots."""
 
     def __init__(self, session: AsyncSession) -> None:
         """Принимает сессию общего tenant UoW без управления транзакцией."""
         self._session = session
+
+    async def state(self, group_id: UUID) -> RepresentationState:
+        """Читает проекцию без Aggregate restore и создания пустой строки."""
+        table = ProductRepresentationModel.__table__
+        row = (
+            (
+                await self._session.execute(
+                    select(table).where(table.c.binding_group_id == group_id)
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return (
+            ProductRepresentationMapper.to_state(row) if row else RepresentationState()
+        )
 
     async def binding(
         self, *, channel_id: UUID, group_id: UUID

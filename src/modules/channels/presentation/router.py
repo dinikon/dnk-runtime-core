@@ -19,6 +19,11 @@ from src.modules.channels.presentation.product_representation.router import (
 router = APIRouter(dependencies=[Depends(prepare_channels_read)])
 router.include_router(binding_router)
 router.include_router(representation_router)
+from src.modules.channels.presentation.content_media.router import (
+    router as media_router,
+)
+
+router.include_router(media_router)
 router.include_router(channel_router)
 router.include_router(sync_run_router)
 router.include_router(publication_router)

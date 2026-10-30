@@ -49,8 +49,10 @@ class EmptyTrashTests(unittest.IsolatedAsyncioTestCase):
         self.clock.now.return_value = self.now
         self.uuids = Mock()
         self.uuids.new.side_effect = uuid4
+        self.usage = Mock()
+        self.usage.used = AsyncMock(return_value=())
         self.handler = EmptyTrashHandler(
-            self.files, self.queries, self.queue, self.clock, self.uuids
+            self.files, self.queries, self.queue, self.clock, self.uuids, self.usage
         )
 
     def file(self, *, deleted: datetime | None = None) -> StoredFile:

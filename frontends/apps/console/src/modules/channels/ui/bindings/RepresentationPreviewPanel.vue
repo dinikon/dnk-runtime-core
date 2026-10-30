@@ -15,6 +15,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ retry: [] }>();
 const selectedLocale = ref(props.locale);
+const view = ref<"effective" | "catalog">("effective");
 const locale = computed({
   get: () =>
     props.preview?.locales.includes(selectedLocale.value)
@@ -59,6 +60,16 @@ const localeId = useId();
     </div>
     <template v-if="preview">
       <div class="flex flex-wrap items-end justify-between gap-3">
+        <label class="space-y-1 text-sm font-medium"
+          >Показать<select
+            v-model="view"
+            aria-label="Источник предпросмотра"
+            class="block h-9 rounded-md border border-input bg-background px-3"
+          >
+            <option value="effective">Итог</option>
+            <option value="catalog">Catalog</option>
+          </select></label
+        >
         <div class="space-y-1">
           <label :for="localeId" class="block text-sm font-medium"
             >Язык представления</label
@@ -94,6 +105,7 @@ const localeId = useId();
         :key="target.publicationId"
         :target="target"
         :locale="locale"
+        :view="view"
       />
     </template>
   </section>

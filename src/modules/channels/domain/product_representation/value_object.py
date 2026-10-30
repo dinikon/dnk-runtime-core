@@ -16,6 +16,8 @@ class ContentOrigin(StrEnum):
     CATALOG = "catalog"
     CATALOG_PARENT = "catalog_parent"
     MISSING = "missing"
+    GROUP_OVERRIDE = "group_override"
+    ITEM_OVERRIDE = "item_override"
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +108,7 @@ class PreparedPublicationContent:
     role: ContentTargetRole
     content: tuple[LocalizedContent, ...]
     issues: tuple[RepresentationIssue, ...]
+    catalog_content: tuple[LocalizedContent, ...] = ()
 
     @property
     def ready(self) -> bool:

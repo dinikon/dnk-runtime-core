@@ -277,6 +277,7 @@ class BindingWriteAtomicityTests(unittest.IsolatedAsyncioTestCase):
             channels,
             views,
             SimpleNamespace(new=Mock(side_effect=uuid4)),
+            SimpleNamespace(get=AsyncMock(return_value=None), save=AsyncMock()),
         )
         with self.assertRaises(CatalogBindingError):
             await writes.update(
