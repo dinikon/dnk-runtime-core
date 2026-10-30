@@ -20,6 +20,7 @@ const props = withDefaults(
     caption: string;
     selectedKeys?: readonly string[];
     density?: "default" | "compact";
+    isDetailRow?: (row: TRow) => boolean;
   }>(),
   { density: "default" },
 );
@@ -27,6 +28,7 @@ const emit = defineEmits<{ rowActivate: [row: TRow] }>();
 defineSlots<{
   header?(props: { column: DataTableColumn<TKey> }): VNode[];
   cell(props: { row: TRow; column: DataTableColumn<TKey> }): VNode[];
+  detail?(props: { row: TRow }): VNode[];
 }>();
 
 const width = computed(() =>
@@ -126,27 +128,36 @@ function alignment(column: DataTableColumn<TKey>): string {
             selectedKeys ? selectedKeys.includes(rowKey(row)) : undefined
           "
           :class="cn('group', density === 'compact' ? 'h-8' : 'h-10')"
-          @dblclick="emit('rowActivate', row)"
+          @dblclick="!isDetailRow?.(row) && emit('rowActivate', row)"
         >
           <TableCell
-            v-for="column in columns"
-            :key="column.key"
-            :style="offsets.get(column.key)"
-            :class="
-              cn(
-                'overflow-hidden border-r border-border/60 px-3 last:border-r-0',
-                density === 'compact' ? 'py-0.5' : 'py-1',
-                alignment(column),
-                column.pinned && 'sticky z-10',
-                column.pinned &&
-                  (selectedKeys?.includes(rowKey(row))
-                    ? 'bg-muted'
-                    : 'bg-background group-hover:bg-muted'),
-              )
-            "
+            v-if="isDetailRow?.(row)"
+            :colspan="columns.length"
+            class="px-3 py-2"
           >
-            <slot name="cell" :row="row" :column="column" />
+            <slot name="detail" :row="row" />
           </TableCell>
+          <template v-else>
+            <TableCell
+              v-for="column in columns"
+              :key="column.key"
+              :style="offsets.get(column.key)"
+              :class="
+                cn(
+                  'overflow-hidden border-r border-border/60 px-3 last:border-r-0',
+                  density === 'compact' ? 'py-0.5' : 'py-1',
+                  alignment(column),
+                  column.pinned && 'sticky z-10',
+                  column.pinned &&
+                    (selectedKeys?.includes(rowKey(row))
+                      ? 'bg-muted'
+                      : 'bg-background group-hover:bg-muted'),
+                )
+              "
+            >
+              <slot name="cell" :row="row" :column="column" />
+            </TableCell>
+          </template>
         </TableRow>
       </TableBody>
     </Table>

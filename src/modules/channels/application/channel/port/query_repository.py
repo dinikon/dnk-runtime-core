@@ -51,6 +51,7 @@ class ChannelReadRow:
     verification: VerificationReadRow
     created_at: datetime
     updated_at: datetime
+    allow_stock_export: bool = False
     recovery_required: bool = False
     available_capabilities: tuple[str, ...] = ()
 

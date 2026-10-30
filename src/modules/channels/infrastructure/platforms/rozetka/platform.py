@@ -1,3 +1,5 @@
+from src.modules.channels.infrastructure.platforms.rozetka.stock import RozetkaStock
+from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
 from src.modules.channels.infrastructure.platforms.rozetka.details import (
     RozetkaDetailsReader,
 )
@@ -50,7 +52,12 @@ class RozetkaPlatform:
             config_version=1,
             config_schema=RozetkaConfig.model_json_schema(),
             credentials_schema=RozetkaCredentials.model_json_schema(),
-            supported_capabilities=("verify_connection", "publications"),
+            supported_capabilities=(
+                "verify_connection",
+                "publications",
+                "read_stock",
+                "write_stock",
+            ),
             publication_parent_kind=None,
         )
 
@@ -101,9 +108,10 @@ class RozetkaPlatform:
             config=ConnectionConfigVO.create(
                 version=typed.version,
                 endpoint=typed.endpoint,
-                settings=typed.settings.model_dump(mode="json"),
+                settings=typed.settings.model_dump(mode="json", exclude={"stock_sync"}),
             ),
             credentials=encoded,
+            allow_stock_export=typed.settings.stock_sync.allow_export,
             currency=typed.settings.currency,
             locales=typed.settings.locales,
         )
@@ -167,4 +175,38 @@ class RozetkaPlatform:
             config=self.decode_config(config),
             credentials=RozetkaCredentials.model_validate_json(credentials),
             publications=publications,
+        )
+
+    async def get_stock(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publication: PublicationLookup,
+        parent: PublicationLookup | None = None,
+    ) -> PlatformStockSnapshot:
+        """Читает только остаток через конкретные типы пакета."""
+        return await RozetkaStock(self.http).get(
+            config=self.decode_config(config),
+            credentials=RozetkaCredentials.model_validate_json(credentials),
+            publication=publication,
+            parent=parent,
+        )
+
+    async def set_stock(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publication: PublicationLookup,
+        quantity: int,
+        backorders: str,
+    ) -> PlatformStockSnapshot:
+        """Устанавливает абсолютное количество и проверяет результат чтением."""
+        return await RozetkaStock(self.http).set(
+            config=self.decode_config(config),
+            credentials=RozetkaCredentials.model_validate_json(credentials),
+            publication=publication,
+            quantity=quantity,
+            backorders=backorders,
         )

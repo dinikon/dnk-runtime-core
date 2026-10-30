@@ -55,6 +55,7 @@ class CatalogBindingGateway:
             str(stock.stock_quantity) if stock.stock_quantity is not None else None,
             value.stock_status,
             value.sources.stock if value.sources else value.id,
+            backorders=stock.backorders.value,
         )
 
     async def families(

@@ -1,45 +1,59 @@
 <script setup lang="ts">
+import { Cable, ChevronRight, MoreHorizontal, Trash2 } from "@lucide/vue";
+import { Button } from "@/components/ui/button";
 import {
-  PageHeader,
-  PageHeaderActions,
-  PageHeaderTabs,
-  type PageHeaderAction,
-} from "@/components/custom-ui/page-header";
-
-defineProps<{
-  title: string;
-  description?: string;
-  activeTab: "settings" | "publications";
-  actions: readonly PageHeaderAction[];
-}>();
-const emit = defineEmits<{
-  tab: [value: "settings" | "publications"];
-  action: [id: string];
-}>();
-const tabs = [
-  { value: "settings", label: "Настройки" },
-  { value: "publications", label: "Публикации" },
-];
-function selectTab(value: string): void {
-  if (value === "settings" || value === "publications") emit("tab", value);
-}
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+defineProps<{ title: string; removable?: boolean; busy?: boolean }>();
+defineEmits<{ back: []; remove: [] }>();
 </script>
-
 <template>
-  <PageHeader :title="title" :description="description">
-    <template #before>
-      <PageHeaderTabs
-        :model-value="activeTab"
-        :items="tabs"
-        aria-label="Разделы канала"
-        @update:model-value="selectTab"
-      />
-    </template>
-    <template #actions>
-      <PageHeaderActions
-        :actions="actions"
-        @action="emit('action', $event.id)"
-      />
-    </template>
-  </PageHeader>
+  <div class="flex min-w-0 flex-1 items-center justify-between gap-2">
+    <nav
+      class="flex min-w-0 items-center gap-1"
+      aria-label="Навигация подключения"
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        class="shrink-0"
+        aria-label="Подключения"
+        @click="$emit('back')"
+        ><Cable data-icon="inline-start" /><span class="hidden sm:inline"
+          >Подключения</span
+        ></Button
+      >
+      <ChevronRight
+        class="size-4 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      /><span class="truncate text-sm" :title="title" aria-current="page">{{
+        title
+      }}</span>
+    </nav>
+    <DropdownMenu v-if="removable"
+      ><DropdownMenuTrigger as-child
+        ><Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          :disabled="busy"
+          aria-label="Действия с подключением"
+          ><MoreHorizontal /></Button></DropdownMenuTrigger
+      ><DropdownMenuContent align="end"
+        ><DropdownMenuGroup
+          ><DropdownMenuItem
+            variant="destructive"
+            :disabled="busy"
+            @select="$emit('remove')"
+            ><Trash2 />Удалить подключение</DropdownMenuItem
+          ></DropdownMenuGroup
+        ></DropdownMenuContent
+      ></DropdownMenu
+    >
+  </div>
 </template>

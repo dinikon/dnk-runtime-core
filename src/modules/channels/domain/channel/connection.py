@@ -17,6 +17,9 @@ from src.modules.channels.domain.channel.value_object.resource_identity import (
     ResourceIdentityVO,
 )
 from src.modules.channels.domain.channel.value_object.verification import VerificationVO
+from src.modules.channels.domain.channel.value_object.stock_sync_settings import (
+    StockSyncSettingsVO,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
@@ -30,6 +33,7 @@ class Connection:
     config_revision: int
     identity: ResourceIdentityVO | None
     verification: VerificationVO
+    stock_sync: StockSyncSettingsVO
 
     @classmethod
     def create(
@@ -39,6 +43,8 @@ class Connection:
         config: ConnectionConfigVO,
         encrypted_credentials: bytes,
         job_id: EntityIdVO,
+        now: datetime,
+        allow_export: bool = False,
     ) -> "Connection":
         """Создаёт первую ожидающую проверку нового подключения."""
         return cls.restore(
@@ -48,6 +54,9 @@ class Connection:
             config_revision=1,
             identity=None,
             verification=VerificationVO(job_id=job_id, config_revision=1),
+            stock_sync=StockSyncSettingsVO(
+                allow_export=allow_export, revision=1, changed_at=now
+            ),
         )
 
     @classmethod
@@ -60,6 +69,7 @@ class Connection:
         config_revision: int,
         identity: ResourceIdentityVO | None,
         verification: VerificationVO,
+        stock_sync: StockSyncSettingsVO,
     ) -> "Connection":
         """Проверяет согласованность восстановленного подключения."""
         connection = cls(
@@ -69,6 +79,7 @@ class Connection:
             config_revision=config_revision,
             identity=identity,
             verification=verification,
+            stock_sync=stock_sync,
         )
         connection.require_consistent_state()
         return connection
@@ -82,6 +93,7 @@ class Connection:
             or not self.encrypted_credentials
             or type(self.config_revision) is not int
             or self.config_revision < 1
+            or not isinstance(self.stock_sync, StockSyncSettingsVO)
             or not isinstance(self.verification, VerificationVO)
             or self.verification.config_revision != self.config_revision
         ):
@@ -98,14 +110,34 @@ class Connection:
                 "Проверенное подключение требует identity магазина."
             )
 
-    def replace_access(
+    def change_settings(
         self,
         *,
         config: ConnectionConfigVO | None,
         encrypted_credentials: bytes | None,
         job_id: EntityIdVO,
+        allow_export: bool | None,
+        now: datetime,
     ) -> bool:
-        """Заменяет доступ сразу и создаёт проверку следующей ревизии."""
+        """Атомарно меняет доступ и локальную политику; проверка нужна только для доступа."""
+        if (
+            not isinstance(now, datetime)
+            or now.tzinfo is None
+            or now < self.stock_sync.changed_at
+        ):
+            raise InvalidChannelStateError("Некорректное время изменения подключения.")
+        stock_sync = self.stock_sync
+        if allow_export is not None:
+            stock_sync = StockSyncSettingsVO(
+                allow_export=allow_export,
+                revision=self.stock_sync.revision
+                + int(allow_export != self.stock_sync.allow_export),
+                changed_at=(
+                    now
+                    if allow_export != self.stock_sync.allow_export
+                    else self.stock_sync.changed_at
+                ),
+            )
         if config is not None and not isinstance(config, ConnectionConfigVO):
             raise InvalidChannelStateError("Некорректная конфигурация подключения.")
         if encrypted_credentials is not None and (
@@ -118,6 +150,7 @@ class Connection:
             config is not None and config != self.config
         ) or encrypted_credentials is not None
         if not connection_changed:
+            self.stock_sync = stock_sync
             return False
         next_revision = self.config_revision + 1
         verification = VerificationVO(job_id=job_id, config_revision=next_revision)
@@ -129,6 +162,7 @@ class Connection:
         )
         self.config_revision = next_revision
         self.verification = verification
+        self.stock_sync = stock_sync
         return True
 
     def request_verification(self, *, job_id: EntityIdVO) -> None:

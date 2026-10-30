@@ -1,3 +1,5 @@
+from src.modules.channels.presentation.stock_sync.router import router as stock_router
+
 """Объединяет HTTP-маршруты агрегатов Channels."""
 
 from fastapi import APIRouter, Depends
@@ -16,3 +18,5 @@ router.include_router(binding_router)
 router.include_router(channel_router)
 router.include_router(sync_run_router)
 router.include_router(publication_router)
+
+router.include_router(stock_router)

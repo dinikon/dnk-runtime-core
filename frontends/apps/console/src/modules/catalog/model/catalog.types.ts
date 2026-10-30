@@ -59,6 +59,9 @@ export interface CatalogItem {
 }
 
 export interface CatalogListItem {
+  manageStock?: boolean;
+  stockQuantity?: number | null;
+  stockSource?: "own" | "parent";
   kind?: "simple" | "variable" | "variant";
   parent_id?: string | null;
   variant_count?: number;

@@ -65,6 +65,8 @@ class CreateChannelHandler:
             config=validated.config,
             encrypted_credentials=self.cipher.encrypt(validated.credentials),
             job_id=EntityIdVO.from_value(job_id),
+            now=now,
+            allow_export=validated.allow_stock_export,
         )
         channel = Channel.create(
             channel_id=EntityIdVO.from_value(self.uuid()),

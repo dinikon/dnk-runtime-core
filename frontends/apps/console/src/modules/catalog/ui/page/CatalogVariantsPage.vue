@@ -16,9 +16,38 @@ import CatalogVariantsBody from "../product/CatalogVariantsBody.vue";
 import DeleteCatalogVariantDialog from "../product/DeleteCatalogVariantDialog.vue";
 import CatalogVariantEditorPage from "./CatalogVariantEditorPage.vue";
 import type { ProductStock } from "../../model/product.types";
-const props = defineProps<{ rootId: string; parentStock: ProductStock }>();
+import type { CatalogQuickEditSection } from "../../model/catalog-table.types";
+import { useCatalogQuickEdit } from "../../model/use-catalog-quick-edit";
+import CatalogQuickEditDialog from "../product/CatalogQuickEditDialog.vue";
+const props = defineProps<{
+  rootId: string;
+  parentStock: ProductStock;
+  prepareEdit?: () => Promise<boolean>;
+}>();
 const ctx = useCatalogContext(),
   rootId = toRef(props, "rootId");
+const quick = useCatalogQuickEdit(
+  ctx.tenantId,
+  ctx.sessionKey,
+  ctx.locale,
+  ctx.active,
+);
+watch(rootId, quick.close);
+async function edit(
+  item: CatalogListItem,
+  section: CatalogQuickEditSection,
+): Promise<void> {
+  const current = ctx.captureSession(),
+    capturedRoot = rootId.value,
+    capturedLocale = ctx.locale.value;
+  if (props.prepareEdit && !(await props.prepareEdit())) return;
+  if (
+    current() &&
+    rootId.value === capturedRoot &&
+    ctx.locale.value === capturedLocale
+  )
+    quick.open(item, section);
+}
 const state = useCatalogVariantsPageState(rootId, ctx.locale);
 const query = useCatalogVariants(
   rootId,
@@ -115,6 +144,8 @@ async function reload(): Promise<void> {
       :can-create="!actions.pending.value && !actions.uncertain.value"
       :out-of-range="state.pagination.value.offset > 0"
       :image-url="imageUrl"
+      :can-quick-edit="ctx.active.value"
+      @quick-edit="edit"
       @open="state.open"
       @remove="deleting = $event"
       @retry="reload"
@@ -143,6 +174,21 @@ async function reload(): Promise<void> {
       :variant-id="state.selected.value"
       :parent-stock="parentStock"
       @close="state.close"
+    />
+    <CatalogQuickEditDialog
+      v-if="quick.selection.value"
+      :key="quick.key.value"
+      :section="quick.selection.value.section"
+      :item="quick.draftSource.value?.item ?? null"
+      :shared="quick.draftSource.value?.shared ?? false"
+      :loading="quick.query.isFetching.value"
+      :pending="quick.mutation.isPending.value"
+      :blocked="!ctx.active.value || quick.query.isError.value"
+      :error="quick.error.value"
+      @dirty="quick.dirty.value = $event"
+      @close="quick.close"
+      @save="quick.save"
+      @retry="quick.query.refetch()"
     />
     <DeleteCatalogVariantDialog
       :open="!!deleting"

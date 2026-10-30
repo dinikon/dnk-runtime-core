@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogListItem } from "../../model/catalog.types";
+import type { CatalogQuickEditSection } from "../../model/catalog-table.types";
 import CatalogItemsTable from "../results/CatalogItemsTable.vue";
 import { catalogVariantsColumns } from "./catalog-variants.columns";
 
@@ -16,6 +17,7 @@ defineProps<{
   canCreate: boolean;
   outOfRange: boolean;
   imageUrl: (item: CatalogListItem) => string | undefined;
+  canQuickEdit: boolean;
 }>();
 const emit = defineEmits<{
   open: [id: string];
@@ -23,6 +25,7 @@ const emit = defineEmits<{
   retry: [];
   create: [];
   firstPage: [];
+  quickEdit: [item: CatalogListItem, section: CatalogQuickEditSection];
 }>();
 </script>
 
@@ -57,7 +60,9 @@ const emit = defineEmits<{
       :items="items"
       :disabled="disabled"
       :image-url="imageUrl"
+      :can-quick-edit="canQuickEdit"
       @open="emit('open', $event)"
+      @quick-edit="(item, section) => emit('quickEdit', item, section)"
       @remove="emit('remove', $event.id)"
     />
     <div v-else-if="!error" class="min-h-0 flex-1 overflow-auto">

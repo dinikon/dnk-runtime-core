@@ -50,11 +50,21 @@ class ChannelReadState:
                 if row.verification.status is VerificationStatus.VERIFIED
                 else ("verify_connection",)
             )
+            capabilities = tuple(
+                capability
+                for capability in capabilities
+                if capability != "write_stock" or row.allow_stock_export
+            )
             enriched.append(
                 replace(
                     row,
                     config=ConnectionConfigReadRow(
-                        config.version, config.endpoint, config.settings
+                        config.version,
+                        config.endpoint,
+                        {
+                            **config.settings,
+                            "stock_sync": {"allow_export": row.allow_stock_export},
+                        },
                     ),
                     recovery_required=row.verification.status
                     is VerificationStatus.PENDING

@@ -28,6 +28,11 @@ from src.modules.channels.infrastructure.persistence.models.channel import Chann
 from src.modules.channels.infrastructure.persistence.models.connection import (
     ConnectionModel,
 )
+from src.modules.channels.infrastructure.channel.persistence.settings import (
+    read_stock_sync_settings,
+    platform_settings,
+    public_settings,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
@@ -80,12 +85,15 @@ def to_domain(row: ChannelModel, c: ConnectionModel) -> Channel:
     connection = Connection.restore(
         connection_id=EntityIdVO.from_value(c.id),
         config=ConnectionConfigVO.create(
-            version=c.config_version, endpoint=c.endpoint, settings=c.settings
+            version=c.config_version,
+            endpoint=c.endpoint,
+            settings=platform_settings(c.settings),
         ),
         encrypted_credentials=c.encrypted_credentials,
         config_revision=c.config_revision,
         identity=read_identity(c),
         verification=read_verification(c),
+        stock_sync=read_stock_sync_settings(c.settings).to_value(),
     )
     return Channel.restore(
         channel_id=EntityIdVO.from_value(row.id),
@@ -113,8 +121,11 @@ def to_read_row(row: ChannelModel, c: ConnectionModel) -> ChannelReadRow:
         name=row.name,
         platform_kind=row.platform_kind,
         revision=row.revision,
+        allow_stock_export=read_stock_sync_settings(c.settings).allow_export,
         config=ConnectionConfigReadRow(
-            version=c.config_version, endpoint=c.endpoint, settings=c.settings
+            version=c.config_version,
+            endpoint=c.endpoint,
+            settings=public_settings(c.settings),
         ),
         config_revision=c.config_revision,
         identity=identity,

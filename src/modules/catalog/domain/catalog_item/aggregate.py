@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Self
+
+from src.modules.catalog.domain.catalog_item.stock_event import CatalogStockChanged
 from src.modules.catalog.domain.catalog_item.value_object.kind import CatalogItemKind
 from src.modules.catalog.domain.catalog_item.entity.variant import CatalogVariant
 from src.modules.catalog.domain.catalog_item.policy.validation import (
@@ -62,6 +64,9 @@ class CatalogItem:
     galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
     kind: CatalogItemKind = CatalogItemKind.SIMPLE
     variants: tuple[CatalogVariant, ...] = ()
+    _stock_events: list[CatalogStockChanged] = field(
+        default_factory=list, init=False, compare=False, repr=False
+    )
 
     @classmethod
     def create(
@@ -328,6 +333,7 @@ class CatalogItem:
             raise InvalidCatalogValueError(
                 "Для проверки наследуемого контента нужна схема.", ("content",)
             )
+        previous_stock = self._stock_ownership()
         candidate = replace(self, **changes)
         if candidate != self:
             candidate.updated_by = actor
@@ -337,7 +343,9 @@ class CatalogItem:
         if candidate == self:
             return
         for name in self.__dataclass_fields__:
-            setattr(self, name, getattr(candidate, name))
+            if name != "_stock_events":
+                setattr(self, name, getattr(candidate, name))
+        self._record_stock_change(previous_stock, now)
 
     def ensure_can_add_image(
         self,
@@ -468,12 +476,14 @@ class CatalogItem:
             raise InvalidCatalogValueError(
                 "Для проверки контента варианта нужна схема.", ("content",)
             )
+        previous_stock = self._stock_ownership()
         self._replace_variants(
             tuple(variant if v.id == variant.id else v for v in self.variants),
             actor,
             now,
             schema,
         )
+        self._record_stock_change(previous_stock, now)
 
     def remove_variant(
         self,
@@ -511,3 +521,38 @@ class CatalogItem:
             raise InvalidCatalogValueError("Некорректные факты использования.")
         if in_use:
             raise CatalogConflictError("Сначала снимите связи с публикациями.")
+
+    def pull_stock_events(self) -> tuple[CatalogStockChanged, ...]:
+        """Передаёт факты Application для атомарной записи Outbox."""
+        events = tuple(self._stock_events)
+        self._stock_events.clear()
+        return events
+
+    def _stock_ownership(
+        self,
+    ) -> dict[CatalogItemIdVO, tuple[CatalogItemIdVO, StockSpecificationVO | None]]:
+        """Снимок количественных источников семьи без контента и ручного наличия."""
+        result = {self.id: (self.id, self.stock if self.stock.manage_stock else None)}
+        for variant in self.variants:
+            inherited = not variant.stock.manage_stock and self.stock.manage_stock
+            source, stock = (
+                (self.id, self.stock) if inherited else (variant.id, variant.stock)
+            )
+            result[variant.id] = (source, stock if stock.manage_stock else None)
+        return result
+
+    def _record_stock_change(
+        self,
+        before: dict[
+            CatalogItemIdVO, tuple[CatalogItemIdVO, StockSpecificationVO | None]
+        ],
+        now: datetime,
+    ) -> None:
+        """Публикует только действительно затронутые позиции, включая наследников."""
+        affected = tuple(
+            identifier
+            for identifier, value in self._stock_ownership().items()
+            if before.get(identifier) != value
+        )
+        if affected:
+            self._stock_events.append(CatalogStockChanged(self.id, now, affected))

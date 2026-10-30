@@ -1,0 +1,70 @@
+.channel-workspace {
+  display: grid;
+  min-width: 0;
+}
+.channel-workspace-fields {
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+}
+.channel-settings-form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.channel-settings-sections {
+  min-width: 0;
+  padding: 0 16px;
+}
+.channel-settings-actions {
+  flex-shrink: 0;
+  padding: 12px 16px;
+}
+.channel-workspace-publications {
+  min-width: 0;
+}
+@media (min-width: 1024px) {
+  .channel-workspace {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    grid-template-columns: 340px minmax(0, 1fr);
+  }
+  .channel-workspace-fields {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+  }
+  .channel-settings-form {
+    min-height: 0;
+    flex: 1;
+  }
+  .channel-settings-sections {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .channel-settings-actions {
+    border-top: 1px solid var(--border);
+  }
+  .channel-workspace-fields input,
+  .channel-workspace-fields [data-slot="select-trigger"] {
+    min-height: 36px;
+  }
+  .channel-workspace-publications {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+@media (max-width: 767px) {
+  .channel-settings-form input,
+  .channel-settings-form [role="combobox"] {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .channel-settings-form button {
+    min-height: 44px;
+  }
+}

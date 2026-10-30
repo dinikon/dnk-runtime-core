@@ -1,3 +1,5 @@
+from datetime import datetime
+
 """Результат внешнего API, применяемый с повторной проверкой поколения."""
 
 from dataclasses import dataclass
@@ -19,3 +21,4 @@ class ApplySyncPageCommand:
     page: PublicationPage | None
     parent_kind: PublicationKind | None
     error_code: str | None = None
+    source_started_at: datetime | None = None

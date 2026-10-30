@@ -383,18 +383,26 @@ class ChannelPublicationPostgresTests(support.ChannelsPostgresTests):
         run = (await self.rows(SyncRunModel))[0]
         self.assertEqual((run["status"], run["processed_count"]), ("completed", 2))
 
-    async def test_legacy_defaults_rename_and_noop_do_not_reverify(self) -> None:
-        """Сравнивает нормализованные настройки с прежним пустым JSON без перезаписи."""
+    async def test_platform_defaults_rename_and_noop_preserve_stock_settings(
+        self,
+    ) -> None:
+        """Пустые настройки платформы нормализуются без перезаписи локальной политики."""
         for kind in ("prom", "woocommerce"):
             created = await self.verified(kind, settings={})
             url = self.root + "/" + created["id"]
             before = await self.detail(created["id"])
+            stored = next(
+                row
+                for row in await self.rows(ConnectionModel)
+                if row["channel_id"] == UUID(created["id"])
+            )
+            stock_settings = {"stock_sync": stored["settings"]["stock_sync"]}
             async with self.engine.begin() as connection:
                 await bind_tenant_schema(connection, self.tenant, self.naming)
                 await connection.execute(
                     update(ConnectionModel)
                     .where(ConnectionModel.channel_id == UUID(created["id"]))
-                    .values(settings={})
+                    .values(settings=stock_settings)
                 )
             detail = await self.detail(created["id"])
             self.assertEqual(detail["config"]["settings"]["currency"], "UAH")
@@ -432,7 +440,7 @@ class ChannelPublicationPostgresTests(support.ChannelsPostgresTests):
                 next(row for row in rows if row["channel_id"] == UUID(created["id"]))[
                     "settings"
                 ],
-                {},
+                stock_settings,
             )
 
     async def test_woo_config_change_fences_page_and_preserves_old_interpretation(

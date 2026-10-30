@@ -2,4 +2,6 @@
 
 from typing import Literal
 
-type Capability = Literal["verify_connection", "publications"]
+type Capability = Literal[
+    "verify_connection", "publications", "read_stock", "write_stock"
+]

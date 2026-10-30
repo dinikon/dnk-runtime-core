@@ -43,3 +43,6 @@ class CatalogItemListRowDTO:
     min_price: Decimal | None = None
     max_price: Decimal | None = None
     mixed_currencies: bool = False
+    manage_stock: bool = False
+    stock_quantity: int | None = None
+    stock_source: str = "own"

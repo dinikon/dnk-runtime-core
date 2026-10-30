@@ -9,7 +9,6 @@ import {
   EmptyDescription,
 } from "@/components/ui/empty";
 import type { PublicationCard } from "../model/publication.types";
-import type { PublicationCreationState } from "../model/catalog-creation.types";
 import PublicationsTable from "./PublicationsTable.vue";
 
 defineProps<{
@@ -17,19 +16,23 @@ defineProps<{
   pending: boolean;
   error: string;
   scrollKey: string;
-  creation?: Record<string, PublicationCreationState>;
+  busy?: boolean;
+  outOfRange?: boolean;
 }>();
 const emit = defineEmits<{
   retry: [];
   open: [id: string];
-  create: [id: string];
+  unlink: [publicationId: string, bindingId: string];
   openCatalog: [id: string];
+  firstPage: [];
+  connect: [id: string];
+  create: [id: string];
 }>();
 </script>
 
 <template>
   <div
-    class="flex min-h-60 min-w-0 flex-1 flex-col gap-3"
+    class="flex min-h-60 min-w-0 flex-1 flex-col gap-3 lg:min-h-0"
     :aria-busy="pending"
     data-slot="publications-body"
   >
@@ -43,13 +46,17 @@ const emit = defineEmits<{
         >
       </AlertDescription>
     </Alert>
-    <div class="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <PublicationsTable
         v-if="items.length"
         :key="scrollKey"
         :items="items"
-        :creation="creation"
+        :busy="busy"
+        @connect="emit('connect', $event)"
         @create="emit('create', $event)"
+        @unlink="
+          (publicationId, bindingId) => emit('unlink', publicationId, bindingId)
+        "
         @open-catalog="emit('openCatalog', $event)"
         @open="emit('open', $event)"
       />
@@ -63,11 +70,18 @@ const emit = defineEmits<{
       </div>
       <Empty v-else-if="!error" class="h-full border-0">
         <EmptyHeader>
-          <EmptyTitle>Публикации не найдены</EmptyTitle>
+          <EmptyTitle>{{
+            outOfRange
+              ? "На этой странице нет публикаций"
+              : "Публикации не найдены"
+          }}</EmptyTitle>
           <EmptyDescription
             >Запустите синхронизацию или измените поиск.</EmptyDescription
           >
         </EmptyHeader>
+        <Button v-if="outOfRange" variant="outline" @click="emit('firstPage')"
+          >На первую страницу</Button
+        >
       </Empty>
     </div>
   </div>

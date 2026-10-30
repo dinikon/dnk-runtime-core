@@ -1,10 +1,13 @@
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
+export interface StockSyncSettings {
+  allow_export: boolean;
+}
 export interface ChannelConfig {
   version: number;
   endpoint: string;
-  settings: JsonObject;
+  settings: JsonObject & { stock_sync: StockSyncSettings };
 }
 export interface Verification {
   jobId: string;
@@ -48,6 +51,7 @@ export interface ChannelDraft {
   settings: JsonObject;
   credentials: Record<string, string>;
   replaceCredentials: boolean;
+  allowStockExport: boolean;
 }
 export interface ChannelSave {
   name: string;

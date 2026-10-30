@@ -5,6 +5,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CatalogListItem } from "../../model/catalog.types";
+import type {
+  CatalogVariantExpansions,
+  CatalogQuickEditSection,
+} from "../../model/catalog-table.types";
 import CatalogItemsTable from "./CatalogItemsTable.vue";
 
 defineProps<{
@@ -16,6 +20,8 @@ defineProps<{
   disabled: boolean;
   canCreate: boolean;
   imageUrl: (item: CatalogListItem) => string | undefined;
+  expanded: CatalogVariantExpansions;
+  canQuickEdit: boolean;
 }>();
 const emit = defineEmits<{
   open: [id: string];
@@ -24,6 +30,11 @@ const emit = defineEmits<{
   reset: [];
   create: [];
   firstPage: [];
+  openVariant: [rootId: string, id: string];
+  toggle: [id: string];
+  variantPage: [id: string, offset: number];
+  variantRetry: [id: string];
+  quickEdit: [item: CatalogListItem, section: CatalogQuickEditSection];
 }>();
 </script>
 
@@ -55,6 +66,13 @@ const emit = defineEmits<{
       :items="items"
       :disabled="disabled"
       :image-url="imageUrl"
+      :expanded="expanded"
+      :can-quick-edit="canQuickEdit"
+      @open-variant="(rootId, id) => emit('openVariant', rootId, id)"
+      @toggle="emit('toggle', $event)"
+      @variant-page="(id, offset) => emit('variantPage', id, offset)"
+      @variant-retry="emit('variantRetry', $event)"
+      @quick-edit="(item, section) => emit('quickEdit', item, section)"
       @open="emit('open', $event)"
       @remove="emit('remove', $event)"
     />

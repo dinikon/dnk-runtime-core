@@ -73,7 +73,7 @@ test("Reading configuration never populates secret fields; interrupted jobs stop
     config: {
       version: 1,
       endpoint: "https://api-seller.rozetka.com.ua",
-      settings: { username: "seller" },
+      settings: { username: "seller", stock_sync: { allow_export: true } },
     },
     config_revision: 2,
     identity: null,
@@ -92,6 +92,12 @@ test("Reading configuration never populates secret fields; interrupted jobs stop
   const draft = draftFor(platform, channel);
   assert.deepEqual(draft.credentials, { password: "" });
   assert.equal(draft.replaceCredentials, false);
+  assert.equal(draft.allowStockExport, true);
+  draft.allowStockExport = false;
+  const saved = updatePayload(saveDraft(draft, platform), channel.revision);
+  assert.deepEqual(saved.config.settings.stock_sync, { allow_export: false });
+  assert.equal("allow_stock_export" in saved, false);
+  assert.equal(channel.config.settings.stock_sync.allow_export, true);
   assert.equal(shouldPoll(channel), true);
   assert.equal(shouldPoll({ ...channel, recoveryRequired: true }), false);
   assert.equal(

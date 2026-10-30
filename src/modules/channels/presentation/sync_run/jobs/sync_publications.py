@@ -150,6 +150,7 @@ class ChannelsSyncPublicationsJobHandler:
                     return
                 platform = self.platforms.get(snapshot.platform_kind)
                 page, error_code = None, None
+                source_started_at = now()
                 try:
                     plaintext = self.cipher.decrypt(snapshot.encrypted_credentials)
                     page = await platform.read_publications(
@@ -208,6 +209,7 @@ class ChannelsSyncPublicationsJobHandler:
                                 page,
                                 platform.manifest.publication_parent_kind,
                                 error_code,
+                                source_started_at,
                             )
                         )
                 except InvalidExternalPublicationError:

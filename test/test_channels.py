@@ -120,7 +120,7 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 platform.manifest.supported_capabilities,
-                ("verify_connection", "publications"),
+                ("verify_connection", "publications", "read_stock", "write_stock"),
             )
             self.assertNotIn("secret-", repr(validated))
             self.assertNotIn("secret-", repr(platform.manifest))
@@ -340,6 +340,7 @@ class ChannelStateTests(unittest.TestCase):
                 config=self.config,
                 encrypted_credentials=b"encrypted",
                 job_id=self.job_id,
+                now=self.now,
             ),
             actor_id=self.actor,
             now=self.now,

@@ -7,6 +7,15 @@ from pathlib import Path
 import signal
 from datetime import UTC, datetime
 
+from src.modules.channels.presentation.stock_sync.jobs import (
+    ChannelsStockJobHandler,
+    ChannelsCatalogStockChangedJobHandler,
+)
+from src.modules.channels.infrastructure.stock_sync.jobs import (
+    JOB_TYPE as CHANNELS_STOCK_JOB_TYPE,
+    CATALOG_EVENT_JOB_TYPE,
+)
+
 from src.modules.channels.presentation.sync_run.jobs.sync_publications import (
     ChannelsSyncPublicationsJobHandler,
 )
@@ -141,6 +150,10 @@ async def handle_worker(_args: argparse.Namespace) -> int:
     catalog_imports = CatalogImportJobHandler(db_helper.session_factory)
     dispatcher = build_scheduled_job_dispatcher(
         {
+            CHANNELS_STOCK_JOB_TYPE: ChannelsStockJobHandler(db_helper.session_factory),
+            CATALOG_EVENT_JOB_TYPE: ChannelsCatalogStockChangedJobHandler(
+                db_helper.session_factory
+            ),
             CHANNELS_SYNC_JOB_TYPE: ChannelsSyncPublicationsJobHandler(
                 db_helper.session_factory
             ),

@@ -1,3 +1,16 @@
+from typing import Annotated
+
+from fastapi import Depends
+
+from src.modules.catalog.infrastructure.catalog_item.stock_events import (
+    CatalogStockEvents,
+)
+from src.modules.shared.infrastructure.events.sqlalchemy_outbox_repository import (
+    SqlAlchemyOutboxRepository,
+)
+from src.modules.shared.presentation.jobs.management import (
+    build_scheduled_job_repository,
+)
 from src.modules.catalog.application.catalog_item.port.publication_usage import (
     CatalogPublicationUsagePort,
 )
@@ -12,8 +25,6 @@ from src.modules.catalog.application.catalog_item.creation_service import (
     CatalogItemCreationService,
 )
 from src.modules.catalog.infrastructure.catalog_item.sku import SqlAlchemyCatalogItemSku
-from typing import Annotated
-from fastapi import Depends
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
@@ -142,10 +153,17 @@ QueriesDep = Annotated[CatalogItemQueryRepositoryProtocol, Depends(get_queries)]
 
 
 def get_mutations(
-    repository: ItemRepositoryDep, lock: MutationLockDep
+    repository: ItemRepositoryDep, lock: MutationLockDep, uow: UoWDep
 ) -> CatalogItemMutationService:
     """Собирает координатор mutations на портах общей session."""
-    return CatalogItemMutationService(repository, lock)
+    return CatalogItemMutationService(
+        repository,
+        lock,
+        CatalogStockEvents(
+            SqlAlchemyOutboxRepository(uow.session),
+            build_scheduled_job_repository(uow.session),
+        ),
+    )
 
 
 MutationsDep = Annotated[CatalogItemMutationService, Depends(get_mutations)]

@@ -142,6 +142,8 @@ class CatalogItemQueryMapper:
             dimensions=item.dimensions,
             kind=item.kind.value,
             parent_id=item.parent_id.uuid if item.parent_id else None,
+            manage_stock=item.stock.manage_stock,
+            stock_quantity=item.stock.stock_quantity,
         )
 
     @staticmethod

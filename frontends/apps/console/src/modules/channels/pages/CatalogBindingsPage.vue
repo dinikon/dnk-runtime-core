@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from "vue";
+import { useQueryClient } from "@tanstack/vue-query";
+import { useBindingStock } from "../model/stock.queries";
+import { useRefreshPublicationStock } from "../model/use-refresh-publication-stock";
+import { useExportCatalogStock } from "../model/use-export-catalog-stock";
+import { stockErrorMessage } from "../model/stock.errors";
+import { bindingKeys } from "../model/bindings/binding.query-keys";
+import { publicationKeys } from "../model/publication.query-keys";
+import BindingStockPanel from "../ui/bindings/BindingStockPanel.vue";
 import { useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -59,10 +67,97 @@ const props = defineProps<{
   initialPublications?: BindingPosition[];
   publicationHasVariants?: boolean;
   locale: string;
+  embedded?: boolean;
+  externalBusy?: boolean;
 }>();
 const router = useRouter(),
   state = useBindingsPageState(),
   scope = useChannelScope();
+const stockGroup = ref<CatalogBinding | null>(null),
+  stockSelected = ref<string[]>([]),
+  stockActionError = ref("");
+const stockChannel = computed(() => stockGroup.value?.channelId ?? ""),
+  stockGroupId = computed(() => stockGroup.value?.id ?? "");
+const stock = useBindingStock(stockChannel, stockGroupId);
+const refreshStock = useRefreshPublicationStock(),
+  exportStock = useExportCatalogStock();
+const stockBusy = computed(
+  () => refreshStock.isPending.value || exportStock.isPending.value,
+);
+const stockCache = useQueryClient();
+watch(
+  [
+    scope,
+    () => props.catalogRootId,
+    () => props.channelId,
+    () => props.publicationId,
+  ],
+  () => {
+    stockGroup.value = null;
+    stockSelected.value = [];
+    stockActionError.value = "";
+  },
+);
+const seenStockResults = new Set<string>();
+watch(
+  () => [scope.value, stockChannel.value, stockGroupId.value],
+  () => seenStockResults.clear(),
+);
+watch(
+  () => stock.data.value,
+  (value) => {
+    const terminal =
+      value?.items.filter(
+        (item) =>
+          item.operation &&
+          !["queued", "running"].includes(item.operation.status),
+      ) ?? [];
+    if (terminal.some((item) => !seenStockResults.has(item.operation!.id))) {
+      terminal.forEach((item) => seenStockResults.add(item.operation!.id));
+      void stockCache.invalidateQueries({
+        queryKey: bindingKeys.root(scope.value),
+      });
+      void stockCache.invalidateQueries({
+        queryKey: publicationKeys.root(scope.value, stockChannel.value),
+      });
+    }
+  },
+);
+function repeatStock(direction: "read" | "write", id: string): void {
+  stockSelected.value = [id];
+  void stockAction(direction);
+}
+function openStock(group: CatalogBinding): void {
+  stockGroup.value = group;
+  stockSelected.value = group.items.map((v) => v.publicationId);
+  stockActionError.value = "";
+}
+async function stockAction(direction: "read" | "write"): Promise<void> {
+  if (!stockGroup.value || stockBusy.value || !stockSelected.value.length)
+    return;
+  const captured = JSON.stringify([
+    scope.value,
+    stockChannel.value,
+    stockGroupId.value,
+  ]);
+  stockActionError.value = "";
+  try {
+    const input = {
+      channelId: stockChannel.value,
+      groupId: stockGroupId.value,
+      publicationIds: [...stockSelected.value],
+    };
+    await (direction === "read"
+      ? refreshStock.mutateAsync(input)
+      : exportStock.mutateAsync(input));
+  } catch (error) {
+    if (
+      captured ===
+      JSON.stringify([scope.value, stockChannel.value, stockGroupId.value])
+    )
+      stockActionError.value = stockErrorMessage(error);
+  }
+}
 const filters = computed(() => ({
   catalogRootId: props.catalogRootId,
   channelId: props.channelId,
@@ -195,7 +290,10 @@ const create = useCreateCatalogBinding(),
   remove = useDeleteCatalogBinding();
 const busy = computed(
   () =>
-    create.isPending.value || update.isPending.value || remove.isPending.value,
+    create.isPending.value ||
+    update.isPending.value ||
+    remove.isPending.value ||
+    !!props.externalBusy,
 );
 const modes = computed<BindingMode[]>(() => {
   if (loadedGroup.value) return [loadedGroup.value.mode];
@@ -253,6 +351,7 @@ watch(
     channelId.value,
     props.catalogRootId,
     props.publicationId,
+    props.locale,
   ],
   initialize,
   { immediate: true },
@@ -314,7 +413,9 @@ onBeforeRouteUpdate((to, from) => {
   const contextChanged =
     to.path !== from.path ||
     to.query.binding !== from.query.binding ||
-    to.query.tab !== from.query.tab;
+    to.query.tab !== from.query.tab ||
+    to.query.publication_tab !== from.query.publication_tab ||
+    to.query.locale !== from.query.locale;
   return !contextChanged || canClose();
 });
 async function open(group?: CatalogBinding): Promise<void> {
@@ -375,7 +476,8 @@ async function save(): Promise<void> {
     preview.isFetching.value ||
     view.issues.length ||
     !items.value.length ||
-    uncertain.value
+    uncertain.value ||
+    (!editId.value && sourceAlreadyBound.value)
   )
     return;
   writeError.value = "";
@@ -476,15 +578,16 @@ function goPublication(group: CatalogBinding): void {
     aria-label="Связи публикаций с Catalog"
   >
     <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
-      <div>
+      <div v-if="!embedded">
         <h2 class="text-xl font-semibold">
           {{ catalogRootId ? "Публикации" : "Связь с Catalog" }}
         </h2>
         <p class="text-muted-foreground text-sm">
-          Связи хранят сопоставления. Данные на площадку пока не отправляются.
+          Связи сопоставляют позиции. Отправка остатков управляется настройкой
+          канала.
         </p>
       </div>
-      <div class="flex gap-2">
+      <div class="ml-auto flex gap-2">
         <Button
           variant="outline"
           :disabled="busy || groups.isFetching.value"
@@ -518,6 +621,7 @@ function goPublication(group: CatalogBinding): void {
       @create="open()"
       @first-page="state.paginate(1, state.limit.value)"
       :busy="busy"
+      @stock="openStock"
       @edit="open"
       @remove="
         deleting = $event;
@@ -536,6 +640,36 @@ function goPublication(group: CatalogBinding): void {
       :disabled="!groups.data.value || groups.isFetching.value"
       @change="state.paginate($event.page, $event.limit)"
     />
+    <Sheet :open="!!stockGroup" @update:open="!$event && (stockGroup = null)">
+      <SheetContent class="w-full sm:max-w-3xl">
+        <SheetHeader
+          ><SheetTitle>Синхронизация остатков</SheetTitle
+          ><SheetDescription
+            >{{ stockGroup?.channelName }} ·
+            {{
+              stockGroup?.preview.catalogRoot?.title ?? "Связанные позиции"
+            }}</SheetDescription
+          ></SheetHeader
+        >
+        <BindingStockPanel
+          v-if="stockGroup"
+          :group="stockGroup"
+          :state="stock.data.value"
+          :loading="stock.isPending.value"
+          :busy="stockBusy"
+          :selected="stockSelected"
+          :error="
+            stockActionError ||
+            (stock.error.value ? stockErrorMessage(stock.error.value) : '')
+          "
+          @select="stockSelected = $event"
+          @refresh="stockAction('read')"
+          @export="stockAction('write')"
+          @repeat="repeatStock"
+          @retry="stock.refetch()"
+        />
+      </SheetContent>
+    </Sheet>
     <Sheet :open="!!state.groupId.value" @update:open="!$event && close()"
       ><SheetContent
         class="w-full gap-0 overflow-hidden sm:max-w-4xl"
@@ -899,6 +1033,7 @@ function goPublication(group: CatalogBinding): void {
               busy ||
               !ready ||
               uncertain ||
+              (!editId && sourceAlreadyBound) ||
               (!!publicationId &&
                 !editId &&
                 mode === 'VARIABLE_TO_SIMPLE' &&

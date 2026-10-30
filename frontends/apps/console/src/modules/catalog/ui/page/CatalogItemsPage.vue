@@ -16,17 +16,38 @@ import CatalogItemsToolbar from "../results/CatalogItemsToolbar.vue";
 import CatalogItemsBody from "../results/CatalogItemsBody.vue";
 import DeleteCatalogItemDialog from "../results/DeleteCatalogItemDialog.vue";
 import ProductCreateDialog from "../product/ProductCreateDialog.vue";
+import CatalogQuickEditDialog from "../product/CatalogQuickEditDialog.vue";
+import { useExpandedCatalogVariants } from "../../model/use-expanded-catalog-variants";
+import { useCatalogQuickEdit } from "../../model/use-catalog-quick-edit";
 
 const busy = ref(false);
 const creation = useCreateCatalogItem(false, () => busy.value);
 const { ctx } = creation;
 const pageState = useCatalogItemsPageState();
 const { params } = pageState;
+const quick = useCatalogQuickEdit(
+  ctx.tenantId,
+  ctx.sessionKey,
+  ctx.locale,
+  ctx.active,
+);
 const items = useCatalogItemsQuery(
   ctx.tenantId,
   ctx.sessionKey,
   ctx.locale,
   params,
+);
+const expandedScope = computed(() =>
+  JSON.stringify([
+    params.value,
+    items.data.value?.items.map((item) => item.id),
+  ]),
+);
+const variants = useExpandedCatalogVariants(
+  ctx.tenantId,
+  ctx.sessionKey,
+  ctx.locale,
+  expandedScope,
 );
 const deletion = useDeleteCatalogItem(ctx.tenantId, ctx.sessionKey);
 const deleteTarget = ref<CatalogListItem | null>(null);
@@ -56,13 +77,24 @@ watch(ctx.sessionKey, () => {
   deleteTarget.value = null;
 });
 
-function open(id: string): void {
+function open(id: string, variantId?: string): void {
   void ctx.router.push({
     path: `/catalog/items/${encodeURIComponent(id)}`,
-    query: { locale: ctx.locale.value },
+    query: {
+      locale: ctx.locale.value,
+      tab: variantId ? "variants" : undefined,
+      variant: variantId,
+    },
   });
 }
 function imageUrl(item: CatalogListItem): string | undefined {
+  if (item.kind === "variant" && item.parent_id && item.primaryImage)
+    return catalogApi.variantImageUrl(
+      item.parent_id,
+      item.id,
+      ctx.locale.value,
+      item.primaryImage.id,
+    );
   return item.primaryImage
     ? catalogApi.imageUrl(item.id, ctx.locale.value, item.primaryImage.id)
     : undefined;
@@ -153,6 +185,13 @@ async function remove(): Promise<void> {
       :disabled="deletion.isPending.value"
       :can-create="canCreate"
       :image-url="imageUrl"
+      :expanded="variants.expanded.value"
+      :can-quick-edit="ctx.active.value"
+      @toggle="variants.toggle"
+      @variant-page="variants.page"
+      @variant-retry="variants.retry"
+      @open-variant="open"
+      @quick-edit="quick.open"
       @open="open($event)"
       @remove="askDelete"
       @retry="items.refetch()"
@@ -175,6 +214,21 @@ async function remove(): Promise<void> {
       @choose="creation.choose"
       @close="creation.close"
       @check="creation.checkCatalog"
+    />
+    <CatalogQuickEditDialog
+      v-if="quick.selection.value"
+      :key="quick.key.value"
+      :section="quick.selection.value.section"
+      :item="quick.draftSource.value?.item ?? null"
+      :shared="quick.draftSource.value?.shared ?? false"
+      :loading="quick.query.isFetching.value"
+      :pending="quick.mutation.isPending.value"
+      :blocked="!ctx.active.value || quick.query.isError.value"
+      :error="quick.error.value"
+      @dirty="quick.dirty.value = $event"
+      @close="quick.close"
+      @save="quick.save"
+      @retry="quick.query.refetch()"
     />
     <DeleteCatalogItemDialog
       v-if="deleteTarget"

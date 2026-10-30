@@ -369,6 +369,53 @@ class PublicationDetailsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(details.products[0].regular_price, Decimal(799))
         self.assertEqual(details.products[0].sale_price, Decimal(599))
 
+    async def test_rozetka_stale_old_and_promo_prices_do_not_raise_the_current_price(
+        self,
+    ):
+        cases = (
+            (369, 350, 369, 369, None, 1),
+            (599, 799, 699, 799, 599, 1),
+            (599, None, 699, 599, None, 1),
+            (599, 599, 599, 599, None, 0),
+            (0, 100, None, 100, 0, 0),
+        )
+        for price, old, promo, regular, sale, warnings in cases:
+            with self.subTest(price=price, old=old, promo=promo):
+                root = lookup(
+                    "3:offer", resource="source_offer", native={"item_id": 42}
+                )
+                http = DetailsHttp(
+                    {
+                        "/goods/details?": {
+                            "success": True,
+                            "content": {
+                                "item": {
+                                    "sync_source_id": 3,
+                                    "price_offer_id": "offer",
+                                    "price": price,
+                                    "price_old": old,
+                                    "price_promo": promo,
+                                }
+                            },
+                        }
+                    }
+                )
+                details = await RozetkaPlatform(http).get_details(
+                    config=ConnectionConfigVO.create(
+                        version=1,
+                        endpoint="https://api-seller.rozetka.com.ua",
+                        settings={},
+                    ),
+                    credentials=b'{"token":"secret"}',
+                    publications=(root,),
+                )
+                self.assertEqual(details.products[0].regular_price, Decimal(regular))
+                self.assertEqual(
+                    details.products[0].sale_price,
+                    Decimal(sale) if sale is not None else None,
+                )
+                self.assertEqual(len(details.warnings), warnings)
+
     async def test_rozetka_without_identifiers_is_explicit_failure(self):
         with self.assertRaises(VerificationFailure):
             await RozetkaPlatform(DetailsHttp({})).get_details(

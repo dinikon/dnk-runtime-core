@@ -1,5 +1,16 @@
 from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.modules.catalog.infrastructure.catalog_item.stock_events import (
+    CatalogStockEvents,
+)
+from src.modules.shared.infrastructure.events.sqlalchemy_outbox_repository import (
+    SqlAlchemyOutboxRepository,
+)
+from src.modules.shared.presentation.jobs.management import (
+    build_scheduled_job_repository,
+)
 from src.modules.catalog.application.catalog_import.command.process_catalog_import_row.handler import (
     ProcessCatalogImportRowHandler,
 )
@@ -47,9 +58,6 @@ from src.modules.files.infrastructure.assembly import (
     build_files_handlers,
     build_artifact_files_facade,
 )
-from src.modules.shared.presentation.jobs.management import (
-    build_scheduled_job_repository,
-)
 from src.modules.shared.application.jobs.schedule_scheduled_job_use_case import (
     ScheduleScheduledJobUseCase,
 )
@@ -79,7 +87,13 @@ def build_process_import_row(
     """Собирает порты и сервисы Catalog/Files на одной tenant-сессии."""
     clock, uuid = UtcClock(), UUID7Generator()
     items = SqlAlchemyCatalogItemRepository(session)
-    mutations = CatalogItemMutationService(items, PostgresCatalogMutationLock(session))
+    mutations = CatalogItemMutationService(
+        items,
+        PostgresCatalogMutationLock(session),
+        CatalogStockEvents(
+            SqlAlchemyOutboxRepository(session), build_scheduled_job_repository(session)
+        ),
+    )
     schemas = SqlAlchemyProductTypeSchemas(session)
     locales = ReferenceDataLocales(SqlAlchemyCatalogRepository(session))
     currencies = ReferenceDataCurrencies(

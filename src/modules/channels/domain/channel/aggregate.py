@@ -52,6 +52,7 @@ class Channel:
         connection.require_consistent_state()
         if (
             connection.config_revision != 1
+            or connection.stock_sync.revision != 1
             or connection.identity is not None
             or connection.verification.status is not VerificationStatus.PENDING
         ):
@@ -98,6 +99,11 @@ class Channel:
             or revision < connection.config_revision
             or not isinstance(created_at, datetime)
             or not isinstance(updated_at, datetime)
+            or created_at.tzinfo is None
+            or updated_at.tzinfo is None
+            or updated_at < created_at
+            or not created_at <= connection.stock_sync.changed_at <= updated_at
+            or revision < connection.stock_sync.revision
         ):
             raise InvalidChannelStateError("Некорректное состояние канала.")
         return cls(
@@ -135,6 +141,7 @@ class Channel:
         job_id: EntityIdVO,
         actor_id: EntityIdVO,
         now: datetime,
+        allow_export: bool | None = None,
     ) -> bool:
         """Атомарно меняет настройки; возвращает необходимость проверки доступа."""
         self.require_revision(expected_revision)
@@ -142,13 +149,21 @@ class Channel:
             (name is not None and not isinstance(name, ChannelNameVO))
             or not isinstance(actor_id, EntityIdVO)
             or not isinstance(now, datetime)
+            or now.tzinfo is None
+            or now < self.updated_at
         ):
             raise InvalidChannelStateError("Некорректное изменение настроек канала.")
         next_name = name if name is not None else self.name
-        connection_changed = self.connection.replace_access(
-            config=config, encrypted_credentials=encrypted_credentials, job_id=job_id
+        previous_stock_sync = self.connection.stock_sync
+        connection_changed = self.connection.change_settings(
+            config=config,
+            encrypted_credentials=encrypted_credentials,
+            job_id=job_id,
+            allow_export=allow_export,
+            now=now,
         )
-        if next_name != self.name or connection_changed:
+        policy_changed = previous_stock_sync != self.connection.stock_sync
+        if next_name != self.name or connection_changed or policy_changed:
             self.name = next_name
             self._touch(actor_id=actor_id, now=now)
         return connection_changed

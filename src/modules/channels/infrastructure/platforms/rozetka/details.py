@@ -108,17 +108,35 @@ class RozetkaDetailsReader:
             "out_of_stock": "out_of_stock",
             "removed": "out_of_stock",
         }.get(data.availability)
-        regular_price = (
-            data.regular_price if data.regular_price is not None else data.price
-        )
-        sale_price = data.sale_price
-        if (
-            sale_price is None
-            and data.regular_price is not None
-            and data.price is not None
-            and data.price < data.regular_price
+        warnings: list[str] = []
+        regular_price = data.price
+        if data.regular_price is not None and (
+            regular_price is None or data.regular_price > regular_price
         ):
-            sale_price = data.price
+            regular_price = data.regular_price
+        elif (
+            data.regular_price is not None
+            and data.price is not None
+            and data.regular_price < data.price
+        ):
+            warnings.append(
+                "Старая цена Rozetka ниже текущей и не использована как обычная цена."
+            )
+        sale_price = (
+            data.price
+            if data.price is not None
+            and regular_price is not None
+            and data.price < regular_price
+            else None
+        )
+        if data.sale_price is not None and regular_price is not None:
+            current_price = sale_price if sale_price is not None else regular_price
+            if data.sale_price < current_price:
+                sale_price = data.sale_price
+            elif data.sale_price > current_price:
+                warnings.append(
+                    "Промо-цена Rozetka выше текущей и не использована как акционная цена."
+                )
         return PublicationDetails(
             (
                 PublicationProductDetails(
@@ -143,5 +161,6 @@ class RozetkaDetailsReader:
                     currency=config.settings.currency,
                     sale_price=sale_price,
                 ),
-            )
+            ),
+            tuple(warnings),
         )

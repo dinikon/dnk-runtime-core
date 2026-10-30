@@ -33,6 +33,9 @@ from src.modules.channels.infrastructure.persistence.models.external_publication
     ExternalPublicationModel,
 )
 from src.modules.channels.infrastructure.persistence.models.sync_run import SyncRunModel
+from src.modules.channels.infrastructure.channel.persistence.settings import (
+    platform_settings,
+)
 
 
 class SqlAlchemyPublicationQueryRepository:
@@ -67,7 +70,7 @@ class SqlAlchemyPublicationQueryRepository:
                 ConnectionConfigVO.create(
                     version=row.config_version,
                     endpoint=row.endpoint,
-                    settings=row.settings,
+                    settings=platform_settings(row.settings),
                 ),
             )
             if row

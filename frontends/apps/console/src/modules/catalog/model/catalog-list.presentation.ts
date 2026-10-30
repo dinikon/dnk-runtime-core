@@ -1,5 +1,12 @@
 import type { CatalogListItem } from "./catalog.types";
 
+/** Не подменяет отсутствие количественного учёта нулём и отмечает общий источник. */
+export function catalogListStock(item: CatalogListItem): string {
+  if (item.manageStock && item.stockQuantity != null)
+    return `${item.stockQuantity}${item.stockSource === "parent" ? " · общий" : ""}`;
+  return item.kind === "variable" ? "В вариантах" : "Без учёта";
+}
+
 function normalizedDecimal(value: string): string {
   return value.includes(".")
     ? value.replace(/0+$/, "").replace(/\.$/, "")

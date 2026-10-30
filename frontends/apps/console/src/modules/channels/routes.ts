@@ -3,7 +3,12 @@ export const channelRoutes: RouteRecordRaw[] = [
   {
     path: "channels/:id/publications",
     name: "channel-publications",
-    component: () => import("./pages/ChannelPublicationsPage.vue"),
+    redirect: (to) => ({
+      name: "channel-detail",
+      params: { id: to.params.id },
+      query: to.query,
+      hash: to.hash,
+    }),
   },
   {
     path: "channels/:id/publications/:publicationId",
@@ -23,6 +28,6 @@ export const channelRoutes: RouteRecordRaw[] = [
   {
     path: "channels/:id",
     name: "channel-detail",
-    component: () => import("./pages/ChannelEditorPage.vue"),
+    component: () => import("./pages/ChannelDetailsPage.vue"),
   },
 ];

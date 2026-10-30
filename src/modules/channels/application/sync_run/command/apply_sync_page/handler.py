@@ -129,7 +129,11 @@ class ApplySyncPageHandler:
                     **values,
                 )
             else:
-                publication.observe(**values)
+                publication.observe(
+                    **values,
+                    source_started_at=command.source_started_at,
+                    config_revision=job.config_revision,
+                )
             changed.append(publication)
         affected = await self.publications.affected_tree(
             EntityIdVO.from_value(job.connection_id), tuple(ids.values())

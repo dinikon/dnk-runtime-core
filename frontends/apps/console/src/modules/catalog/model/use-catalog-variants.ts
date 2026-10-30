@@ -9,6 +9,7 @@ import axios from "axios";
 import { catalogApi } from "../api/catalog.api";
 import type { CatalogItemsPage } from "./catalog.types";
 import { getApiErrorMessage } from "@/app/providers/http";
+import { catalogListKeys } from "./catalog-list.query-keys";
 
 export interface VariantPagination {
   offset: number;
@@ -22,15 +23,15 @@ export function useCatalogVariants(
   pagination: Ref<VariantPagination>,
 ): UseQueryReturnType<CatalogItemsPage, Error> {
   return useQuery({
-    queryKey: computed(() => [
-      "catalog",
-      tenantId.value,
-      sessionKey.value,
-      "variants",
-      rootId.value,
-      locale.value,
-      pagination.value,
-    ]),
+    queryKey: computed(() =>
+      catalogListKeys.variants(
+        tenantId.value,
+        sessionKey.value,
+        rootId.value,
+        locale.value,
+        pagination.value,
+      ),
+    ),
     enabled: computed(
       () => !!rootId.value && !!tenantId.value && !!locale.value,
     ),

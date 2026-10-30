@@ -2,11 +2,16 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
-from src.modules.channels.infrastructure.platforms.base import StrictModel
+from src.modules.channels.infrastructure.platforms.base import (
+    StrictModel,
+    StockSyncSettings,
+)
 
 
 class RozetkaSettings(StrictModel):
     """Фиксированные валюта и языки площадки."""
+
+    stock_sync: StockSyncSettings = Field(default_factory=StockSyncSettings)
 
     currency: Literal["UAH"] = Field(
         default="UAH", title="Валюта", json_schema_extra={"readOnly": True}

@@ -20,6 +20,9 @@ from src.modules.channels.application.external_publication.catalog_creation_erro
 from src.modules.channels.domain.channel.value_object.connection_config import (
     ConnectionConfigVO,
 )
+from src.modules.channels.infrastructure.channel.persistence.settings import (
+    platform_settings,
+)
 
 
 class SqlAlchemyPublicationCreationRead:
@@ -80,7 +83,7 @@ class SqlAlchemyPublicationCreationRead:
             ConnectionConfigVO.create(
                 version=connection["config_version"],
                 endpoint=connection["endpoint"],
-                settings=connection["settings"],
+                settings=platform_settings(connection["settings"]),
             ),
             connection["config_revision"],
             connection["encrypted_credentials"],

@@ -11,6 +11,70 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 class CatalogVariantsPostgresTests(CatalogPostgresTests):
+    async def test_list_stock_projection(self) -> None:
+        """Списки передают количество и источник без копирования общего запаса детям."""
+        root = (
+            await self.request(
+                "POST",
+                "/items",
+                {
+                    "kind": "variable",
+                    "stock": {
+                        "manage_stock": True,
+                        "stock_quantity": 7,
+                        "stock_status": None,
+                        "backorders": "notify",
+                    },
+                },
+                201,
+            )
+        )["id"]
+        inherited = (await self.request("POST", f"/items/{root}/variants", {}, 201))[
+            "id"
+        ]
+        own = (
+            await self.request(
+                "POST",
+                f"/items/{root}/variants",
+                {
+                    "stock": {
+                        "manage_stock": True,
+                        "stock_quantity": 0,
+                        "stock_status": None,
+                        "backorders": "no",
+                    },
+                },
+                201,
+            )
+        )["id"]
+        rows = (await self.request("GET", f"/items/{root}/variants?locale=en"))["items"]
+        by_id = {row["id"]: row for row in rows}
+        self.assertTrue(by_id[inherited]["manage_stock"])
+        self.assertEqual(by_id[inherited]["stock_quantity"], 7)
+        self.assertEqual(by_id[inherited]["stock_source"], "parent")
+        self.assertEqual(by_id[own]["stock_quantity"], 0)
+        self.assertEqual(by_id[own]["stock_source"], "own")
+        roots = (await self.request("GET", "/items?locale=en"))["items"]
+        self.assertEqual(roots[0]["stock_quantity"], 7)
+        self.assertEqual(roots[0]["stock_source"], "own")
+        await self.request(
+            "PATCH",
+            f"/items/{root}",
+            {
+                "stock": {
+                    "manage_stock": False,
+                    "stock_quantity": None,
+                    "stock_status": "in_stock",
+                    "backorders": "no",
+                },
+            },
+        )
+        rows = (await self.request("GET", f"/items/{root}/variants?locale=en"))["items"]
+        manual = next(row for row in rows if row["id"] == inherited)
+        self.assertFalse(manual["manage_stock"])
+        self.assertIsNone(manual["stock_quantity"])
+        self.assertEqual(manual["stock_source"], "own")
+
     async def test_variant_flow_and_atomic_failures(self) -> None:
         root = (
             await self.request(

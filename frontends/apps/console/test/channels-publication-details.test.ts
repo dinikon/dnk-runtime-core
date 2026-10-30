@@ -96,10 +96,8 @@ async function render(
 }
 test("Prom renders all sellable positions, primary marker and direct-link highlight without Select", async () => {
   const html = await render(card, "child");
-  assert.equal(
-    (html.match(/data-slot="publication-item-details"/g) ?? []).length,
-    2,
-  );
+  assert.equal((html.match(/data-row-key=/g) ?? []).length, 2);
+  assert.match(html, /Позиции публикации/);
   assert.match(html, /Основная позиция/);
   assert.match(html, /SKU-BASE/);
   assert.match(html, /SKU-CHILD/);
@@ -109,6 +107,8 @@ test("Prom renders all sellable positions, primary marker and direct-link highli
   assert.match(html, /999999\.000000001 UAH/);
   assert.match(html, /Перевод не получен/);
   assert.match(html, /Общий остаток карточки/);
+  assert.match(html, /Обычная цена/);
+  assert.match(html, /Акционная цена/);
   assert.match(html, /предыдущими настройками/);
 });
 test("WooCommerce renders a single variation under Variants and never injects the parent", async () => {
@@ -119,10 +119,7 @@ test("WooCommerce renders a single variation under Variants and never injects th
     items: [variant],
   });
   assert.match(html, /aria-label="Варианты"/);
-  assert.equal(
-    (html.match(/data-slot="publication-item-details"/g) ?? []).length,
-    1,
-  );
+  assert.equal((html.match(/data-row-key=/g) ?? []).length, 1);
   assert.doesNotMatch(html, /SKU-BASE|Основная позиция/);
   const empty = await render({
     ...card,
@@ -132,7 +129,7 @@ test("WooCommerce renders a single variation under Variants and never injects th
   });
   assert.match(empty, /Разновидности этой карточки ещё не получены/);
 });
-test("Simple publication keeps one details card, unknown values and safe links", async () => {
+test("Simple publication renders one table row, unknown values and safe links", async () => {
   const html = await render({
     ...card,
     items: [
@@ -145,10 +142,7 @@ test("Simple publication keeps one details card, unknown values and safe links",
       },
     ],
   });
-  assert.equal(
-    (html.match(/data-slot="publication-item-details"/g) ?? []).length,
-    1,
-  );
+  assert.equal((html.match(/data-row-key=/g) ?? []).length, 1);
   assert.doesNotMatch(html, /aria-label="Варианты"|javascript:|src="invalid"/);
   assert.match(html, /Не получена/);
   assert.match(html, /Не получен/);

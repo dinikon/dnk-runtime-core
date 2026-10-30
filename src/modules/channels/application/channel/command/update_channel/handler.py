@@ -83,6 +83,9 @@ class UpdateChannelHandler:
             job_id=EntityIdVO.from_value(job_id),
             actor_id=EntityIdVO.from_value(command.actor_id),
             now=now,
+            allow_export=(
+                validated.allow_stock_export if command.config is not None else None
+            ),
         )
         if connection_changed:
             if self.sync_runs is not None:

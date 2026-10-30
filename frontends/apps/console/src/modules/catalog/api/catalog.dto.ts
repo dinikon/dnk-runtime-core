@@ -127,6 +127,9 @@ export interface DefaultSchemaResponse {
 }
 
 export interface ListItemDTO {
+  manage_stock: boolean;
+  stock_quantity: number | null;
+  stock_source: "own" | "parent";
   kind: "simple" | "variable" | "variant";
   parent_id: string | null;
   variant_count: number;

@@ -8,7 +8,6 @@ import httpx
 from pydantic import TypeAdapter
 
 from src.modules.channels.application.error import VerificationFailure
-from src.modules.channels.domain.types import JsonObject
 from src.modules.channels.domain.types import JsonValue
 
 
@@ -29,7 +28,7 @@ class JsonHttp(Protocol):
         url: str,
         *,
         headers: dict[str, str] | None = None,
-        body: JsonObject | None = None,
+        body: JsonValue = None,
     ) -> JsonValue:
         """Возвращает ограниченный JSON либо безопасную ошибку."""
         ...
@@ -40,7 +39,7 @@ class JsonHttp(Protocol):
         url: str,
         *,
         headers: dict[str, str] | None = None,
-        body: JsonObject | None = None,
+        body: JsonValue = None,
     ) -> JsonHttpResponse:
         """Возвращает JSON вместе с заголовками для страничных API."""
         ...
@@ -103,7 +102,7 @@ class SafeJsonHttp:
         url: str,
         *,
         headers: dict[str, str] | None = None,
-        body: JsonObject | None = None,
+        body: JsonValue = None,
     ) -> JsonValue:
         """Сохраняет существующий контракт verifier без HTTP-метаданных."""
         return (
@@ -116,7 +115,7 @@ class SafeJsonHttp:
         url: str,
         *,
         headers: dict[str, str] | None = None,
-        body: JsonObject | None = None,
+        body: JsonValue = None,
     ) -> JsonHttpResponse:
         """Выполняет запрос без redirect, proxy из окружения и логирования payload."""
         try:

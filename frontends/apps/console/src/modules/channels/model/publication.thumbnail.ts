@@ -1,6 +1,8 @@
 import type { PublicationCard } from "./publication.types";
 
-function imageUrl(value: string | null | undefined): string | null {
+export function publicationExternalUrl(
+  value: string | null | undefined,
+): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -15,14 +17,15 @@ function imageUrl(value: string | null | undefined): string | null {
 }
 
 export function publicationThumbnail(card: PublicationCard): string | null {
-  if (card.rootKind === "variable") return imageUrl(card.rootMainImageUrl);
+  if (card.rootKind === "variable")
+    return publicationExternalUrl(card.rootMainImageUrl);
   const selected = card.items.find(
     (item) => item.id === card.selectedPublicationId,
   );
-  const selectedUrl = imageUrl(selected?.mainImageUrl);
+  const selectedUrl = publicationExternalUrl(selected?.mainImageUrl);
   if (selectedUrl) return selectedUrl;
   for (const item of card.items) {
-    const url = imageUrl(item.mainImageUrl);
+    const url = publicationExternalUrl(item.mainImageUrl);
     if (url) return url;
   }
   return null;

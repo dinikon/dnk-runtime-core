@@ -7,7 +7,10 @@ import {
   parseCatalogItemsParams,
 } from "../src/modules/catalog/model/catalog-list-state.ts";
 import { useCatalogItemsPageState } from "../src/modules/catalog/model/use-catalog-items-page-state.ts";
-import { catalogListPrice } from "../src/modules/catalog/model/catalog-list.presentation.ts";
+import {
+  catalogListPrice,
+  catalogListStock,
+} from "../src/modules/catalog/model/catalog-list.presentation.ts";
 import { listItemFromDto } from "../src/modules/catalog/api/catalog.mapper.ts";
 import type { CatalogListItem } from "../src/modules/catalog/model/catalog.types.ts";
 import type { ListItemDTO } from "../src/modules/catalog/api/catalog.dto.ts";
@@ -86,6 +89,9 @@ test("list mapper keeps the image, stock status and exact price from the existin
     price: "0.123456",
     currency: "USD",
     stock_status: "in_stock",
+    manage_stock: true,
+    stock_quantity: 0,
+    stock_source: "own",
     primary_image: image,
     available_for_sale: false,
     weight: null,
@@ -93,6 +99,9 @@ test("list mapper keeps the image, stock status and exact price from the existin
   } satisfies ListItemDTO;
   const item = listItemFromDto(dto);
   assert.equal(item.stockStatus, "in_stock");
+  assert.equal(item.manageStock, true);
+  assert.equal(item.stockQuantity, 0);
+  assert.equal(item.stockSource, "own");
   assert.equal(item.availableForSale, false);
   assert.equal(item.price, "0.123456");
   assert.deepEqual(item.primaryImage, image);
@@ -100,6 +109,34 @@ test("list mapper keeps the image, stock status and exact price from the existin
     listItemFromDto({ ...dto, stock_status: null, primary_image: null })
       .stockStatus,
     null,
+  );
+});
+
+test("table stock distinguishes zero, manual availability, variants and a shared source", () => {
+  const item: CatalogListItem = {
+    id: "root",
+    title: "Stock",
+    sku: null,
+    status: "active",
+    price: null,
+    currency: null,
+    availableForSale: false,
+    manageStock: true,
+    stockQuantity: 0,
+  };
+  assert.equal(catalogListStock(item), "0");
+  assert.equal(catalogListStock({ ...item, stockQuantity: -2 }), "-2");
+  assert.equal(
+    catalogListStock({ ...item, kind: "variant", stockSource: "parent" }),
+    "0 · общий",
+  );
+  assert.equal(
+    catalogListStock({ ...item, manageStock: false, stockQuantity: null }),
+    "Без учёта",
+  );
+  assert.equal(
+    catalogListStock({ ...item, kind: "variable", manageStock: false }),
+    "В вариантах",
   );
 });
 

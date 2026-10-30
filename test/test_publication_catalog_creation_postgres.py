@@ -208,6 +208,74 @@ class PublicationCatalogPostgresTests(binding_support.CatalogBindingsPostgresTes
             "TAKEN",
         )
 
+    async def test_rozetka_stale_old_price_creates_catalog_at_the_current_price(self):
+        from test.test_publication_catalog_creation import DetailsHttp
+        from src.modules.channels.infrastructure.registry import InstalledPlatforms
+
+        channel, pubs = await self.source("rozetka")
+        async with self.sessions() as session:
+            await bind_tenant_schema(
+                await session.connection(), self.tenant, self.naming
+            )
+            await session.execute(
+                update(P)
+                .where(P.id == UUID(pubs[0]))
+                .values(
+                    external_id="3:offer",
+                    resource_type="source_offer",
+                    platform_data={"item_id": 42, "sync_source_id": 3},
+                )
+            )
+            await session.commit()
+        http = DetailsHttp(
+            {
+                "/goods/details?": {
+                    "success": True,
+                    "content": {
+                        "item": [
+                            {
+                                "sync_source_id": 3,
+                                "price_offer_id": "offer",
+                                "item_id": 42,
+                                "name_ua": "Назва",
+                                "name_ru": "Название",
+                                "description_ua": "Опис",
+                                "description": "Описание",
+                                "price": 369,
+                                "price_old": 350,
+                                "price_promo": 369,
+                                "stock_quantity": 14,
+                                "photo_preview": "https://img.example/thumb.png",
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+        with patch(
+            "src.modules.channels.presentation.external_publication.catalog_creation_depends.get_platforms",
+            return_value=InstalledPlatforms(http),
+        ):
+            result = await self.create_from(channel, pubs[0])
+        details = (
+            await self.call(
+                "GET", f"/catalog/items/{result['catalog_item_id']}?locale=uk"
+            )
+        )["item"]
+        self.assertEqual(
+            Decimal(details["price_specification"]["regular_price"]), Decimal(369)
+        )
+        self.assertIsNone(details["price_specification"]["sale_price"])
+        self.assertEqual(details["stock"]["stock_quantity"], 14)
+        self.assertTrue(any("Старая цена" in warning for warning in result["warnings"]))
+        group = (
+            await self.call(
+                "GET",
+                f"/channels/{channel}/catalog-bindings/{result['binding_group_id']}?locale=uk",
+            )
+        )["binding"]
+        self.assertEqual(group["preview"]["assessment"]["state"], "linked")
+
     async def test_prices_are_saved_for_simple_and_each_sellable_variant(self):
         self.platform.regular_price = Decimal("100.123456")
         self.platform.sale_price = Decimal("90.123456")

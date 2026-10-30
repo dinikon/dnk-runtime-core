@@ -1,3 +1,5 @@
+from src.modules.channels.infrastructure.platforms.woocommerce.stock import WooStock
+from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
 from src.modules.channels.infrastructure.platforms.woocommerce.details import (
     WooDetailsReader,
 )
@@ -55,7 +57,12 @@ class WooCommercePlatform:
             config_version=1,
             config_schema=WooCommerceConfig.model_json_schema(),
             credentials_schema=WooCommerceCredentials.model_json_schema(),
-            supported_capabilities=("verify_connection", "publications"),
+            supported_capabilities=(
+                "verify_connection",
+                "publications",
+                "read_stock",
+                "write_stock",
+            ),
             publication_parent_kind=PublicationKind.VARIABLE,
         )
 
@@ -113,9 +120,10 @@ class WooCommercePlatform:
             config=ConnectionConfigVO.create(
                 version=typed.version,
                 endpoint=typed.endpoint,
-                settings=typed.settings.model_dump(mode="json"),
+                settings=typed.settings.model_dump(mode="json", exclude={"stock_sync"}),
             ),
             credentials=encoded,
+            allow_stock_export=typed.settings.stock_sync.allow_export,
             currency=typed.settings.currency,
             locales=(typed.settings.locale,),
         )
@@ -184,4 +192,38 @@ class WooCommercePlatform:
             config=self.decode_config(config),
             credentials=WooCommerceCredentials.model_validate_json(credentials),
             publications=publications,
+        )
+
+    async def get_stock(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publication: PublicationLookup,
+        parent: PublicationLookup | None = None,
+    ) -> PlatformStockSnapshot:
+        """Читает только остаток через конкретные типы пакета."""
+        return await WooStock(self.http).get(
+            config=self.decode_config(config),
+            credentials=WooCommerceCredentials.model_validate_json(credentials),
+            publication=publication,
+            parent=parent,
+        )
+
+    async def set_stock(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publication: PublicationLookup,
+        quantity: int,
+        backorders: str,
+    ) -> PlatformStockSnapshot:
+        """Устанавливает абсолютное количество и проверяет результат чтением."""
+        return await WooStock(self.http).set(
+            config=self.decode_config(config),
+            credentials=WooCommerceCredentials.model_validate_json(credentials),
+            publication=publication,
+            quantity=quantity,
+            backorders=backorders,
         )

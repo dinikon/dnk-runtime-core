@@ -34,6 +34,7 @@ class BindingPositionDTO:
     stock_source_id: UUID
     external_id: str | None = None
     stale: bool = False
+    backorders: str = "no"
 
 
 @dataclass(frozen=True, slots=True)

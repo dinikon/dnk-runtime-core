@@ -12,6 +12,7 @@ export interface ChannelAction<I, O> {
 }
 export function useChannelAction<I, O>(
   action: (input: I, signal: AbortSignal) => Promise<O>,
+  refetchType: "active" | "none" = "active",
 ): ChannelAction<I, O> {
   const scope = useChannelScope(),
     client = useQueryClient(),
@@ -44,6 +45,7 @@ export function useChannelAction<I, O>(
       if (!alive || stamp() !== captured) return;
       await client.invalidateQueries({
         queryKey: channelKeys.root(scope.value),
+        refetchType,
       });
       if (!alive || stamp() !== captured) return;
       return { value };

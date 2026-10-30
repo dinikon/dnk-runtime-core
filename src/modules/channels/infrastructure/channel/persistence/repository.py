@@ -4,6 +4,10 @@ from uuid import UUID
 from sqlalchemy import select, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.channels.infrastructure.stock_sync.gate import channel_stock_lock_key
+from src.modules.channels.infrastructure.channel.persistence.settings import (
+    write_settings,
+)
 from src.modules.channels.domain.channel.aggregate import Channel
 from src.modules.channels.domain.channel.value_object.resource_identity import (
     ResourceIdentityVO,
@@ -30,6 +34,11 @@ class SqlAlchemyChannelRepository:
         self, channel_id: EntityIdVO, *, for_update: bool = False
     ) -> Channel | None:
         """Блокирует сначала корень, затем читает принадлежащую ему Entity."""
+        if for_update and self.session.get_bind().dialect.name == "postgresql":
+            await self.session.execute(
+                text("SELECT pg_advisory_xact_lock(:key)"),
+                {"key": channel_stock_lock_key(self.tenant_id, channel_id.uuid)},
+            )
         statement = select(ChannelModel).where(ChannelModel.id == channel_id.uuid)
         if for_update:
             statement = statement.with_for_update()
@@ -68,7 +77,7 @@ class SqlAlchemyChannelRepository:
         stored.config_version, stored.endpoint, stored.settings = (
             c.config.version,
             c.config.endpoint,
-            c.config.settings,
+            write_settings(c.config.settings, c.stock_sync),
         )
         stored.encrypted_credentials, stored.config_revision = (
             c.encrypted_credentials,

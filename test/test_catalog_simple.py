@@ -72,11 +72,13 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         self.assertEqual(self.item.stock.effective_status(), StockStatus.IN_STOCK)
         self.assertFalse(
             {"parent_id", "children", "axes", "selection"}
-            & {f.name for f in fields(self.item)}
+            & {f.name for f in fields(self.item) if f.init}
         )
         self.assertEqual(self.item.kind.value, "simple")
         self.assertEqual(self.item.variants, ())
-        values = {f.name: getattr(self.item, f.name) for f in fields(self.item)}
+        values = {
+            f.name: getattr(self.item, f.name) for f in fields(self.item) if f.init
+        }
         values["identifier"] = values.pop("id")
         restored = CatalogItem.restore(**values)
         self.assertEqual(restored.snapshot(), self.item.snapshot())

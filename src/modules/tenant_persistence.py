@@ -111,3 +111,5 @@ import src.modules.crm.infrastructure.persistence.models.position_history  # noq
 
 import src.modules.channels.infrastructure.persistence.models.catalog_binding_group  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.catalog_binding_item  # noqa: F401
+
+import src.modules.channels.infrastructure.persistence.models.stock_sync  # noqa: F401

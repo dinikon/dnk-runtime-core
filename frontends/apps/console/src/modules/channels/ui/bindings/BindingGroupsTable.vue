@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Ellipsis, ExternalLink, Link2, Package, Unlink } from "@lucide/vue";
+import { useMediaQuery } from "@vueuse/core";
+import { Package } from "@lucide/vue";
 import { DataTable } from "@/components/custom-ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import PublicationActions from "../PublicationActions.vue";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  bindingPublicationPrice,
+  bindingPublicationStock,
+} from "../../model/publication-summary";
 import {
   bindingModes,
   bindingStates,
@@ -26,15 +24,23 @@ const props = defineProps<{
   showCatalog: boolean;
 }>();
 const emit = defineEmits<{
+  stock: [group: CatalogBinding];
   edit: [group: CatalogBinding];
   remove: [group: CatalogBinding];
   catalog: [id: string];
   publication: [group: CatalogBinding];
 }>();
+const mobile = useMediaQuery("(max-width: 639px)");
 const columns = computed(() =>
-  bindingGroupsColumns.filter(
-    (column) => props.showCatalog || column.key !== "catalog",
-  ),
+  bindingGroupsColumns
+    .filter((column) => props.showCatalog || column.key !== "catalog")
+    .map((column) =>
+      mobile.value && column.key === "publication"
+        ? { ...column, width: 180 }
+        : mobile.value && column.key === "actions"
+          ? { ...column, pinned: undefined }
+          : column,
+    ),
 );
 function publication(group: CatalogBinding): BindingPosition | undefined {
   const id = group.publicationRootId ?? group.items[0]?.publicationId;
@@ -122,6 +128,18 @@ function title(group: CatalogBinding): string {
         :title="bindingModes[group.mode]"
         >{{ bindingModes[group.mode] }}</span
       >
+      <span
+        v-else-if="column.key === 'price'"
+        class="block truncate tabular-nums"
+        :title="bindingPublicationPrice(group.preview.publications)"
+        >{{ bindingPublicationPrice(group.preview.publications) }}</span
+      >
+      <span
+        v-else-if="column.key === 'stock'"
+        class="block truncate tabular-nums"
+        :title="bindingPublicationStock(group.preview.publications)"
+        >{{ bindingPublicationStock(group.preview.publications) }}</span
+      >
       <Badge
         v-else-if="column.key === 'state'"
         :variant="
@@ -133,47 +151,36 @@ function title(group: CatalogBinding): string {
         "
         >{{ bindingStates[group.preview.state] }}</Badge
       >
-      <span
+      <Button
         v-else-if="column.key === 'matched'"
-        class="tabular-nums"
+        type="button"
+        variant="ghost"
+        size="sm"
+        :disabled="busy"
+        aria-label="Открыть сопоставления"
+        class="h-auto px-0 tabular-nums"
         :title="`Пар: ${group.preview.matchedCount} · Позиций товара: ${group.preview.catalogCount} · Публикаций: ${group.preview.publicationCount}`"
+        @click="emit('edit', group)"
         >{{ group.preview.matchedCount }} /
-        {{ group.preview.catalogCount }}</span
+        {{ group.preview.catalogCount }}</Button
       >
-      <DropdownMenu v-else-if="column.key === 'actions'">
-        <DropdownMenuTrigger as-child
-          ><Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            :disabled="busy"
-            :aria-label="`Действия: ${group.channelName} · ${title(group)}`"
-            ><Ellipsis /></Button
-        ></DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-56"
-          ><DropdownMenuGroup>
-            <DropdownMenuItem
-              :disabled="!canOpen(group)"
-              @select="emit('publication', group)"
-              ><ExternalLink />Открыть публикацию</DropdownMenuItem
-            >
-            <DropdownMenuItem
-              v-if="showCatalog"
-              @select="emit('catalog', group.catalogRootId)"
-              ><Package />Открыть товар</DropdownMenuItem
-            >
-            <DropdownMenuItem @select="emit('edit', group)"
-              ><Link2 />Сопоставления</DropdownMenuItem
-            > </DropdownMenuGroup
-          ><DropdownMenuSeparator /><DropdownMenuGroup
-            ><DropdownMenuItem
-              variant="destructive"
-              @select="emit('remove', group)"
-              ><Unlink />Снять связь</DropdownMenuItem
-            ></DropdownMenuGroup
-          ></DropdownMenuContent
-        >
-      </DropdownMenu>
+      <PublicationActions
+        v-else-if="column.key === 'actions'"
+        :busy="busy"
+        :publication-disabled="!canOpen(group)"
+        can-sync-stock
+        @stock="emit('stock', group)"
+        :catalog-targets="[
+          {
+            id: group.catalogRootId,
+            label: group.preview.catalogRoot?.title ?? 'Товар без названия',
+          },
+        ]"
+        :unlink-targets="[{ id: group.id, label: title(group) }]"
+        @publication="emit('publication', group)"
+        @catalog="emit('catalog', $event)"
+        @unlink="emit('remove', group)"
+      />
     </template>
   </DataTable>
 </template>

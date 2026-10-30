@@ -312,19 +312,24 @@ class SqlAlchemyCatalogItemQueryRepository:
             CatalogItemMapper.to_values(row, parts, parent.product_type_id)
             for row in rows
         )
-        items = tuple(
-            replace(
-                CatalogItemQueryMapper.list_row(
-                    effective_variant(parent, own, query.locale).values,
-                    query.locale,
-                    as_of,
-                ),
-                status=own.status,
+        items = []
+        for own in values:
+            resolved = effective_variant(parent, own, query.locale)
+            items.append(
+                replace(
+                    CatalogItemQueryMapper.list_row(
+                        resolved.values,
+                        query.locale,
+                        as_of,
+                    ),
+                    status=own.status,
+                    stock_source=(
+                        "parent" if resolved.stock_source_id != own.id else "own"
+                    ),
+                )
             )
-            for own in values
-        )
         return ListCatalogVariantsResultDTO(
-            items, total or 0, query.offset, query.limit, as_of
+            tuple(items), total or 0, query.offset, query.limit, as_of
         )
 
     async def get_snapshot(

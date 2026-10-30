@@ -32,6 +32,7 @@ const {
   resets,
   contentValues,
   changeContent,
+  flush,
 } = useProductPage();
 const pageState = useProductEditorPageState(
   () => item.data.value?.kind === "variable",
@@ -154,6 +155,7 @@ function focused(): void {
         ><CatalogVariantsPage
           :root-id="id"
           :parent-stock="item.data.value.stock"
+          :prepare-edit="flush"
       /></template>
       <template #publications
         ><CatalogBindingsPage

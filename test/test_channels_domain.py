@@ -43,6 +43,7 @@ class ChannelsDomainTests(unittest.TestCase):
             config=self.config,
             encrypted_credentials=b"encrypted",
             job_id=self.job,
+            now=self.now,
         )
         self.channel = Channel.create(
             channel_id=EntityIdVO(uuid4()),
@@ -254,6 +255,7 @@ class ChannelsDomainTests(unittest.TestCase):
             config_revision=1,
             identity=None,
             verification=self.connection.verification,
+            stock_sync=self.connection.stock_sync,
         )
         for invalid in (
             {"config_revision": 0},

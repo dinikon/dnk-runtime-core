@@ -3,9 +3,14 @@ import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  EmptyDescription,
+} from "@/components/ui/empty";
 import type { PublicationCard } from "../model/publication.types";
-import PublicationItemDetails from "./PublicationItemDetails.vue";
+import PublicationPositionsTable from "./PublicationPositionsTable.vue";
 const props = defineProps<{
   card: PublicationCard | undefined;
   pending: boolean;
@@ -22,62 +27,43 @@ const hasVariants = computed(
 );
 </script>
 <template>
-  <Alert v-if="error" variant="destructive">
-    <AlertDescription class="flex flex-wrap items-center gap-3">
-      {{ error }}
-      <Button variant="outline" @click="emit('retry')">Повторить</Button>
-    </AlertDescription>
-  </Alert>
-  <Skeleton v-if="pending" class="h-80 w-full shrink-0" />
-  <div v-else-if="card" class="flex min-w-0 flex-col gap-6">
-    <template v-if="hasVariants || !card.items.length">
-      <Card>
-        <CardHeader
-          ><CardTitle class="break-words">{{
-            card.title ?? "Перевод не получен"
-          }}</CardTitle></CardHeader
-        >
-        <CardContent>
-          <p class="text-sm">
-            <span class="text-muted-foreground">Цена: </span
-            >{{
-              card.minPrice === null
-                ? "Не получена"
-                : card.minPrice +
-                  (card.maxPrice !== null && card.maxPrice !== card.minPrice
-                    ? "–" + card.maxPrice
-                    : "") +
-                  " " +
-                  (card.currency ?? "")
-            }}
-          </p>
-        </CardContent>
-      </Card>
-      <section aria-label="Варианты" class="flex min-w-0 flex-col gap-3">
-        <h2 class="text-lg font-semibold">Варианты</h2>
-        <p v-if="!card.items.length" class="text-sm text-muted-foreground">
-          Разновидности этой карточки ещё не получены.
-        </p>
-        <ul v-else class="flex min-w-0 flex-col gap-3">
-          <li v-for="item in card.items" :key="item.id" class="min-w-0">
-            <PublicationItemDetails
-              compact
-              :item="item"
-              :primary="card.rootKind === 'simple' && item.id === card.id"
-              :highlighted="
-                requestedPublicationId !== card.id &&
-                item.id === requestedPublicationId
-              "
-            />
-          </li>
-        </ul>
-      </section>
-    </template>
-    <PublicationItemDetails
-      v-else
-      v-for="item in card.items"
-      :key="item.id"
-      :item="item"
-    />
+  <div class="flex min-h-60 min-w-0 flex-1 flex-col gap-3 lg:min-h-0">
+    <Alert v-if="error" variant="destructive" class="shrink-0"
+      ><AlertDescription class="flex flex-wrap items-center gap-3"
+        >{{ error
+        }}<Button type="button" variant="outline" @click="emit('retry')"
+          >Повторить</Button
+        ></AlertDescription
+      ></Alert
+    >
+    <div
+      v-if="pending && !card"
+      role="status"
+      aria-label="Загрузка публикации"
+      class="flex flex-col gap-2"
+    >
+      <Skeleton v-for="index in 4" :key="index" class="h-10 w-full" />
+    </div>
+    <section
+      v-else-if="card"
+      :aria-label="hasVariants ? 'Варианты' : 'Позиция публикации'"
+      class="flex min-h-0 min-w-0 flex-1 flex-col"
+    >
+      <PublicationPositionsTable
+        v-if="card.items.length"
+        :card="card"
+        :requested-publication-id="requestedPublicationId"
+        class="max-h-[65dvh] lg:max-h-none"
+      />
+      <Empty v-else class="flex-1"
+        ><EmptyHeader
+          ><EmptyTitle>Позиции ещё не получены</EmptyTitle
+          ><EmptyDescription
+            >Разновидности этой карточки ещё не получены. Обновите публикации в
+            подключении.</EmptyDescription
+          ></EmptyHeader
+        ></Empty
+      >
+    </section>
   </div>
 </template>

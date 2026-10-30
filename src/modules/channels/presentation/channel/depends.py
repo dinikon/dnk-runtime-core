@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi import Depends
 
+from src.modules.channels.infrastructure.stock_sync.jobs import SharedStockJobs
 from src.modules.channels.presentation.sync_run.depends import SyncRunsDep
 from src.modules.channels.infrastructure.settings_catalog import (
     ReferenceChannelSettingsCatalog,
@@ -131,6 +132,7 @@ def get_delete_channel_handler(
         SharedVerificationJobs(build_scheduled_job_repository(uow.session)),
         utc_now,
         sync_runs=sync_runs,
+        stock_jobs=SharedStockJobs(build_scheduled_job_repository(uow.session)),
     )
 
 

@@ -1,3 +1,4 @@
+from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
 from src.modules.channels.application.external_publication.catalog_details import (
     PublicationLookup,
     PublicationDetails,
@@ -45,6 +46,7 @@ class ValidatedConnection:
 
     config: ConnectionConfigVO
     credentials: bytes | None = field(repr=False)
+    allow_stock_export: bool = False
     currency: str = "UAH"
     locales: tuple[str, ...] = ("uk", "ru")
 
@@ -95,6 +97,29 @@ class Platform(Protocol):
         publications: tuple["PublicationLookup", ...],
     ) -> "PublicationDetails":
         """Получает актуальное полное семейство вне SQL транзакции."""
+        ...
+
+    async def get_stock(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publication: PublicationLookup,
+        parent: PublicationLookup | None = None,
+    ) -> PlatformStockSnapshot:
+        """Получает наблюдаемый остаток, не меняя Catalog."""
+        ...
+
+    async def set_stock(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        publication: PublicationLookup,
+        quantity: int,
+        backorders: str,
+    ) -> PlatformStockSnapshot:
+        """Отправляет только количество и поддержанную политику наличия."""
         ...
 
 

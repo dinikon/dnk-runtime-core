@@ -1,8 +1,9 @@
 """Сохраняемый снимок одной реальной публикации внешнего источника."""
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
+from decimal import Decimal
 import json
 
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -168,6 +169,8 @@ class ExternalPublication:
         platform_data: JsonObject,
         run_id: EntityIdVO,
         now: datetime,
+        source_started_at: datetime | None = None,
+        config_revision: int | None = None,
     ) -> None:
         """Атомарно заменяет снимок, сохраняя EntityIdVO и первую дату получения."""
         if (
@@ -178,6 +181,25 @@ class ExternalPublication:
             raise InvalidExternalPublicationError(
                 "Наблюдение старше сохранённого снимка."
             )
+        stock_observation = self._platform_data.get("stock_observation")
+        if (
+            source_started_at is not None
+            and isinstance(stock_observation, dict)
+            and stock_observation.get("config_revision") == config_revision
+        ):
+            received_at = datetime.fromisoformat(stock_observation["received_at"])
+            if received_at > source_started_at:
+                # Полный ответ был запрошен до отдельного получения/отправки остатка.
+                data = replace(
+                    data,
+                    quantity=self.data.quantity,
+                    stock_mode=self.data.stock_mode,
+                    availability=self.data.availability,
+                )
+                platform_data = {
+                    **platform_data,
+                    "stock_observation": stock_observation,
+                }
         candidate = self.restore(
             publication_id=self.id,
             connection_id=self.connection_id,
@@ -210,6 +232,46 @@ class ExternalPublication:
         )
         self.last_seen_at, self.last_sync_run_id = now, run_id
         self.revision += int(changed)
+
+    def observe_stock(
+        self,
+        *,
+        quantity: Decimal | None,
+        stock_mode: str,
+        availability: str | None,
+        native: JsonObject,
+        now: datetime,
+    ) -> None:
+        """Меняет только наблюдение остатка, сохраняя полный исходный снимок контента."""
+        if (
+            not isinstance(now, datetime)
+            or now.tzinfo is None
+            or (stock_mode == "parent" and self.parent_id is None)
+        ):
+            raise InvalidExternalPublicationError("Некорректное наблюдение остатка.")
+        candidate = replace(
+            self.data,
+            quantity=quantity,
+            stock_mode=stock_mode,
+            availability=availability,
+        )
+        document = deepcopy(native)
+        try:
+            json.dumps(document, allow_nan=False)
+        except (ValueError, TypeError):
+            raise InvalidExternalPublicationError(
+                "Наблюдение должно быть JSON."
+            ) from None
+        self.data = candidate
+        self._platform_data = {
+            **self._platform_data,
+            "stock_observation": {
+                **document,
+                "version": 1,
+                "received_at": now.isoformat(),
+            },
+        }
+        self.revision += 1
 
 
 class PublicationStructurePolicy:

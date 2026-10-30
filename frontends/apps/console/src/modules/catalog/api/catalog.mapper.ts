@@ -18,6 +18,9 @@ export function itemFromDto(value: ReadItemDTO): CatalogItem {
 
 export function listItemFromDto(value: ListItemDTO): CatalogListItem {
   return {
+    manageStock: value.manage_stock,
+    stockQuantity: value.stock_quantity,
+    stockSource: value.stock_source,
     id: value.id,
     kind: value.kind,
     parent_id: value.parent_id,
