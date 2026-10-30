@@ -94,6 +94,7 @@ class WooCommercePlatform:
                 "image/webp",
                 "image/gif",
                 "image/bmp",
+                "image/avif",
             ),
             stock_features=StockFeaturesVO(
                 True, ("in_stock", "out_of_stock", "on_order"), ("no", "notify", "yes")

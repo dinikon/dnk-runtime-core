@@ -284,6 +284,38 @@ class ContentDeliveryPostgresTests(ContentMediaPostgresTests):
             )
         )
 
+    async def test_avif_gallery_is_delivered_and_served_with_original_mime(
+        self,
+    ) -> None:
+        """AVIF проходит подготовку Worker и передаётся Woo без конвертации."""
+        channel, group, _, detail, _ = await self.media_fixture("woocommerce")
+        data = b"\x00\x00\x00\x18ftypmif1\x00\x00\x00\x00avifmiaf"
+        identifier = await self.image(data=data, mime="image/avif")
+        saved = await self.call(
+            "PUT",
+            self.path(channel, group),
+            self.version(detail)
+            | {
+                "overrides": {
+                    "common": {
+                        "uk": {"gallery": [{"file_id": str(identifier), "alt": "AVIF"}]}
+                    }
+                }
+            },
+        )
+        await self.request_delivery(channel, group, saved)
+        await self.execute_job(await self.claim_delivery())
+        result = (await self.results(channel, group))[0]
+        self.assertEqual(result["status"], "succeeded", result)
+        self.assertIsNone(result["error_code"])
+        image = self.puts[0]["images"][0]
+        self.assertEqual(image["alt"], "AVIF")
+        self.assertIn("/image.avif?token=", image["src"])
+        response = await self.client.get(image["src"], headers={"Cookie": ""})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers["content-type"], "image/avif")
+        self.assertEqual(response.content, data)
+
     async def test_duplicate_start_stale_preview_and_disable_cancel(self) -> None:
         channel, group, root, detail, _ = await self.media_fixture("woocommerce")
         preview = await self.call("POST", self.path(channel, group) + "/preview", {})
