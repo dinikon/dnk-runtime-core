@@ -89,6 +89,11 @@ def create_app() -> DnkApp:
     )
 
     app.include_router(media_public_router)
+    from src.modules.channels.presentation.content_feed.router import (
+        public_router as feed_public_router,
+    )
+
+    app.include_router(feed_public_router)
     app.include_router(control_plane_router)
     app.include_router(identity_csrf_router)
     app.include_router(identity_access_router)

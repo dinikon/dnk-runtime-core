@@ -1,4 +1,10 @@
 from uuid import UUID
+from src.modules.channels.application.content_delivery.cancellation import (
+    ContentDeliveryCancellation,
+)
+from src.modules.channels.infrastructure.content_delivery.repository import (
+    SqlAlchemyContentDeliveryRepository,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.channels.application.port.platform import PlatformRegistry
 from src.modules.shared.domain.time.clock_port import ClockPort
@@ -140,6 +146,9 @@ def build_representation_runtime(
         representations=SqlAlchemyProductRepresentationRepository(session),
         uuid=uuid,
         clock=clock,
+        cancellations=ContentDeliveryCancellation(
+            SqlAlchemyContentDeliveryRepository(session), clock
+        ),
     )
     return RepresentationRuntime(reader, drafts, writes)
 

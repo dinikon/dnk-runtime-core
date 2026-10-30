@@ -1,3 +1,23 @@
+from src.modules.channels.application.content_delivery.contracts import (
+    ContentWriteOutcome,
+)
+from uuid import UUID
+from src.modules.channels.application.content_delivery.contracts import (
+    PreparedContentRequest,
+    ContentDeliveryResult,
+    ContentReconciliationResult,
+)
+from src.modules.channels.application.content_media.contracts import PreparedGallery
+from src.modules.channels.domain.content_delivery.value_object import DeliveryContextVO
+from src.modules.channels.domain.product_representation.value_object import (
+    LocalizedContent,
+    PreparedPublicationContent,
+    RepresentationIssue,
+)
+from src.modules.channels.infrastructure.platforms.woocommerce.content import (
+    WooContentAdapter,
+    woo_content_issues,
+)
 import hashlib
 from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
 from src.modules.channels.infrastructure.platforms.woocommerce.stock import WooStock
@@ -64,6 +84,7 @@ class WooCommercePlatform:
                 "publications",
                 "read_stock",
                 "write_stock",
+                "write_content",
             ),
             publication_parent_kind=PublicationKind.VARIABLE,
             media_remote_ids=True,
@@ -245,4 +266,63 @@ class WooCommercePlatform:
             credentials=WooCommerceCredentials.model_validate_json(credentials),
             publication=publication,
             desired=desired,
+        )
+
+    def content_issues(
+        self, targets: tuple[PreparedPublicationContent, ...]
+    ) -> tuple[RepresentationIssue, ...]:
+        """Проверяет поля и ограничения конкретного контракта WooCommerce."""
+        return woo_content_issues(targets)
+
+    def prepare_content(
+        self,
+        *,
+        context: DeliveryContextVO,
+        content: LocalizedContent,
+        gallery: PreparedGallery | None,
+        reserved_media_ids: tuple[UUID, ...],
+    ) -> PreparedContentRequest:
+        """Связывает конкретный сериализатор с общим портом доставки."""
+        return WooContentAdapter(self.http).prepare(
+            context=context,
+            content=content,
+            gallery=gallery,
+            reserved_media_ids=reserved_media_ids,
+        )
+
+    async def send_content(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        request: PreparedContentRequest,
+    ) -> ContentDeliveryResult:
+        """Восстанавливает свои настройки и секреты только на сетевой границе."""
+        return await WooContentAdapter(self.http).execute(
+            config=self.decode_config(config),
+            credentials=WooCommerceCredentials.model_validate_json(credentials),
+            request=request,
+            reconcile=False,
+        )
+
+    async def reconcile_content(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        request: PreparedContentRequest,
+    ) -> ContentReconciliationResult:
+        """Сверяет сохранённый запрос, не выполняя PUT."""
+        result = await WooContentAdapter(self.http).execute(
+            config=self.decode_config(config),
+            credentials=WooCommerceCredentials.model_validate_json(credentials),
+            request=request,
+            reconcile=True,
+        )
+
+        return ContentReconciliationResult(
+            confirmed=result.outcome is ContentWriteOutcome.CONFIRMED,
+            fields=result.fields,
+            media=result.media,
+            error_code=result.error_code,
         )

@@ -1,4 +1,7 @@
 from uuid import UUID
+from src.modules.channels.application.content_delivery.cancellation import (
+    ContentDeliveryCancellation,
+)
 
 from src.modules.channels.application.catalog_binding.ports import BindingCatalogPort
 from src.modules.channels.application.error import ChannelInputError
@@ -45,6 +48,7 @@ class RepresentationWrites:
         representations: ProductRepresentationRepositoryProtocol,
         uuid: UUIdGeneratorProtocol,
         clock: ClockPort,
+        cancellations: ContentDeliveryCancellation,
     ) -> None:
         """Принимает порты одной tenant-транзакции и генераторы внешней сборки."""
         self._reader = reader
@@ -55,6 +59,7 @@ class RepresentationWrites:
         self._representations = representations
         self._uuid = uuid
         self._clock = clock
+        self._cancellations = cancellations
 
     async def lock_context(
         self, *, tenant_id: UUID, channel_id: UUID, group_id: UUID
@@ -123,6 +128,8 @@ class RepresentationWrites:
                 now=now,
             )
         await self._representations.save(representation)
+        if not representation.export_enabled:
+            await self._cancellations.cancel(representation.id)
         return await self._reader.load(channel_id=channel_id, group_id=group_id)
 
     async def enable(
@@ -192,4 +199,5 @@ class RepresentationWrites:
                 now=self._clock.now(),
             )
             await self._representations.save(representation)
+            await self._cancellations.cancel(representation.id)
         return await self._reader.load(channel_id=channel_id, group_id=group_id)

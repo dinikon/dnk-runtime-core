@@ -1,3 +1,6 @@
+from src.modules.channels.infrastructure.content_delivery.jobs import (
+    SharedContentDeliveryJobs,
+)
 from typing import Annotated
 from uuid import uuid4
 
@@ -133,6 +136,9 @@ def get_delete_channel_handler(
         utc_now,
         sync_runs=sync_runs,
         stock_jobs=SharedStockJobs(build_scheduled_job_repository(uow.session)),
+        content_jobs=SharedContentDeliveryJobs(
+            build_scheduled_job_repository(uow.session)
+        ),
     )
 
 

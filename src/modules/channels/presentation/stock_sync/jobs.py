@@ -23,7 +23,7 @@ from src.modules.channels.domain.stock_sync.error import StockSyncError
 from src.modules.channels.domain.external_publication.error import (
     InvalidExternalPublicationError,
 )
-from src.modules.channels.infrastructure.stock_sync.gate import stock_channel_gate
+from src.modules.channels.infrastructure.channel.gate import channel_write_gate
 from src.modules.channels.infrastructure.stock_sync.jobs import (
     JOB_TYPE,
     CATALOG_EVENT_JOB_TYPE,
@@ -114,7 +114,7 @@ class ChannelsStockJobHandler:
                     job.tenant_id,
                     TenantSchemaNaming(dnk_config.SCHEMA_PREFIX),
                 )
-                async with stock_channel_gate(
+                async with channel_write_gate(
                     connection, job.tenant_id, job.channel_id
                 ):
                     sessions = async_sessionmaker(connection, expire_on_commit=False)

@@ -1,3 +1,6 @@
+from src.modules.channels.application.content_delivery.planning import (
+    content_fingerprint,
+)
 from src.modules.channels.application.error import ChannelInputError
 from src.modules.channels.application.product_representation.query.preview_representation.dto import (
     PreviewRepresentationResultDTO,
@@ -71,4 +74,6 @@ class PreviewRepresentationHandler:
             state=context.state,
             export_blockers=draft.export_blockers,
             draft=query.overrides is not None,
+            content_fingerprint=content_fingerprint(draft.prepared),
+            delivery_issues=self._reader.content_issues(draft.prepared),
         )

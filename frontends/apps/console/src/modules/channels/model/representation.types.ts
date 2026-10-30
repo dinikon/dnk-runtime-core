@@ -53,6 +53,8 @@ export interface RepresentationPreview {
   issues: RepresentationIssue[];
   targets: RepresentationTarget[];
   exportBlockers: string[];
+  contentFingerprint: string;
+  deliveryIssues: RepresentationIssue[];
   draft: boolean;
 }
 

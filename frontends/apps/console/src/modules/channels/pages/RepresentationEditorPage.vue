@@ -1,5 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { useContentDeliveries } from "../model/use-content-deliveries";
+import { useRequestContentDelivery } from "../model/use-request-content-delivery";
+import { useReconcileContentDelivery } from "../model/use-reconcile-content-delivery";
+import {
+  contentDeliveryError,
+  contentDeliveryIssue,
+} from "../model/content-delivery.errors";
+import type { ContentDelivery } from "../model/content-delivery.types";
+import ContentDeliveriesPanel from "../ui/bindings/ContentDeliveriesPanel.vue";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,6 +53,13 @@ const detail = useRepresentationDetails(channelId, groupId),
 const save = useSaveRepresentation(),
   enable = useEnableRepresentationExport(),
   disable = useDisableRepresentationExport();
+const outgoing = useRequestContentDelivery(),
+  reconcileDelivery = useReconcileContentDelivery();
+const deliveryEnabled = computed(
+  () => savedPreview.data.value?.platform === "woocommerce",
+);
+const deliveries = useContentDeliveries(channelId, groupId, deliveryEnabled);
+const reviewedFingerprint = ref("");
 const draft = ref<RepresentationOverrides | null>(null),
   version = ref<RepresentationVersion | null>(null),
   baseline = ref("");
@@ -58,7 +74,11 @@ const locale = ref(props.locale),
   actionError = ref("");
 const busy = computed(
   () =>
-    save.isPending.value || enable.isPending.value || disable.isPending.value,
+    save.isPending.value ||
+    enable.isPending.value ||
+    disable.isPending.value ||
+    outgoing.isPending.value ||
+    reconcileDelivery.isPending.value,
 );
 const flagsBusy = computed(
   () => enable.isPending.value || disable.isPending.value,
@@ -298,6 +318,76 @@ function pickImage(fileId: string): void {
   });
   pickerOpen.value = false;
 }
+const canReview = computed(
+  () =>
+    !dirty.value &&
+    !stale.value &&
+    !previewLoading.value &&
+    !savedPreview.error.value &&
+    !!savedPreview.data.value?.contentFingerprint,
+);
+const canDeliver = computed(
+  () =>
+    canReview.value &&
+    detail.data.value?.state.exportEnabled === true &&
+    reviewedFingerprint.value === savedPreview.data.value?.contentFingerprint &&
+    !savedPreview.data.value?.deliveryIssues.length &&
+    !savedPreview.data.value?.exportBlockers.length &&
+    !deliveries.data.value?.some(
+      (item) =>
+        item.status === "unknown" ||
+        (item.status === "in_flight" && item.recoveryRequired) ||
+        (!item.recoveryRequired &&
+          ["queued", "in_flight"].includes(item.status) &&
+          item.contentFingerprint === reviewedFingerprint.value),
+    ),
+);
+const deliveryErrors = computed(() =>
+  Object.fromEntries(
+    (deliveries.data.value ?? []).map((item) => [
+      item.publicationId,
+      item.errorCode ? contentDeliveryIssue(item.errorCode) : "",
+    ]),
+  ),
+);
+watch([() => savedPreview.data.value?.contentFingerprint, contextKey], () => {
+  reviewedFingerprint.value = "";
+});
+async function deliver(): Promise<void> {
+  if (!canDeliver.value || !version.value || busy.value) return;
+  const captured = contextKey();
+  actionError.value = "";
+  try {
+    await outgoing.mutateAsync({
+      channelId: channelId.value,
+      groupId: groupId.value,
+      ...version.value,
+      contentFingerprint: reviewedFingerprint.value,
+    });
+  } catch (error) {
+    if (active && captured === contextKey()) {
+      actionError.value = contentDeliveryError(error);
+      reviewedFingerprint.value = "";
+      await Promise.allSettled([deliveries.refetch(), savedPreview.refetch()]);
+    }
+  }
+}
+async function reconcile(item: ContentDelivery): Promise<void> {
+  if (busy.value) return;
+  const captured = contextKey();
+  actionError.value = "";
+  try {
+    await reconcileDelivery.mutateAsync({
+      channelId: channelId.value,
+      groupId: groupId.value,
+      publicationId: item.publicationId,
+      expectedRevision: item.revision,
+    });
+  } catch (error) {
+    if (active && captured === contextKey())
+      actionError.value = contentDeliveryError(error);
+  }
+}
 const canEnable = computed(
   () =>
     !!detail.data.value?.state.id &&
@@ -424,6 +514,39 @@ const canEnable = computed(
               Для включения экспорта сначала сохраните представление.
             </p>
           </div>
+          <ContentDeliveriesPanel
+            v-if="deliveryEnabled"
+            :items="deliveries.data.value ?? []"
+            :loading="deliveries.isFetching.value"
+            :error="
+              deliveries.error.value
+                ? contentDeliveryError(deliveries.error.value)
+                : ''
+            "
+            :busy="busy"
+            :can-request="canDeliver"
+            :can-review="canReview"
+            :reviewed="
+              !!reviewedFingerprint &&
+              reviewedFingerprint ===
+                savedPreview.data.value?.contentFingerprint
+            "
+            :fingerprint="savedPreview.data.value?.contentFingerprint ?? ''"
+            :issues="
+              (savedPreview.data.value?.deliveryIssues ?? []).map((issue) =>
+                contentDeliveryIssue(issue.code),
+              )
+            "
+            :error-messages="deliveryErrors"
+            @review="
+              reviewedFingerprint = $event
+                ? (savedPreview.data.value?.contentFingerprint ?? '')
+                : ''
+            "
+            @request="deliver"
+            @reconcile="reconcile"
+            @refresh="deliveries.refetch()"
+          />
         </template>
       </section>
       <section class="flex min-h-[300px] min-w-0 flex-1 flex-col lg:min-h-0">

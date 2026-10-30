@@ -1,3 +1,9 @@
+from src.modules.channels.application.content_delivery.cancellation import (
+    ContentDeliveryCancellation,
+)
+from src.modules.channels.infrastructure.content_delivery.repository import (
+    SqlAlchemyContentDeliveryRepository,
+)
 from typing import Annotated
 from src.modules.channels.infrastructure.product_representation.repository import (
     SqlAlchemyProductRepresentationRepository,
@@ -157,6 +163,9 @@ def get_create_catalog_from_publication_handler(
             views,
             uuid,
             SqlAlchemyProductRepresentationRepository(session),
+            ContentDeliveryCancellation(
+                SqlAlchemyContentDeliveryRepository(session), clock
+            ),
         ),
         uow=uow,
         uuid=uuid,

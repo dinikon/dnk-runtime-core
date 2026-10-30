@@ -1,3 +1,9 @@
+from src.modules.channels.application.product_representation.contracts import (
+    PreparedRepresentation,
+)
+from src.modules.channels.domain.product_representation.value_object import (
+    RepresentationIssue,
+)
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -71,6 +77,14 @@ class RepresentationReader:
             binding,
             await self._representations.state(group_id),
             connection.locales,
+        )
+
+    def content_issues(
+        self, representation: "PreparedRepresentation"
+    ) -> tuple["RepresentationIssue", ...]:
+        """Получает ограничения исходящей доставки из установленного пакета."""
+        return self._platforms.get(representation.platform).content_issues(
+            representation.preparation.targets
         )
 
     @staticmethod

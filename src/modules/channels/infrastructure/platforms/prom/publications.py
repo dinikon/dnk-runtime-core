@@ -29,6 +29,7 @@ class PromProduct(BaseModel):
 
     model_config = ConfigDict(strict=True)
     id: int = Field(gt=0)
+    external_id: str | None = None
     name: str | None = None
     name_multilang: dict[str, str | None] = Field(default_factory=dict)
     sku: str | None = None
@@ -118,6 +119,11 @@ class PromPublicationReader:
             "prom.publication.v1",
             {
                 "is_variation": product.is_variation,
+                "import_key": (
+                    product.external_id
+                    if product.external_id and product.external_id.strip()
+                    else None
+                ),
                 "variation_base_id": product.variation_base_id,
                 "variation_group_id": product.variation_group_id,
                 "source_currency": product.currency,

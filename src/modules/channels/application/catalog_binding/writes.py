@@ -1,4 +1,7 @@
 from datetime import datetime
+from src.modules.channels.application.content_delivery.cancellation import (
+    ContentDeliveryCancellation,
+)
 from uuid import UUID
 from src.modules.channels.application.catalog_binding.contracts import BindingPairDTO
 from src.modules.channels.application.catalog_binding.ports import BindingCatalogPort
@@ -29,6 +32,7 @@ class BindingWrites:
         views: BindingViews,
         uuid: UUIdGeneratorProtocol,
         representations: ProductRepresentationRepositoryProtocol,
+        cancellations: ContentDeliveryCancellation,
     ) -> None:
         """Получает порты общего внешнего UoW."""
         self.catalog, self.groups, self.channels, self.views, self.uuid = (
@@ -39,6 +43,7 @@ class BindingWrites:
             uuid,
         )
         self.representations = representations
+        self.cancellations = cancellations
 
     async def create(
         self,
@@ -141,6 +146,7 @@ class BindingWrites:
                 now=now,
             )
             await self.representations.save(representation)
+            await self.cancellations.cancel(representation.id)
         return group
 
     async def delete(

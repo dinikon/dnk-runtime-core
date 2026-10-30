@@ -27,6 +27,8 @@ export interface RepresentationIssueDto {
 export interface PreviewRepresentationResponseDto {
   state: RepresentationStateDto;
   export_blockers: string[];
+  content_fingerprint: string;
+  delivery_issues: RepresentationIssueDto[];
   draft: boolean;
   representation: {
     channel_id: string;

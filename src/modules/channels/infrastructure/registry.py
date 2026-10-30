@@ -8,6 +8,13 @@ from src.modules.channels.infrastructure.platforms.rozetka.platform import (
 from src.modules.channels.infrastructure.platforms.woocommerce.platform import (
     WooCommercePlatform,
 )
+from src.modules.channels.application.content_feed.port.serializer import (
+    ContentFeedSerializerProtocol,
+)
+from src.modules.channels.application.content_feed.error import FeedBuildError
+from src.modules.channels.infrastructure.platforms.prom.feed_serializer import (
+    PromYmlSerializer,
+)
 
 
 class InstalledPlatforms:
@@ -35,3 +42,12 @@ class InstalledPlatforms:
     def manifests(self) -> tuple[PlatformManifest, ...]:
         """Возвращает декларации в стабильном порядке регистрации."""
         return tuple(p.manifest for p in self._platforms.values())
+
+    def content_feed_serializer(self, kind: str) -> ContentFeedSerializerProtocol:
+        """Связывает конкретный XML-пакет с его портом без импорта модели в ядро."""
+        if (
+            kind == "prom"
+            and "content_feed" in self.get(kind).manifest.supported_capabilities
+        ):
+            return PromYmlSerializer()
+        raise FeedBuildError("feed_platform_unsupported")

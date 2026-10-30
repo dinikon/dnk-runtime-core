@@ -9,6 +9,10 @@ class TenantPublicHostsFacade(Protocol):
         """Возвращает основной Console host с резервным API host без HTTP-заголовков."""
         ...
 
+    async def api_host(self, tenant_id: UUID) -> str | None:
+        """Возвращает API host либо основной Console host с API proxy для внешних ссылок."""
+        ...
+
     async def owns_host(self, tenant_id: UUID, host: str) -> bool:
         """Проверяет принадлежность активного host указанному tenant."""
         ...

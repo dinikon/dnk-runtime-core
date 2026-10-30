@@ -1,3 +1,16 @@
+from uuid import UUID
+from src.modules.channels.application.content_delivery.contracts import (
+    PreparedContentRequest,
+    ContentDeliveryResult,
+    ContentReconciliationResult,
+)
+from src.modules.channels.application.content_media.contracts import PreparedGallery
+from src.modules.channels.domain.content_delivery.value_object import DeliveryContextVO
+from src.modules.channels.domain.product_representation.value_object import (
+    LocalizedContent,
+    PreparedPublicationContent,
+    RepresentationIssue,
+)
 from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
 from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
 from src.modules.channels.application.external_publication.catalog_details import (
@@ -68,6 +81,43 @@ class Platform(Protocol):
 
     def media_metadata_fingerprint(self, alt: str) -> str:
         """Возвращает ключ метаданных, принадлежащих внешнему attachment."""
+        ...
+
+    def content_issues(
+        self, targets: tuple["PreparedPublicationContent", ...]
+    ) -> tuple["RepresentationIssue", ...]:
+        """Проверяет возможность отправить явное намерение в существующую цель."""
+        ...
+
+    def prepare_content(
+        self,
+        *,
+        context: "DeliveryContextVO",
+        content: "LocalizedContent",
+        gallery: "PreparedGallery | None",
+        reserved_media_ids: tuple[UUID, ...],
+    ) -> "PreparedContentRequest":
+        """Строит версионированный запрос в конкретных типах своего пакета."""
+        ...
+
+    async def send_content(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        request: "PreparedContentRequest",
+    ) -> "ContentDeliveryResult":
+        """Отправляет сохранённый запрос вне транзакции; неоднозначный исход не повторяет."""
+        ...
+
+    async def reconcile_content(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        request: "PreparedContentRequest",
+    ) -> "ContentReconciliationResult":
+        """Выполняет только чтение для сверки ранее отправленного запроса."""
         ...
 
     async def verify(

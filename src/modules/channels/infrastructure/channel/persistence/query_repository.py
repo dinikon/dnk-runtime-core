@@ -26,6 +26,7 @@ class SqlAlchemyChannelQueryRepository:
         row = (
             await self.session.execute(
                 select(ChannelModel, ConnectionModel)
+                .execution_options(populate_existing=True)
                 .options(defer(ConnectionModel.encrypted_credentials, raiseload=True))
                 .join(ConnectionModel, ConnectionModel.channel_id == ChannelModel.id)
                 .where(ChannelModel.id == channel_id)

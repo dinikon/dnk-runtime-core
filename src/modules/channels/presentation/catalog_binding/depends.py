@@ -1,3 +1,9 @@
+from src.modules.channels.application.content_delivery.cancellation import (
+    ContentDeliveryCancellation,
+)
+from src.modules.channels.infrastructure.content_delivery.repository import (
+    SqlAlchemyContentDeliveryRepository,
+)
 from src.modules.channels.infrastructure.catalog_binding.query_repository import (
     SqlAlchemyCatalogBindingQueryRepository,
 )
@@ -68,7 +74,7 @@ class BindingRuntime:
 
 
 def get_binding_runtime(
-    uow: UoWDep, uuid: UuidDep, context: AuthenticatedRequestContextDep
+    uow: UoWDep, uuid: UuidDep, clock: ClockDep, context: AuthenticatedRequestContextDep
 ) -> BindingRuntime:
     """Собирает взаимные порты без вложенных UoW."""
     read = SqlAlchemyCatalogBindingQueryRepository(uow.session)
@@ -87,6 +93,9 @@ def get_binding_runtime(
             views,
             uuid,
             SqlAlchemyProductRepresentationRepository(uow.session),
+            ContentDeliveryCancellation(
+                SqlAlchemyContentDeliveryRepository(uow.session), clock
+            ),
         ),
         BindingQueries(read, catalog, views),
     )

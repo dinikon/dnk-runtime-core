@@ -120,7 +120,12 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 platform.manifest.supported_capabilities,
-                ("verify_connection", "publications", "read_stock", "write_stock"),
+                ("verify_connection", "publications", "read_stock", "write_stock")
+                + (
+                    ("write_content",)
+                    if kind == "woocommerce"
+                    else ("content_feed",) if kind == "prom" else ()
+                ),
             )
             self.assertNotIn("secret-", repr(validated))
             self.assertNotIn("secret-", repr(platform.manifest))

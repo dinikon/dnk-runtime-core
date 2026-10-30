@@ -1,3 +1,17 @@
+from uuid import UUID
+from src.modules.channels.application.content_delivery.contracts import (
+    PreparedContentRequest,
+    ContentDeliveryResult,
+    ContentReconciliationResult,
+)
+from src.modules.channels.application.content_media.contracts import PreparedGallery
+from src.modules.channels.domain.content_delivery.value_object import DeliveryContextVO
+from src.modules.channels.domain.content_delivery.error import ContentDeliveryError
+from src.modules.channels.domain.product_representation.value_object import (
+    LocalizedContent,
+    PreparedPublicationContent,
+    RepresentationIssue,
+)
 import hashlib
 from src.modules.channels.infrastructure.platforms.rozetka.stock import (
     known_stock_target,
@@ -222,3 +236,40 @@ class RozetkaPlatform:
             publication=publication,
             desired=desired,
         )
+
+    def content_issues(
+        self, targets: tuple[PreparedPublicationContent, ...]
+    ) -> tuple[RepresentationIssue, ...]:
+        """Этот пакет пока не предоставляет исходящую API-доставку контента."""
+        return (RepresentationIssue("content_platform_unsupported"),)
+
+    def prepare_content(
+        self,
+        *,
+        context: DeliveryContextVO,
+        content: LocalizedContent,
+        gallery: PreparedGallery | None,
+        reserved_media_ids: tuple[UUID, ...],
+    ) -> PreparedContentRequest:
+        """Отклоняет неподдерживаемую запись до любых сетевых операций."""
+        raise ContentDeliveryError("content_platform_unsupported")
+
+    async def send_content(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        request: PreparedContentRequest,
+    ) -> ContentDeliveryResult:
+        """Не отправляет неподдерживаемые запросы."""
+        raise ContentDeliveryError("content_platform_unsupported")
+
+    async def reconcile_content(
+        self,
+        *,
+        config: ConnectionConfigVO,
+        credentials: bytes,
+        request: PreparedContentRequest,
+    ) -> ContentReconciliationResult:
+        """Не выполняет сверку чужого формата платформы."""
+        raise ContentDeliveryError("content_platform_unsupported")

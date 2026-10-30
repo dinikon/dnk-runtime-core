@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import select, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.channels.infrastructure.stock_sync.gate import channel_stock_lock_key
+from src.modules.channels.infrastructure.channel.gate import channel_write_lock_key
 from src.modules.channels.infrastructure.channel.persistence.settings import (
     write_settings,
 )
@@ -37,7 +37,7 @@ class SqlAlchemyChannelRepository:
         if for_update and self.session.get_bind().dialect.name == "postgresql":
             await self.session.execute(
                 text("SELECT pg_advisory_xact_lock(:key)"),
-                {"key": channel_stock_lock_key(self.tenant_id, channel_id.uuid)},
+                {"key": channel_write_lock_key(self.tenant_id, channel_id.uuid)},
             )
         statement = select(ChannelModel).where(ChannelModel.id == channel_id.uuid)
         if for_update:

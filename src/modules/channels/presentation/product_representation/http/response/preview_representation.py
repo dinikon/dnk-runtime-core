@@ -144,6 +144,8 @@ class PreviewRepresentationResponse(BaseModel):
     state: RepresentationStateResponse
     export_blockers: tuple[str, ...]
     draft: bool
+    content_fingerprint: str
+    delivery_issues: tuple[PreviewRepresentationIssueResponse, ...]
 
     @classmethod
     def from_dto(
@@ -155,6 +157,11 @@ class PreviewRepresentationResponse(BaseModel):
             state=RepresentationStateResponse.from_state(result.state),
             export_blockers=result.export_blockers,
             draft=result.draft,
+            content_fingerprint=result.content_fingerprint,
+            delivery_issues=tuple(
+                PreviewRepresentationIssueResponse.from_issue(v)
+                for v in result.delivery_issues
+            ),
             representation=PreviewPreparedRepresentationResponse(
                 channel_id=value.channel_id,
                 connection_id=value.connection_id,

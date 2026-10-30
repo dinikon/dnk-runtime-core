@@ -30,6 +30,8 @@ function fixture(): PreviewRepresentationResponseDto {
       updated_by: null,
     },
     export_blockers: ["representation_title_missing"],
+    content_fingerprint: "a".repeat(64),
+    delivery_issues: [],
     draft: false,
     representation: {
       channel_id: "channel",

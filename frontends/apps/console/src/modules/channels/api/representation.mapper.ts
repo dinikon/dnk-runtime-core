@@ -69,6 +69,8 @@ export function representationPreview(
     bindingState: value.binding_state,
     issues: value.issues.map(issue),
     exportBlockers: [...dto.export_blockers],
+    contentFingerprint: dto.content_fingerprint,
+    deliveryIssues: dto.delivery_issues.map(issue),
     draft: dto.draft,
     targets: value.targets.map((target) => ({
       publicationId: target.publication_id,

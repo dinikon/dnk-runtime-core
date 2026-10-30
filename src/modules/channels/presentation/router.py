@@ -29,3 +29,13 @@ router.include_router(sync_run_router)
 router.include_router(publication_router)
 
 router.include_router(stock_router)
+
+from src.modules.channels.presentation.content_delivery.router import (
+    router as delivery_router,
+)
+
+router.include_router(delivery_router)
+
+from src.modules.channels.presentation.content_feed.router import router as feed_router
+
+router.include_router(feed_router)
