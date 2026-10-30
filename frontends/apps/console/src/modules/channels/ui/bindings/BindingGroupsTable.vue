@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useMediaQuery } from "@vueuse/core";
-import { Package } from "@lucide/vue";
+import { Package, FileText } from "@lucide/vue";
 import { DataTable } from "@/components/custom-ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ const props = defineProps<{
   showCatalog: boolean;
 }>();
 const emit = defineEmits<{
+  representation: [group: CatalogBinding];
   stock: [group: CatalogBinding];
   edit: [group: CatalogBinding];
   remove: [group: CatalogBinding];
@@ -164,23 +165,37 @@ function title(group: CatalogBinding): string {
         >{{ group.preview.matchedCount }} /
         {{ group.preview.catalogCount }}</Button
       >
-      <PublicationActions
+      <div
         v-else-if="column.key === 'actions'"
-        :busy="busy"
-        :publication-disabled="!canOpen(group)"
-        can-sync-stock
-        @stock="emit('stock', group)"
-        :catalog-targets="[
-          {
-            id: group.catalogRootId,
-            label: group.preview.catalogRoot?.title ?? 'Товар без названия',
-          },
-        ]"
-        :unlink-targets="[{ id: group.id, label: title(group) }]"
-        @publication="emit('publication', group)"
-        @catalog="emit('catalog', $event)"
-        @unlink="emit('remove', group)"
-      />
+        class="flex items-center justify-end gap-1"
+      >
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          :disabled="busy"
+          aria-label="Представление публикации"
+          title="Представление публикации"
+          @click="emit('representation', group)"
+          ><FileText aria-hidden="true"
+        /></Button>
+        <PublicationActions
+          :busy="busy"
+          :publication-disabled="!canOpen(group)"
+          can-sync-stock
+          @stock="emit('stock', group)"
+          :catalog-targets="[
+            {
+              id: group.catalogRootId,
+              label: group.preview.catalogRoot?.title ?? 'Товар без названия',
+            },
+          ]"
+          :unlink-targets="[{ id: group.id, label: title(group) }]"
+          @publication="emit('publication', group)"
+          @catalog="emit('catalog', $event)"
+          @unlink="emit('remove', group)"
+        />
+      </div>
     </template>
   </DataTable>
 </template>

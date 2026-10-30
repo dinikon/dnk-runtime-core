@@ -16,6 +16,7 @@ defineProps<{
   outOfRange: boolean;
 }>();
 const emit = defineEmits<{
+  representation: [group: CatalogBinding];
   stock: [group: CatalogBinding];
   edit: [group: CatalogBinding];
   remove: [group: CatalogBinding];
@@ -55,6 +56,7 @@ const emit = defineEmits<{
       :busy="busy"
       :show-catalog="showCatalog"
       @stock="emit('stock', $event)"
+      @representation="emit('representation', $event)"
       @edit="emit('edit', $event)"
       @remove="emit('remove', $event)"
       @catalog="emit('catalog', $event)"

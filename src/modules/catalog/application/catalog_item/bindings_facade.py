@@ -40,6 +40,25 @@ class CatalogBindingsFacade:
         LocaleVO(locale)
         return await self._queries.snapshots(identifiers, locale, as_of)
 
+    async def families_for_locales(
+        self,
+        *,
+        identifiers: tuple[UUID, ...],
+        locales: tuple[str, ...],
+        as_of: datetime,
+    ) -> tuple[GetCatalogProductSnapshotResultDTO, ...]:
+        """Читает все локали batch на одном снимке внешнего UoW.
+
+        Вызывающая сборка обеспечивает REPEATABLE READ до первого SQL-запроса.
+        Метод не открывает отдельные транзакции и не выбирает запасную локаль.
+        """
+        for locale in locales:
+            LocaleVO(locale)
+        result: list[GetCatalogProductSnapshotResultDTO] = []
+        for locale in locales:
+            result.extend(await self._queries.snapshots(identifiers, locale, as_of))
+        return tuple(result)
+
     async def search(
         self,
         *,

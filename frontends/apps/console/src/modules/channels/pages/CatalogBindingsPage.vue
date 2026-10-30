@@ -8,6 +8,9 @@ import { stockErrorMessage } from "../model/stock.errors";
 import { bindingKeys } from "../model/bindings/binding.query-keys";
 import { publicationKeys } from "../model/publication.query-keys";
 import BindingStockPanel from "../ui/bindings/BindingStockPanel.vue";
+import RepresentationPreviewPanel from "../ui/bindings/RepresentationPreviewPanel.vue";
+import { useRepresentationPreview } from "../model/representation.queries";
+import { representationErrorMessage } from "../model/representation.errors";
 import { useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -76,6 +79,11 @@ const router = useRouter(),
 const stockGroup = ref<CatalogBinding | null>(null),
   stockSelected = ref<string[]>([]),
   stockActionError = ref("");
+const representationGroup = ref<CatalogBinding | null>(null);
+const representation = useRepresentationPreview(
+  computed(() => representationGroup.value?.channelId ?? ""),
+  computed(() => representationGroup.value?.id ?? ""),
+);
 const stockChannel = computed(() => stockGroup.value?.channelId ?? ""),
   stockGroupId = computed(() => stockGroup.value?.id ?? "");
 const stock = useBindingStock(stockChannel, stockGroupId);
@@ -94,6 +102,7 @@ watch(
   ],
   () => {
     stockGroup.value = null;
+    representationGroup.value = null;
     stockSelected.value = [];
     stockActionError.value = "";
   },
@@ -626,6 +635,7 @@ function goPublication(group: CatalogBinding): void {
       @first-page="state.paginate(1, state.limit.value)"
       :busy="busy"
       @stock="openStock"
+      @representation="representationGroup = $event"
       @edit="open"
       @remove="
         deleting = $event;
@@ -644,6 +654,36 @@ function goPublication(group: CatalogBinding): void {
       :disabled="!groups.data.value || groups.isFetching.value"
       @change="state.paginate($event.page, $event.limit)"
     />
+    <Sheet
+      :open="!!representationGroup"
+      @update:open="!$event && (representationGroup = null)"
+    >
+      <SheetContent class="w-full sm:max-w-3xl">
+        <SheetHeader
+          ><SheetTitle>Представление публикации</SheetTitle
+          ><SheetDescription
+            >{{ representationGroup?.channelName }} ·
+            {{
+              representationGroup?.preview.catalogRoot?.title ??
+              "Связанные позиции"
+            }}</SheetDescription
+          ></SheetHeader
+        >
+        <RepresentationPreviewPanel
+          v-if="representationGroup"
+          :key="representationGroup.id"
+          :preview="representation.data.value"
+          :locale="locale"
+          :loading="representation.isFetching.value"
+          :error="
+            representation.error.value
+              ? representationErrorMessage(representation.error.value)
+              : ''
+          "
+          @retry="representation.refetch()"
+        />
+      </SheetContent>
+    </Sheet>
     <Sheet :open="!!stockGroup" @update:open="!$event && (stockGroup = null)">
       <SheetContent class="w-full sm:max-w-3xl">
         <SheetHeader

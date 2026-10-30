@@ -23,7 +23,7 @@ export const bindingGroupsColumns: readonly DataTableColumn<BindingGroupsColumn>
     {
       key: "actions",
       label: "Действия",
-      width: 208,
+      width: 248,
       align: "right",
       pinned: "end",
     },

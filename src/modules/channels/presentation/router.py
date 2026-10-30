@@ -12,9 +12,13 @@ from src.modules.channels.presentation.external_publication.router import (
 from src.modules.channels.presentation.catalog_binding.router import (
     router as binding_router,
 )
+from src.modules.channels.presentation.product_representation.router import (
+    router as representation_router,
+)
 
 router = APIRouter(dependencies=[Depends(prepare_channels_read)])
 router.include_router(binding_router)
+router.include_router(representation_router)
 router.include_router(channel_router)
 router.include_router(sync_run_router)
 router.include_router(publication_router)
