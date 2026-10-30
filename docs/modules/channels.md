@@ -518,6 +518,10 @@ Unknown запрещает слепой повтор; подтверждённа
 caption дают явную ошибку, а не обрезаются. URL имеет расширение, поскольку WooCommerce
 берёт имя для загрузки из URL: [реализация загрузчика](https://raw.githubusercontent.com/woocommerce/woocommerce/trunk/plugins/woocommerce/includes/wc-rest-functions.php).
 
+Экспорт WooCommerce разрешает JPEG, PNG, WebP, GIF, BMP и AVIF. Изображения
+передаются без конвертации; AVIF сохраняет MIME `image/avif` и расширение `.avif`
+в публичной ссылке.
+
 Открытые токены не сохраняются в Domain/SQL и не включаются в repr. Используется
 общий Shared Cipher. Uvicorn скрывает query в access logs; Console nginx отключает
 логи media-location, штатный nginx ingress chart уже отключает access log. Внешний
