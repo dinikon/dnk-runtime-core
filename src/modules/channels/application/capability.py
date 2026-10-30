@@ -9,4 +9,5 @@ type Capability = Literal[
     "write_stock",
     "write_content",
     "content_feed",
+    "apply_content_feed",
 ]

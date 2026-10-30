@@ -31,7 +31,7 @@ class ContentFeedArchitectureTests(TestCase):
                                     arg.annotation, f"{path}:{arg.arg}"
                                 )
                         if node.name == "__post_init__":
-                            self.assertEqual(path.name, "value_object.py")
+                            self.assertIn(path.name, ("value_object.py", "delivery.py"))
                     if isinstance(node, ast.ImportFrom) and layer in {
                         "domain",
                         "application",
@@ -70,12 +70,17 @@ class ContentFeedArchitectureTests(TestCase):
             "rotate_feed_access",
             "revoke_feed_access",
             "delete_content_feed",
+            "request_feed_import",
+            "resume_feed_import",
+            "attach_feed_import",
+            "resolve_feed_import",
         )
         queries = (
             "get_content_feed",
             "list_content_feeds",
             "preview_content_feed",
             "get_content_feed_xml",
+            "get_feed_import",
         )
         for kind, names in (("command", commands), ("query", queries)):
             for name in names:

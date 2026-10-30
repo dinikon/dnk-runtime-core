@@ -1,4 +1,8 @@
 from uuid import UUID
+from src.modules.channels.domain.content_feed.delivery import FeedDeliveryVO
+from src.modules.channels.infrastructure.content_feed.delivery_document import (
+    decode_delivery,
+)
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +42,17 @@ class SqlAlchemyContentFeedQueryRepository:
         await self._session.execute(
             text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
         )
+
+    async def import_states(self, channel_id: UUID) -> tuple[FeedDeliveryVO, ...]:
+        """Не восстанавливает настройки фидов для проверки их последней операции."""
+        rows = (
+            await self._session.execute(
+                select(F.delivery_schema, F.delivery_state)
+                .join(C, C.id == F.connection_id)
+                .where(C.channel_id == channel_id)
+            )
+        ).all()
+        return tuple(decode_delivery(schema, value) for schema, value in rows)
 
     async def channel_for_feed(self, feed_id: UUID) -> UUID:
         """Не ищет чужие схемы по публичному ID."""

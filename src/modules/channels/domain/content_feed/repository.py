@@ -22,3 +22,13 @@ class ContentFeedRepositoryProtocol(Protocol):
     async def delete(self, feed: ContentFeed, *, expected_revision: int) -> None:
         """Удаляет фид только с ожидаемой ревизией."""
         ...
+
+    async def save_delivery(
+        self,
+        feed: ContentFeed,
+        *,
+        expected_revision: int,
+        expected_delivery_revision: int,
+    ) -> None:
+        """Сохраняет прогресс с двойным CAS без изменения настроек и их аудита."""
+        ...

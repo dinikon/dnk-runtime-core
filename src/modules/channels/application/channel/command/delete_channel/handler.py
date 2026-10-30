@@ -13,6 +13,9 @@ from src.modules.channels.application.channel.port.jobs import VerificationJobs
 from src.modules.channels.domain.channel.error import ChannelNotFoundError
 from src.modules.channels.domain.channel.repository import ChannelRepositoryProtocol
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.channels.application.content_feed.service.deletion import (
+    FeedImportDeletionGuard,
+)
 
 
 class DeleteChannelHandler:
@@ -27,12 +30,14 @@ class DeleteChannelHandler:
         sync_runs: SyncRuns | None = None,
         stock_jobs: StockJobsPort | None = None,
         content_jobs: ContentDeliveryJobsPort | None = None,
+        feed_imports: FeedImportDeletionGuard | None = None,
     ) -> None:
         """Принимает порты общей транзакции."""
         self.repository, self.jobs, self.clock = repository, jobs, clock
         self.sync_runs = sync_runs
         self.stock_jobs = stock_jobs
         self.content_jobs = content_jobs
+        self.feed_imports = feed_imports
 
     async def execute(self, command: DeleteChannelCommand) -> None:
         """Сначала блокирует Channel, затем задания; внешний API не вызывается."""
@@ -42,6 +47,12 @@ class DeleteChannelHandler:
         if channel is None:
             raise ChannelNotFoundError("Канал не найден.")
         channel.require_revision(command.expected_revision)
+        if self.feed_imports is not None:
+            await self.feed_imports.require_channel_deletable(
+                tenant_id=command.tenant_id,
+                channel_id=channel.id.uuid,
+                now=self.clock(),
+            )
         if self.sync_runs is not None:
             await self.sync_runs.cancel(
                 channel=channel, tenant_id=command.tenant_id, reason="channel_deleted"

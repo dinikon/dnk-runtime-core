@@ -4,6 +4,7 @@ from src.modules.channels.application.content_feed.contracts import (
     FeedPublicationKey,
     FeedReadRow,
 )
+from src.modules.channels.domain.content_feed.delivery import FeedDeliveryVO
 
 
 class ContentFeedQueryRepositoryProtocol(Protocol):
@@ -11,6 +12,10 @@ class ContentFeedQueryRepositoryProtocol(Protocol):
 
     async def begin_snapshot(self) -> None:
         """Выбирает изоляцию до первого чтения нового этапа."""
+        ...
+
+    async def import_states(self, channel_id: UUID) -> tuple[FeedDeliveryVO, ...]:
+        """Читает только состояние операций для решения об удалении канала."""
         ...
 
     async def channel_for_feed(self, feed_id: UUID) -> UUID:

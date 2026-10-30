@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+
 from src.modules.channels.presentation.content_feed.http.route import ContentFeedRoute
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
@@ -64,6 +65,36 @@ from src.modules.channels.presentation.content_feed.http.controller.delete_conte
 )
 from src.modules.channels.presentation.content_feed.http.controller.get_content_feed_xml import (
     get_content_feed_xml,
+)
+from src.modules.channels.presentation.content_feed.http.controller.request_feed_import import (
+    request_feed_import,
+)
+from src.modules.channels.presentation.content_feed.http.response.request_feed_import import (
+    RequestFeedImportResponse,
+)
+from src.modules.channels.presentation.content_feed.http.controller.resume_feed_import import (
+    resume_feed_import,
+)
+from src.modules.channels.presentation.content_feed.http.response.resume_feed_import import (
+    ResumeFeedImportResponse,
+)
+from src.modules.channels.presentation.content_feed.http.controller.attach_feed_import import (
+    attach_feed_import,
+)
+from src.modules.channels.presentation.content_feed.http.response.attach_feed_import import (
+    AttachFeedImportResponse,
+)
+from src.modules.channels.presentation.content_feed.http.controller.resolve_feed_import import (
+    resolve_feed_import,
+)
+from src.modules.channels.presentation.content_feed.http.response.resolve_feed_import import (
+    ResolveFeedImportResponse,
+)
+from src.modules.channels.presentation.content_feed.http.controller.get_feed_import import (
+    get_feed_import,
+)
+from src.modules.channels.presentation.content_feed.http.response.get_feed_import import (
+    GetFeedImportResponse,
 )
 
 router = APIRouter(
@@ -213,4 +244,65 @@ public_router.add_api_route(
             }
         }
     },
+)
+
+
+router.add_api_route(
+    "/{channel_id}/content-feeds/{feed_id}/imports",
+    request_feed_import,
+    methods=["POST"],
+    status_code=202,
+    response_model=RequestFeedImportResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+
+router.add_api_route(
+    "/{channel_id}/content-feeds/{feed_id}/imports/current/resume",
+    resume_feed_import,
+    methods=["POST"],
+    status_code=200,
+    response_model=ResumeFeedImportResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+
+router.add_api_route(
+    "/{channel_id}/content-feeds/{feed_id}/imports/current/attach",
+    attach_feed_import,
+    methods=["POST"],
+    status_code=200,
+    response_model=AttachFeedImportResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+
+router.add_api_route(
+    "/{channel_id}/content-feeds/{feed_id}/imports/current/resolve",
+    resolve_feed_import,
+    methods=["POST"],
+    status_code=200,
+    response_model=ResolveFeedImportResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+
+router.add_api_route(
+    "/{channel_id}/content-feeds/{feed_id}/imports/current",
+    get_feed_import,
+    methods=["GET"],
+    response_model=GetFeedImportResponse,
+    dependencies=[Depends(require_authenticated_request_context)],
 )

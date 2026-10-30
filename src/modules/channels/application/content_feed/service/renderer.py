@@ -263,7 +263,7 @@ class FeedRenderer:
                     ):
                         raise FeedBuildError("feed_media_changed", unavailable=True)
         await self.uow.commit()
-        return result
+        return RenderedFeed(result.content, result.statistics, snapshot)
 
     async def _current_feed(
         self, feed: ContentFeed, channel_id: UUID, public: bool, token: str

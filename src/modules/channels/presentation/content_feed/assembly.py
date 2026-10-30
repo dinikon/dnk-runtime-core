@@ -39,6 +39,14 @@ from src.modules.shared.application.crypto.cipher import Cipher
 from src.modules.shared.application.persistence.unit_of_work import UnitOfWorkProtocol
 from src.modules.shared.application.uuid.uuid_port import UUIdGeneratorProtocol
 from src.modules.shared.domain.time.clock_port import ClockPort
+from src.modules.channels.application.content_feed.service.imports import FeedImports
+from src.modules.channels.infrastructure.content_feed.jobs import SharedFeedImportJobs
+from src.modules.channels.infrastructure.channel.persistence.repository import (
+    SqlAlchemyChannelRepository,
+)
+from src.modules.shared.presentation.jobs.management import (
+    build_scheduled_job_repository,
+)
 
 
 @dataclass(slots=True)
@@ -46,6 +54,7 @@ class ContentFeedRuntime:
     """Сборка сценариев фида на одной tenant-сессии."""
 
     management: ContentFeedManagement
+    imports: FeedImports
 
 
 def build_content_feed_runtime(
@@ -116,5 +125,23 @@ def build_content_feed_runtime(
             cipher=cipher,
             clock=clock,
             uuid=uuid,
-        )
+        ),
+        FeedImports(
+            feeds=feeds,
+            queries=queries,
+            channels=SqlAlchemyChannelRepository(session, tenant_id),
+            platforms=platforms,
+            renderer=renderer,
+            importer=platforms.feed_importer("prom"),
+            access=tokens,
+            authorization=FeedAuthorization(
+                tenant_id=tenant_id, authorization=authorization
+            ),
+            jobs=SharedFeedImportJobs(build_scheduled_job_repository(session)),
+            cipher=cipher,
+            uow=uow,
+            clock=clock,
+            uuid=uuid,
+            tenant_id=tenant_id,
+        ),
     )

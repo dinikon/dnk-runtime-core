@@ -95,3 +95,4 @@ class RenderedFeed:
 
     content: bytes = field(repr=False)
     statistics: FeedStatistics
+    snapshot: FeedSnapshot | None = field(default=None, repr=False)

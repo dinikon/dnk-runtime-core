@@ -230,6 +230,7 @@ class ContentFeedManagement:
             channel_id=EntityIdVO(channel_id), feed_id=EntityIdVO(feed_id)
         )
         feed.require_revision(expected_revision)
+        feed.require_delivery_finished()
         await self.feeds.delete(feed, expected_revision=expected_revision)
 
     async def preview(

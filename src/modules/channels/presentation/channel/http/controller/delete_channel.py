@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from fastapi import Query, Response
+from fastapi import Query, Response, HTTPException
+from src.modules.channels.domain.content_feed.error import ContentFeedError
 
 from src.modules.channels.application.channel.command.delete_channel.command import (
     DeleteChannelCommand,
@@ -40,4 +41,6 @@ async def delete_channel(
         )
     except (ChannelError, ChannelInputError) as error:
         raise channel_http_error(error) from None
+    except ContentFeedError as error:
+        raise HTTPException(409, detail={"code": error.code}) from None
     return Response(status_code=204)

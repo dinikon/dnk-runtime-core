@@ -1,6 +1,13 @@
 from src.modules.channels.infrastructure.content_delivery.jobs import (
     SharedContentDeliveryJobs,
 )
+from src.modules.channels.application.content_feed.service.deletion import (
+    FeedImportDeletionGuard,
+)
+from src.modules.channels.infrastructure.content_feed.persistence.query_repository import (
+    SqlAlchemyContentFeedQueryRepository,
+)
+from src.modules.channels.infrastructure.content_feed.jobs import SharedFeedImportJobs
 from typing import Annotated
 from uuid import uuid4
 
@@ -138,6 +145,10 @@ def get_delete_channel_handler(
         stock_jobs=SharedStockJobs(build_scheduled_job_repository(uow.session)),
         content_jobs=SharedContentDeliveryJobs(
             build_scheduled_job_repository(uow.session)
+        ),
+        feed_imports=FeedImportDeletionGuard(
+            SqlAlchemyContentFeedQueryRepository(uow.session),
+            SharedFeedImportJobs(build_scheduled_job_repository(uow.session)),
         ),
     )
 

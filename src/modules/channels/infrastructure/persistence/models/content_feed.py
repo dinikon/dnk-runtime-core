@@ -45,3 +45,10 @@ class ContentFeedModel(TenantBase):
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True))
     created_by: Mapped[UUID] = mapped_column(StringUUID)
     updated_by: Mapped[UUID] = mapped_column(StringUUID)
+    delivery_schema: Mapped[str] = mapped_column(
+        sa.Text, server_default="content_feed_delivery.v1"
+    )
+    delivery_state: Mapped[JsonObject] = mapped_column(
+        sa.JSON().with_variant(JSONB(), "postgresql"), server_default=sa.text("'{}'")
+    )
+    delivery_request_encrypted: Mapped[bytes | None] = mapped_column(sa.LargeBinary)

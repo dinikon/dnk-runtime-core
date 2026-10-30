@@ -124,7 +124,9 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
                 + (
                     ("write_content",)
                     if kind == "woocommerce"
-                    else ("content_feed",) if kind == "prom" else ()
+                    else (
+                        ("content_feed", "apply_content_feed") if kind == "prom" else ()
+                    )
                 ),
             )
             self.assertNotIn("secret-", repr(validated))

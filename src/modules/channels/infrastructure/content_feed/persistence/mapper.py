@@ -4,6 +4,11 @@ from typing import Any
 from src.modules.channels.domain.content_feed.aggregate import ContentFeed
 from src.modules.channels.domain.content_feed.value_object import FeedSourceVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.channels.infrastructure.content_feed.delivery_document import (
+    DELIVERY_SCHEMA,
+    decode_delivery,
+    encode_delivery,
+)
 
 
 class ContentFeedMapper:
@@ -26,6 +31,8 @@ class ContentFeedMapper:
             updated_at=row["updated_at"],
             created_by=EntityIdVO(row["created_by"]),
             updated_by=EntityIdVO(row["updated_by"]),
+            delivery=decode_delivery(row["delivery_schema"], row["delivery_state"]),
+            delivery_request_encrypted=row["delivery_request_encrypted"],
         )
 
     @staticmethod
@@ -46,4 +53,7 @@ class ContentFeedMapper:
             updated_at=feed.updated_at,
             created_by=feed.created_by.uuid,
             updated_by=feed.updated_by.uuid,
+            delivery_schema=DELIVERY_SCHEMA,
+            delivery_state=encode_delivery(feed.delivery),
+            delivery_request_encrypted=feed.delivery_request_encrypted,
         )

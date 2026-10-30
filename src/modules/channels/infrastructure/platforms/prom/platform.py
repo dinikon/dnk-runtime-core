@@ -76,6 +76,7 @@ class PromPlatform:
                 "read_stock",
                 "write_stock",
                 "content_feed",
+                "apply_content_feed",
             ),
             publication_parent_kind=PublicationKind.SIMPLE,
             stock_features=StockFeaturesVO(

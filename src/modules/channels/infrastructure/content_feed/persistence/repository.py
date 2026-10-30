@@ -15,6 +15,11 @@ from src.modules.channels.infrastructure.persistence.models.connection import (
 from src.modules.channels.infrastructure.persistence.models.content_feed import (
     ContentFeedModel,
 )
+from sqlalchemy import func
+from src.modules.channels.infrastructure.content_feed.delivery_document import (
+    DELIVERY_SCHEMA,
+    encode_delivery,
+)
 
 
 class SqlAlchemyContentFeedRepository:
@@ -61,7 +66,12 @@ class SqlAlchemyContentFeedRepository:
         table = ContentFeedModel.__table__
         result = await self._session.execute(
             update(table)
-            .where(table.c.id == feed.id.uuid, table.c.revision == expected_revision)
+            .where(
+                table.c.id == feed.id.uuid,
+                table.c.revision == expected_revision,
+                func.coalesce(table.c.delivery_state["revision"].as_integer(), 0)
+                == feed.delivery.revision,
+            )
             .values(**ContentFeedMapper.to_values(feed))
         )
         if result.rowcount != 1:
@@ -72,8 +82,37 @@ class SqlAlchemyContentFeedRepository:
         table = ContentFeedModel.__table__
         result = await self._session.execute(
             delete(table).where(
-                table.c.id == feed.id.uuid, table.c.revision == expected_revision
+                table.c.id == feed.id.uuid,
+                table.c.revision == expected_revision,
+                func.coalesce(table.c.delivery_state["revision"].as_integer(), 0)
+                == feed.delivery.revision,
             )
         )
         if result.rowcount != 1:
             raise ContentFeedError("feed_revision_conflict", conflict=True)
+
+    async def save_delivery(
+        self,
+        feed: ContentFeed,
+        *,
+        expected_revision: int,
+        expected_delivery_revision: int,
+    ) -> None:
+        """Прогресс не меняет revision/updated_by настроек, используемые XML endpoint."""
+        table = ContentFeedModel.__table__
+        result = await self._session.execute(
+            update(table)
+            .where(
+                table.c.id == feed.id.uuid,
+                table.c.revision == expected_revision,
+                func.coalesce(table.c.delivery_state["revision"].as_integer(), 0)
+                == expected_delivery_revision,
+            )
+            .values(
+                delivery_schema=DELIVERY_SCHEMA,
+                delivery_state=encode_delivery(feed.delivery),
+                delivery_request_encrypted=feed.delivery_request_encrypted,
+            )
+        )
+        if result.rowcount != 1:
+            raise ContentFeedError("feed_delivery_revision_conflict", conflict=True)

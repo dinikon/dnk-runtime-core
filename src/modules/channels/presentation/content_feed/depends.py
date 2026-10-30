@@ -1,5 +1,7 @@
 from typing import Annotated
+
 from fastapi import Depends, HTTPException
+
 from src.modules.channels.presentation.content_feed.assembly import (
     ContentFeedRuntime,
     build_content_feed_runtime,
@@ -54,6 +56,22 @@ from src.modules.channels.application.content_feed.command.delete_content_feed.h
 )
 from src.modules.channels.application.content_feed.query.get_content_feed_xml.handler import (
     GetContentFeedXmlHandler,
+)
+from src.modules.channels.application.content_feed.service.imports import FeedImports
+from src.modules.channels.application.content_feed.command.request_feed_import.handler import (
+    RequestFeedImportHandler,
+)
+from src.modules.channels.application.content_feed.command.resume_feed_import.handler import (
+    ResumeFeedImportHandler,
+)
+from src.modules.channels.application.content_feed.command.attach_feed_import.handler import (
+    AttachFeedImportHandler,
+)
+from src.modules.channels.application.content_feed.command.resolve_feed_import.handler import (
+    ResolveFeedImportHandler,
+)
+from src.modules.channels.application.content_feed.query.get_feed_import.handler import (
+    GetFeedImportHandler,
 )
 
 
@@ -227,4 +245,72 @@ def get_content_feed_xml_handler(
 
 GetContentFeedXmlHandlerDep = Annotated[
     GetContentFeedXmlHandler, Depends(get_content_feed_xml_handler)
+]
+
+
+def get_feed_imports(
+    runtime: ContentFeedRuntimeDep,
+    tenant: MediaTenantDep,
+    context: AuthenticatedRequestContextDep,
+) -> FeedImports:
+    """Использует те же границы tenant и авторизации, что управление ContentFeed."""
+    if tenant_id_from_context(context) != tenant.id:
+        raise HTTPException(403, detail={"code": "access_denied"})
+    return runtime.imports
+
+
+FeedImportsDep = Annotated[FeedImports, Depends(get_feed_imports)]
+
+
+def get_request_feed_import_handler(
+    imports: FeedImportsDep,
+) -> RequestFeedImportHandler:
+    """Собирает отдельный сценарий request_feed_import."""
+    return RequestFeedImportHandler(imports)
+
+
+RequestFeedImportHandlerDep = Annotated[
+    RequestFeedImportHandler, Depends(get_request_feed_import_handler)
+]
+
+
+def get_resume_feed_import_handler(imports: FeedImportsDep) -> ResumeFeedImportHandler:
+    """Собирает отдельный сценарий resume_feed_import."""
+    return ResumeFeedImportHandler(imports)
+
+
+ResumeFeedImportHandlerDep = Annotated[
+    ResumeFeedImportHandler, Depends(get_resume_feed_import_handler)
+]
+
+
+def get_attach_feed_import_handler(imports: FeedImportsDep) -> AttachFeedImportHandler:
+    """Собирает отдельный сценарий attach_feed_import."""
+    return AttachFeedImportHandler(imports)
+
+
+AttachFeedImportHandlerDep = Annotated[
+    AttachFeedImportHandler, Depends(get_attach_feed_import_handler)
+]
+
+
+def get_resolve_feed_import_handler(
+    imports: FeedImportsDep,
+) -> ResolveFeedImportHandler:
+    """Собирает отдельный сценарий resolve_feed_import."""
+    return ResolveFeedImportHandler(imports)
+
+
+ResolveFeedImportHandlerDep = Annotated[
+    ResolveFeedImportHandler, Depends(get_resolve_feed_import_handler)
+]
+
+
+def get_feed_import_handler(imports: FeedImportsDep) -> GetFeedImportHandler:
+    """Собирает чтение последней операции без внешнего API."""
+    return GetFeedImportHandler(imports)
+
+
+GetFeedImportHandlerDep = Annotated[
+    GetFeedImportHandler, Depends(get_feed_import_handler)
 ]
