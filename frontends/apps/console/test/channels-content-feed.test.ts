@@ -231,3 +231,17 @@ test("active import locks source replacement without exposing stored source URL"
   assert.match(html, /disabled/);
   assert.doesNotMatch(html, /token=secret/);
 });
+
+test("new source form reports a clean draft after the feed is created", async () => {
+  const dirty: boolean[] = [];
+  await renderToString(
+    createSSRApp(Form, {
+      feed: { id: "created-feed", revision: 1, enabled: false },
+      busy: false,
+      locked: false,
+      savedVersion: 1,
+      onDirty: (value: boolean) => dirty.push(value),
+    }),
+  );
+  assert.deepEqual(dirty, [false]);
+});

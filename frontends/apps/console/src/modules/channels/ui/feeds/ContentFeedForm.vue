@@ -26,7 +26,7 @@ const dirty = computed(() => !!source.value.trim());
 const changed = computed(
   () => dirty.value && baseRevision.value !== (props.feed?.revision ?? 0),
 );
-watch(dirty, (v) => emit("dirty", v));
+watch(dirty, (v) => emit("dirty", v), { immediate: true });
 watch(
   () => props.feed?.revision,
   () => {
