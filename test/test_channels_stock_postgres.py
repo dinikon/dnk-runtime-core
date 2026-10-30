@@ -47,6 +47,83 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection imp
 )
 
 
+class PromStockHttp:
+    """Проверяемый API остатков: применяет абсолютные значения и возвращает пустой ACK."""
+
+    def __init__(self) -> None:
+        self.products = {
+            identifier: {
+                "id": identifier,
+                "quantity_in_stock": 3,
+                "presence": "available",
+                "name": "Untouched",
+            }
+            for identifier in (101, 102)
+        }
+        self.calls = []
+
+    async def request(self, method: str, url: str, **kwargs: object) -> dict:
+        """Не эмулирует контентные операции и не обращается к сети."""
+        from copy import deepcopy
+
+        self.calls.append((method, url, kwargs))
+        if method == "GET":
+            return {"product": deepcopy(self.products[int(url.rsplit("/", 1)[1])])}
+        for value in kwargs["body"]:
+            self.products[value["id"]].update(value)
+        return {"processed_ids": [], "errors": {}, "warnings": {}}
+
+
+class WooStockHttp:
+    """API с настоящим различием собственного и родительского количественного учёта."""
+
+    def __init__(self) -> None:
+        self.products = {
+            100: {
+                "id": 100,
+                "manage_stock": True,
+                "stock_quantity": 3,
+                "stock_status": "instock",
+                "backorders": "no",
+            }
+        }
+        for identifier in (101, 102):
+            self.products[identifier] = {
+                "id": identifier,
+                "manage_stock": False,
+                "stock_quantity": None,
+                "stock_status": "instock",
+                "backorders": "no",
+            }
+        self.calls = []
+        self.fail_parent = False
+
+    async def request(self, method: str, url: str, **kwargs: object) -> dict:
+        """Возвращает нативный parent только при реально включённом учёте родителя."""
+        from copy import deepcopy
+
+        identifier = int(url.rsplit("/", 1)[1])
+        self.calls.append((method, url, kwargs))
+        if method == "PUT":
+            if identifier == 100 and self.fail_parent:
+                from src.modules.channels.application.error import VerificationFailure
+
+                raise VerificationFailure("stock_write_rejected")
+            self.products[identifier].update(kwargs["body"])
+        value = deepcopy(self.products[identifier])
+        if (
+            identifier != 100
+            and not value["manage_stock"]
+            and self.products[100]["manage_stock"]
+        ):
+            value.update(
+                manage_stock="parent",
+                stock_quantity=None,
+                stock_status=self.products[100]["stock_status"],
+            )
+        return value
+
+
 class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
@@ -135,7 +212,11 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
             )
             await session.commit()
         self.claimed_jobs.extend(rows)
-        found = next(v for v in self.claimed_jobs if v.job_type == kind)
+        found = next(
+            v
+            for v in self.claimed_jobs
+            if v.job_type == kind and v.tenant_id == self.tenant
+        )
         self.claimed_jobs.remove(found)
         return found
 
@@ -167,6 +248,286 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
     async def stock_state(self, channel: str, group: str) -> dict:
         return await self.call(
             "GET", f"/channels/{channel}/catalog-bindings/{group}/stock"
+        )
+
+    async def setup_family_stock(
+        self,
+        *,
+        own_quantity: int | None = None,
+        standalone: bool = False,
+        platform: str = "prom",
+    ) -> tuple[str, str, str, list[str], list[str]]:
+        """Связывает два варианта Catalog с продаваемыми позициями Prom."""
+        own_stock = (
+            {
+                "stock": {
+                    "manage_stock": True,
+                    "stock_quantity": own_quantity,
+                    "stock_status": None,
+                    "backorders": "no",
+                }
+            }
+            if own_quantity is not None
+            else {}
+        )
+        root = (
+            await self.call(
+                "POST",
+                "/catalog/items",
+                {
+                    "kind": "variable",
+                    "stock": {
+                        "manage_stock": True,
+                        "stock_quantity": 7,
+                        "stock_status": None,
+                        "backorders": "no",
+                    },
+                    "variants": [{}, own_stock],
+                },
+                201,
+            )
+        )["id"]
+        positions = [
+            value["id"]
+            for value in (
+                await self.call("GET", f"/catalog/items/{root}/variants?locale=uk")
+            )["items"]
+        ]
+        channel, publications = await self.source(platform, variable=not standalone)
+        if standalone:
+            _, second = await self.source(platform, existing_channel=channel)
+            publications.extend(second)
+        async with self.sessions() as session:
+            await bind_tenant_schema(
+                await session.connection(), self.tenant, self.naming
+            )
+            repository = SqlAlchemyChannelRepository(session, self.tenant)
+            aggregate = await repository.get(EntityIdVO(UUID(channel)), for_update=True)
+            aggregate.apply_verification(
+                job_id=aggregate.connection.verification.job_id,
+                config_revision=1,
+                identity=ResourceIdentityVO(namespace="test.stock", key=str(uuid4())),
+                error_code=None,
+                now=datetime.now(UTC),
+            )
+            await repository.save(aggregate)
+            for external_id, publication in enumerate(publications, 101):
+                stored = await session.get(ExternalPublicationModel, UUID(publication))
+                stored.external_id = str(external_id)
+                stored.raw_data = {"name": "Content must survive"}
+                stored.normalized_data = {
+                    **stored.normalized_data,
+                    "quantity": "3",
+                    "stock_mode": "own",
+                }
+            await session.commit()
+        payload, preview = await self.propose(
+            channel,
+            root,
+            positions,
+            publications,
+            mode="VARIABLE_TO_SIMPLE" if standalone else "VARIABLE_TO_VARIABLE",
+            source_root=None if standalone else publications[0],
+        )
+        body = {k: v for k, v in payload.items() if k != "group_id"} | {
+            "catalog_token": preview["catalog_token"],
+            "publication_token": preview["publication_token"],
+        }
+        group = (
+            await self.call("POST", f"/channels/{channel}/catalog-bindings", body, 201)
+        )["id"]
+        await self.enable(channel)
+        return channel, group, root, positions, publications
+
+    async def test_prom_manual_export_projects_parent_stock_to_each_position(
+        self,
+    ) -> None:
+        """Оба вида связей согласуются одним заданием семьи с отдельными результатами."""
+        for standalone in (False, True):
+            with self.subTest(standalone=standalone):
+                channel, group, root, positions, publications = (
+                    await self.setup_family_stock(standalone=standalone)
+                )
+                accepted = await self.call(
+                    "POST",
+                    f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+                    {},
+                    202,
+                )
+                self.assertEqual(len(accepted["operation_ids"]), 1)
+                http = PromStockHttp()
+                job = await self.stock_job()
+                worker = ChannelsStockJobHandler(
+                    self.sessions,
+                    platforms=InstalledPlatforms(http),
+                    cipher=self.cipher,
+                )
+                await worker.handle(job)
+                calls = list(http.calls)
+                await worker.handle(job)
+                await self.finish(job)
+                self.assertEqual(calls, http.calls)
+                self.assertEqual(
+                    [
+                        v[2]["body"][0]["quantity_in_stock"]
+                        for v in http.calls
+                        if v[0] == "POST"
+                    ],
+                    [7, 7],
+                )
+                state = await self.stock_state(channel, group)
+                self.assertEqual(
+                    {v["operation"]["status"] for v in state["items"]}, {"completed"}
+                )
+                self.assertEqual(
+                    {v["operation"]["operation_id"] for v in state["items"]},
+                    set(accepted["operation_ids"]),
+                )
+                self.assertEqual(
+                    {v["publication_quantity"] for v in state["items"]}, {"7"}
+                )
+                for position in positions:
+                    item = (
+                        await self.call(
+                            "GET",
+                            f"/catalog/items/{root}/variants/{position}?locale=uk",
+                        )
+                    )["item"]
+                    self.assertFalse(item["stock"]["manage_stock"])
+                    self.assertEqual(item["effective_stock"]["stock_quantity"], 7)
+
+    async def test_prom_manual_export_selected_variant_uses_own_override(self) -> None:
+        """HTTP запрещает выбор для отправки; собственный остаток сохраняется при отправке семьи."""
+        channel, group, root, positions, publications = await self.setup_family_stock(
+            own_quantity=4
+        )
+        url = f"/channels/{channel}/catalog-bindings/{group}/stock-export"
+        await self.call("POST", url, {"publication_ids": [publications[1]]}, 422)
+        await self.call("POST", url, {}, 202)
+        http = PromStockHttp()
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        self.assertEqual(http.products[101]["quantity_in_stock"], 7)
+        self.assertEqual(http.products[102]["quantity_in_stock"], 4)
+
+    async def test_prom_parent_change_automatically_exports_all_inherited_positions(
+        self,
+    ) -> None:
+        """Повторная доставка события не создаёт второе семейное задание."""
+        channel, group, root, _, _ = await self.setup_family_stock()
+        await self.call(
+            "PATCH",
+            f"/catalog/items/{root}",
+            {
+                "stock": {
+                    "manage_stock": True,
+                    "stock_quantity": 8,
+                    "stock_status": None,
+                    "backorders": "no",
+                }
+            },
+        )
+        event = await self.stock_job("catalog.stock_changed")
+        consumer = ChannelsCatalogStockChangedJobHandler(self.sessions)
+        await consumer.handle(event)
+        await consumer.handle(event)
+        await self.finish(event)
+        jobs = [
+            v
+            for v in await self.rows(ScheduledJobModel)
+            if v["job_type"] == "channels.sync_stock"
+        ]
+        self.assertEqual(len(jobs), 1)
+        http = PromStockHttp()
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        self.assertEqual({v["quantity_in_stock"] for v in http.products.values()}, {8})
+        self.assertEqual(
+            {
+                v["operation"]["status"]
+                for v in (await self.stock_state(channel, group))["items"]
+            },
+            {"completed"},
+        )
+
+    async def test_prom_parent_change_preserves_own_variant_stock_and_inherits_backorders(
+        self,
+    ) -> None:
+        """Семья отправляется целиком; собственное количество не заменяется родительским."""
+        channel, group, root, _, _ = await self.setup_family_stock(own_quantity=4)
+        await self.call(
+            "PATCH",
+            f"/catalog/items/{root}",
+            {
+                "stock": {
+                    "manage_stock": True,
+                    "stock_quantity": 0,
+                    "stock_status": None,
+                    "backorders": "notify",
+                }
+            },
+        )
+        event = await self.stock_job("catalog.stock_changed")
+        await ChannelsCatalogStockChangedJobHandler(self.sessions).handle(event)
+        await self.finish(event)
+        http = PromStockHttp()
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        self.assertEqual(
+            (http.products[101]["quantity_in_stock"], http.products[101]["presence"]),
+            (0, "order"),
+        )
+        self.assertEqual(
+            (http.products[102]["quantity_in_stock"], http.products[102]["presence"]),
+            (4, "available"),
+        )
+
+    async def test_prom_inherited_export_still_requires_channel_permission(
+        self,
+    ) -> None:
+        """Запрет канала действует и для ручной, и для автоматической проекции."""
+        channel, group, root, _, _ = await self.setup_family_stock()
+        await self.enable(channel, False)
+        await self.call(
+            "POST",
+            f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+            {},
+            403,
+        )
+        await self.call(
+            "PATCH",
+            f"/catalog/items/{root}",
+            {
+                "stock": {
+                    "manage_stock": True,
+                    "stock_quantity": 8,
+                    "stock_status": None,
+                    "backorders": "no",
+                }
+            },
+        )
+        event_job = await self.stock_job("catalog.stock_changed")
+        await ChannelsCatalogStockChangedJobHandler(self.sessions).handle(event_job)
+        await self.finish(event_job)
+        self.assertFalse(
+            any(
+                value["job_type"] == "channels.sync_stock"
+                for value in await self.rows(ScheduledJobModel)
+            )
+        )
+        state = await self.stock_state(channel, group)
+        self.assertEqual(
+            {value["export_blocker"] for value in state["items"]},
+            {"stock_export_forbidden"},
         )
 
     async def test_prom_retry_empty_ack_completes_after_confirmed_readback(
@@ -419,7 +780,12 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
         await self.finish(write_job)
         self.assertEqual(
             http.calls[1][2]["body"],
-            {"manage_stock": True, "stock_quantity": 8, "backorders": "no"},
+            {
+                "stock_status": "instock",
+                "manage_stock": True,
+                "stock_quantity": 8,
+                "backorders": "no",
+            },
         )
         self.assertEqual(
             (await self.stock_state(channel, group))["items"][0]["operation"]["status"],
@@ -457,13 +823,7 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
         channel, group, root, pub = await self.setup_stock(tracked=False)
         await self.enable(channel)
         state = await self.stock_state(channel, group)
-        self.assertEqual(state["items"][0]["export_blocker"], "stock_tracking_required")
-        await self.call(
-            "POST",
-            f"/channels/{channel}/catalog-bindings/{group}/stock-export",
-            {},
-            422,
-        )
+        self.assertIsNone(state["items"][0]["export_blocker"])
         await self.call(
             "PATCH",
             f"/catalog/items/{root}",
@@ -545,7 +905,16 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
                     await session.commit()
                 return await super().request(method, url, **kwargs)
 
-        http = LostLeaseHttp([{"id": 101, "manage_stock": True, "stock_quantity": 90}])
+        http = LostLeaseHttp(
+            [
+                {
+                    "stock_status": "instock",
+                    "id": 101,
+                    "manage_stock": True,
+                    "stock_quantity": 90,
+                }
+            ]
+        )
         await ChannelsStockJobHandler(
             self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
         ).handle(job)
@@ -655,6 +1024,7 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
         return channel, group, root, children
 
     async def test_stock_shared_woo_pool_writes_parent_once(self) -> None:
+        """Родитель записывается один раз, у наследующих вариантов отключается собственный учёт."""
         channel, group, root, children = await self.setup_shared_stock(
             catalog_shared=True, platform_shared=True
         )
@@ -665,53 +1035,65 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
             202,
         )
         self.assertEqual(len(accepted["operation_ids"]), 1)
+        http = WooStockHttp()
         job = await self.stock_job()
-        parent = {
-            "id": 100,
-            "manage_stock": True,
-            "stock_quantity": 3,
-            "backorders": "no",
-            "stock_status": "instock",
-        }
-        after = {**parent, "stock_quantity": 7}
-        http = FixtureHttp(
-            [
-                {"id": 101, "manage_stock": "parent", "stock_quantity": None},
-                parent,
-                after,
-                after,
-            ]
-        )
         await ChannelsStockJobHandler(
             self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
         ).handle(job)
-        self.assertEqual([v[0] for v in http.calls], ["GET", "GET", "PUT", "GET"])
-        self.assertTrue(http.calls[2][1].endswith("/products/100"))
+        await self.finish(job)
+        writes = [v for v in http.calls if v[0] == "PUT"]
+        self.assertEqual(len(writes), 3)
+        self.assertTrue(writes[0][1].endswith("/products/100"))
+        self.assertEqual(writes[0][2]["body"]["stock_quantity"], 7)
+        for write in writes[1:]:
+            self.assertFalse(write[2]["body"]["manage_stock"])
+            self.assertIsNone(write[2]["body"]["stock_quantity"])
         state = await self.stock_state(channel, group)
-        self.assertEqual(
-            [v["publication_quantity"] for v in state["items"]], ["7", "7"]
+        parent = next(
+            value for value in state["items"] if value["catalog_position_id"] == root
         )
+        for value in state["items"]:
+            self.assertEqual(value["stock_owner_id"], parent["publication_id"])
+
+        self.assertEqual({v["publication_quantity"] for v in state["items"]}, {"7"})
         self.assertEqual(
-            len({v["operation"]["operation_id"] for v in state["items"]}), 1
+            {v["operation"]["status"] for v in state["items"]}, {"completed"}
         )
 
     async def test_stock_ambiguous_pool_mappings_block_before_queue(self) -> None:
-        for catalog_shared, platform_shared in [(True, False), (False, True)]:
-            channel, group, root, children = await self.setup_shared_stock(
-                catalog_shared=catalog_shared, platform_shared=platform_shared
-            )
-            state = await self.stock_state(channel, group)
-            self.assertEqual(
-                {v["export_blocker"] for v in state["items"]},
-                {"stock_ownership_ambiguous"},
-            )
-            response = await self.call(
-                "POST",
-                f"/channels/{channel}/catalog-bindings/{group}/stock-export",
-                {},
-                422,
-            )
-            self.assertEqual(response["detail"]["code"], "stock_ownership_ambiguous")
+        """Нативный режим приводится к Catalog в обе стороны без условий по платформе в политике."""
+        for catalog_shared, platform_shared in ((True, False), (False, True)):
+            with self.subTest(catalog_shared=catalog_shared):
+                channel, group, _, _ = await self.setup_shared_stock(
+                    catalog_shared=catalog_shared, platform_shared=platform_shared
+                )
+                await self.call(
+                    "POST",
+                    f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+                    {},
+                    202,
+                )
+                http = WooStockHttp()
+                job = await self.stock_job()
+                await ChannelsStockJobHandler(
+                    self.sessions,
+                    platforms=InstalledPlatforms(http),
+                    cipher=self.cipher,
+                ).handle(job)
+                await self.finish(job)
+                self.assertEqual(http.products[100]["manage_stock"], catalog_shared)
+                for identifier in (101, 102):
+                    self.assertEqual(
+                        http.products[identifier]["manage_stock"], not catalog_shared
+                    )
+                    self.assertEqual(
+                        http.products[identifier]["stock_quantity"],
+                        None if catalog_shared else 7,
+                    )
+                state = await self.stock_state(channel, group)
+                self.assertEqual(
+                    {v["operation"]["status"] for v in state["items"]}, {"completed"}
+                )
 
     async def test_stock_rozetka_duplicate_marketplace_target_blocks_export(
         self,
@@ -755,9 +1137,9 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
             "POST",
             f"/channels/{channel}/catalog-bindings/{group}/stock-export",
             {},
-            422,
+            200,
         )
-        self.assertEqual(response["detail"]["code"], "stock_ownership_ambiguous")
+        self.assertEqual(response["warnings"], ["stock_ownership_ambiguous"])
 
     async def test_stock_latest_catalog_quantity_used_before_api_write(self) -> None:
         channel, group, root, pub = await self.setup_stock()
@@ -789,6 +1171,7 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
                 return await super().request(method, url, **kwargs)
 
         before = {
+            "stock_status": "instock",
             "id": 101,
             "manage_stock": True,
             "stock_quantity": 3,
@@ -835,6 +1218,7 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
                 return await super().request(method, url, **kwargs)
 
         before = {
+            "stock_status": "instock",
             "id": 101,
             "manage_stock": True,
             "stock_quantity": 3,
@@ -850,6 +1234,241 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
         self.assertEqual(state["items"][0]["catalog_quantity"], 12)
         self.assertEqual(state["items"][0]["operation"]["status"], "queued")
         self.assertNotEqual(state["items"][0]["operation"]["operation_id"], str(job.id))
+
+    async def test_parent_mode_change_exports_family_even_when_children_have_own_stock(
+        self,
+    ) -> None:
+        """Изменение только родителя не теряется при собственном учёте всех вариантов."""
+        channel, group, root, _ = await self.setup_shared_stock(
+            catalog_shared=False, platform_shared=True
+        )
+        consumer = ChannelsCatalogStockChangedJobHandler(self.sessions)
+        for _ in range(2):
+            previous = await self.stock_job("catalog.stock_changed")
+            await consumer.handle(previous)
+            await self.finish(previous)
+        await self.call(
+            "PATCH",
+            f"/catalog/items/{root}",
+            {
+                "stock": {
+                    "manage_stock": True,
+                    "stock_quantity": 9,
+                    "stock_status": None,
+                    "backorders": "no",
+                }
+            },
+        )
+        event = await self.stock_job("catalog.stock_changed")
+        await consumer.handle(event)
+        await self.finish(event)
+        job = await self.stock_job()
+        http = WooStockHttp()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        self.assertEqual(http.products[100]["stock_quantity"], 9)
+        self.assertEqual(http.products[101]["stock_quantity"], 7)
+        self.assertEqual(http.products[102]["stock_quantity"], 7)
+        self.assertEqual(
+            {
+                v["operation"]["status"]
+                for v in (await self.stock_state(channel, group))["items"]
+            },
+            {"completed"},
+        )
+
+    async def test_variable_to_standalone_products_projects_effective_quantity(
+        self,
+    ) -> None:
+        """Самостоятельные товары получают эффективное число без попытки включить нативное наследование."""
+        channel, group, _, _, _ = await self.setup_family_stock(
+            platform="woocommerce", standalone=True
+        )
+        await self.call(
+            "POST",
+            f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+            {},
+            202,
+        )
+        http = WooStockHttp()
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        for identifier in (101, 102):
+            self.assertTrue(http.products[identifier]["manage_stock"])
+            self.assertEqual(http.products[identifier]["stock_quantity"], 7)
+        state = await self.stock_state(channel, group)
+        self.assertEqual(
+            {v["operation"]["status"] for v in state["items"]}, {"completed"}
+        )
+
+    async def test_independent_family_failure_keeps_other_position_progress(
+        self,
+    ) -> None:
+        """Независимые адресаты продолжают запись после явного отказа одной позиции."""
+        from src.modules.channels.application.error import VerificationFailure
+
+        channel, group, _, _, _ = await self.setup_family_stock()
+        await self.call(
+            "POST",
+            f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+            {},
+            202,
+        )
+
+        class RejectFirstHttp(PromStockHttp):
+            async def request(self, method: str, url: str, **kwargs: object) -> dict:
+                if method == "POST" and kwargs["body"][0]["id"] == 101:
+                    raise VerificationFailure("stock_write_rejected")
+                return await super().request(method, url, **kwargs)
+
+        http = RejectFirstHttp()
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        state = await self.stock_state(channel, group)
+        self.assertEqual(
+            {v["operation"]["status"] for v in state["items"]}, {"completed", "failed"}
+        )
+        self.assertEqual(http.products[102]["quantity_in_stock"], 7)
+
+    async def test_manual_availability_auto_export_has_no_invented_quantity(
+        self,
+    ) -> None:
+        """Изменение ручного наличия создаёт событие и передаёт только статус."""
+        channel, group, root, publication = await self.setup_stock(
+            platform="prom", tracked=False
+        )
+        await self.enable(channel)
+        await self.call(
+            "PATCH",
+            f"/catalog/items/{root}",
+            {
+                "stock": {
+                    "manage_stock": False,
+                    "stock_quantity": None,
+                    "stock_status": "out_of_stock",
+                    "backorders": "no",
+                }
+            },
+        )
+        event = await self.stock_job("catalog.stock_changed")
+        await ChannelsCatalogStockChangedJobHandler(self.sessions).handle(event)
+        await self.finish(event)
+        http = PromStockHttp()
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        payload = next(v[2]["body"][0] for v in http.calls if v[0] == "POST")
+        self.assertNotIn("quantity_in_stock", payload)
+        self.assertEqual(payload["presence"], "not_available")
+        self.assertEqual(http.products[101]["quantity_in_stock"], 3)
+        state = (await self.stock_state(channel, group))["items"][0]
+        self.assertEqual(state["desired_state"]["mode"], "availability")
+        self.assertEqual(state["operation"]["status"], "completed")
+
+    async def test_unsupported_manual_status_returns_warning_without_job(self) -> None:
+        """Неподдержанный API-режим пропускается без изменения количества на ноль или один."""
+        channel, group, _, _ = await self.setup_stock(platform="rozetka", tracked=False)
+        await self.enable(channel)
+        response = await self.call(
+            "POST",
+            f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+            {},
+            200,
+        )
+        self.assertEqual(
+            response, {"operation_ids": [], "warnings": ["stock_status_unsupported"]}
+        )
+        self.assertFalse(
+            any(
+                v["job_type"] == "channels.sync_stock"
+                for v in await self.rows(ScheduledJobModel)
+            )
+        )
+
+    async def test_family_parent_failure_blocks_dependent_writes(self) -> None:
+        """Ошибочный родитель не оставляет зависимые варианты с частично переключённым режимом."""
+        channel, group, _, _ = await self.setup_shared_stock(
+            catalog_shared=True, platform_shared=True
+        )
+        await self.call(
+            "POST",
+            f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+            {},
+            202,
+        )
+        http = WooStockHttp()
+        http.fail_parent = True
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        self.assertEqual(len([v for v in http.calls if v[0] == "PUT"]), 1)
+        state = await self.stock_state(channel, group)
+        self.assertEqual({v["operation"]["status"] for v in state["items"]}, {"failed"})
+        self.assertEqual(
+            [v["operation"]["error_code"] for v in state["items"]].count(
+                "stock_dependency_failed"
+            ),
+            2,
+        )
+
+    async def test_partial_family_warns_about_unmapped_inheritors(self) -> None:
+        """Несопоставленного ребёнка не записываем, влияние родителя показываем явно."""
+        channel, group, root, children = await self.setup_shared_stock(
+            catalog_shared=True, platform_shared=True
+        )
+        detail = (
+            await self.call(
+                "GET", f"/channels/{channel}/catalog-bindings/{group}?locale=uk"
+            )
+        )["binding"]["group"]
+        pairs = detail["items"][:1]
+        payload, preview = await self.propose(
+            channel,
+            root,
+            [pairs[0]["catalog_position_id"]],
+            [pairs[0]["publication_id"]],
+            mode="VARIABLE_TO_VARIABLE",
+            source_root=detail["publication_root_id"],
+            group_id=group,
+        )
+        await self.call(
+            "PUT",
+            f"/channels/{channel}/catalog-bindings/{group}",
+            {
+                "expected_revision": detail["revision"],
+                "items": payload["items"],
+                "catalog_token": preview["catalog_token"],
+                "publication_token": preview["publication_token"],
+                "locale": "uk",
+            },
+        )
+        state = await self.stock_state(channel, group)
+        self.assertEqual(state["warnings"], ["stock_unmapped_inheritors"])
+        await self.call(
+            "POST",
+            f"/channels/{channel}/catalog-bindings/{group}/stock-export",
+            {},
+            202,
+        )
+        http = WooStockHttp()
+        job = await self.stock_job()
+        await ChannelsStockJobHandler(
+            self.sessions, platforms=InstalledPlatforms(http), cipher=self.cipher
+        ).handle(job)
+        await self.finish(job)
+        self.assertEqual(len([v for v in http.calls if v[0] == "PUT"]), 2)
 
     async def test_stock_migration_roundtrip_preserves_catalog_and_disables_export(
         self,
@@ -944,6 +1563,7 @@ class ChannelStockPostgresTests(support.CatalogBindingsPostgresTests):
                 return await super().request(method, url, **kwargs)
 
         before = {
+            "stock_status": "instock",
             "id": 101,
             "manage_stock": True,
             "stock_quantity": 3,

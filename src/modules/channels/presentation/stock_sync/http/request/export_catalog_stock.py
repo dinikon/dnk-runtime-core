@@ -1,10 +1,7 @@
-from uuid import UUID
-
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class ExportCatalogStockRequest(BaseModel):
-    """Пустой список выбирает все пары текущей группы."""
+    """Синхронизирует связанную семью целиком без выбора отдельных позиций."""
 
     model_config = ConfigDict(extra="forbid")
-    publication_ids: tuple[UUID, ...] = Field(default=(), max_length=1000)

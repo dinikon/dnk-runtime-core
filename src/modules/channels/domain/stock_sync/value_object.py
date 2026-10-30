@@ -29,7 +29,8 @@ class StockSnapshotVO:
             or not isinstance(self.external_id, str)
             or not self.external_id
             or not isinstance(self.mode, str)
-            or self.mode not in {"own", "untracked", "unknown", "not_applicable"}
+            or self.mode
+            not in {"own", "parent", "untracked", "unknown", "not_applicable"}
             or (
                 self.quantity is not None
                 and (
@@ -87,14 +88,14 @@ class StockLinkFacts:
 
 
 class StockOwnershipPolicy:
-    """Запрещает неоднозначное объединение или разложение общего количества."""
+    """Проверяет однозначность адресатов без ограничений на число получателей."""
 
     def ensure_exportable(
-        self, selected: StockLinkFacts, links: tuple[StockLinkFacts, ...]
+        self,
+        selected: StockLinkFacts,
+        links: tuple[StockLinkFacts, ...],
     ) -> None:
         """Проверяет всю топологию подключения, включая другие группы связей."""
-        if selected.quantity is None:
-            raise StockSyncError("stock_tracking_required")
         if (
             selected.platform_target_key is not None
             and len(
@@ -108,7 +109,7 @@ class StockOwnershipPolicy:
         ):
             raise StockSyncError("stock_ownership_ambiguous")
         # Отрицательное значение Catalog сохраняется; неподдержанный экспорт отклоняется.
-        if selected.quantity < 0:
+        if selected.quantity is not None and selected.quantity < 0:
             raise StockSyncError("stock_negative_unsupported")
         if (
             len(
@@ -116,18 +117,6 @@ class StockOwnershipPolicy:
                     v.catalog_owner_id
                     for v in links
                     if v.platform_owner_id == selected.platform_owner_id
-                }
-            )
-            > 1
-        ):
-            raise StockSyncError("stock_ownership_ambiguous")
-        if (
-            selected.catalog_position_id != selected.catalog_owner_id
-            and len(
-                {
-                    v.platform_owner_id
-                    for v in links
-                    if v.catalog_owner_id == selected.catalog_owner_id
                 }
             )
             > 1

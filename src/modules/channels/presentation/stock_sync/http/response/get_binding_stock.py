@@ -1,7 +1,17 @@
+from src.modules.channels.domain.stock_sync.state import StockMode
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
+
+
+class DesiredStockFields(BaseModel):
+    """Публичное описание собственного или эффективного наличия."""
+
+    mode: StockMode
+    quantity: int | None
+    availability: str
+    backorders: str
 
 
 class StockOperationFields(BaseModel):
@@ -14,7 +24,7 @@ class StockOperationFields(BaseModel):
     quantity: str | None
     availability: str | None
     observed_at: datetime | None
-    desired_quantity: int | None
+    desired_state: DesiredStockFields | None
     error_code: str | None
     updated_at: datetime
     recovery_required: bool
@@ -32,6 +42,7 @@ class BindingStockItemFields(BaseModel):
     publication_availability: str | None
     export_blocker: str | None
     operation: StockOperationFields | None
+    desired_state: DesiredStockFields
 
 
 class GetBindingStockResponse(BaseModel):
@@ -39,3 +50,4 @@ class GetBindingStockResponse(BaseModel):
 
     allow_stock_export: bool
     items: tuple[BindingStockItemFields, ...]
+    warnings: tuple[str, ...]

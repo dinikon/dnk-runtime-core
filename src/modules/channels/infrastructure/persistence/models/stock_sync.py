@@ -12,10 +12,13 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_base import (
 
 
 class StockSyncModel(TenantBase):
-    """Хранилище текущего состояния одного физического остатка, без бизнес-CHECK."""
+    """Хранилище состояния участника синхронизации без бизнес-CHECK."""
 
     __tablename__ = "channel_stock_sync_states"
-    __table_args__ = (sa.Index("ix_channel_stock_binding", "binding_group_id"),)
+    __table_args__ = (
+        sa.Index("ix_channel_stock_binding", "binding_group_id"),
+        sa.Index("ix_channel_stock_operation", "operation_id"),
+    )
     publication_id: Mapped[UUID] = mapped_column(
         StringUUID,
         sa.ForeignKey(
@@ -50,7 +53,7 @@ class StockSyncModel(TenantBase):
     observed_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), nullable=True
     )
-    desired_quantity: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    desired_state: Mapped[JsonObject | None] = mapped_column(JSONB, nullable=True)
     error_code: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), nullable=False

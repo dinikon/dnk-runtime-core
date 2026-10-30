@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockMode
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -133,11 +134,13 @@ class RozetkaStock:
         config: RozetkaConfig,
         credentials: RozetkaCredentials,
         publication: PublicationLookup,
-        quantity: int,
-        backorders: str,
+        desired: DesiredStockVO,
     ) -> PlatformStockSnapshot:
         """Не меняет режим источника и не выдаёт локальный ключ прайса за ID записи."""
-        if backorders != "no":
+        if desired.mode is StockMode.AVAILABILITY:
+            raise VerificationFailure("stock_status_unsupported")
+        quantity = desired.quantity
+        if desired.backorders != "no":
             raise VerificationFailure("stock_backorders_unsupported")
         before = await self.get(
             config=config, credentials=credentials, publication=publication

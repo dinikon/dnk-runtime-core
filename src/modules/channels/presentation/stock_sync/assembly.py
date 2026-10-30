@@ -1,3 +1,4 @@
+from src.modules.channels.infrastructure.registry import InstalledPlatforms
 from dataclasses import dataclass
 from collections.abc import Callable
 from uuid import UUID, uuid4
@@ -65,7 +66,7 @@ def build_stock_runtime(
     shared_jobs = build_scheduled_job_repository(session)
     channels = SqlAlchemyChannelRepository(session, tenant_id)
     states = SqlAlchemyStockSyncRepository(session)
-    read = SqlAlchemyStockRead(session, shared_jobs, tenant_id)
+    read = SqlAlchemyStockRead(session, shared_jobs, tenant_id, InstalledPlatforms())
     catalog = CatalogBindingGateway(
         CatalogBindingsFacade(
             SqlAlchemyCatalogItemQueryRepository(session),
@@ -73,7 +74,10 @@ def build_stock_runtime(
         )
     )
     planning = StockPlanning(
-        SqlAlchemyCatalogBindingQueryRepository(session), catalog, read
+        SqlAlchemyCatalogBindingQueryRepository(session),
+        catalog,
+        read,
+        InstalledPlatforms(),
     )
     jobs = SharedStockJobs(shared_jobs)
     clock = UtcClock()
@@ -91,6 +95,7 @@ def build_stock_runtime(
             read=read,
             jobs=jobs,
             clock=clock,
+            operations=operations,
         ),
         ApplyStockSyncHandler(
             channels=channels,

@@ -53,12 +53,16 @@ def upgrade() -> None:
         sa.Column("binding_revision", sa.Integer(), nullable=False),
         sa.Column("observed", postgresql.JSONB(), nullable=True),
         sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("desired_quantity", sa.Integer(), nullable=True),
+        sa.Column("desired_state", postgresql.JSONB(), nullable=True),
         sa.Column("error_code", sa.String(100), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index(
         "ix_channel_stock_binding", "channel_stock_sync_states", ["binding_group_id"]
+    )
+
+    op.create_index(
+        "ix_channel_stock_operation", "channel_stock_sync_states", ["operation_id"]
     )
 
 

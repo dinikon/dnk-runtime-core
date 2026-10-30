@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockMode
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -12,7 +13,7 @@ from src.modules.channels.domain.stock_sync.value_object import (
 
 @dataclass(slots=True)
 class StockSync:
-    """Одно состояние и одно поколение задания на физический остаток площадки."""
+    """Состояние участника с поколением самостоятельного или семейного задания."""
 
     publication_id: EntityIdVO
     connection_id: EntityIdVO
@@ -26,7 +27,7 @@ class StockSync:
     binding_revision: int
     observed: StockSnapshotVO | None
     observed_at: datetime | None
-    desired_quantity: int | None
+    desired_state: DesiredStockVO | None
     error_code: str | None
     updated_at: datetime
 
@@ -58,7 +59,7 @@ class StockSync:
             binding_revision=binding_revision,
             observed=None,
             observed_at=None,
-            desired_quantity=None,
+            desired_state=None,
             error_code=None,
             updated_at=now,
         )
@@ -79,7 +80,7 @@ class StockSync:
         binding_revision: int,
         observed: StockSnapshotVO | None,
         observed_at: datetime | None,
-        desired_quantity: int | None,
+        desired_state: DesiredStockVO | None,
         error_code: str | None,
         updated_at: datetime,
     ) -> "StockSync":
@@ -100,23 +101,22 @@ class StockSync:
             or (observed is None) != (observed_at is None)
             or (observed is not None and not isinstance(observed, StockSnapshotVO))
             or (
-                desired_quantity is not None
+                desired_state is not None
                 and (
-                    type(desired_quantity) is not int
-                    or not 0 <= desired_quantity <= 2147483647
+                    not isinstance(desired_state, DesiredStockVO)
+                    or (
+                        desired_state.quantity is not None
+                        and desired_state.quantity < 0
+                    )
                 )
             )
-            or (direction == "read" and desired_quantity is not None)
+            or (direction == "read" and desired_state is not None)
             or (
                 error_code is not None
                 and (not isinstance(error_code, str) or not error_code.strip())
             )
-            or (status == "queued" and desired_quantity is not None)
-            or (
-                status in {"running", "completed"}
-                and direction == "write"
-                and desired_quantity is None
-            )
+            or (status == "queued" and desired_state is not None)
+            or (status == "running" and direction == "write" and desired_state is None)
             or (status == "failed") != (error_code is not None)
             or (status == "completed" and observed is None)
             or not isinstance(updated_at, datetime)
@@ -144,7 +144,7 @@ class StockSync:
             binding_revision,
             observed,
             observed_at,
-            desired_quantity,
+            desired_state,
             error_code,
             updated_at,
         )
@@ -195,14 +195,14 @@ class StockSync:
             binding_revision=binding_revision,
             observed=self.observed,
             observed_at=self.observed_at,
-            desired_quantity=None,
+            desired_state=None,
             error_code=None,
             updated_at=now,
         )
         self._replace(candidate)
 
     def start(
-        self, *, operation_id: EntityIdVO, quantity: int | None, now: datetime
+        self, *, operation_id: EntityIdVO, desired: DesiredStockVO | None, now: datetime
     ) -> bool:
         """Старое или повторно завершённое задание не получает право записи."""
         self._require_time(now)
@@ -211,12 +211,17 @@ class StockSync:
             "running",
         }:
             return False
+        if (self.direction == "write" and not isinstance(desired, DesiredStockVO)) or (
+            self.direction == "read" and desired is not None
+        ):
+            raise StockSyncError("stock_state_invalid")
         if (
-            self.direction == "write"
-            and (type(quantity) is not int or not 0 <= quantity <= 2147483647)
-        ) or (self.direction == "read" and quantity is not None):
-            raise StockSyncError("stock_quantity_invalid")
-        self.status, self.desired_quantity, self.updated_at = "running", quantity, now
+            desired is not None
+            and desired.quantity is not None
+            and desired.quantity < 0
+        ):
+            raise StockSyncError("stock_negative_unsupported")
+        self.status, self.desired_state, self.updated_at = "running", desired, now
         self.revision += 1
         return True
 

@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
 from src.modules.channels.infrastructure.platforms.woocommerce.stock import WooStock
 from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
 from src.modules.channels.infrastructure.platforms.woocommerce.details import (
@@ -64,6 +65,9 @@ class WooCommercePlatform:
                 "write_stock",
             ),
             publication_parent_kind=PublicationKind.VARIABLE,
+            stock_features=StockFeaturesVO(
+                True, ("in_stock", "out_of_stock", "on_order"), ("no", "notify", "yes")
+            ),
         )
 
     def decode_config(self, config: ConnectionConfigVO) -> WooCommerceConfig:
@@ -194,6 +198,10 @@ class WooCommercePlatform:
             publications=publications,
         )
 
+    def stock_target_key(self, native: JsonObject) -> str | None:
+        """Нормализует нативный ключ без раскрытия модели платформы."""
+        return None
+
     async def get_stock(
         self,
         *,
@@ -216,14 +224,12 @@ class WooCommercePlatform:
         config: ConnectionConfigVO,
         credentials: bytes,
         publication: PublicationLookup,
-        quantity: int,
-        backorders: str,
+        desired: DesiredStockVO,
     ) -> PlatformStockSnapshot:
         """Устанавливает абсолютное количество и проверяет результат чтением."""
         return await WooStock(self.http).set(
             config=self.decode_config(config),
             credentials=WooCommerceCredentials.model_validate_json(credentials),
             publication=publication,
-            quantity=quantity,
-            backorders=backorders,
+            desired=desired,
         )

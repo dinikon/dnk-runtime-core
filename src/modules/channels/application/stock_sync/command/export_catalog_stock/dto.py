@@ -7,3 +7,4 @@ class ExportCatalogStockResultDTO:
     """Идентификаторы запланированных операций export_catalog_stock."""
 
     operation_ids: tuple[UUID, ...]
+    warnings: tuple[str, ...] = ()

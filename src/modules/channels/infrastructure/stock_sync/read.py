@@ -1,3 +1,5 @@
+from src.modules.channels.infrastructure.stock_sync.mapper import DesiredStockDocument
+from src.modules.channels.application.port.platform import PlatformRegistry
 from uuid import UUID
 
 from sqlalchemy import select, or_
@@ -5,9 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.channels.infrastructure.channel.persistence.settings import (
     read_stock_sync_settings,
-)
-from src.modules.channels.infrastructure.platforms.rozetka.stock import (
-    known_stock_target,
 )
 from src.modules.channels.application.external_publication.catalog_details import (
     PublicationLookup,
@@ -39,9 +38,15 @@ class SqlAlchemyStockRead:
         session: AsyncSession,
         jobs: ScheduledJobRepositoryProtocol,
         tenant_id: UUID,
+        platforms: PlatformRegistry,
     ) -> None:
         """Получает общую tenant-сессию и порт состояния Shared Jobs."""
-        self.session, self.jobs, self.tenant_id = session, jobs, tenant_id
+        self.session, self.jobs, self.tenant_id, self.platforms = (
+            session,
+            jobs,
+            tenant_id,
+            platforms,
+        )
 
     async def publications(
         self, connection_id: UUID, ids: tuple[UUID, ...]
@@ -92,11 +97,7 @@ class SqlAlchemyStockRead:
                 v["normalized_data"].get("stock_mode", "unknown"),
                 v["normalized_data"].get("quantity"),
                 v["normalized_data"].get("availability"),
-                (
-                    known_stock_target(v["platform_data"])
-                    if platform_kind == "rozetka"
-                    else None
-                ),
+                self.platforms.get(platform_kind).stock_target_key(v["platform_data"]),
             )
             for v in rows
         )
@@ -155,7 +156,13 @@ class SqlAlchemyStockRead:
                     observed.get("quantity"),
                     observed.get("availability"),
                     state.observed_at,
-                    state.desired_quantity,
+                    (
+                        DesiredStockDocument.model_validate(
+                            state.desired_state
+                        ).to_value()
+                        if state.desired_state
+                        else None
+                    ),
                     "stock_job_interrupted" if lost else state.error_code,
                     state.updated_at,
                     lost,

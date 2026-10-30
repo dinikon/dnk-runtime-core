@@ -14,3 +14,7 @@ class StockSyncRepositoryProtocol(Protocol):
     async def save(self, state: StockSync) -> None:
         """Сохраняет проверенное состояние без commit."""
         ...
+
+    async def for_operation(self, operation_id: EntityIdVO) -> tuple[StockSync, ...]:
+        """Загружает участников одного семейного задания."""
+        ...

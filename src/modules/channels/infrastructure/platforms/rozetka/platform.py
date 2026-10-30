@@ -1,3 +1,7 @@
+from src.modules.channels.infrastructure.platforms.rozetka.stock import (
+    known_stock_target,
+)
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
 from src.modules.channels.infrastructure.platforms.rozetka.stock import RozetkaStock
 from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
 from src.modules.channels.infrastructure.platforms.rozetka.details import (
@@ -59,6 +63,7 @@ class RozetkaPlatform:
                 "write_stock",
             ),
             publication_parent_kind=None,
+            stock_features=StockFeaturesVO(),
         )
 
     def decode_config(self, config: ConnectionConfigVO) -> RozetkaConfig:
@@ -177,6 +182,10 @@ class RozetkaPlatform:
             publications=publications,
         )
 
+    def stock_target_key(self, native: JsonObject) -> str | None:
+        """Нормализует нативный ключ без раскрытия модели платформы."""
+        return known_stock_target(native)
+
     async def get_stock(
         self,
         *,
@@ -199,14 +208,12 @@ class RozetkaPlatform:
         config: ConnectionConfigVO,
         credentials: bytes,
         publication: PublicationLookup,
-        quantity: int,
-        backorders: str,
+        desired: DesiredStockVO,
     ) -> PlatformStockSnapshot:
         """Устанавливает абсолютное количество и проверяет результат чтением."""
         return await RozetkaStock(self.http).set(
             config=self.decode_config(config),
             credentials=RozetkaCredentials.model_validate_json(credentials),
             publication=publication,
-            quantity=quantity,
-            backorders=backorders,
+            desired=desired,
         )

@@ -1,3 +1,4 @@
+from src.modules.catalog.domain.catalog_item.policy.stock import resolve_stock
 from dataclasses import dataclass, replace
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
@@ -38,8 +39,9 @@ def effective_variant(
         if locale in own.galleries
         else parent.galleries.get(locale)
     )
-    inherits_stock = not own.stock.manage_stock and parent.stock.manage_stock
-    stock = parent.stock if inherits_stock else own.stock
+    resolved_stock = resolve_stock(own=own.stock, parent=parent.stock)
+    inherits_stock = resolved_stock.inherited
+    stock = resolved_stock.specification
     return CatalogVariantEffectiveValues(
         replace(
             own,

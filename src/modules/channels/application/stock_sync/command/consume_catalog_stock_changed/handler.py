@@ -60,14 +60,14 @@ class ConsumeCatalogStockChangedHandler:
                 for pair in group.items
                 if pair.catalog_position_id in positions
             )
-            if not publications:
+            if not publications and group.catalog_root_id not in positions:
                 continue
             await self.operations.request(
                 tenant_id=event.tenant_id,
                 channel_id=group.channel_id,
                 group_id=group.id,
                 direction="write",
-                publication_ids=publications,
+                publication_ids=(),
                 now=self.clock.now(),
                 automatic=True,
                 occurred_at=event.occurred_at,

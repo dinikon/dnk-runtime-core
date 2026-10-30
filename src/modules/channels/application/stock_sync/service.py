@@ -1,8 +1,9 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
+from src.modules.channels.application.port.platform import PlatformRegistry
 from dataclasses import dataclass
 from datetime import datetime
 from collections.abc import Callable
 from uuid import UUID
-from decimal import Decimal
 
 from src.modules.channels.application.catalog_binding.ports import (
     BindingReadPort,
@@ -36,6 +37,8 @@ class StockPlanItem:
     publication: StockPublication
     owner: StockPublication
     facts: StockLinkFacts
+    desired: DesiredStockVO
+    features: StockFeaturesVO
 
 
 class StockPlanning:
@@ -46,9 +49,15 @@ class StockPlanning:
         bindings: BindingReadPort,
         catalog: BindingCatalogPort,
         read: StockReadPort,
+        platforms: PlatformRegistry,
     ) -> None:
         """Все порты читают один tenant в текущем UoW."""
-        self.bindings, self.catalog, self.read = bindings, catalog, read
+        self.bindings, self.catalog, self.read, self.platforms = (
+            bindings,
+            catalog,
+            read,
+            platforms,
+        )
 
     async def connection_items(
         self, connection_id: UUID, now: datetime
@@ -74,49 +83,46 @@ class StockPlanning:
             if family is None:
                 continue
             positions = {v.id: v for v in family.positions}
-            for pair in group.items:
-                publication, position = publications.get(
-                    pair.publication_id
-                ), positions.get(pair.catalog_position_id)
-                if publication is None or position is None:
+            pairs = [
+                (pair.publication_id, positions.get(pair.catalog_position_id))
+                for pair in group.items
+            ]
+            root = publications.get(group.publication_root_id)
+            if root is not None and root.lookup.kind == "variable":
+                pairs.insert(0, (root.lookup.id, family.root))
+            features = self.platforms.get(group.platform).manifest.stock_features
+            for publication_id, position in pairs:
+                publication = publications.get(publication_id)
+                if publication is None or position is None or position.stock is None:
                     continue
-                parent = publications.get(publication.lookup.parent_id)
-                shared = publication.stock_mode == "parent" or (
-                    group.platform == "woocommerce"
-                    and publication.stock_mode == "untracked"
-                    and parent is not None
-                    and parent.stock_mode == "own"
-                )
-                owner = parent if shared else publication
-                if owner is None:
-                    continue
-                quantity = (
-                    Decimal(position.quantity)
-                    if position.quantity is not None
-                    else None
-                )
-                # Catalog хранит целые количества; проверка сохраняет неизвестное значение.
-                if quantity is not None and quantity != quantity.to_integral_value():
-                    raise StockSyncError("stock_quantity_invalid")
+                desired = position.stock
                 facts = StockLinkFacts(
                     EntityIdVO(publication.lookup.id),
-                    EntityIdVO(owner.lookup.id),
+                    EntityIdVO(publication.lookup.id),
                     EntityIdVO(position.id),
                     EntityIdVO(position.stock_source_id),
-                    int(quantity) if quantity is not None else None,
-                    position.backorders,
-                    owner.write_target_key,
+                    desired.quantity,
+                    desired.backorders,
+                    publication.write_target_key,
                 )
-                result.append(StockPlanItem(group, publication, owner, facts))
+                result.append(
+                    StockPlanItem(
+                        group, publication, publication, facts, desired, features
+                    )
+                )
         return tuple(result)
 
     @staticmethod
     def ensure_exportable(
         selected: StockPlanItem, items: tuple[StockPlanItem, ...]
     ) -> None:
-        """Не допускает неподдержанную топологию даже при одинаковых количествах."""
+        """Проверяет возможности адресата и однозначность записи доменными правилами."""
+        warning = selected.features.warning(selected.desired)
+        if warning:
+            raise StockSyncError(warning)
         StockOwnershipPolicy().ensure_exportable(
-            selected.facts, tuple(v.facts for v in items)
+            selected.facts,
+            tuple(v.facts for v in items),
         )
 
 
@@ -153,7 +159,7 @@ class StockOperations:
         automatic: bool = False,
         occurred_at: datetime | None = None,
     ) -> tuple[UUID, ...]:
-        """Сохраняет весь выбранный набор атомарно, без частичных заданий при отказе."""
+        """Атомарно планирует доступных участников семьи или выбранное получение."""
         channel = await self.channels.get(EntityIdVO(channel_id), for_update=True)
         if channel is None:
             if automatic:
@@ -190,17 +196,54 @@ class StockOperations:
             return ()
         if not group_items:
             raise StockSyncError("stock_binding_not_found")
-        ids = set(publication_ids)
-        if len(ids) != len(publication_ids) or ids - {
-            v.publication.lookup.id for v in group_items
-        }:
+        for item in group_items:
+            pending = await self.states.get(EntityIdVO(item.publication.lookup.id))
+            if (
+                pending is not None
+                and pending.status in {"queued", "running"}
+                and pending.direction != direction
+                and await self.jobs.active(
+                    tenant_id=tenant_id, job_id=pending.operation_id.uuid
+                )
+            ):
+                raise StockSyncError("stock_operation_in_progress")
+        ids = set(publication_ids) if direction == "read" else set()
+        if direction == "read" and (
+            len(ids) != len(publication_ids)
+            or ids - {v.publication.lookup.id for v in group_items}
+        ):
             raise StockSyncError("stock_selection_invalid")
         selected = tuple(
             v for v in group_items if not ids or v.publication.lookup.id in ids
         )
-        if direction == "write" and not automatic:
+        if direction == "write":
+            exportable = []
             for item in selected:
-                self.planning.ensure_exportable(item, all_items)
+                try:
+                    self.planning.ensure_exportable(item, all_items)
+                except StockSyncError:
+                    continue
+                exportable.append(item)
+            selected = tuple(exportable)
+            active = []
+            for item in selected:
+                previous = await self.states.get(EntityIdVO(item.publication.lookup.id))
+                if previous is not None and previous.status in {"queued", "running"}:
+                    if (
+                        previous.direction == direction
+                        and previous.config_revision
+                        == channel.connection.config_revision
+                        and previous.policy_revision
+                        == channel.connection.stock_sync.revision
+                        and previous.binding_revision == item.group.revision
+                        and await self.jobs.active(
+                            tenant_id=tenant_id, job_id=previous.operation_id.uuid
+                        )
+                    ):
+                        active.append(previous.operation_id.uuid)
+            if active:
+                return tuple(dict.fromkeys(active))
+        family_operation = self.uuid() if direction == "write" else None
         operations = []
         seen: set[UUID] = set()
         for item in selected:
@@ -223,7 +266,7 @@ class StockOperations:
             ):
                 operations.append(state.operation_id.uuid)
                 continue
-            operation_id = self.uuid()
+            operation_id = family_operation or self.uuid()
             if state is None:
                 state = StockSync.create(
                     publication_id=EntityIdVO(owner_id),
@@ -247,8 +290,12 @@ class StockOperations:
                     now=now,
                 )
             await self.states.save(state)
-            await self.jobs.schedule(
-                tenant_id=tenant_id, channel_id=channel.id.uuid, state=state, now=now
-            )
+            if not operations or direction == "read":
+                await self.jobs.schedule(
+                    tenant_id=tenant_id,
+                    channel_id=channel.id.uuid,
+                    state=state,
+                    now=now,
+                )
             operations.append(operation_id)
-        return tuple(operations)
+        return tuple(dict.fromkeys(operations))

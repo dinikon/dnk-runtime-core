@@ -1,3 +1,4 @@
+from fastapi import Response
 from uuid import UUID
 
 from src.modules.channels.application.stock_sync.command.export_catalog_stock.command import (
@@ -23,6 +24,7 @@ async def export_catalog_stock(
     channel_id: UUID,
     group_id: UUID,
     payload: ExportCatalogStockRequest,
+    response: Response,
     context: AuthenticatedRequestContextDep,
     authorization: AuthorizationServiceDep,
     handler: ExportCatalogStockHandlerDep,
@@ -30,8 +32,9 @@ async def export_catalog_stock(
     """Преобразует доверенный tenant и выбранные пары в отдельную команду."""
     tenant_id, _ = await channel_access(context, authorization, "manage", channel_id)
     result = await handler.execute(
-        ExportCatalogStockCommand(
-            tenant_id, channel_id, group_id, payload.publication_ids
-        )
+        ExportCatalogStockCommand(tenant_id, channel_id, group_id)
     )
-    return ExportCatalogStockResponse(operation_ids=result.operation_ids)
+    response.status_code = 202 if result.operation_ids else 200
+    return ExportCatalogStockResponse(
+        operation_ids=result.operation_ids, warnings=result.warnings
+    )

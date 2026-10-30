@@ -16,6 +16,7 @@ import { updatePayload } from "../src/modules/channels/api/channel.mapper.ts";
 
 const dto = {
   allow_stock_export: false,
+  warnings: [],
   items: [
     {
       publication_id: "pub",
@@ -26,6 +27,12 @@ const dto = {
       publication_quantity: "9007199254740993",
       publication_availability: "in_stock",
       export_blocker: "stock_export_forbidden",
+      desired_state: {
+        mode: "quantity" as const,
+        quantity: 0,
+        availability: "out_of_stock",
+        backorders: "no",
+      },
       operation: {
         publication_id: "pub",
         operation_id: "op",
@@ -34,7 +41,7 @@ const dto = {
         quantity: "9007199254740993",
         availability: "in_stock",
         observed_at: "2026-10-29T10:00:00Z",
-        desired_quantity: null,
+        desired_state: null,
         error_code: null,
         updated_at: "2026-10-29T10:00:00Z",
         recovery_required: false,
@@ -53,9 +60,7 @@ test("stock requests copy explicit selection without quantities or secrets", () 
   const payload = refreshStockPayload(input);
   input.publicationIds.push("c");
   assert.deepEqual(payload, { publication_ids: ["a", "b"] });
-  assert.deepEqual(exportStockPayload(input), {
-    publication_ids: ["a", "b", "c"],
-  });
+  assert.deepEqual(exportStockPayload(), {});
   assert.doesNotMatch(JSON.stringify(payload), /quantity|catalog|credentials/);
 });
 test("query keys isolate tenants, sessions and groups, polling stops on completion", () => {
@@ -136,7 +141,11 @@ after(async () => {
 function render(props: Record<string, unknown> = {}): Promise<string> {
   return renderToString(
     createSSRApp(Panel, {
-      group: { preview: { publications: [{ id: "pub", title: "Товар" }] } },
+      group: {
+        mode: "SIMPLE_TO_SIMPLE",
+        items: [{ publicationId: "pub", catalogId: "product" }],
+        preview: { publications: [{ id: "pub", title: "Товар" }] },
+      },
       state: mapBindingStock(dto),
       loading: false,
       busy: false,
@@ -152,7 +161,7 @@ test("permission disables export and keeps refresh available", async () => {
   assert.match(html, /Отправка остатков запрещена/);
   assert.match(
     html,
-    /<button[^>]*\sdisabled(?=[\s=>])[^>]*>\s*Отправить остаток\s*<\/button>/,
+    /<button[^>]*\sdisabled(?=[\s=>])[^>]*>\s*Синхронизировать наличие\s*<\/button>/,
   );
   assert.match(
     html,
@@ -182,7 +191,10 @@ test("failed operation and query error retain last quantity and offer retry", as
 test("loading does not invent quantities or enable actions", async () => {
   const html = await render({ state: undefined, loading: true });
   assert.match(html, /aria-busy="true"/);
-  assert.doesNotMatch(html, /Обновить остаток|Отправить остаток|Неизвестно/);
+  assert.doesNotMatch(
+    html,
+    /Обновить остаток|Синхронизировать наличие|Неизвестно/,
+  );
 });
 
 test("unconfirmed stock explains quantity and availability without reporting a rejection", async () => {
@@ -216,4 +228,61 @@ test("stock action is available inside the pinned action group and respects busy
     createSSRApp(Actions, { catalogTargets: [], unlinkTargets: [] }),
   );
   assert.doesNotMatch(hidden, /aria-label="Синхронизация остатков"/);
+});
+
+test("manual availability is a valid export mode without a fabricated quantity", async () => {
+  const state = mapBindingStock(dto);
+  state.allowStockExport = true;
+  const item = state.items[0]!;
+  item.catalogQuantity = null;
+  item.desiredState = {
+    mode: "availability",
+    quantity: null,
+    availability: "out_of_stock",
+    backorders: "no",
+  };
+  item.exportBlocker = null;
+  item.operation = null;
+  const html = await render({ state, selected: [] });
+  assert.match(html, /Нет в наличии/);
+  assert.doesNotMatch(html, /Не учитывается/);
+  assert.match(
+    html,
+    /<button(?![^>]*\sdisabled(?:\s|=|>))[^>]*>\s*Синхронизировать наличие\s*<\/button>/,
+  );
+});
+
+test("partial export keeps the family action available and explains unmapped inheritors", async () => {
+  const state = mapBindingStock(dto);
+  state.allowStockExport = true;
+  state.warnings = ["stock_unmapped_inheritors"];
+  state.items[0]!.exportBlocker = null;
+  state.items[0]!.operation!.direction = "write";
+  state.items.push({
+    ...state.items[0]!,
+    publicationId: "unsupported",
+    operation: null,
+    exportBlocker: "stock_status_unsupported",
+  });
+  const html = await render({ state });
+  assert.match(html, /Частично выполнено/);
+  assert.match(html, /несопоставленные варианты площадки/);
+  assert.match(html, /Позиция пропущена/);
+  assert.match(
+    html,
+    /<button(?![^>]*\sdisabled(?:\s|=|>))[^>]*>\s*Синхронизировать наличие\s*<\/button>/,
+  );
+});
+
+test("completed observation does not mask newer Catalog settings", async () => {
+  const state = mapBindingStock(dto);
+  state.items[0]!.operation!.direction = "write";
+  state.items[0]!.operation!.desiredState = {
+    mode: "quantity",
+    quantity: 3,
+    availability: "in_stock",
+    backorders: "no",
+  };
+  const html = await render({ state });
+  assert.match(html, /Требуется синхронизация: наличие изменилось в Catalog/);
 });

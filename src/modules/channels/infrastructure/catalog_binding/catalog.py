@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockMode
 from datetime import datetime
 from uuid import UUID
 from src.modules.catalog.application.catalog_item.bindings_facade import (
@@ -56,6 +57,22 @@ class CatalogBindingGateway:
             value.stock_status,
             value.sources.stock if value.sources else value.id,
             backorders=stock.backorders.value,
+            stock=DesiredStockVO(
+                (
+                    StockMode.INHERIT
+                    if value.sources and value.sources.stock != value.id
+                    else (
+                        StockMode.QUANTITY
+                        if stock.manage_stock
+                        else StockMode.AVAILABILITY
+                    )
+                ),
+                stock.stock_quantity,
+                {"on_backorder": "on_order"}.get(
+                    stock.effective_status().value, stock.effective_status().value
+                ),
+                stock.backorders.value,
+            ),
         )
 
     async def families(

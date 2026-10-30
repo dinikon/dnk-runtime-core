@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -17,6 +18,7 @@ class BindingStockItemDTO:
     publication_availability: str | None
     export_blocker: str | None
     operation: StockSyncRow | None
+    desired_state: DesiredStockVO
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,3 +27,4 @@ class GetBindingStockResultDTO:
 
     allow_stock_export: bool
     items: tuple[BindingStockItemDTO, ...]
+    warnings: tuple[str, ...] = ()

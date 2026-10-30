@@ -47,7 +47,7 @@ export const stockApi = {
         (
           await httpClient.post<ExportCatalogStockResponseDto>(
             `${root(value.channelId, value.groupId)}/stock-export`,
-            exportStockPayload(value),
+            exportStockPayload(),
           )
         ).data.operation_ids,
     );

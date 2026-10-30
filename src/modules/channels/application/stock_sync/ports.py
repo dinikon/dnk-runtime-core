@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -33,7 +34,7 @@ class StockSyncRow:
     quantity: str | None
     availability: str | None
     observed_at: datetime | None
-    desired_quantity: int | None
+    desired_state: DesiredStockVO | None
     error_code: str | None
     updated_at: datetime
     recovery_required: bool = False

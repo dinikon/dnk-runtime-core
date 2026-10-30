@@ -49,6 +49,24 @@ class GetBindingStockHandler:
                 connection.id, tuple({v.owner.lookup.id for v in selected})
             )
         }
+        family = await self.read.publications(
+            connection.id, tuple(v.publication.lookup.id for v in selected)
+        )
+        by_id = {v.lookup.id: v for v in family}
+        warnings = ()
+        roots = {
+            v.publication.lookup.id
+            for v in selected
+            if v.publication.lookup.kind == "variable" and v.features.inheritance
+        }
+        bound = {v.publication.lookup.id for v in selected}
+        if any(
+            v.lookup.parent_id in roots
+            and v.lookup.id not in bound
+            and v.stock_mode in {"parent", "untracked", "unknown"}
+            for v in family
+        ):
+            warnings = ("stock_unmapped_inheritors",)
         items = []
         for plan in selected:
             blocker = None
@@ -61,17 +79,23 @@ class GetBindingStockHandler:
             elif not channel.allow_stock_export:
                 blocker = "stock_export_forbidden"
             operation = states.get(plan.owner.lookup.id)
+            observed = by_id.get(plan.publication.lookup.id, plan.publication)
+            if observed.stock_mode == "parent":
+                observed = by_id.get(observed.lookup.parent_id, observed)
             items.append(
                 BindingStockItemDTO(
                     plan.publication.lookup.id,
-                    plan.owner.lookup.id,
+                    observed.lookup.id,
                     plan.facts.catalog_position_id.uuid,
                     plan.facts.catalog_owner_id.uuid,
                     plan.facts.quantity,
-                    plan.owner.quantity,
-                    plan.owner.availability,
+                    observed.quantity,
+                    observed.availability,
                     blocker,
                     operation,
+                    plan.desired,
                 )
             )
-        return GetBindingStockResultDTO(channel.allow_stock_export, tuple(items))
+        return GetBindingStockResultDTO(
+            channel.allow_stock_export, tuple(items), warnings
+        )

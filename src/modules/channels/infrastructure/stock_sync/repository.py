@@ -35,3 +35,12 @@ class SqlAlchemyStockSyncRepository:
                 index_elements=["publication_id"], set_=values
             )
         )
+
+    async def for_operation(self, operation_id: EntityIdVO) -> tuple[StockSync, ...]:
+        """Восстанавливает состояния участников без выбора бизнес-порядка."""
+        rows = await self.session.scalars(
+            select(StockSyncModel)
+            .where(StockSyncModel.operation_id == operation_id.uuid)
+            .execution_options(populate_existing=True)
+        )
+        return tuple(to_domain(row) for row in rows)

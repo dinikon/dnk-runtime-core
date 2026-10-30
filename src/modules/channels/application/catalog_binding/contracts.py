@@ -1,3 +1,5 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO
+
 """Конкретные read-проекции и снимки границ привязки."""
 
 from dataclasses import dataclass
@@ -35,6 +37,7 @@ class BindingPositionDTO:
     external_id: str | None = None
     stale: bool = False
     backorders: str = "no"
+    stock: DesiredStockVO | None = None
 
 
 @dataclass(frozen=True, slots=True)

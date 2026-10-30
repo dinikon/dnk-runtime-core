@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.error import StockSyncError
 from src.modules.channels.application.stock_sync.command.export_catalog_stock.command import (
     ExportCatalogStockCommand,
 )
@@ -19,13 +20,26 @@ class ExportCatalogStockHandler:
         self, command: ExportCatalogStockCommand
     ) -> ExportCatalogStockResultDTO:
         """Возвращает принятые задания без ожидания платформенного API."""
+        operation_ids = await self.operations.request(
+            tenant_id=command.tenant_id,
+            channel_id=command.channel_id,
+            group_id=command.group_id,
+            direction="write",
+            publication_ids=(),
+            now=self.clock.now(),
+        )
+        plans = await self.operations.planning.connection_items(
+            (await self.operations.planning.bindings.connection(command.channel_id)).id,
+            self.clock.now(),
+        )
+        warnings = []
+        for plan in plans:
+            if plan.group.id != command.group_id:
+                continue
+            try:
+                self.operations.planning.ensure_exportable(plan, plans)
+            except StockSyncError as exc:
+                warnings.append(exc.code)
         return ExportCatalogStockResultDTO(
-            await self.operations.request(
-                tenant_id=command.tenant_id,
-                channel_id=command.channel_id,
-                group_id=command.group_id,
-                direction="write",
-                publication_ids=command.publication_ids,
-                now=self.clock.now(),
-            )
+            operation_ids, tuple(dict.fromkeys(warnings))
         )

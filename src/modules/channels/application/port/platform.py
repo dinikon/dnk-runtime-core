@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
 from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
 from src.modules.channels.application.external_publication.catalog_details import (
     PublicationLookup,
@@ -38,6 +39,7 @@ class PlatformManifest:
     credentials_schema: JsonObject
     supported_capabilities: tuple[Capability, ...]
     publication_parent_kind: PublicationKind | None = None
+    stock_features: StockFeaturesVO = StockFeaturesVO()
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +101,10 @@ class Platform(Protocol):
         """Получает актуальное полное семейство вне SQL транзакции."""
         ...
 
+    def stock_target_key(self, native: JsonObject) -> str | None:
+        """Возвращает подтверждённый ключ физического адресата записи."""
+        ...
+
     async def get_stock(
         self,
         *,
@@ -116,8 +122,7 @@ class Platform(Protocol):
         config: ConnectionConfigVO,
         credentials: bytes,
         publication: PublicationLookup,
-        quantity: int,
-        backorders: str,
+        desired: DesiredStockVO,
     ) -> PlatformStockSnapshot:
         """Отправляет только количество и поддержанную политику наличия."""
         ...

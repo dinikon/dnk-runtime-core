@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockMode
 import logging
 import re
 
@@ -99,20 +100,27 @@ class PromStock:
         config: PromConfig,
         credentials: PromCredentials,
         publication: PublicationLookup,
-        quantity: int,
-        backorders: str,
+        desired: DesiredStockVO,
     ) -> PlatformStockSnapshot:
         """Отклоняет явные ошибки и подтверждает фактический остаток чтением."""
         before = await self.get(
             config=config, credentials=credentials, publication=publication
         )
-        if before.stock.mode != "own":
+        if desired.mode is not StockMode.AVAILABILITY and before.stock.mode != "own":
             raise VerificationFailure("stock_ownership_ambiguous")
-        presence = (
-            "available"
-            if quantity > 0
-            else "not_available" if backorders == "no" else "order"
-        )
+        quantity = desired.quantity
+        presence = {
+            "in_stock": "available",
+            "out_of_stock": "not_available",
+            "on_order": "order",
+        }[desired.availability]
+        payload = {
+            "id": int(publication.external_id),
+            "presence": presence,
+            "in_stock": desired.availability == "in_stock",
+        }
+        if desired.mode is not StockMode.AVAILABILITY:
+            payload["quantity_in_stock"] = quantity
         response = PromStockUpdate.model_validate(
             await self.http.request(
                 "POST",
@@ -120,14 +128,7 @@ class PromStock:
                 headers={
                     "Authorization": "Bearer " + credentials.token.get_secret_value()
                 },
-                body=[
-                    {
-                        "id": int(publication.external_id),
-                        "quantity_in_stock": quantity,
-                        "presence": presence,
-                        "in_stock": quantity > 0,
-                    }
-                ],
+                body=[payload],
             )
         )
         diagnostic: dict[str, object] = {
@@ -170,10 +171,9 @@ class PromStock:
             "order": "on_order",
         }[presence]
         if (
-            result.stock.mode != "own"
-            or result.stock.quantity != quantity
-            or result.stock.availability != expected_availability
-        ):
+            desired.mode is not StockMode.AVAILABILITY
+            and (result.stock.mode != "own" or result.stock.quantity != quantity)
+        ) or result.stock.availability != expected_availability:
             logger.warning(
                 "Prom stock unconfirmed: publication_id=%s external_id=%s",
                 publication.id,

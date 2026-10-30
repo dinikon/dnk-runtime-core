@@ -1,3 +1,4 @@
+from src.modules.catalog.domain.catalog_item.policy.stock import resolve_stock
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Self
@@ -515,7 +516,8 @@ class CatalogItem:
             self.variants = variants
             self.updated_by, self.updated_at = actor, now
 
-    def ensure_deletable(self, *, in_use: bool) -> None:
+    @staticmethod
+    def ensure_deletable(*, in_use: bool) -> None:
         """Запрещает физическое удаление источника сохранённой публикационной связи."""
         if type(in_use) is not bool:
             raise InvalidCatalogValueError("Некорректные факты использования.")
@@ -531,14 +533,14 @@ class CatalogItem:
     def _stock_ownership(
         self,
     ) -> dict[CatalogItemIdVO, tuple[CatalogItemIdVO, StockSpecificationVO | None]]:
-        """Снимок количественных источников семьи без контента и ручного наличия."""
-        result = {self.id: (self.id, self.stock if self.stock.manage_stock else None)}
+        """Снимок источников количества и ручного наличия без контента."""
+        result = {self.id: (self.id, self.stock)}
         for variant in self.variants:
-            inherited = not variant.stock.manage_stock and self.stock.manage_stock
+            resolved = resolve_stock(own=variant.stock, parent=self.stock)
             source, stock = (
-                (self.id, self.stock) if inherited else (variant.id, variant.stock)
-            )
-            result[variant.id] = (source, stock if stock.manage_stock else None)
+                self.id if resolved.inherited else variant.id
+            ), resolved.specification
+            result[variant.id] = (source, stock)
         return result
 
     def _record_stock_change(

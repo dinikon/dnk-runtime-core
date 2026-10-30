@@ -24,7 +24,11 @@ class StockRoute(ChannelsRoute):
                 status = (
                     404
                     if error.code.endswith("_not_found")
-                    else 403 if error.code == "stock_export_forbidden" else 422
+                    else (
+                        403
+                        if error.code == "stock_export_forbidden"
+                        else 409 if error.code == "stock_operation_in_progress" else 422
+                    )
                 )
                 return JSONResponse(
                     status_code=status, content={"detail": {"code": error.code}}

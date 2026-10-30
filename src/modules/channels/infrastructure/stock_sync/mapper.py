@@ -1,3 +1,4 @@
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockMode
 from typing import Literal
 from decimal import Decimal
 
@@ -22,6 +23,23 @@ class StockSnapshotDocument(BaseModel):
     quantity: Decimal | None
     availability: str | None
     backorders: str | None
+
+
+class DesiredStockDocument(BaseModel):
+    """Строгий документ желаемого наличия без нативных полей."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    version: Literal[1] = 1
+    mode: str
+    quantity: int | None
+    availability: str
+    backorders: str
+
+    def to_value(self) -> DesiredStockVO:
+        """Передаёт проверку значения доменному VO."""
+        return DesiredStockVO(
+            StockMode(self.mode), self.quantity, self.availability, self.backorders
+        )
 
 
 def to_domain(row: StockSyncModel) -> StockSync:
@@ -53,7 +71,11 @@ def to_domain(row: StockSyncModel) -> StockSync:
             else None
         ),
         observed_at=row.observed_at,
-        desired_quantity=row.desired_quantity,
+        desired_state=(
+            DesiredStockDocument.model_validate(row.desired_state).to_value()
+            if row.desired_state
+            else None
+        ),
         error_code=row.error_code,
         updated_at=row.updated_at,
     )
@@ -76,7 +98,9 @@ def to_values(state: StockSync) -> dict[str, object]:
             {"version": 1, **state.observed.to_document()} if state.observed else None
         ),
         "observed_at": state.observed_at,
-        "desired_quantity": state.desired_quantity,
+        "desired_state": (
+            state.desired_state.to_document() if state.desired_state else None
+        ),
         "error_code": state.error_code,
         "updated_at": state.updated_at,
     }

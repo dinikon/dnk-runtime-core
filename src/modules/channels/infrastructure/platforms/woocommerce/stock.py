@@ -1,3 +1,5 @@
+from dataclasses import replace
+from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockMode
 import base64
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -93,7 +95,22 @@ class WooStock:
                     config=config, credentials=credentials, publication=parent
                 )
                 if ancestor.stock.mode == "own":
-                    return ancestor
+                    return PlatformStockSnapshot(
+                        StockSnapshotVO(
+                            publication.resource_type,
+                            publication.external_id,
+                            "parent",
+                            None,
+                            ancestor.stock.availability,
+                            ancestor.stock.backorders,
+                        ),
+                        {
+                            "manage_stock": value.manage_stock,
+                            "stock_quantity": None,
+                            "effective_quantity": str(ancestor.stock.quantity),
+                            "parent_external_id": parent.external_id,
+                        },
+                    )
                 if value.manage_stock == "parent":
                     raise VerificationFailure("stock_ownership_ambiguous")
         mode = "own" if value.manage_stock is True else "untracked"
@@ -124,32 +141,79 @@ class WooStock:
         config: WooCommerceConfig,
         credentials: WooCommerceCredentials,
         publication: PublicationLookup,
-        quantity: int,
-        backorders: str,
+        desired: DesiredStockVO,
     ) -> PlatformStockSnapshot:
         """Не отправляет цену, контент и статус публикации."""
-        if backorders not in {"no", "notify", "yes"}:
+        if desired.backorders not in {"no", "notify", "yes"}:
             raise VerificationFailure("stock_backorders_unsupported")
+        if desired.mode is StockMode.INHERIT and publication.resource_type == "product":
+            desired = DesiredStockVO(
+                StockMode.QUANTITY,
+                desired.quantity,
+                desired.availability,
+                desired.backorders,
+            )
+        payload = {
+            "manage_stock": desired.mode is StockMode.QUANTITY,
+            "stock_quantity": (
+                desired.quantity if desired.mode is StockMode.QUANTITY else None
+            ),
+            "stock_status": {
+                "in_stock": "instock",
+                "out_of_stock": "outofstock",
+                "on_order": "onbackorder",
+            }[desired.availability],
+            "backorders": (
+                desired.backorders
+                if desired.mode is not StockMode.AVAILABILITY
+                else "no"
+            ),
+        }
         raw = await self.http.request(
             "PUT",
             config.endpoint + self.path(publication),
             headers=self.headers(credentials),
-            body={
-                "manage_stock": True,
-                "stock_quantity": quantity,
-                "backorders": backorders,
-            },
+            body=payload,
         )
         value = WooStockResponse.model_validate(raw)
         if str(value.id) != publication.external_id:
             raise VerificationFailure("publication_identity_invalid")
+        parent = None
+        if desired.mode is StockMode.INHERIT:
+            parent_id = publication.platform_data.get("parent_product_id")
+            if not isinstance(parent_id, str):
+                raise VerificationFailure("publication_identity_invalid")
+            parent = replace(
+                publication,
+                resource_type="product",
+                external_id=parent_id,
+                kind="variable",
+                parent_id=None,
+            )
         result = await self.get(
-            config=config, credentials=credentials, publication=publication
+            config=config,
+            credentials=credentials,
+            publication=publication,
+            parent=parent,
         )
-        if (
-            result.stock.mode != "own"
-            or result.stock.quantity != quantity
-            or result.stock.backorders != backorders
-        ):
+        confirmed = result.stock.availability == desired.availability
+        if desired.mode is StockMode.QUANTITY:
+            confirmed = (
+                confirmed
+                and result.stock.mode == "own"
+                and result.stock.quantity == desired.quantity
+                and result.stock.backorders == desired.backorders
+            )
+        elif desired.mode is StockMode.INHERIT:
+            confirmed = (
+                confirmed
+                and result.stock.mode == "parent"
+                and result.platform_data.get("effective_quantity")
+                == str(desired.quantity)
+                and result.stock.backorders == desired.backorders
+            )
+        else:
+            confirmed = confirmed and result.stock.mode == "untracked"
+        if not confirmed:
             raise VerificationFailure("stock_write_unconfirmed", retryable=True)
         return result

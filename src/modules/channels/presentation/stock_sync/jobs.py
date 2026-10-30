@@ -118,103 +118,104 @@ class ChannelsStockJobHandler:
                     connection, job.tenant_id, job.channel_id
                 ):
                     sessions = async_sessionmaker(connection, expire_on_commit=False)
-                    async with UnitOfWork(sessions) as uow:
-                        prepared = await build_stock_runtime(
-                            uow.session, job.tenant_id
-                        ).prepare.execute(job)
-                    snapshot = prepared.snapshot
-                    if snapshot is None:
-                        return
-                    result, error, owner_id = None, None, None
-                    try:
-                        platform = self.platforms.get(snapshot.platform_kind)
-                        credentials = self.cipher.decrypt(
-                            snapshot.encrypted_credentials
-                        )
-                        publication = snapshot.plan.publication.lookup
-                        parent = next(
-                            (
-                                v.lookup
-                                for v in snapshot.family
-                                if v.lookup.id == publication.parent_id
-                            ),
-                            None,
-                        )
-                        observed = await platform.get_stock(
-                            config=snapshot.config,
-                            credentials=credentials,
-                            publication=publication,
-                            parent=parent,
-                        )
-                        owner = next(
-                            (
-                                v.lookup
-                                for v in snapshot.family
-                                if (v.lookup.resource_type, v.lookup.external_id)
-                                == (
-                                    observed.stock.resource_type,
-                                    observed.stock.external_id,
-                                )
-                            ),
-                            None,
-                        )
-                        if owner is None:
-                            raise VerificationFailure("stock_ownership_ambiguous")
-                        owner_id = owner.id
-                        if owner_id != snapshot.plan.owner.lookup.id:
-                            raise VerificationFailure("stock_ownership_ambiguous")
-                        # Повторная короткая проверка перед записью учитывает Catalog, изменённый во время чтения API.
-                        if snapshot.direction == "write":
-                            async with UnitOfWork(sessions) as uow:
-                                fresh = await build_stock_runtime(
-                                    uow.session, job.tenant_id
-                                ).prepare.execute(job)
-                            if fresh.snapshot is None:
-                                return
-                            snapshot = fresh.snapshot
-                        write = snapshot.direction == "write"
-                        if write:
-                            if owner_id != snapshot.plan.owner.lookup.id:
-                                raise VerificationFailure("stock_ownership_ambiguous")
-                            result = await platform.set_stock(
+                    error = None
+                    while True:
+                        async with UnitOfWork(sessions) as uow:
+                            prepared = await build_stock_runtime(
+                                uow.session, job.tenant_id
+                            ).prepare.execute(job)
+                        snapshot = prepared.snapshot
+                        if snapshot is None:
+                            break
+                        result, error, owner_id = None, None, None
+                        try:
+                            platform = self.platforms.get(snapshot.platform_kind)
+                            credentials = self.cipher.decrypt(
+                                snapshot.encrypted_credentials
+                            )
+                            publication = snapshot.plan.publication.lookup
+                            parent = next(
+                                (
+                                    v.lookup
+                                    for v in snapshot.family
+                                    if v.lookup.id == publication.parent_id
+                                ),
+                                None,
+                            )
+                            observed = await platform.get_stock(
                                 config=snapshot.config,
                                 credentials=credentials,
-                                publication=owner,
-                                quantity=snapshot.plan.facts.quantity,
-                                backorders=snapshot.plan.facts.backorders,
+                                publication=publication,
+                                parent=parent,
                             )
-                        else:
-                            result = observed
-                    except CipherNotConfigured:
-                        raise ScheduledJobDeferred(
-                            "Channels encryption key unavailable"
-                        ) from None
-                    except CiphertextUnreadable:
-                        error = "credentials_unreadable"
-                    except VerificationFailure as exc:
-                        if (
-                            exc.retryable
-                            and scheduled.attempts
-                            < dnk_config.SCHEDULED_JOBS.max_attempts
+                            owner = next(
+                                (
+                                    v.lookup
+                                    for v in snapshot.family
+                                    if (v.lookup.resource_type, v.lookup.external_id)
+                                    == (
+                                        observed.stock.resource_type,
+                                        observed.stock.external_id,
+                                    )
+                                ),
+                                None,
+                            )
+                            if owner is None:
+                                raise VerificationFailure("stock_ownership_ambiguous")
+                            owner_id = owner.id
+                            # Повторная короткая проверка перед записью учитывает Catalog, изменённый во время чтения API.
+                            if snapshot.direction == "write":
+                                async with UnitOfWork(sessions) as uow:
+                                    fresh = await build_stock_runtime(
+                                        uow.session, job.tenant_id
+                                    ).prepare.execute(job)
+                                if fresh.snapshot is None:
+                                    return
+                                snapshot = fresh.snapshot
+                            write = snapshot.direction == "write"
+                            if write:
+                                if owner_id != snapshot.plan.owner.lookup.id:
+                                    raise VerificationFailure(
+                                        "stock_ownership_ambiguous"
+                                    )
+                                result = await platform.set_stock(
+                                    config=snapshot.config,
+                                    credentials=credentials,
+                                    publication=owner,
+                                    desired=snapshot.plan.desired,
+                                )
+                            else:
+                                result = observed
+                        except CipherNotConfigured:
+                            raise ScheduledJobDeferred(
+                                "Channels encryption key unavailable"
+                            ) from None
+                        except CiphertextUnreadable:
+                            error = "credentials_unreadable"
+                        except VerificationFailure as exc:
+                            if (
+                                exc.retryable
+                                and scheduled.attempts
+                                < dnk_config.SCHEDULED_JOBS.max_attempts
+                            ):
+                                raise
+                            error = exc.code
+                        except StockSyncError as exc:
+                            error = exc.code
+                        except (
+                            ValidationError,
+                            ValueError,
+                            InvalidExternalPublicationError,
                         ):
-                            raise
-                        error = exc.code
-                    except StockSyncError as exc:
-                        error = exc.code
-                    except (
-                        ValidationError,
-                        ValueError,
-                        InvalidExternalPublicationError,
-                    ):
-                        error = "provider_response_invalid"
-                    async with UnitOfWork(sessions) as uow:
-                        await build_stock_runtime(
-                            uow.session, job.tenant_id
-                        ).apply.execute(
-                            ApplyStockSyncCommand(
-                                job, snapshot, result, owner_id, error
+                            error = "provider_response_invalid"
+                        async with UnitOfWork(sessions) as uow:
+                            await build_stock_runtime(
+                                uow.session, job.tenant_id
+                            ).apply.execute(
+                                ApplyStockSyncCommand(
+                                    job, snapshot, result, owner_id, error
+                                )
                             )
-                        )
                 logger.info(
                     "Channels stock step committed: publication_id=%s job_id=%s reason_code=%s",
                     job.publication_id,

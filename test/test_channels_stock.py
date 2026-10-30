@@ -1,3 +1,9 @@
+from src.modules.channels.domain.stock_sync.state import (
+    DesiredStockVO,
+    StockMode,
+    StockFeaturesVO,
+)
+
 """Доменные ограничения и точные контракты количественного API трёх площадок."""
 
 from dataclasses import fields, replace
@@ -36,6 +42,20 @@ from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
 )
+
+
+def quantitative(quantity: int, backorders: str = "no") -> DesiredStockVO:
+    """Строит ожидаемое количественное состояние для контрактного теста."""
+    return DesiredStockVO(
+        StockMode.QUANTITY,
+        quantity,
+        (
+            "in_stock"
+            if quantity > 0
+            else "out_of_stock" if backorders == "no" else "on_order"
+        ),
+        backorders,
+    )
 
 
 def identifier() -> EntityIdVO:
@@ -85,8 +105,8 @@ class StockDomainTests(unittest.TestCase):
     def test_old_and_duplicate_jobs_do_not_apply(self) -> None:
         state = self.state()
         now = datetime.now(UTC)
-        self.assertFalse(state.start(operation_id=identifier(), quantity=None, now=now))
-        state.start(operation_id=state.operation_id, quantity=None, now=now)
+        self.assertFalse(state.start(operation_id=identifier(), desired=None, now=now))
+        state.start(operation_id=state.operation_id, desired=None, now=now)
         result = StockSnapshotVO("product", "101", "own", Decimal(4), "in_stock")
         self.assertFalse(
             state.complete(
@@ -110,7 +130,7 @@ class StockDomainTests(unittest.TestCase):
             )
         )
         self.assertFalse(
-            state.start(operation_id=state.operation_id, quantity=None, now=now)
+            state.start(operation_id=state.operation_id, desired=None, now=now)
         )
 
     def test_error_preserves_last_observation_and_retry_gets_new_generation(
@@ -118,7 +138,7 @@ class StockDomainTests(unittest.TestCase):
     ) -> None:
         state = self.state()
         now = datetime.now(UTC)
-        state.start(operation_id=state.operation_id, quantity=None, now=now)
+        state.start(operation_id=state.operation_id, desired=None, now=now)
         observed = StockSnapshotVO("product", "101", "own", Decimal(5), "in_stock")
         state.complete(
             operation_id=state.operation_id, snapshot=observed, error_code=None, now=now
@@ -133,7 +153,9 @@ class StockDomainTests(unittest.TestCase):
             binding_revision=1,
             now=now,
         )
-        state.start(operation_id=state.operation_id, quantity=8, now=now)
+        state.start(
+            operation_id=state.operation_id, desired=quantitative(8, "no"), now=now
+        )
         state.complete(
             operation_id=state.operation_id,
             snapshot=None,
@@ -154,7 +176,7 @@ class StockDomainTests(unittest.TestCase):
             {"observed_at": datetime.now(UTC)},
             {"status": "failed"},
             {"error_code": "error"},
-            {"desired_quantity": 1},
+            {"desired_state": 1},
             {"updated_at": datetime.now()},
         ):
             with self.subTest(changes=changes), self.assertRaises(StockSyncError):
@@ -176,11 +198,13 @@ class StockDomainTests(unittest.TestCase):
         self.assertEqual(state, before)
         with self.assertRaises(StockSyncError):
             state.start(
-                operation_id=state.operation_id, quantity=5, now=datetime.now(UTC)
+                operation_id=state.operation_id,
+                desired=quantitative(5, "no"),
+                now=datetime.now(UTC),
             )
         self.assertEqual(state, before)
         state.start(
-            operation_id=state.operation_id, quantity=None, now=datetime.now(UTC)
+            operation_id=state.operation_id, desired=None, now=datetime.now(UTC)
         )
         before = replace(state)
         for error in ("", "   ", 1):
@@ -193,37 +217,90 @@ class StockDomainTests(unittest.TestCase):
                 )
             self.assertEqual(state, before)
 
-    def test_inventory_ownership_is_not_inferred_from_equal_numbers(self) -> None:
-        catalog, position_a, position_b, remote_a, remote_b = tuple(
-            identifier() for _ in range(5)
+    def test_different_catalog_sources_cannot_write_one_target(self) -> None:
+        """Конфликт определяется адресатом, независимо от совпадения количеств."""
+        target = identifier()
+        a = StockLinkFacts(identifier(), target, identifier(), identifier(), 2, "no")
+        b = StockLinkFacts(identifier(), target, identifier(), identifier(), 2, "no")
+        with self.assertRaisesRegex(StockSyncError, "stock_ownership_ambiguous"):
+            StockOwnershipPolicy().ensure_exportable(a, (a, b))
+
+    def test_prom_projects_inherited_stock_to_each_independent_position(self) -> None:
+        """Общий источник разрешён для Prom без объединения целей записи."""
+        parent = identifier()
+        inherited = StockLinkFacts(
+            identifier(), identifier(), identifier(), parent, 2, "notify"
         )
-        a = StockLinkFacts(identifier(), remote_a, position_a, catalog, 10, "no")
-        b = StockLinkFacts(identifier(), remote_b, position_b, catalog, 10, "no")
-        policy = StockOwnershipPolicy()
-        with self.assertRaisesRegex(StockSyncError, "stock_ownership_ambiguous"):
-            policy.ensure_exportable(a, (a, b))
-        shared_b = replace(b, platform_owner_id=remote_a)
-        policy.ensure_exportable(a, (a, shared_b))
-        with self.assertRaisesRegex(StockSyncError, "stock_ownership_ambiguous"):
-            policy.ensure_exportable(
-                a, (a, replace(shared_b, catalog_owner_id=position_b))
+        sibling = replace(
+            inherited,
+            publication_id=identifier(),
+            platform_owner_id=identifier(),
+            catalog_position_id=identifier(),
+        )
+        own_position = identifier()
+        own = StockLinkFacts(
+            identifier(), identifier(), own_position, own_position, 5, "no"
+        )
+        links = (inherited, sibling, own)
+        for selected in links:
+            StockOwnershipPolicy().ensure_exportable(
+                selected,
+                links,
             )
-        policy.ensure_exportable(
-            replace(a, catalog_owner_id=position_a),
-            (
-                replace(a, catalog_owner_id=position_a),
-                replace(b, catalog_owner_id=position_b),
-            ),
+
+    def test_manual_availability_and_quantity_have_explicit_support(self) -> None:
+        """Отсутствие количества допустимо для статуса, неподдержанное состояние предупреждается."""
+        features = StockFeaturesVO(
+            True, ("in_stock", "out_of_stock", "on_order"), ("no", "notify", "yes")
+        )
+        for status in features.manual_availability:
+            desired = DesiredStockVO(StockMode.AVAILABILITY, None, status)
+            self.assertIsNone(features.warning(desired))
+            self.assertEqual(
+                StockFeaturesVO().warning(desired), "stock_status_unsupported"
+            )
+        self.assertEqual(
+            features.warning(quantitative(-2)), "stock_negative_unsupported"
+        )
+        self.assertIsNone(
+            features.warning(DesiredStockVO(StockMode.INHERIT, 0, "on_order", "notify"))
         )
 
-    def test_manual_and_negative_catalog_stock_cannot_export(self) -> None:
-        a = StockLinkFacts(
-            identifier(), identifier(), identifier(), identifier(), None, "no"
-        )
-        with self.assertRaisesRegex(StockSyncError, "stock_tracking_required"):
-            StockOwnershipPolicy().ensure_exportable(a, (a,))
-        with self.assertRaisesRegex(StockSyncError, "stock_negative_unsupported"):
-            StockOwnershipPolicy().ensure_exportable(replace(a, quantity=-2), (a,))
+    def test_desired_stock_rejects_contradictory_values(self) -> None:
+        """Некорректные типы и сочетания отклоняются доменной ошибкой до записи."""
+        for mode, quantity, availability, backorders in (
+            (StockMode.QUANTITY, None, "in_stock", "no"),
+            (StockMode.AVAILABILITY, 1, "in_stock", "no"),
+            (StockMode.AVAILABILITY, None, "in_stock", "notify"),
+            (StockMode.QUANTITY, True, "in_stock", "no"),
+            (StockMode.QUANTITY, 1, [], "no"),
+            (StockMode.QUANTITY, 1, "in_stock", []),
+        ):
+            with (
+                self.subTest(mode=mode, quantity=quantity),
+                self.assertRaises(StockSyncError),
+            ):
+                DesiredStockVO(mode, quantity, availability, backorders)
+
+    def test_common_stock_flow_has_no_platform_specific_branches(self) -> None:
+        """Общий поток принимает нормализованные факты вместо сравнений с именами площадок."""
+        import ast
+
+        root = Path(__file__).resolve().parents[1] / "src/modules/channels"
+        for layer in ("domain", "application", "infrastructure", "presentation"):
+            for path in (root / layer / "stock_sync").rglob("*.py"):
+                for node in ast.walk(ast.parse(path.read_text())):
+                    if not isinstance(node, ast.Compare):
+                        continue
+                    names = {
+                        part.value
+                        for part in ast.walk(node)
+                        if isinstance(part, ast.Constant)
+                        and isinstance(part.value, str)
+                    }
+                    self.assertFalse(
+                        names & {"prom", "woocommerce", "rozetka"}, str(path)
+                    )
 
     def test_channel_policy_changes_revision_once_without_reverification(self) -> None:
         setup = channel_domain_support.ChannelsDomainTests()
@@ -439,8 +516,15 @@ class StockDomainTests(unittest.TestCase):
         second = replace(
             first, publication_id=identifier(), platform_owner_id=identifier()
         )
-        with self.assertRaisesRegex(StockSyncError, "stock_ownership_ambiguous"):
-            StockOwnershipPolicy().ensure_exportable(first, (first, second))
+        for platform in ("prom", "woocommerce", "rozetka"):
+            with (
+                self.subTest(platform=platform),
+                self.assertRaisesRegex(StockSyncError, "stock_ownership_ambiguous"),
+            ):
+                StockOwnershipPolicy().ensure_exportable(
+                    first,
+                    (first, second),
+                )
 
 
 class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
@@ -485,8 +569,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
             config=config,
             credentials=secret,
             publication=lookup(),
-            quantity=0,
-            backorders="no",
+            desired=quantitative(0, "no"),
         )
         self.assertEqual(result.stock.quantity, 0)
         self.assertEqual(http.calls[1][0], "POST")
@@ -526,8 +609,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                 config=config,
                 credentials=secret,
                 publication=lookup(),
-                quantity=5,
-                backorders="no",
+                desired=quantitative(5, "no"),
             )
         self.assertNotIn("private", str(error.exception))
         self.assertEqual([call[0] for call in http.calls], ["GET", "POST"])
@@ -571,8 +653,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                     config=config,
                     credentials=secret,
                     publication=lookup(parent=variant),
-                    quantity=quantity,
-                    backorders=backorders,
+                    desired=quantitative(quantity, backorders),
                 )
                 self.assertEqual(result.stock.quantity, quantity)
                 self.assertEqual(result.platform_data["presence"], presence)
@@ -619,8 +700,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                             config=config,
                             credentials=secret,
                             publication=lookup(),
-                            quantity=7,
-                            backorders="no",
+                            desired=quantitative(7, "no"),
                         )
                     self.assertEqual(error.exception.code, "stock_write_unconfirmed")
                     self.assertTrue(error.exception.retryable)
@@ -652,8 +732,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                 config=config,
                 credentials=secret,
                 publication=publication,
-                quantity=7,
-                backorders="no",
+                desired=quantitative(7, "no"),
             )
         self.assertEqual(result.stock.quantity, 7)
         record = logs.records[0]
@@ -708,8 +787,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                         config=config,
                         credentials=secret,
                         publication=lookup(),
-                        quantity=7,
-                        backorders="no",
+                        desired=quantitative(7, "no"),
                     )
                 self.assertEqual(
                     getattr(logs.records[0], "provider_error_code", None), expected_code
@@ -739,8 +817,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                         config=config,
                         credentials=secret,
                         publication=lookup(),
-                        quantity=7,
-                        backorders="no",
+                        desired=quantitative(7, "no"),
                     )
                 self.assertEqual(len(http.calls), 2)
         platform, http, config, secret = self.platform(
@@ -770,8 +847,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                 config=config,
                 credentials=secret,
                 publication=lookup(),
-                quantity=7,
-                backorders="no",
+                desired=quantitative(7, "no"),
             )
 
     async def test_prom_unknown_inheritance_is_blocked_before_write(self) -> None:
@@ -793,8 +869,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                 config=config,
                 credentials=secret,
                 publication=lookup(parent=True),
-                quantity=5,
-                backorders="no",
+                desired=quantitative(5, "no"),
             )
         self.assertEqual(len(http.calls), 1)
 
@@ -813,14 +888,18 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
             publication=lookup(
                 "variation", parent=True, native={"parent_product_id": "100"}
             ),
-            quantity=4,
-            backorders="notify",
+            desired=quantitative(4, "notify"),
         )
         self.assertEqual(result.stock.quantity, 4)
         self.assertTrue(http.calls[0][1].endswith("/products/100/variations/101"))
         self.assertEqual(
             http.calls[0][2]["body"],
-            {"manage_stock": True, "stock_quantity": 4, "backorders": "notify"},
+            {
+                "manage_stock": True,
+                "stock_quantity": 4,
+                "stock_status": "instock",
+                "backorders": "notify",
+            },
         )
 
     async def test_woo_inherited_and_legacy_false_resolve_actual_parent(self) -> None:
@@ -839,8 +918,73 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
             result = await p.get_stock(
                 config=config, credentials=secret, publication=child, parent=parent
             )
-            self.assertEqual(result.stock.external_id, "100")
-            self.assertEqual(result.stock.quantity, 15)
+            self.assertEqual(result.stock.external_id, "101")
+            self.assertIsNone(result.stock.quantity)
+            self.assertEqual(result.platform_data["effective_quantity"], "15")
+
+    async def test_woo_manual_statuses_disable_quantity_tracking(self) -> None:
+        """Все ручные статусы передаются без выдуманного количества."""
+        for status, native in (
+            ("in_stock", "instock"),
+            ("out_of_stock", "outofstock"),
+            ("on_order", "onbackorder"),
+        ):
+            with self.subTest(status=status):
+                response = {
+                    "id": 101,
+                    "manage_stock": False,
+                    "stock_quantity": None,
+                    "stock_status": native,
+                    "backorders": "no",
+                }
+                platform, http, config, secret = self.platform(
+                    "woocommerce", [response, response]
+                )
+                result = await platform.set_stock(
+                    config=config,
+                    credentials=secret,
+                    publication=lookup(),
+                    desired=DesiredStockVO(StockMode.AVAILABILITY, None, status),
+                )
+                self.assertEqual(result.stock.availability, status)
+                self.assertEqual(
+                    http.calls[0][2]["body"],
+                    {
+                        "manage_stock": False,
+                        "stock_quantity": None,
+                        "stock_status": native,
+                        "backorders": "no",
+                    },
+                )
+
+    async def test_prom_manual_statuses_preserve_existing_quantity(self) -> None:
+        """Ручное наличие изменяет только presence/in_stock и подтверждается чтением."""
+        for status, native in (
+            ("in_stock", "available"),
+            ("out_of_stock", "not_available"),
+            ("on_order", "order"),
+        ):
+            with self.subTest(status=status):
+                before = {
+                    "product": {
+                        "id": 101,
+                        "quantity_in_stock": 9,
+                        "presence": "available",
+                    }
+                }
+                after = {"product": {**before["product"], "presence": native}}
+                platform, http, config, secret = self.platform(
+                    "prom", [before, {"processed_ids": []}, after]
+                )
+                result = await platform.set_stock(
+                    config=config,
+                    credentials=secret,
+                    publication=lookup(),
+                    desired=DesiredStockVO(StockMode.AVAILABILITY, None, status),
+                )
+                self.assertEqual(result.stock.availability, status)
+                self.assertEqual(result.stock.quantity, 9)
+                self.assertNotIn("quantity_in_stock", http.calls[1][2]["body"][0])
 
     async def test_woo_null_quantity_is_not_zero(self) -> None:
         p, http, config, secret = self.platform(
@@ -897,8 +1041,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
             config=config,
             credentials=secret,
             publication=self.rozetka_lookup(),
-            quantity=0,
-            backorders="no",
+            desired=quantitative(0, "no"),
         )
         self.assertEqual(result.stock.quantity, 0)
         self.assertEqual(http.calls[1][0], "PUT")
@@ -923,8 +1066,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                     config=config,
                     credentials=secret,
                     publication=self.rozetka_lookup(),
-                    quantity=5,
-                    backorders="no",
+                    desired=quantitative(5, "no"),
                 )
             self.assertEqual(len(http.calls), 1)
 
@@ -951,8 +1093,7 @@ class StockPlatformTests(unittest.IsolatedAsyncioTestCase):
                 config=config,
                 credentials=secret,
                 publication=self.rozetka_lookup(),
-                quantity=5,
-                backorders="no",
+                desired=quantitative(5, "no"),
             )
 
     async def test_read_identity_mismatch_is_rejected_for_each_platform(self) -> None:

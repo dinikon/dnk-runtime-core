@@ -43,17 +43,41 @@ const availabilityLabels: Record<string, string> = {
   not_applicable: "Не применяется",
 };
 const active = computed(() => stockActive(props.state));
-const selectedRows = computed(
-  () =>
-    props.state?.items.filter((v) =>
-      props.selected.includes(v.publicationId),
-    ) ?? [],
-);
 const canExport = computed(
   () =>
-    selectedRows.value.length > 0 &&
-    selectedRows.value.every((v) => !v.exportBlocker),
+    props.state?.allowStockExport &&
+    props.state.items.some((v) => !v.exportBlocker),
 );
+const familyStatus = computed(() => {
+  const operations =
+    props.state?.items
+      .map((v) => v.operation)
+      .filter((v) => v?.direction === "write") ?? [];
+  if (!operations.length) return "";
+  if (operations.some((v) => v?.status === "queued" || v?.status === "running"))
+    return "Синхронизация выполняется";
+  const outdated = props.state?.items.some((item) => {
+    const sent = item.operation?.desiredState;
+    const current = item.desiredState;
+    return (
+      item.operation?.direction === "write" &&
+      item.operation.status === "completed" &&
+      sent &&
+      (sent.mode !== current.mode ||
+        sent.quantity !== current.quantity ||
+        sent.availability !== current.availability ||
+        sent.backorders !== current.backorders)
+    );
+  });
+  if (outdated) return "Требуется синхронизация: наличие изменилось в Catalog";
+  const completed = operations.filter((v) => v?.status === "completed").length;
+  const skipped = props.state?.items.some((v) => !!v.exportBlocker) ?? false;
+  return completed === operations.length && !skipped
+    ? "Выполнено"
+    : completed
+      ? "Частично выполнено"
+      : "Ошибка синхронизации";
+});
 function choose(id: string, checked: boolean): void {
   emit(
     "select",
@@ -64,7 +88,7 @@ function choose(id: string, checked: boolean): void {
 }
 function title(id: string): string {
   const p = props.group.preview.publications.find((v) => v.id === id);
-  return p?.title ?? p?.externalId ?? id;
+  return p?.title ?? p?.externalId ?? "Родительская карточка";
 }
 function received(value: string | null): string {
   return value
@@ -81,8 +105,8 @@ function received(value: string | null): string {
     :aria-busy="loading || busy || active"
   >
     <p class="text-sm text-muted-foreground">
-      Получение обновляет только публикацию. Отправка использует количество
-      Catalog и требует разрешения канала.
+      Получение обновляет только публикацию. Отправка согласует количество и
+      наличие всей связанной семьи с Catalog и требует разрешения канала.
     </p>
     <Alert v-if="error" variant="destructive"
       ><AlertDescription
@@ -94,6 +118,14 @@ function received(value: string | null): string {
     >
     <Skeleton v-if="loading && !state" class="h-24 w-full" />
     <template v-if="state">
+      <p v-if="familyStatus" role="status" class="text-sm">
+        {{ familyStatus }}
+      </p>
+      <Alert v-for="warning in state.warnings" :key="warning"
+        ><AlertDescription>{{
+          stockCodeMessage(warning)
+        }}</AlertDescription></Alert
+      >
       <Alert v-if="!state.allowStockExport"
         ><AlertDescription
           >Отправка остатков запрещена в настройках канала. Получение
@@ -127,7 +159,11 @@ function received(value: string | null): string {
           size="sm"
           :disabled="busy || active || !canExport"
           @click="emit('export')"
-          >Отправить остаток</Button
+          >{{
+            group.mode === "SIMPLE_TO_SIMPLE"
+              ? "Синхронизировать наличие"
+              : "Синхронизировать наличие семьи"
+          }}</Button
         >
       </div>
       <p
@@ -164,7 +200,11 @@ function received(value: string | null): string {
                 </div></TableCell
               >
               <TableCell class="tabular-nums"
-                >{{ item.catalogQuantity ?? "Не учитывается" }}
+                >{{
+                  item.desiredState.mode === "availability"
+                    ? availabilityLabels[item.desiredState.availability]
+                    : (item.catalogQuantity ?? "Неизвестно")
+                }}
                 <p
                   v-if="item.catalogOwnerId !== item.catalogPositionId"
                   class="text-xs text-muted-foreground"
@@ -173,9 +213,16 @@ function received(value: string | null): string {
                 </p></TableCell
               >
               <TableCell class="tabular-nums"
-                >{{ item.publicationQuantity ?? "Неизвестно" }}
+                >{{
+                  item.publicationQuantity ??
+                  availabilityLabels[item.publicationAvailability ?? ""] ??
+                  "Неизвестно"
+                }}
                 <p
-                  v-if="item.publicationAvailability"
+                  v-if="
+                    item.publicationAvailability &&
+                    item.publicationQuantity !== null
+                  "
                   class="text-xs text-muted-foreground"
                 >
                   {{

@@ -124,7 +124,7 @@ watch(
   },
 );
 function repeatStock(direction: "read" | "write", id: string): void {
-  stockSelected.value = [id];
+  if (direction === "read") stockSelected.value = [id];
   void stockAction(direction);
 }
 function openStock(group: CatalogBinding): void {
@@ -133,7 +133,11 @@ function openStock(group: CatalogBinding): void {
   stockActionError.value = "";
 }
 async function stockAction(direction: "read" | "write"): Promise<void> {
-  if (!stockGroup.value || stockBusy.value || !stockSelected.value.length)
+  if (
+    !stockGroup.value ||
+    stockBusy.value ||
+    (direction === "read" && !stockSelected.value.length)
+  )
     return;
   const captured = JSON.stringify([
     scope.value,

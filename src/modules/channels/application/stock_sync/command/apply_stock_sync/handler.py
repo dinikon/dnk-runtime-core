@@ -46,7 +46,7 @@ class ApplyStockSyncHandler:
         """После изменения Catalog во время API планирует актуальное исправление."""
         job, snapshot = command.job, command.snapshot
         channel = await self.channels.get(EntityIdVO(job.channel_id), for_update=True)
-        state = await self.states.get(EntityIdVO(job.publication_id))
+        state = await self.states.get(EntityIdVO(snapshot.plan.publication.lookup.id))
         if (
             channel is None
             or state is None
@@ -104,17 +104,3 @@ class ApplyStockSyncHandler:
             now=now,
         )
         await self.states.save(state)
-        if (
-            state.direction == "write"
-            and (current.facts.quantity, current.facts.backorders)
-            != (snapshot.plan.facts.quantity, snapshot.plan.facts.backorders)
-            and current.facts.quantity is not None
-        ):
-            await self.operations.request(
-                tenant_id=job.tenant_id,
-                channel_id=job.channel_id,
-                group_id=current.group.id,
-                direction="write",
-                publication_ids=(current.publication.lookup.id,),
-                now=now,
-            )
