@@ -29,6 +29,8 @@ class ValidatedConnection:
 
     config: ConnectionConfigVO
     credentials: bytes | None = field(repr=False)
+    currency: str
+    locales: tuple[str, ...]
 
 
 class Platform(Protocol):

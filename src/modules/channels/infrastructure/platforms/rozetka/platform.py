@@ -88,6 +88,8 @@ class RozetkaPlatform:
                 settings=typed.settings.model_dump(mode="json"),
             ),
             credentials=encoded,
+            currency=typed.settings.currency,
+            locales=typed.settings.locales,
         )
 
     async def verify(

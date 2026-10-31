@@ -6,12 +6,19 @@ from src.modules.channels.infrastructure.platforms.base import StrictModel
 from src.modules.channels.infrastructure.platforms.url import normalize_endpoint
 
 
+class WooCommerceSettings(StrictModel):
+    """Одна валюта и один язык интерпретации контента канала."""
+
+    currency: Literal["UAH", "EUR", "USD"] = Field(default="UAH", title="Валюта")
+    locale: Literal["uk", "ru", "en"] = Field(default="uk", title="Язык контента")
+
+
 class WooCommerceConfig(StrictModel):
     """Публичный HTTPS URL магазина с возможным подпутём WordPress."""
 
     version: Literal[1] = 1
     endpoint: str = Field(title="Адрес магазина", json_schema_extra={"format": "uri"})
-    settings: StrictModel = Field(default_factory=StrictModel)
+    settings: WooCommerceSettings = Field(default_factory=WooCommerceSettings)
 
     @field_validator("endpoint")
     @classmethod

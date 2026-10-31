@@ -7,6 +7,16 @@ from fastapi import Depends, HTTPException
 from src.modules.identity.domain.auth.request_context import RequestContext
 
 from src.modules.channels.infrastructure.registry import InstalledPlatforms
+from src.modules.channels.application.port.settings_catalog import (
+    ChannelSettingsCatalog,
+)
+from src.modules.channels.infrastructure.settings_catalog import (
+    ReferenceDataChannelSettings,
+)
+from src.modules.reference_data.presentation.depends import (
+    CatalogRepositoryDep,
+    ValidateCurrencyHandlerDep,
+)
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
@@ -63,9 +73,21 @@ def get_platforms() -> InstalledPlatforms:
     return InstalledPlatforms()
 
 
+def get_settings_catalog(
+    currencies: ValidateCurrencyHandlerDep,
+    locales: CatalogRepositoryDep,
+) -> ChannelSettingsCatalog:
+    """Собирает проверку справочников на общей сессии внешнего UoW."""
+    return ReferenceDataChannelSettings(currencies, locales)
+
+
+SettingsCatalogDep = Annotated[ChannelSettingsCatalog, Depends(get_settings_catalog)]
+
+
 def get_create_channel_handler(
     uow: UoWDep,
     context: AuthenticatedRequestContextDep,
+    settings_catalog: SettingsCatalogDep,
 ) -> CreateChannelHandler:
     """Собирает CreateChannel на внешней границе и общей сессии UoW."""
     return CreateChannelHandler(
@@ -75,6 +97,7 @@ def get_create_channel_handler(
         get_cipher(),
         utc_now,
         uuid4,
+        settings_catalog=settings_catalog,
     )
 
 
@@ -86,6 +109,7 @@ CreateChannelHandlerDep = Annotated[
 def get_update_channel_handler(
     uow: UoWDep,
     context: AuthenticatedRequestContextDep,
+    settings_catalog: SettingsCatalogDep,
 ) -> UpdateChannelHandler:
     """Собирает UpdateChannel на внешней границе и общей сессии UoW."""
     return UpdateChannelHandler(
@@ -95,6 +119,7 @@ def get_update_channel_handler(
         get_cipher(),
         utc_now,
         uuid4,
+        settings_catalog=settings_catalog,
     )
 
 

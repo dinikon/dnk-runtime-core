@@ -13,6 +13,9 @@ from src.modules.channels.application.port.jobs import (
     VerificationJob,
 )
 from src.modules.channels.application.port.platform import PlatformRegistry
+from src.modules.channels.application.port.settings_catalog import (
+    ChannelSettingsCatalog,
+)
 from src.modules.channels.domain.aggregate import Channel
 from src.modules.channels.domain.connection import Connection
 from src.modules.channels.domain.repository import ChannelRepositoryProtocol
@@ -32,6 +35,8 @@ class CreateChannelHandler:
         cipher: Cipher,
         clock: Callable[[], datetime],
         uuid: Callable[[], UUID],
+        *,
+        settings_catalog: ChannelSettingsCatalog,
     ) -> None:
         """Принимает порты одной транзакции и фабрики значений."""
         (
@@ -42,11 +47,15 @@ class CreateChannelHandler:
             self.clock,
             self.uuid,
         ) = (repository, jobs, platforms, cipher, clock, uuid)
+        self.settings_catalog = settings_catalog
 
     async def execute(self, command: CreateChannelCommand) -> CreateChannelDTO:
         """Валидирует локальные модели, шифрует секрет и планирует проверку."""
         validated = self.platforms.get(command.platform_kind).validate(
             command.config, command.credentials
+        )
+        await self.settings_catalog.ensure_available(
+            currency=validated.currency, locales=validated.locales
         )
         assert validated.credentials is not None
         now, job_id = self.clock(), self.uuid()

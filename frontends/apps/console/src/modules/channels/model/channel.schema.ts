@@ -35,6 +35,8 @@ export function schemaFields(
       return {
         key,
         title: typeof field.title === "string" ? field.title : key,
+        description:
+          typeof field.description === "string" ? field.description : undefined,
         required: required.includes(key),
         secret: field.writeOnly === true || field.format === "password",
         readOnly: field.const !== undefined || field.readOnly === true,

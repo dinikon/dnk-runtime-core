@@ -13,6 +13,9 @@ from src.modules.channels.application.port.jobs import (
     VerificationJob,
 )
 from src.modules.channels.application.port.platform import PlatformRegistry
+from src.modules.channels.application.port.settings_catalog import (
+    ChannelSettingsCatalog,
+)
 from src.modules.channels.domain.error import ChannelNotFoundError
 from src.modules.channels.domain.repository import ChannelRepositoryProtocol
 from src.modules.channels.domain.value_object.channel_name import ChannelNameVO
@@ -31,6 +34,8 @@ class UpdateChannelHandler:
         cipher: Cipher,
         clock: Callable[[], datetime],
         uuid: Callable[[], UUID],
+        *,
+        settings_catalog: ChannelSettingsCatalog,
     ) -> None:
         """Принимает зависимости внешнего UoW."""
         (
@@ -41,6 +46,7 @@ class UpdateChannelHandler:
             self.clock,
             self.uuid,
         ) = (repository, jobs, platforms, cipher, clock, uuid)
+        self.settings_catalog = settings_catalog
 
     async def execute(self, command: UpdateChannelCommand) -> UpdateChannelDTO:
         """Проверяет ревизию до замены секрета и отмены старого задания."""
@@ -56,6 +62,13 @@ class UpdateChannelHandler:
         current = self.platforms.get(channel.platform_kind).validate(
             channel.connection.config, None
         )
+        if (validated.currency, validated.locales) != (
+            current.currency,
+            current.locales,
+        ):
+            await self.settings_catalog.ensure_available(
+                currency=validated.currency, locales=validated.locales
+            )
         encrypted = (
             self.cipher.encrypt(validated.credentials)
             if validated.credentials is not None

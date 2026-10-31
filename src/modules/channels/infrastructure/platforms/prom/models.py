@@ -1,8 +1,33 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from src.modules.channels.infrastructure.platforms.base import StrictModel
+
+
+class PromSettings(StrictModel):
+    """Фиксированные валюта и порядок языков контента магазина."""
+
+    currency: Literal["UAH"] = Field(default="UAH", title="Валюта")
+    locales: tuple[Literal["ru"], Literal["uk"]] = Field(
+        default=("ru", "uk"),
+        title="Языки контента",
+        description="Русский — основной, Українська — дополнительный.",
+        json_schema_extra={"readOnly": True},
+    )
+
+    @field_validator("locales", mode="before")
+    @classmethod
+    def normalize_locales(cls, value: object) -> tuple[str, str]:
+        """Принимает только оба языка без дублей и фиксирует основной RU."""
+        if (
+            not isinstance(value, (list, tuple))
+            or len(value) != 2
+            or not all(isinstance(item, str) for item in value)
+            or set(value) != {"ru", "uk"}
+        ):
+            raise ValueError("Both ru and uk are required")
+        return ("ru", "uk")
 
 
 class PromConfig(StrictModel):
@@ -10,7 +35,7 @@ class PromConfig(StrictModel):
 
     version: Literal[1] = 1
     endpoint: Literal["https://my.prom.ua"] = "https://my.prom.ua"
-    settings: StrictModel = Field(default_factory=StrictModel)
+    settings: PromSettings = Field(default_factory=PromSettings)
 
 
 class PromCredentials(StrictModel):

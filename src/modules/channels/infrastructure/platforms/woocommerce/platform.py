@@ -94,6 +94,8 @@ class WooCommercePlatform:
                 settings=typed.settings.model_dump(mode="json"),
             ),
             credentials=encoded,
+            currency=typed.settings.currency,
+            locales=(typed.settings.locale,),
         )
 
     async def verify(

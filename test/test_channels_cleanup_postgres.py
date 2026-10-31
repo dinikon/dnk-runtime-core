@@ -187,7 +187,10 @@ class ChannelsCleanupPostgresTests(support.ChannelsPostgresTests):
         async with self.engine.begin() as connection:
             await TenantMigrator().upgrade(connection, schema)
         detail = await self.detail(created["id"])
-        self.assertEqual(detail["config"]["settings"], {})
+        self.assertEqual(
+            detail["config"]["settings"],
+            {"currency": "UAH", "locales": ["ru", "uk"]},
+        )
 
     async def test_global_cleanup_preserves_verification_other_jobs_and_outbox(
         self,

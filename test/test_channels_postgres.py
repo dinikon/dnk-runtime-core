@@ -263,6 +263,210 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(len(await self.rows(ScheduledJobModel)), 1)
 
+    async def test_content_settings_persist_and_reverify_only_effective_changes(
+        self,
+    ) -> None:
+        """Выбор Woo сохраняется; rename/no-op не меняют доступ, а новые настройки запускают проверку."""
+        config = {
+            "version": 1,
+            "endpoint": "https://shop.example",
+            "settings": {"currency": "EUR", "locale": "en"},
+        }
+        response = await self.client.post(
+            self.root,
+            headers=self.headers,
+            json={
+                "name": "Woo",
+                "platform_kind": "woocommerce",
+                "config": config,
+                "credentials": {
+                    "consumer_key": "ck-test",
+                    "consumer_secret": "cs-test",
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        created = response.json()
+        path = self.root + "/" + created["id"]
+        self.assertEqual(
+            (await self.detail(created["id"]))["config"]["settings"], config["settings"]
+        )
+        original = (await self.rows(ConnectionModel))[0]
+        self.assertEqual(original["settings"], config["settings"])
+        renamed = await self.client.patch(
+            path,
+            headers=self.headers,
+            json={"expected_revision": 1, "name": "Renamed Woo", "config": config},
+        )
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        self.assertEqual(renamed.json()["revision"], 2)
+        self.assertEqual((await self.detail(created["id"]))["config_revision"], 1)
+        self.assertEqual(len(await self.rows(ScheduledJobModel)), 1)
+        config["settings"] = {"currency": "USD", "locale": "ru"}
+        changed = await self.client.patch(
+            path, headers=self.headers, json={"expected_revision": 2, "config": config}
+        )
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertEqual(changed.json()["revision"], 3)
+        detail = await self.detail(created["id"])
+        self.assertEqual(detail["config_revision"], 2)
+        self.assertEqual(detail["config"]["settings"], config["settings"])
+        self.assertNotEqual(
+            changed.json()["verification_job_id"], created["verification_job_id"]
+        )
+        repeated = await self.client.patch(
+            path, headers=self.headers, json={"expected_revision": 3, "config": config}
+        )
+        self.assertEqual(repeated.status_code, 200, repeated.text)
+        self.assertEqual(repeated.json(), changed.json())
+        self.assertEqual(len(await self.rows(ScheduledJobModel)), 2)
+        stored = (await self.rows(ConnectionModel))[0]
+        self.assertEqual(
+            stored["encrypted_credentials"], original["encrypted_credentials"]
+        )
+        self.assertEqual(stored["settings"], config["settings"])
+
+    async def test_legacy_defaults_are_read_without_writes_or_reverification(
+        self,
+    ) -> None:
+        """Нормализация пустого settings не изменяет исходную запись и её поколение."""
+        created = await self.create()
+        async with self.engine.begin() as connection:
+            await bind_tenant_schema(connection, self.tenant, self.naming)
+            await connection.execute(update(ConnectionModel).values(settings={}))
+        original_channel = await self.rows(ChannelModel)
+        original_connection = await self.rows(ConnectionModel)
+        original_jobs = await self.rows(ScheduledJobModel)
+        detail = await self.detail(created["id"])
+        self.assertEqual(
+            detail["config"]["settings"], {"currency": "UAH", "locales": ["ru", "uk"]}
+        )
+        listing = await self.client.get(self.root)
+        self.assertEqual(listing.json()["items"][0]["config"], detail["config"])
+        response = await self.client.patch(
+            self.root + "/" + created["id"],
+            headers=self.headers,
+            json={"expected_revision": 1, "config": detail["config"]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["revision"], 1)
+        self.assertEqual(await self.rows(ChannelModel), original_channel)
+        self.assertEqual(await self.rows(ConnectionModel), original_connection)
+        self.assertEqual(await self.rows(ScheduledJobModel), original_jobs)
+
+    async def test_unavailable_reference_codes_do_not_partially_save_changes(
+        self,
+    ) -> None:
+        """Отказ справочника отклоняет создание и атомарно сохраняет прежние имя, секрет и задания."""
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                update(LocaleModel).where(LocaleModel.code == "ru").values(active=False)
+            )
+        try:
+            failed = await self.client.post(
+                self.root,
+                headers=self.headers,
+                json={
+                    "name": "Prom",
+                    "platform_kind": "prom",
+                    "config": {
+                        "version": 1,
+                        "endpoint": "https://my.prom.ua",
+                        "settings": {},
+                    },
+                    "credentials": {"token": "test-secret"},
+                },
+            )
+            self.assertEqual(failed.status_code, 422, failed.text)
+            self.assertEqual(failed.json()["detail"]["code"], "locale_unavailable")
+            self.assertEqual(await self.rows(ChannelModel), [])
+            self.assertEqual(await self.rows(ConnectionModel), [])
+            self.assertEqual(await self.rows(ScheduledJobModel), [])
+        finally:
+            async with self.engine.begin() as connection:
+                await connection.execute(
+                    update(LocaleModel)
+                    .where(LocaleModel.code == "ru")
+                    .values(active=True)
+                )
+        config = {
+            "version": 1,
+            "endpoint": "https://shop.example",
+            "settings": {"currency": "EUR", "locale": "uk"},
+        }
+        response = await self.client.post(
+            self.root,
+            headers=self.headers,
+            json={
+                "name": "Woo",
+                "platform_kind": "woocommerce",
+                "config": config,
+                "credentials": {"consumer_key": "ck", "consumer_secret": "cs"},
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        path = self.root + "/" + response.json()["id"]
+        originals = (
+            await self.rows(ChannelModel),
+            await self.rows(ConnectionModel),
+            await self.rows(ScheduledJobModel),
+        )
+        for model, code, settings, error in (
+            (
+                CurrencyModel,
+                "USD",
+                {"currency": "USD", "locale": "uk"},
+                "currency_unavailable",
+            ),
+            (
+                LocaleModel,
+                "ru",
+                {"currency": "EUR", "locale": "ru"},
+                "locale_unavailable",
+            ),
+        ):
+            async with self.engine.begin() as connection:
+                await connection.execute(
+                    update(model).where(model.code == code).values(active=False)
+                )
+            try:
+                failed = await self.client.patch(
+                    path,
+                    headers=self.headers,
+                    json={
+                        "expected_revision": 1,
+                        "name": "Should not change",
+                        "config": {**config, "settings": settings},
+                        "credentials": {
+                            "consumer_key": "new-key",
+                            "consumer_secret": "new-secret",
+                        },
+                    },
+                )
+                self.assertEqual(failed.status_code, 422, failed.text)
+                self.assertEqual(failed.json()["detail"]["code"], error)
+                self.assertNotIn("new-secret", failed.text)
+                self.assertEqual(
+                    (
+                        await self.rows(ChannelModel),
+                        await self.rows(ConnectionModel),
+                        await self.rows(ScheduledJobModel),
+                    ),
+                    originals,
+                )
+                renamed = await self.client.patch(
+                    path,
+                    headers=self.headers,
+                    json={"expected_revision": 1, "name": "Woo"},
+                )
+                self.assertEqual(renamed.status_code, 200, renamed.text)
+                self.assertEqual(renamed.json()["revision"], 1)
+            finally:
+                async with self.engine.begin() as connection:
+                    await connection.execute(
+                        update(model).where(model.code == code).values(active=True)
+                    )
+
     async def test_schedule_failure_rolls_back_entire_creation(self) -> None:
         """Ошибка постановки задания откатывает и Channel, и credentials."""
         with patch.object(

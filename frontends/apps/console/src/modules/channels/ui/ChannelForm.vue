@@ -206,8 +206,12 @@ async function submit(event: Event): Promise<void> {
               :disabled="busy"
               :maxlength="field.maxLength"
               @update:model-value="value('settings', field.key, $event)"
-            /> </Field
-        ></FieldGroup>
+            />
+            <FieldDescription v-if="field.description" class="text-xs">
+              {{ field.description }}
+            </FieldDescription>
+          </Field></FieldGroup
+        >
       </ChannelSettingsSection>
       <ChannelSettingsSection
         title="Доступ к магазину"

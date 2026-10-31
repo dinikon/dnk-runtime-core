@@ -25,6 +25,8 @@ const messages: Record<string, string> = {
   channel_not_found: "Канал удалён или недоступен.",
   access_denied: "Недостаточно прав для этого действия.",
   credentials_invalid: "Заполните полный комплект данных доступа.",
+  currency_unavailable: "Валюта отсутствует в справочнике или недоступна.",
+  locale_unavailable: "Язык контента отсутствует в справочнике или недоступен.",
   configuration_invalid: "Проверьте настройки подключения.",
   request_invalid: "Проверьте обязательные поля формы.",
   name_invalid: "Введите название канала длиной до 255 символов.",
