@@ -7,7 +7,7 @@ export interface ChannelDto {
   config: {
     version: number;
     endpoint: string;
-    settings: JsonObject & { stock_sync: { allow_export: boolean } };
+    settings: JsonObject;
   };
   config_revision: number;
   identity: { namespace: string; key: string } | null;

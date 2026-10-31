@@ -9,8 +9,7 @@ import { catalogRoutes } from "../src/modules/catalog/routes.ts";
 test("editor tabs only expose sections available to the product", () => {
   assert.equal(productEditorTab("variants", true), "variants");
   assert.equal(productEditorTab("variants", false), "description");
-  assert.equal(productEditorTab("publications", false), "publications");
-  assert.equal(productEditorTab("publications", false, false), "description");
+  assert.equal(productEditorTab("publications", false), "description");
   assert.equal(productEditorTab("media", false, false), "description");
   for (const value of [undefined, "general", "unknown", ["variants"]]) {
     assert.equal(productEditorTab(value, true), "description");

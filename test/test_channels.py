@@ -16,22 +16,22 @@ from src.modules.channels.application.error import (
     ChannelInputError,
     VerificationFailure,
 )
-from src.modules.channels.domain.channel.aggregate import Channel
-from src.modules.channels.domain.channel.connection import Connection
-from src.modules.channels.domain.channel.error import (
+from src.modules.channels.domain.aggregate import Channel
+from src.modules.channels.domain.connection import Connection
+from src.modules.channels.domain.error import (
     ChannelNotFoundError,
     InvalidChannelNameError,
     InvalidChannelStateError,
     InvalidResourceIdentityError,
 )
-from src.modules.channels.domain.channel.error import (
+from src.modules.channels.domain.error import (
     ChannelRevisionConflictError,
 )
-from src.modules.channels.domain.channel.value_object.channel_name import ChannelNameVO
-from src.modules.channels.domain.channel.value_object.connection_config import (
+from src.modules.channels.domain.value_object.channel_name import ChannelNameVO
+from src.modules.channels.domain.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.channel.value_object.resource_identity import (
+from src.modules.channels.domain.value_object.resource_identity import (
     ResourceIdentityVO,
 )
 from src.modules.channels.infrastructure.http import PublicHttpsTransport, SafeJsonHttp
@@ -44,7 +44,7 @@ from src.modules.channels.infrastructure.platforms.woocommerce.models import (
 )
 from src.modules.channels.infrastructure.registry import InstalledPlatforms
 from src.modules.channels.presentation.http.access import channel_http_error
-from src.modules.channels.presentation.channel.http.request.update_channel import (
+from src.modules.channels.presentation.http.request.update_channel import (
     UpdateChannelRequest,
 )
 from src.modules.shared.application.crypto.error import (
@@ -120,14 +120,7 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(
                 platform.manifest.supported_capabilities,
-                ("verify_connection", "publications", "read_stock", "write_stock")
-                + (
-                    ("write_content",)
-                    if kind == "woocommerce"
-                    else (
-                        ("content_feed", "apply_content_feed") if kind == "prom" else ()
-                    )
-                ),
+                ("verify_connection",),
             )
             self.assertNotIn("secret-", repr(validated))
             self.assertNotIn("secret-", repr(platform.manifest))
@@ -347,7 +340,6 @@ class ChannelStateTests(unittest.TestCase):
                 config=self.config,
                 encrypted_credentials=b"encrypted",
                 job_id=self.job_id,
-                now=self.now,
             ),
             actor_id=self.actor,
             now=self.now,

@@ -492,11 +492,9 @@ class CatalogItem:
         identifier: CatalogItemIdVO,
         actor: EntityIdVO,
         now: datetime,
-        in_use: bool = False,
     ) -> None:
         """Удаляет entity с проверкой последнего варианта Active-карточки."""
         self.variant(identifier)
-        self.ensure_deletable(in_use=in_use)
         self._replace_variants(
             tuple(v for v in self.variants if v.id != identifier), actor, now
         )
@@ -515,14 +513,6 @@ class CatalogItem:
         if candidate != self:
             self.variants = variants
             self.updated_by, self.updated_at = actor, now
-
-    @staticmethod
-    def ensure_deletable(*, in_use: bool) -> None:
-        """Запрещает физическое удаление источника сохранённой публикационной связи."""
-        if type(in_use) is not bool:
-            raise InvalidCatalogValueError("Некорректные факты использования.")
-        if in_use:
-            raise CatalogConflictError("Сначала снимите связи с публикациями.")
 
     def pull_stock_events(self) -> tuple[CatalogStockChanged, ...]:
         """Передаёт факты Application для атомарной записи Outbox."""

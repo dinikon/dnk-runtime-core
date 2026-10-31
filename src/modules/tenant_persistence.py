@@ -109,17 +109,5 @@ import src.modules.catalog.infrastructure.persistence.models.catalog_import_medi
 
 import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.connection  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.sync_run  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.external_publication  # noqa: F401
 
 import src.modules.crm.infrastructure.persistence.models.position_history  # noqa: F401
-
-import src.modules.channels.infrastructure.persistence.models.catalog_binding_group  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.catalog_binding_item  # noqa: F401
-
-import src.modules.channels.infrastructure.persistence.models.stock_sync  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.product_representation  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.content_media  # noqa: F401
-
-import src.modules.channels.infrastructure.persistence.models.content_delivery  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.content_feed  # noqa: F401

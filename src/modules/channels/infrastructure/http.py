@@ -1,26 +1,15 @@
 import asyncio
 import ipaddress
 import socket
-from dataclasses import dataclass
 from typing import Protocol
-
 import httpx
 from pydantic import TypeAdapter
-
 from src.modules.channels.application.error import VerificationFailure
 from src.modules.channels.domain.types import JsonValue
 
 
-@dataclass(frozen=True, slots=True)
-class JsonHttpResponse:
-    """Данные ответа и заголовки пагинации без транспортного клиента."""
-
-    data: JsonValue
-    headers: dict[str, str]
-
-
 class JsonHttp(Protocol):
-    """Минимальный HTTP-порт пакетов для детерминированных contract-тестов."""
+    """Ограниченный JSON transport пакетов проверки подключения."""
 
     async def request(
         self,
@@ -30,22 +19,7 @@ class JsonHttp(Protocol):
         headers: dict[str, str] | None = None,
         body: JsonValue = None,
     ) -> JsonValue:
-        """Возвращает ограниченный JSON либо безопасную ошибку."""
-        ...
-
-    async def request_response(
-        self,
-        method: str,
-        url: str,
-        *,
-        headers: dict[str, str] | None = None,
-        body: JsonValue = None,
-    ) -> JsonHttpResponse:
-        """Возвращает JSON вместе с заголовками для страничных API."""
-        ...
-
-    async def request_bytes(self, url: str) -> bytes:
-        """Читает публичный файл без credentials, redirect и неограниченного тела."""
+        """Возвращает JSON либо безопасную ошибку без содержимого ответа."""
         ...
 
 
@@ -98,25 +72,7 @@ class PublicHttpsTransport(httpx.AsyncBaseTransport):
 
 
 class SafeJsonHttp:
-    """HTTP-клиент с ограничениями времени, тела и безопасным отображением ошибок."""
-
-    async def request_bytes(self, url: str) -> bytes:
-        """Использует тот же HTTPS/DNS guard; секреты API не передаются на media host."""
-        try:
-            async with httpx.AsyncClient(
-                transport=PublicHttpsTransport(),
-                trust_env=False,
-                follow_redirects=False,
-                timeout=10,
-            ) as client:
-                response = await client.get(url)
-            if response.status_code != 200:
-                raise VerificationFailure("content_media_unconfirmed")
-            return response.content
-        except (httpx.TimeoutException, TimeoutError):
-            raise VerificationFailure("network_timeout", retryable=True) from None
-        except (httpx.RequestError, OSError, ValueError):
-            raise VerificationFailure("content_media_unconfirmed") from None
+    """Ограничивает адреса, время и размер ответа verifier."""
 
     async def request(
         self,
@@ -126,19 +82,6 @@ class SafeJsonHttp:
         headers: dict[str, str] | None = None,
         body: JsonValue = None,
     ) -> JsonValue:
-        """Сохраняет существующий контракт verifier без HTTP-метаданных."""
-        return (
-            await self.request_response(method, url, headers=headers, body=body)
-        ).data
-
-    async def request_response(
-        self,
-        method: str,
-        url: str,
-        *,
-        headers: dict[str, str] | None = None,
-        body: JsonValue = None,
-    ) -> JsonHttpResponse:
         """Выполняет запрос без redirect, proxy из окружения и логирования payload."""
         try:
             async with httpx.AsyncClient(
@@ -160,10 +103,7 @@ class SafeJsonHttp:
                 raise VerificationFailure("endpoint_redirected")
             if response.status_code != 200:
                 raise VerificationFailure("provider_response_invalid")
-            return JsonHttpResponse(
-                TypeAdapter(JsonValue).validate_json(response.content),
-                {key.lower(): value for key, value in response.headers.items()},
-            )
+            return TypeAdapter(JsonValue).validate_json(response.content)
         except (httpx.TimeoutException, TimeoutError):
             raise VerificationFailure("network_timeout", retryable=True) from None
         except (httpx.RequestError, OSError):

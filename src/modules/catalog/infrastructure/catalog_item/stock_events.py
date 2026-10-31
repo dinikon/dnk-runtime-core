@@ -7,39 +7,18 @@ from src.modules.catalog.domain.catalog_item.stock_event import CatalogStockChan
 from src.modules.shared.application.events.outbox_repository_protocol import (
     OutboxRepositoryProtocol,
 )
-from src.modules.shared.application.jobs.scheduled_job_repository_protocol import (
-    ScheduledJobRepositoryProtocol,
-)
-from src.modules.shared.domain.jobs.scheduled_job import ScheduledJob
 
 
 class CatalogStockEvents:
-    """Outbox и внутренняя доставка Shared Jobs принадлежат одной транзакции Catalog."""
+    """Сохраняет интеграционные события Catalog в outbox общей транзакции."""
 
-    def __init__(
-        self, outbox: OutboxRepositoryProtocol, jobs: ScheduledJobRepositoryProtocol
-    ) -> None:
-        """Не публикует в брокер до commit и не вызывает Channels."""
-        self.outbox, self.jobs = outbox, jobs
+    def __init__(self, outbox: OutboxRepositoryProtocol) -> None:
+        """Принимает outbox текущего UoW."""
+        self.outbox = outbox
 
     async def publish(self, *, tenant_id: UUID, event: CatalogStockChanged) -> None:
-        """Сохраняет один envelope для повторяемой внутренней доставки и брокера."""
+        """Сохраняет один envelope для последующей доставки в брокер."""
         integration = stock_changed_event(
             tenant_id=tenant_id, event_id=uuid4(), event=event
         )
         await self.outbox.add(integration)
-        await self.jobs.schedule_once(
-            ScheduledJob(
-                integration.event_id,
-                tenant_id,
-                integration.event_type,
-                integration.to_payload(),
-                event.occurred_at,
-                "scheduled",
-                0,
-                None,
-                None,
-                event.occurred_at,
-                event.occurred_at,
-            )
-        )

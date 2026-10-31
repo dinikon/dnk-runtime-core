@@ -8,19 +8,6 @@ from src.modules.catalog.infrastructure.catalog_item.stock_events import (
 from src.modules.shared.infrastructure.events.sqlalchemy_outbox_repository import (
     SqlAlchemyOutboxRepository,
 )
-from src.modules.shared.presentation.jobs.management import (
-    build_scheduled_job_repository,
-)
-from src.modules.catalog.application.catalog_item.port.publication_usage import (
-    CatalogPublicationUsagePort,
-)
-from src.modules.catalog.infrastructure.catalog_item.publication_usage import (
-    ChannelsCatalogUsage,
-)
-from src.modules.channels.application.catalog_binding.usage import CatalogBindingUsage
-from src.modules.channels.infrastructure.catalog_binding.query_repository import (
-    SqlAlchemyCatalogBindingQueryRepository,
-)
 from src.modules.catalog.application.catalog_item.creation_service import (
     CatalogItemCreationService,
 )
@@ -161,7 +148,6 @@ def get_mutations(
         lock,
         CatalogStockEvents(
             SqlAlchemyOutboxRepository(uow.session),
-            build_scheduled_job_repository(uow.session),
         ),
     )
 
@@ -207,25 +193,11 @@ CreateCatalogItemHandlerDep = Annotated[
 ]
 
 
-def get_publication_usage(uow: UoWDep) -> CatalogPublicationUsagePort:
-    """Собирает взаимные порты на той же сессии внешнего Catalog UoW."""
-    return ChannelsCatalogUsage(
-        CatalogBindingUsage(SqlAlchemyCatalogBindingQueryRepository(uow.session))
-    )
-
-
-PublicationUsageDep = Annotated[
-    CatalogPublicationUsagePort, Depends(get_publication_usage)
-]
-
-
 def get_delete_catalog_item_handler(
-    mutations: MutationsDep, repository: ItemRepositoryDep, usage: PublicationUsageDep
+    mutations: MutationsDep, repository: ItemRepositoryDep
 ) -> DeleteCatalogItemHandler:
     """Собирает отдельный handler сценария delete_catalog_item."""
-    return DeleteCatalogItemHandler(
-        mutations=mutations, repository=repository, usage=usage
-    )
+    return DeleteCatalogItemHandler(mutations=mutations, repository=repository)
 
 
 DeleteCatalogItemHandlerDep = Annotated[
@@ -343,10 +315,10 @@ UpdateCatalogVariantHandlerDep = Annotated[
 
 
 def get_delete_catalog_variant_handler(
-    mutations: MutationsDep, clock: ClockDep, usage: PublicationUsageDep
+    mutations: MutationsDep, clock: ClockDep
 ) -> DeleteCatalogVariantHandler:
     """Собирает конкретный сценарий на портах одного внешнего UoW."""
-    return DeleteCatalogVariantHandler(mutations, clock, usage)
+    return DeleteCatalogVariantHandler(mutations, clock)
 
 
 DeleteCatalogVariantHandlerDep = Annotated[

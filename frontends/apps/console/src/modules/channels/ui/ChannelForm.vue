@@ -258,28 +258,6 @@ async function submit(event: Event): Promise<void> {
           ></FieldGroup>
         </FieldSet>
       </ChannelSettingsSection>
-      <ChannelSettingsSection v-if="editing" title="Синхронизация остатков">
-        <FieldGroup
-          ><Field orientation="horizontal">
-            <Checkbox
-              :id="uid + '-stock-export'"
-              :model-value="draft.allowStockExport"
-              :disabled="busy"
-              @update:model-value="
-                emit('change', { ...draft, allowStockExport: $event === true })
-              "
-            />
-            <FieldLabel :for="uid + '-stock-export'"
-              >Разрешить отправку остатков</FieldLabel
-            > </Field
-          ><FieldDescription>
-            Изменения количества и наличия Catalog будут отправляться в
-            связанные позиции этого канала. Получение остатка обновляет только
-            публикацию. Включение разрешения не запускает отправку существующих
-            остатков.
-          </FieldDescription></FieldGroup
-        >
-      </ChannelSettingsSection>
       <ChannelSettingsSection v-if="channel" title="Проверка подключения"
         ><ChannelVerification
           :channel="channel"

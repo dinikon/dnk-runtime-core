@@ -30,9 +30,8 @@ from uuid import UUID, uuid4
 from alembic import command
 
 from sqlalchemy import Column, MetaData, String, delete, func, inspect, select, text
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
-    AsyncConnection,
     async_sessionmaker,
     create_async_engine,
 )
@@ -153,17 +152,22 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.upgrade(connection, schema)
         return schema
 
-    async def test_baseline_downgrade_is_tenant_local(self) -> None:
-        """Откат одного tenant не меняет соседние схемы или public."""
+    async def test_destructive_head_rejects_downgrade_without_changing_tenants(
+        self,
+    ) -> None:
+        """Отказ необратимого отката сохраняет текущий tenant, соседние схемы и public."""
         first, second = await self.new_schema(), await self.new_schema()
         async with self.engine.begin() as connection:
-            await self.migrator.downgrade(connection, first, "base")
-            self.assertEqual(await self.migrator.current(connection, first), ())
+            with self.assertRaisesRegex(RuntimeError, "необратима"):
+                await self.migrator.downgrade(connection, first, "base")
+            self.assertEqual(
+                await self.migrator.current(connection, first), (self.migrator.head(),)
+            )
             self.assertEqual(
                 await self.migrator.current(connection, second), (self.migrator.head(),)
             )
             for table in migration_metadata().tables:
-                self.assertFalse(
+                self.assertTrue(
                     await connection.run_sync(
                         lambda conn: inspect(conn).has_table(table, schema=first)
                     )
@@ -184,7 +188,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_upgrade_repeat_downgrade_and_constraints(self) -> None:
-        """Повтор сохраняет начальные данные, откат не трогает чужие таблицы."""
+        """Повтор и отказ необратимого отката сохраняют данные, ограничения и чужие таблицы."""
         schema = await self.new_schema()
         async with self.engine.begin() as connection:
             tables = set(
@@ -245,8 +249,11 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             await connection.execute(
                 text(f'CREATE TABLE "{schema}".legacy_objects (id integer)')
             )
-            await self.migrator.downgrade(connection, schema, "base")
-            self.assertEqual(await self.migrator.current(connection, schema), ())
+            with self.assertRaisesRegex(RuntimeError, "необратима"):
+                await self.migrator.downgrade(connection, schema, "base")
+            self.assertEqual(
+                await self.migrator.current(connection, schema), (self.migrator.head(),)
+            )
             self.assertTrue(await schema_exists(connection, schema))
             self.assertTrue(
                 await connection.run_sync(
@@ -392,8 +399,11 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(
                     all(fk["referred_schema"] == schema for fk in foreign_keys)
                 )
-            await self.migrator.downgrade(connection, right, "base")
-            self.assertEqual(await self.migrator.current(connection, right), ())
+            with self.assertRaisesRegex(RuntimeError, "необратима"):
+                await self.migrator.downgrade(connection, right, "base")
+            self.assertEqual(
+                await self.migrator.current(connection, right), (self.migrator.head(),)
+            )
             self.assertEqual(
                 await self.migrator.current(connection, left), (self.migrator.head(),)
             )

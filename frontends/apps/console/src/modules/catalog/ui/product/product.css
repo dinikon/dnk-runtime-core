@@ -190,8 +190,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .product-workspace-variants[data-state="active"],
-  .product-workspace-publications[data-state="active"] {
+  .product-workspace-variants[data-state="active"] {
     display: flex;
     flex-direction: column;
     overflow: hidden;

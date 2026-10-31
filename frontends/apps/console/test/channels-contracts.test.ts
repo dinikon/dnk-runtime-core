@@ -27,36 +27,29 @@ const platform: Platform = {
       settings: { $ref: "#/$defs/Settings" },
     },
     $defs: {
-      Settings: {
-        properties: { username: { title: "Логин", type: "string" } },
-        required: ["username"],
-      },
+      Settings: { properties: {}, additionalProperties: false },
     },
   },
   credentialsSchema: {
     properties: {
-      password: { type: "string", format: "password", writeOnly: true },
+      token: { type: "string", format: "password", writeOnly: true },
     },
-    required: ["password"],
+    required: ["token"],
   },
 };
 test("Forms resolve platform-owned nested schemas and password metadata", () => {
-  assert.equal(
-    schemaFields(platform.configSchema, "settings")[0]?.key,
-    "username",
-  );
+  assert.equal(schemaFields(platform.configSchema, "settings").length, 0);
   assert.equal(schemaFields(platform.credentialsSchema)[0]?.secret, true);
   assert.equal(schemaFields(platform.configSchema)[0]?.readOnly, true);
 });
 test("Create serializes a complete independent secret snapshot; editing omits retained credentials", () => {
   const draft = draftFor(platform);
   draft.name = "Store";
-  draft.settings.username = "seller";
-  draft.credentials.password = "one-time-secret";
+  draft.credentials.token = "one-time-secret";
   const value = saveDraft(draft, platform);
-  draft.credentials.password = "later-input";
+  draft.credentials.token = "later-input";
   const body = createPayload(value);
-  assert.equal(body.credentials.password, "one-time-secret");
+  assert.equal(body.credentials.token, "one-time-secret");
   assert.equal(body.platform_kind, "rozetka");
   draft.replaceCredentials = false;
   assert.equal(
@@ -73,7 +66,7 @@ test("Reading configuration never populates secret fields; interrupted jobs stop
     config: {
       version: 1,
       endpoint: "https://api-seller.rozetka.com.ua",
-      settings: { username: "seller", stock_sync: { allow_export: true } },
+      settings: {},
     },
     config_revision: 2,
     identity: null,
@@ -90,14 +83,11 @@ test("Reading configuration never populates secret fields; interrupted jobs stop
     recovery_required: false,
   });
   const draft = draftFor(platform, channel);
-  assert.deepEqual(draft.credentials, { password: "" });
+  assert.deepEqual(draft.credentials, { token: "" });
   assert.equal(draft.replaceCredentials, false);
-  assert.equal(draft.allowStockExport, true);
-  draft.allowStockExport = false;
   const saved = updatePayload(saveDraft(draft, platform), channel.revision);
-  assert.deepEqual(saved.config.settings.stock_sync, { allow_export: false });
-  assert.equal("allow_stock_export" in saved, false);
-  assert.equal(channel.config.settings.stock_sync.allow_export, true);
+  assert.deepEqual(saved.config.settings, {});
+  assert.deepEqual(channel.config.settings, {});
   assert.equal(shouldPoll(channel), true);
   assert.equal(shouldPoll({ ...channel, recoveryRequired: true }), false);
   assert.equal(

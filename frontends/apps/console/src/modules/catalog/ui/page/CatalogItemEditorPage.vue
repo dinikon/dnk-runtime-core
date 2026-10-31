@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { CatalogBindingsPage } from "@/modules/channels";
 import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -156,12 +155,6 @@ function focused(): void {
           :root-id="id"
           :parent-stock="item.data.value.stock"
           :prepare-edit="flush"
-      /></template>
-      <template #publications
-        ><CatalogBindingsPage
-          :catalog-root-id="id"
-          :catalog-kind="item.data.value.kind"
-          :locale="ctx.locale.value"
       /></template>
     </ProductEditor>
   </div>

@@ -70,7 +70,7 @@ const emit = defineEmits<{
             ? "Вернитесь на первую страницу списка."
             : filtered
               ? "Измените поиск или сбросьте фильтры."
-              : "Подключите магазин, чтобы получать его публикации."
+              : "Подключите магазин и проверьте доступ к площадке."
         }}</EmptyDescription></EmptyHeader
       ><EmptyContent
         ><Button v-if="outOfRange" variant="outline" @click="emit('firstPage')"

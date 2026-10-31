@@ -7,12 +7,6 @@ from src.modules.catalog.application.catalog_item.query.find_used_image_files.ha
 from src.modules.catalog.infrastructure.catalog_item.image_usage import (
     SqlAlchemyCatalogImageUsage,
 )
-from src.modules.channels.application.content_media.query.find_used_image_files.handler import (
-    FindUsedImageFilesHandler as ChannelImages,
-)
-from src.modules.channels.infrastructure.content_media.query_repository import (
-    SqlAlchemyContentMediaQueryRepository,
-)
 from src.modules.files.application.stored_file.command.lock_ready_file.handler import (
     LockReadyFileHandler,
 )
@@ -212,5 +206,4 @@ def build_file_usage(session: AsyncSession) -> FileUsagePort:
     """Подключает владельцев ссылок на внешней границе Files без опционального bypass."""
     return ConsumerFileUsage(
         catalog=CatalogImages(SqlAlchemyCatalogImageUsage(session)),
-        channels=ChannelImages(SqlAlchemyContentMediaQueryRepository(session)),
     )

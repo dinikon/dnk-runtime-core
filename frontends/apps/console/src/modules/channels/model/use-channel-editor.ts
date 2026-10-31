@@ -44,7 +44,6 @@ export function useChannelEditor(id: Ref<string>): ChannelEditor {
       value.platformKind,
       value.endpoint,
       value.settings,
-      value.allowStockExport,
     ]);
   }
   watch(
@@ -86,7 +85,7 @@ export function useChannelEditor(id: Ref<string>): ChannelEditor {
           baseRevision.value = channel.revision;
       }
     },
-    { immediate: true },
+    { immediate: true, flush: "post" },
   );
   const platform = computed(() =>
     platforms.data.value?.find((p) => p.kind === draft.value?.platformKind),

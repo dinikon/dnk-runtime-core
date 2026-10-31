@@ -1,14 +1,12 @@
 import type { EditorGroup } from "./product-editor-layout";
 
-export type ProductEditorTab = "description" | "variants" | "publications";
+export type ProductEditorTab = "description" | "variants";
 
 /** Old section links still focus the same fields in the single editor. */
 export function productEditorTab(
   value: unknown,
   variable: boolean,
-  publications = true,
 ): ProductEditorTab {
-  if (value === "publications" && publications) return value;
   if (value === "variants" && variable) return value;
   return "description";
 }

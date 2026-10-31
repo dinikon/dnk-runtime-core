@@ -1,28 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Radio } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChannelEditor } from "../model/use-channel-editor";
 import { useChannelEditorNavigation } from "../model/use-channel-editor-navigation";
-import { useChannelSection } from "../model/use-channel-section";
 import { channelListReturnTo } from "../model/channel-navigation";
 import { channelErrorMessage } from "../model/channel.errors";
 import ChannelHeader from "../ui/ChannelHeader.vue";
 import ChannelForm from "../ui/ChannelForm.vue";
 import DeleteChannelDialog from "../ui/DeleteChannelDialog.vue";
-import ChannelPublicationsPage from "./ChannelPublicationsPage.vue";
-import ChannelContentFeedPage from "./ChannelContentFeedPage.vue";
 const route = useRoute(),
   router = useRouter();
 const id = computed(() => String(route.params.id ?? ""));
 const editor = useChannelEditor(id);
-const section = useChannelSection(
-  computed(() => editor.query.data.value?.platformKind === "prom"),
-);
 const deleteOpen = ref(false);
 watch(editor.contextKey, () => {
   deleteOpen.value = false;
@@ -75,7 +67,9 @@ async function remove(): Promise<void> {
         <Skeleton class="h-96 w-full" />
       </div>
       <ChannelForm
-        v-if="editor.draft.value && editor.platform.value"
+        v-if="
+          editor.draft.value && editor.platform.value && editor.query.data.value
+        "
         :key="editor.contextKey.value"
         :draft="editor.draft.value"
         :platform="editor.platform.value"
@@ -150,49 +144,6 @@ async function remove(): Promise<void> {
         ></Alert
       >
     </section>
-    <Tabs
-      v-model="section"
-      class="channel-workspace-publications flex min-w-0 flex-col gap-0"
-    >
-      <TabsList
-        variant="line"
-        aria-label="Разделы подключения"
-        class="shrink-0 border-b px-4"
-        ><TabsTrigger value="publications" variant="line"
-          ><Radio
-            class="mr-2 size-4"
-            aria-hidden="true"
-          />Публикации</TabsTrigger
-        ><TabsTrigger
-          v-if="editor.query.data.value?.platformKind === 'prom'"
-          value="content-feed"
-          variant="line"
-          >XML-фид</TabsTrigger
-        ></TabsList
-      >
-      <TabsContent
-        value="publications"
-        class="flex min-h-0 flex-1 flex-col p-4 lg:p-6"
-      >
-        <ChannelPublicationsPage v-if="editor.query.data.value" />
-        <Skeleton v-else-if="loading" class="h-72 w-full" />
-      </TabsContent>
-      <TabsContent
-        value="content-feed"
-        class="flex min-h-0 flex-1 flex-col p-4 lg:p-6"
-      >
-        <ChannelContentFeedPage
-          v-if="editor.query.data.value?.platformKind === 'prom'"
-          :key="editor.contextKey.value"
-          :channel-id="id"
-          :verified="
-            editor.query.data.value.availableCapabilities.includes(
-              'apply_content_feed',
-            )
-          "
-        />
-      </TabsContent>
-    </Tabs>
     <DeleteChannelDialog
       v-if="editor.query.data.value"
       v-model:open="deleteOpen"

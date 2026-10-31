@@ -1,37 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr
 
-from src.modules.channels.infrastructure.platforms.base import (
-    StrictModel,
-    StockSyncSettings,
-)
-
-
-class RozetkaSettings(StrictModel):
-    """Фиксированные валюта и языки площадки."""
-
-    stock_sync: StockSyncSettings = Field(default_factory=StockSyncSettings)
-
-    currency: Literal["UAH"] = Field(
-        default="UAH", title="Валюта", json_schema_extra={"readOnly": True}
-    )
-    locales: tuple[Literal["uk"], Literal["ru"]] = Field(
-        default=("uk", "ru"), title="Языки", json_schema_extra={"readOnly": True}
-    )
-
-    @field_validator("locales", mode="before")
-    @classmethod
-    def fixed_locales(cls, value: object) -> tuple[str, str]:
-        """Принимает оба порядка, отклоняя неполный набор и дубли."""
-        if (
-            not isinstance(value, (list, tuple))
-            or len(value) != 2
-            or not all(isinstance(item, str) for item in value)
-            or set(value) != {"uk", "ru"}
-        ):
-            raise ValueError("Both uk and ru are required")
-        return ("uk", "ru")
+from src.modules.channels.infrastructure.platforms.base import StrictModel
 
 
 class RozetkaConfig(StrictModel):
@@ -41,7 +12,7 @@ class RozetkaConfig(StrictModel):
     endpoint: Literal["https://api-seller.rozetka.com.ua"] = (
         "https://api-seller.rozetka.com.ua"
     )
-    settings: RozetkaSettings = Field(default_factory=RozetkaSettings)
+    settings: StrictModel = Field(default_factory=StrictModel)
 
 
 class RozetkaCredentials(StrictModel):

@@ -6,24 +6,24 @@ from datetime import UTC, datetime, timedelta
 import unittest
 from uuid import uuid4
 
-from src.modules.channels.domain.channel.aggregate import Channel
-from src.modules.channels.domain.channel.connection import Connection
-from src.modules.channels.domain.channel.enum.verification_status import (
+from src.modules.channels.domain.aggregate import Channel
+from src.modules.channels.domain.connection import Connection
+from src.modules.channels.domain.enum.verification_status import (
     VerificationStatus,
 )
-from src.modules.channels.domain.channel.error import (
+from src.modules.channels.domain.error import (
     InvalidChannelNameError,
     InvalidChannelStateError,
     InvalidResourceIdentityError,
 )
-from src.modules.channels.domain.channel.value_object.channel_name import ChannelNameVO
-from src.modules.channels.domain.channel.value_object.connection_config import (
+from src.modules.channels.domain.value_object.channel_name import ChannelNameVO
+from src.modules.channels.domain.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.channel.value_object.resource_identity import (
+from src.modules.channels.domain.value_object.resource_identity import (
     ResourceIdentityVO,
 )
-from src.modules.channels.domain.channel.value_object.verification import VerificationVO
+from src.modules.channels.domain.value_object.verification import VerificationVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
@@ -43,7 +43,6 @@ class ChannelsDomainTests(unittest.TestCase):
             config=self.config,
             encrypted_credentials=b"encrypted",
             job_id=self.job,
-            now=self.now,
         )
         self.channel = Channel.create(
             channel_id=EntityIdVO(uuid4()),
@@ -255,7 +254,6 @@ class ChannelsDomainTests(unittest.TestCase):
             config_revision=1,
             identity=None,
             verification=self.connection.verification,
-            stock_sync=self.connection.stock_sync,
         )
         for invalid in (
             {"config_revision": 0},

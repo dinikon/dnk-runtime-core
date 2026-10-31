@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import "./product.css";
-import { FileText, Layers, Radio } from "@lucide/vue";
+import { FileText, Layers } from "@lucide/vue";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ProductEditorTab } from "../../model/product-editor-state";
@@ -367,15 +367,6 @@ onMounted(async () => {
             ><Layers class="mr-2 size-4" aria-hidden="true" />Варианты ·
             {{ item.variant_count ?? 0 }}</TabsTrigger
           >
-          <TabsTrigger
-            v-if="$slots.publications"
-            value="publications"
-            variant="line"
-            ><Radio
-              class="mr-2 size-4"
-              aria-hidden="true"
-            />Публикации</TabsTrigger
-          >
         </TabsList>
       </div>
       <TabsContent
@@ -404,12 +395,6 @@ onMounted(async () => {
         value="variants"
         class="product-workspace-panel product-workspace-variants"
         ><slot name="variants"
-      /></TabsContent>
-      <TabsContent
-        v-if="$slots.publications"
-        value="publications"
-        class="product-workspace-panel product-workspace-publications"
-        ><slot name="publications"
       /></TabsContent>
     </Tabs>
   </div>

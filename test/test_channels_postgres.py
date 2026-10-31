@@ -15,20 +15,16 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateSchema, DropSchema
 from src.config import dnk_config
 from src.modules.channels.presentation.router import router
-from src.modules.channels.presentation.channel.jobs.verify_connection import (
+from src.modules.channels.presentation.jobs.verify_connection import (
     ChannelsVerifyConnectionJobHandler,
 )
 from src.modules.channels.infrastructure.registry import InstalledPlatforms
 from src.modules.shared.infrastructure.crypto.fernet_cipher import FernetCipher
-from src.modules.shared.application.crypto.error import (
-    CipherNotConfigured,
-    CiphertextUnreadable,
-)
 from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
 from src.modules.channels.infrastructure.persistence.models.connection import (
     ConnectionModel,
 )
-from src.modules.channels.infrastructure.channel.jobs import SharedVerificationJobs
+from src.modules.channels.infrastructure.jobs import SharedVerificationJobs
 from src.modules.channels.application.error import VerificationFailure
 from src.modules.shared.infrastructure.jobs.scheduled_job_model import ScheduledJobModel
 from src.modules.shared.infrastructure.jobs.sqlalchemy_scheduled_job_repository import (
@@ -124,7 +120,7 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.app.include_router(router, prefix="/api/console")
         self.cipher = FernetCipher(Fernet.generate_key().decode())
         self.cipher_patch = patch(
-            "src.modules.channels.presentation.channel.depends.get_cipher",
+            "src.modules.channels.presentation.depends.get_cipher",
             return_value=self.cipher,
         )
         self.cipher_patch.start()
@@ -525,7 +521,7 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         detail = await self.detail(created["id"])
         self.assertEqual(detail["verification"]["error_code"], "credentials_unreadable")
         with patch(
-            "src.modules.channels.presentation.channel.depends.get_cipher",
+            "src.modules.channels.presentation.depends.get_cipher",
             return_value=FernetCipher(None),
         ):
             failed = await self.client.post(
@@ -593,28 +589,25 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(await self.rows(ChannelModel)), 1)
 
-    async def test_additive_migration_can_be_downgraded_and_reapplied(self) -> None:
-        """Откат удаляет только две таблицы Channels и сохраняет соседние модули."""
-        from sqlalchemy import text
+    async def test_current_schema_contains_only_channels_and_connections(self) -> None:
+        """Новый tenant хранит только подключение, сохраняя соседние модули."""
+        from sqlalchemy import inspect
 
-        async with self.engine.begin() as connection:
-            await TenantMigrator().downgrade(
-                connection, self.schemas[0], "0005_catalog_import_limits"
+        async with self.engine.connect() as connection:
+            names = await connection.run_sync(
+                lambda c: inspect(c).get_table_names(schema=self.schemas[0])
             )
-            names = set(
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT table_name FROM information_schema.tables WHERE table_schema=:schema"
-                        ),
-                        {"schema": self.schemas[0]},
-                    )
-                ).scalars()
-            )
-            self.assertNotIn("channels", names)
-            self.assertNotIn("channel_connections", names)
-            self.assertTrue({"catalog_item", "contacts", "crm_deals"} <= names)
-            await TenantMigrator().upgrade(connection, self.schemas[0])
+        self.assertEqual(
+            {
+                name
+                for name in names
+                if name == "channels" or name.startswith("channel_")
+            },
+            {"channels", "channel_connections"},
+        )
+        self.assertTrue(
+            {"catalog_item", "contacts", "crm_deals", "files_registry"} <= set(names)
+        )
         created = await self.create()
         self.assertEqual(
             (await self.detail(created["id"]))["verification"]["status"], "pending"

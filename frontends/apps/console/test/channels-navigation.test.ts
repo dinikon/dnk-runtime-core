@@ -23,33 +23,10 @@ test("connection return restores only the internal list and its filters", () => 
     assert.equal(channelListReturnTo(value), "/channels");
 });
 
-test("old publication-list links retain their context on the connection page", () => {
-  const route = channelRoutes.find(
-    (route) => route.name === "channel-publications",
+test("routes expose only connection list, creation and settings", () => {
+  assert.deepEqual(
+    channelRoutes.map((route) => route.name),
+    ["channels", "channel-new", "channel-detail"],
   );
-  assert.equal(typeof route?.redirect, "function");
-  if (typeof route?.redirect !== "function") return;
-  const query = {
-    q: "SKU-1",
-    offset: "50",
-    limit: "25",
-    locale: "uk",
-    binding_filter: "unlinked",
-    returnTo: "/channels?platform=prom",
-  };
-  const result = route.redirect({
-    params: { id: "shop / 1" },
-    query,
-    hash: "#row",
-  } as Parameters<typeof route.redirect>[0]);
-  assert.deepEqual(result, {
-    name: "channel-detail",
-    params: { id: "shop / 1" },
-    query,
-    hash: "#row",
-  });
-  assert.ok(
-    channelRoutes.find((route) => route.name === "channel-publication")
-      ?.component,
-  );
+  assert.ok(channelRoutes.every((route) => route.component));
 });

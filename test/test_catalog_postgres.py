@@ -342,8 +342,8 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         denied = await self.client.post(self.base + "/items", json={})
         self.assertEqual(denied.status_code, 403)
 
-    async def test_fresh_baseline_downgrade_upgrade_and_drift(self) -> None:
-        """Сохранённая baseline обратима и совпадает с SQL metadata."""
+    async def test_cleanup_head_rejects_downgrade_and_has_no_drift(self) -> None:
+        """Необратимая очистка сохраняет Catalog; текущая схема совпадает с metadata."""
         from alembic.autogenerate import compare_metadata
         from alembic.migration import MigrationContext
         from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
@@ -352,8 +352,17 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         async with self.engine.begin() as connection:
             schema = self.schemas[0]
-            await TenantMigrator().downgrade(connection, schema, "base")
-            self.assertIsNone(
+            original_types = await connection.scalar(
+                text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
+            )
+            original_blocks = await connection.scalar(
+                text(
+                    f'SELECT count(*) FROM "{schema}".catalog_content_block_definitions'
+                )
+            )
+            with self.assertRaisesRegex(RuntimeError, "необратима"):
+                await TenantMigrator().downgrade(connection, schema, "base")
+            self.assertIsNotNone(
                 await connection.scalar(
                     text("SELECT to_regclass(:table)"),
                     {"table": schema + ".catalog_item"},
@@ -395,7 +404,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await connection.scalar(
                     text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
                 ),
-                0,
+                original_types,
             )
             self.assertEqual(
                 await connection.scalar(
@@ -403,10 +412,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                         f'SELECT count(*) FROM "{schema}".catalog_content_block_definitions'
                     )
                 ),
-                0,
+                original_blocks,
             )
-        await self.request("GET", "/product-type/default?locale=en", status=404)
-        await self.request("POST", "/items", {}, status=404)
+        await self.request("GET", "/product-type/default?locale=en")
+        await self.request("POST", "/items", {}, status=201)
 
     async def test_inactive_locale_reads_and_sql_constraints(self) -> None:
         from sqlalchemy.exc import IntegrityError

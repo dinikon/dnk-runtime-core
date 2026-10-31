@@ -29,10 +29,7 @@ export function schemaFields(
   const properties = object(node.properties);
   const required = Array.isArray(node.required) ? node.required : [];
   return Object.entries(properties)
-    .filter(
-      ([key]) =>
-        key !== "version" && key !== "settings" && key !== "stock_sync",
-    )
+    .filter(([key]) => key !== "version" && key !== "settings")
     .map(([key, raw]) => {
       const field = resolved(raw, schema);
       return {
@@ -77,7 +74,6 @@ export function draftFor(platform: Platform, channel?: Channel): ChannelDraft {
       schemaFields(platform.credentialsSchema).map((field) => [field.key, ""]),
     ),
     replaceCredentials: !channel,
-    allowStockExport: channel?.config.settings.stock_sync.allow_export ?? false,
   };
 }
 export function saveDraft(
@@ -92,7 +88,6 @@ export function saveDraft(
       endpoint: draft.endpoint,
       settings: {
         ...(JSON.parse(JSON.stringify(draft.settings)) as JsonObject),
-        stock_sync: { allow_export: draft.allowStockExport },
       },
     },
     ...(draft.replaceCredentials

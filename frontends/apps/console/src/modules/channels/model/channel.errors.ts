@@ -28,24 +28,6 @@ const messages: Record<string, string> = {
   configuration_invalid: "Проверьте настройки подключения.",
   request_invalid: "Проверьте обязательные поля формы.",
   name_invalid: "Введите название канала длиной до 255 символов.",
-  currency_unavailable: "Валюта отсутствует в активном справочнике.",
-  locale_unavailable: "Язык отсутствует в активном справочнике.",
-  locale_invalid: "Этот язык не настроен для канала.",
-  sync_not_available: "Перед синхронизацией проверьте подключение.",
-  sync_run_not_found: "Запуск синхронизации не найден.",
-  publication_not_found: "Публикация не найдена в этом канале.",
-  publication_parent_unavailable:
-    "Не удалось получить основной товар разновидности.",
-  publication_structure_invalid:
-    "Площадка вернула противоречивые связи разновидностей. Ранее полученные страницы сохранены.",
-  publication_structure_changed:
-    "Изменилась структура карточки. Ранее полученные данные сохранены.",
-  pagination_not_progressing:
-    "Площадка повторяет страницу и не продвигает список товаров.",
-  sync_interrupted: "Синхронизация была прервана. Можно запустить новый обход.",
-  configuration_changed:
-    "Синхронизация отменена после изменения настроек канала.",
-  channel_deleted: "Синхронизация отменена после удаления канала.",
 };
 export function channelErrorMessage(error: unknown): string {
   const code =

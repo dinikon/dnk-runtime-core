@@ -7,7 +7,6 @@ from test.test_catalog_postgres import CatalogPostgresTests
 from src.modules.catalog.application.catalog_item.query.get_catalog_product_snapshot.query import (
     GetCatalogProductSnapshotQuery,
 )
-from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 class CatalogVariantsPostgresTests(CatalogPostgresTests):
@@ -223,18 +222,38 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
             self.assertEqual(count, 0)
 
     async def test_migration_refuses_lossy_downgrade(self) -> None:
-        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
-            TenantMigrator,
-        )
-
         await self.request(
             "POST", "/items", {"kind": "variable", "sku": "CONTAINER"}, 201
         )
+        # Проверяем guard самой исторической ревизии: новый head не допускает
+        # пересечения необратимой очистки Channels при обычном downgrade.
+        import importlib.util
+        from pathlib import Path
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "migrations/tenant/versions/0008_catalog_variants.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "catalog_variants_legacy_guard", path
+        )
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
         with self.assertRaisesRegex(RuntimeError, "SKU"):
             async with self.engine.begin() as connection:
-                await TenantMigrator().downgrade(
-                    connection, self.schemas[0], "0007_channels_publications"
+                await connection.execute(
+                    text("SELECT set_config('search_path', :schema, true)"),
+                    {"schema": self.schemas[0]},
                 )
+
+                def downgrade(sync) -> None:
+                    """Проверяет запрет потери SKU в исторической миграции."""
+                    with Operations.context(MigrationContext.configure(sync)):
+                        migration.downgrade()
+
+                await connection.run_sync(downgrade)
         self.assertEqual((await self.request("GET", "/items?locale=en"))["total"], 1)
 
     async def test_public_snapshot_import_collision_and_tenant_isolation(self) -> None:
@@ -512,21 +531,8 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
         )
         self.assertEqual((await read(ids[1]))["stock_status"], "on_backorder")
         self.assertEqual((await read(ids[0]))["effective_stock"]["stock_quantity"], -1)
-        # SKU-null families and child own settings survive downgrade/upgrade.
+        # Повторное применение актуальной схемы сохраняет всю семью и настройки.
         async with self.engine.begin() as connection:
-            await TenantMigrator().downgrade(
-                connection, self.schemas[0], "0007_channels_publications"
-            )
-            columns = (
-                await connection.execute(
-                    text(
-                        "SELECT column_name,is_nullable FROM information_schema.columns WHERE table_schema=:schema AND table_name='catalog_item'"
-                    ),
-                    {"schema": self.schemas[0]},
-                )
-            ).all()
-            self.assertNotIn("stock_source", dict(columns))
-            self.assertEqual(dict(columns)["manage_stock"], "NO")
             await TenantMigrator().upgrade(connection, self.schemas[0])
         self.assertEqual((await read(ids[1]))["stock"], original[1])
 

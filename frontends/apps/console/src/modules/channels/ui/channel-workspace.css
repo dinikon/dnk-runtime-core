@@ -1,5 +1,9 @@
 .channel-workspace {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 768px;
+  margin-inline: auto;
   min-width: 0;
 }
 .channel-workspace-fields {
@@ -19,22 +23,17 @@
   flex-shrink: 0;
   padding: 12px 16px;
 }
-.channel-workspace-publications {
-  min-width: 0;
-}
 @media (min-width: 1024px) {
   .channel-workspace {
     flex: 1;
     min-height: 0;
     overflow: hidden;
-    grid-template-columns: 340px minmax(0, 1fr);
   }
   .channel-workspace-fields {
     display: flex;
     min-height: 0;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid var(--border);
     border-bottom: none;
   }
   .channel-settings-form {
@@ -52,10 +51,6 @@
   .channel-workspace-fields input,
   .channel-workspace-fields [data-slot="select-trigger"] {
     min-height: 36px;
-  }
-  .channel-workspace-publications {
-    min-height: 0;
-    overflow: hidden;
   }
 }
 @media (max-width: 767px) {

@@ -18,9 +18,7 @@ export function useProductEditorPageState(
   const route = useRoute();
   const router = useRouter();
   const key = variant ? "variant_tab" : "tab";
-  const tab = computed(() =>
-    productEditorTab(route.query[key], variable(), !variant),
-  );
+  const tab = computed(() => productEditorTab(route.query[key], variable()));
   const initialGroup = computed(() => productEditorGroup(route.query[key]));
   function selectTab(value: ProductEditorTab): void {
     void router.replace({

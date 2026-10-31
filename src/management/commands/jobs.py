@@ -7,34 +7,6 @@ from pathlib import Path
 import signal
 from datetime import UTC, datetime
 
-from src.modules.channels.presentation.content_feed.jobs import (
-    ChannelsFeedImportJobHandler,
-)
-from src.modules.channels.infrastructure.content_feed.jobs import (
-    JOB_TYPE as CHANNELS_FEED_IMPORT_JOB_TYPE,
-)
-from src.modules.channels.presentation.content_delivery.jobs import (
-    ChannelsContentDeliveryJobHandler,
-)
-from src.modules.channels.infrastructure.content_delivery.jobs import (
-    JOB_TYPE as CHANNELS_CONTENT_JOB_TYPE,
-)
-
-from src.modules.channels.presentation.stock_sync.jobs import (
-    ChannelsStockJobHandler,
-    ChannelsCatalogStockChangedJobHandler,
-)
-from src.modules.channels.infrastructure.stock_sync.jobs import (
-    JOB_TYPE as CHANNELS_STOCK_JOB_TYPE,
-    CATALOG_EVENT_JOB_TYPE,
-)
-
-from src.modules.channels.presentation.sync_run.jobs.sync_publications import (
-    ChannelsSyncPublicationsJobHandler,
-)
-from src.modules.channels.infrastructure.sync_run.jobs import (
-    JOB_TYPE as CHANNELS_SYNC_JOB_TYPE,
-)
 from src.modules.files.presentation.jobs.empty_trash import (
     FilesEmptyTrashJobHandler,
     JOB_TYPE as FILES_EMPTY_TRASH_JOB_TYPE,
@@ -49,10 +21,10 @@ from src.modules.files.presentation.jobs.trash_cleanup import (
     JOB_TYPE as FILES_TRASH_JOB_TYPE,
 )
 from src.config import dnk_config
-from src.modules.channels.presentation.channel.jobs.verify_connection import (
+from src.modules.channels.presentation.jobs.verify_connection import (
     ChannelsVerifyConnectionJobHandler,
 )
-from src.modules.channels.infrastructure.channel.jobs import (
+from src.modules.channels.infrastructure.jobs import (
     JOB_TYPE as CHANNELS_VERIFY_JOB_TYPE,
 )
 from src.modules.reference_data.presentation.jobs.refresh import (
@@ -163,19 +135,6 @@ async def handle_worker(_args: argparse.Namespace) -> int:
     catalog_imports = CatalogImportJobHandler(db_helper.session_factory)
     dispatcher = build_scheduled_job_dispatcher(
         {
-            CHANNELS_FEED_IMPORT_JOB_TYPE: ChannelsFeedImportJobHandler(
-                db_helper.session_factory
-            ),
-            CHANNELS_CONTENT_JOB_TYPE: ChannelsContentDeliveryJobHandler(
-                db_helper.session_factory
-            ),
-            CHANNELS_STOCK_JOB_TYPE: ChannelsStockJobHandler(db_helper.session_factory),
-            CATALOG_EVENT_JOB_TYPE: ChannelsCatalogStockChangedJobHandler(
-                db_helper.session_factory
-            ),
-            CHANNELS_SYNC_JOB_TYPE: ChannelsSyncPublicationsJobHandler(
-                db_helper.session_factory
-            ),
             CHANNELS_VERIFY_JOB_TYPE: ChannelsVerifyConnectionJobHandler(
                 db_helper.session_factory
             ),

@@ -1,57 +1,21 @@
-from uuid import UUID
-from src.modules.channels.application.content_delivery.contracts import (
-    PreparedContentRequest,
-    ContentDeliveryResult,
-    ContentReconciliationResult,
-    ContentMediaResult,
-    ContentMediaChecksum,
-)
-from src.modules.channels.application.content_media.contracts import PreparedGallery
-from src.modules.channels.domain.content_delivery.value_object import DeliveryContextVO
-from src.modules.channels.domain.content_delivery.error import ContentDeliveryError
-from src.modules.channels.domain.product_representation.value_object import (
-    LocalizedContent,
-    PreparedPublicationContent,
-    RepresentationIssue,
-)
-import hashlib
-from src.modules.channels.domain.stock_sync.state import DesiredStockVO, StockFeaturesVO
-from src.modules.channels.infrastructure.platforms.prom.stock import PromStock
-from src.modules.channels.application.stock_sync.contracts import PlatformStockSnapshot
-from src.modules.channels.infrastructure.platforms.prom.details import PromDetailsReader
-from src.modules.channels.application.external_publication.catalog_details import (
-    PublicationLookup,
-    PublicationDetails,
-)
 import json
 from urllib.parse import urlencode
-
 from pydantic import ValidationError
-
-from src.modules.channels.application.sync_run.port.source import (
-    PublicationCheckpoint,
-    PublicationObservation,
-    PublicationPage,
+from src.modules.channels.application.error import (
+    ChannelInputError,
+    VerificationFailure,
 )
-from src.modules.channels.domain.external_publication.value_object import (
-    PublicationKind,
-)
-from src.modules.channels.infrastructure.platforms.prom.publications import (
-    PromPublicationReader,
-)
-from src.modules.channels.application.error import ChannelInputError
-from src.modules.channels.application.error import VerificationFailure
 from src.modules.channels.application.port.platform import (
     PlatformManifest,
     ValidatedConnection,
 )
-from src.modules.channels.domain.types import JsonObject
-from src.modules.channels.domain.channel.value_object.connection_config import (
+from src.modules.channels.domain.value_object.connection_config import (
     ConnectionConfigVO,
 )
-from src.modules.channels.domain.channel.value_object.resource_identity import (
+from src.modules.channels.domain.value_object.resource_identity import (
     ResourceIdentityVO,
 )
+from src.modules.channels.domain.types import JsonObject
 from src.modules.channels.infrastructure.http import JsonHttp
 from src.modules.channels.infrastructure.platforms.prom.models import (
     PromConfig,
@@ -61,10 +25,10 @@ from src.modules.channels.infrastructure.platforms.prom.models import (
 
 
 class PromPlatform:
-    """Проверяет Prom по согласованному кандидату identity корневой группы."""
+    """Проверяет настройки и доступ к магазину Prom."""
 
     def __init__(self, http: JsonHttp) -> None:
-        """Собирает явную декларацию и HTTP-порт Prom."""
+        """Связывает конкретные модели и verifier с общим transport."""
         self.http = http
         self.manifest = PlatformManifest(
             kind="prom",
@@ -72,23 +36,8 @@ class PromPlatform:
             config_version=1,
             config_schema=PromConfig.model_json_schema(),
             credentials_schema=PromCredentials.model_json_schema(),
-            supported_capabilities=(
-                "verify_connection",
-                "publications",
-                "read_stock",
-                "write_stock",
-                "content_feed",
-                "apply_content_feed",
-            ),
-            publication_parent_kind=PublicationKind.SIMPLE,
-            stock_features=StockFeaturesVO(
-                False, ("in_stock", "out_of_stock", "on_order"), ("no", "notify", "yes")
-            ),
+            supported_capabilities=("verify_connection",),
         )
-
-    def media_metadata_fingerprint(self, alt: str) -> str:
-        """Разделяет внешние attachment по alt; XML использует только исходный файл."""
-        return hashlib.sha256(b"").hexdigest()
 
     def decode_config(self, config: ConnectionConfigVO) -> PromConfig:
         """Восстанавливает конкретную модель настроек Prom."""
@@ -137,12 +86,9 @@ class PromPlatform:
             config=ConnectionConfigVO.create(
                 version=typed.version,
                 endpoint=typed.endpoint,
-                settings=typed.settings.model_dump(mode="json", exclude={"stock_sync"}),
+                settings=typed.settings.model_dump(mode="json"),
             ),
             credentials=encoded,
-            allow_stock_export=typed.settings.stock_sync.allow_export,
-            currency=typed.settings.currency,
-            locales=typed.settings.locales,
         )
 
     async def verify(
@@ -183,121 +129,3 @@ class PromPlatform:
                 raise VerificationFailure("resource_identity_unavailable")
             last_id = ids[-1]
         raise VerificationFailure("resource_identity_unavailable")
-
-    async def read_publications(
-        self,
-        *,
-        config: ConnectionConfigVO,
-        credentials: bytes,
-        checkpoint: PublicationCheckpoint,
-        parent_external_id: str | None = None,
-    ) -> PublicationPage:
-        """Восстанавливает конкретные настройки и читает один шаг источника."""
-        return await PromPublicationReader(self.http).read(
-            config=self.decode_config(config),
-            credentials=PromCredentials.model_validate_json(credentials),
-            checkpoint=checkpoint,
-        )
-
-    async def read_publication_dependencies(
-        self,
-        *,
-        config: ConnectionConfigVO,
-        credentials: bytes,
-        keys: tuple[tuple[str, str], ...],
-    ) -> tuple[PublicationObservation, ...]:
-        """Дозагружает подтверждённые зависимости изменения структуры."""
-        return await PromPublicationReader(self.http).read_dependencies(
-            config=self.decode_config(config),
-            credentials=PromCredentials.model_validate_json(credentials),
-            keys=keys,
-        )
-
-    async def get_details(
-        self,
-        *,
-        config: ConnectionConfigVO,
-        credentials: bytes,
-        publications: tuple[PublicationLookup, ...],
-    ) -> PublicationDetails:
-        """Восстанавливает конкретные типы пакета и читает полное семейство."""
-        return await PromDetailsReader(self.http).read(
-            config=self.decode_config(config),
-            credentials=PromCredentials.model_validate_json(credentials),
-            publications=publications,
-        )
-
-    def stock_target_key(self, native: JsonObject) -> str | None:
-        """Нормализует нативный ключ без раскрытия модели платформы."""
-        return None
-
-    async def get_stock(
-        self,
-        *,
-        config: ConnectionConfigVO,
-        credentials: bytes,
-        publication: PublicationLookup,
-        parent: PublicationLookup | None = None,
-    ) -> PlatformStockSnapshot:
-        """Читает только остаток через конкретные типы пакета."""
-        return await PromStock(self.http).get(
-            config=self.decode_config(config),
-            credentials=PromCredentials.model_validate_json(credentials),
-            publication=publication,
-            parent=parent,
-        )
-
-    async def set_stock(
-        self,
-        *,
-        config: ConnectionConfigVO,
-        credentials: bytes,
-        publication: PublicationLookup,
-        desired: DesiredStockVO,
-    ) -> PlatformStockSnapshot:
-        """Устанавливает абсолютное количество и проверяет результат чтением."""
-        return await PromStock(self.http).set(
-            config=self.decode_config(config),
-            credentials=PromCredentials.model_validate_json(credentials),
-            publication=publication,
-            desired=desired,
-        )
-
-    def content_issues(
-        self, targets: tuple[PreparedPublicationContent, ...]
-    ) -> tuple[RepresentationIssue, ...]:
-        """Этот пакет пока не предоставляет исходящую API-доставку контента."""
-        return (RepresentationIssue("content_platform_unsupported"),)
-
-    def prepare_content(
-        self,
-        *,
-        context: DeliveryContextVO,
-        content: LocalizedContent,
-        gallery: PreparedGallery | None,
-        reserved_media_ids: tuple[UUID, ...],
-    ) -> PreparedContentRequest:
-        """Отклоняет неподдерживаемую запись до любых сетевых операций."""
-        raise ContentDeliveryError("content_platform_unsupported")
-
-    async def send_content(
-        self,
-        *,
-        config: ConnectionConfigVO,
-        credentials: bytes,
-        request: PreparedContentRequest,
-    ) -> ContentDeliveryResult:
-        """Не отправляет неподдерживаемые запросы."""
-        raise ContentDeliveryError("content_platform_unsupported")
-
-    async def reconcile_content(
-        self,
-        *,
-        config: ConnectionConfigVO,
-        credentials: bytes,
-        request: PreparedContentRequest,
-        known_media: tuple[ContentMediaResult, ...] = (),
-        media_checksums: tuple[ContentMediaChecksum, ...] = (),
-    ) -> ContentReconciliationResult:
-        """Не выполняет сверку чужого формата платформы."""
-        raise ContentDeliveryError("content_platform_unsupported")
