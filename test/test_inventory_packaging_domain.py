@@ -9,6 +9,7 @@ from src.modules.inventory.domain.error import (
     InvalidPackagingValueError,
     UnknownUomError,
     IncompatibleUomError,
+    QuantityPrecisionError,
 )
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
@@ -37,6 +38,9 @@ from src.modules.inventory.domain.inventory_item.value_object.packaging_quantity
     PackagingQuantityVO,
 )
 from src.modules.inventory.domain.inventory_item.value_object.sku import SkuVO
+from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import (
+    TrackingMode,
+)
 from src.modules.inventory.domain.packaging_type.aggregate import PackagingType
 from src.modules.inventory.domain.packaging_type.error import InvalidPackagingTypeError
 from src.modules.inventory.domain.packaging_type.value_object.identifier import (
@@ -280,6 +284,31 @@ class InventoryPackagingDomainTests(unittest.TestCase):
         )
         self.assertEqual(quantity.value, Decimal("0.5"))
         self.assertEqual(item.remove_packaging(packaging.id).packagings, ())
+
+    def test_serial_packaging_requires_integral_content_at_every_write_path(
+        self,
+    ) -> None:
+        """Серийный товар допускает ящик из 12 штук и запрещает дробное содержимое."""
+        for mode in (TrackingMode.SERIAL, TrackingMode.LOT_AND_SERIAL):
+            with self.subTest(mode=mode):
+                empty = self.create_item(tracking_mode=mode)
+                item = empty.add_packaging(
+                    self.box, packaging_type=self.kind.snapshot()
+                )
+                self.assertEqual(self.restore_item(item), item)
+                invalid = self.packaging(
+                    content_quantity=PackagingQuantityVO(Decimal("0.5"))
+                )
+                with self.assertRaises(QuantityPrecisionError):
+                    empty.add_packaging(invalid, packaging_type=self.kind.snapshot())
+                with self.assertRaises(QuantityPrecisionError):
+                    self.restore_item(empty, packagings=(invalid,))
+                with self.assertRaises(QuantityPrecisionError):
+                    self.change_packaging(
+                        item, content_quantity=invalid.content_quantity
+                    )
+                self.assertEqual(empty.packagings, ())
+                self.assertEqual(item.packagings, (self.box,))
 
     def test_incompatible_dimensions_are_rejected_on_add_change_and_restore(
         self,

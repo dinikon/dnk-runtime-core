@@ -6,7 +6,11 @@ from decimal import Decimal
 from uuid import uuid4
 
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
-from src.modules.inventory.domain.error import InvalidUomCodeError
+from src.modules.inventory.domain.error import (
+    InvalidUomCodeError,
+    QuantityPrecisionError,
+    UnknownUomError,
+)
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
 from src.modules.inventory.domain.inventory_item.error import (
     InvalidBarcodeError,
@@ -32,10 +36,23 @@ from src.modules.inventory.domain.inventory_item.value_object.tracking_mode impo
 )
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.uom_catalog import list_uoms
 
 
 class InventoryValueObjectTests(unittest.TestCase):
     """Проверяет нормализацию кодов и режим необязательных дат-заметок."""
+
+    def test_serial_requirement_includes_combined_tracking_mode(self) -> None:
+        """Оба режима серий требуют поштучной идентификации; NONE и LOT её не требуют."""
+        for mode, expected in (
+            (TrackingMode.NONE, False),
+            (TrackingMode.LOT, False),
+            (TrackingMode.SERIAL, True),
+            (TrackingMode.LOT_AND_SERIAL, True),
+        ):
+            with self.subTest(mode=mode):
+                self.assertIs(mode.requires_serial, expected)
 
     def test_text_values_trim_without_losing_identity(self) -> None:
         """Нормализует регистр SKU, сохраняя ведущие нули и регистр штрихкода."""
@@ -188,6 +205,88 @@ class InventoryItemDomainTests(unittest.TestCase):
                                 tracking_mode=tracking, expiration_mode=expiration
                             )
                             self.assertIs(item.expiration_mode, expiration)
+
+    def test_factories_enforce_tracking_unit_rules_and_expiration_matrix(self) -> None:
+        """Проверяет все системные единицы и режимы с допустимыми и конфликтными настройками."""
+        configurations = (
+            (QuantityRulesVO(Decimal("1"), 0), True),
+            (QuantityRulesVO(Decimal("1.000"), 0), True),
+            (QuantityRulesVO(Decimal("0.5"), 1), False),
+            (QuantityRulesVO(Decimal("0.001"), 3), False),
+            (QuantityRulesVO(Decimal("2"), 0), False),
+            (QuantityRulesVO(Decimal("1"), 2), False),
+        )
+        for factory in (self.make_item, self.restore_item):
+            for tracking in TrackingMode:
+                for unit in list_uoms():
+                    for rules, serial_compatible in configurations:
+                        for expiration in ExpirationMode:
+                            values = dict(
+                                tracking_mode=tracking,
+                                base_uom=unit.code,
+                                quantity_rules=rules,
+                                expiration_mode=expiration,
+                            )
+                            with self.subTest(factory=factory, **values):
+                                if (
+                                    tracking is TrackingMode.NONE
+                                    and expiration is ExpirationMode.REQUIRED
+                                ):
+                                    allowed = False
+                                elif tracking in (TrackingMode.NONE, TrackingMode.LOT):
+                                    allowed = True
+                                else:
+                                    allowed = (
+                                        unit.code.value == "PCS" and serial_compatible
+                                    )
+                                if allowed:
+                                    item = factory(**values)
+                                    self.assertEqual(item.base_uom, unit.code)
+                                    self.assertIs(item.quantity_rules, rules)
+                                    self.assertIs(item.tracking_mode, tracking)
+                                    self.assertIs(item.expiration_mode, expiration)
+                                else:
+                                    with self.assertRaises(
+                                        InvalidTrackingConfigurationError
+                                    ):
+                                        factory(**values)
+
+    def test_unknown_unit_is_rejected_for_every_tracking_mode(self) -> None:
+        """Код неизвестной единицы не становится допустимым в режиме без прослеживаемости."""
+        for factory in (self.make_item, self.restore_item):
+            for tracking in TrackingMode:
+                for code in ("BOX", "kg", "pcs", "UNKNOWN"):
+                    with (
+                        self.subTest(factory=factory, tracking=tracking, code=code),
+                        self.assertRaises(UnknownUomError),
+                    ):
+                        factory(
+                            tracking_mode=tracking,
+                            expiration_mode=ExpirationMode.NONE,
+                            base_uom=UomCodeVO(code),
+                        )
+
+    def test_serial_item_accepts_only_integral_quantities_including_zero(self) -> None:
+        """Серийный товар принимает целое количество экземпляров без дробных штук и округления."""
+        for tracking in (TrackingMode.SERIAL, TrackingMode.LOT_AND_SERIAL):
+            item = self.make_item(tracking_mode=tracking)
+            self.assertEqual(
+                tuple(unit.code for unit in item.available_uoms), (self.pcs,)
+            )
+            for value in ("0", "1", "12.000"):
+                with self.subTest(tracking=tracking, value=value):
+                    quantity = item.to_base_quantity(
+                        quantity=QuantityVO(Decimal(value)), uom=self.pcs
+                    )
+                    self.assertEqual(quantity.value, Decimal(value))
+            for value in ("0.5", "1.001"):
+                with (
+                    self.subTest(tracking=tracking, value=value),
+                    self.assertRaises(QuantityPrecisionError),
+                ):
+                    item.to_base_quantity(
+                        quantity=QuantityVO(Decimal(value)), uom=self.pcs
+                    )
 
     def test_factories_require_typed_manual_state(self) -> None:
         """Отклоняет отсутствие SKU, чужие ID, сырые режимы и изменяемые коллекции."""

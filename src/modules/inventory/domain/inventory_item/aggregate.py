@@ -1,4 +1,5 @@
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from typing import Self
 
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
@@ -258,6 +259,15 @@ class InventoryItem:
             raise InvalidTrackingConfigurationError(
                 "Обязательный срок годности требует учёта по партиям или сериям."
             )
+        get_uom(self.base_uom)
+        if self.tracking_mode.requires_serial and (
+            self.base_uom != UomCodeVO("PCS")
+            or self.quantity_rules.step != Decimal("1")
+            or self.quantity_rules.precision != 0
+        ):
+            raise InvalidTrackingConfigurationError(
+                "Серийный учёт требует базовую единицу PCS, шаг 1 и точность 0."
+            )
         for packaging in self.packagings:
             if not isinstance(packaging, ItemPackaging):
                 raise InvalidInventoryItemValueError("Ожидалась Entity ItemPackaging.")
@@ -278,7 +288,6 @@ class InventoryItem:
             raise InventoryItemConflictError(
                 "ID и значения штрихкодов должны быть уникальны."
             )
-        get_uom(self.base_uom)
         for packaging in self.packagings:
             self.to_base_quantity(
                 quantity=QuantityVO(packaging.content_quantity.value),

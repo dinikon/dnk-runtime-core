@@ -18,7 +18,7 @@ class InvalidBarcodeError(InventoryItemError):
 
 
 class InvalidTrackingConfigurationError(InventoryItemError):
-    """Сообщает о несовместимых настройках прослеживаемости и срока годности."""
+    """Сообщает о несовместимости прослеживаемости, срока годности, единицы и количества."""
 
 
 class InvalidInventoryItemTrackingSnapshotError(InventoryItemError):
