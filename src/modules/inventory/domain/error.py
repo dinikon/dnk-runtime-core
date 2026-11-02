@@ -43,3 +43,11 @@ class QuantityPrecisionError(InventoryError):
 
 class QuantityStepError(InventoryError):
     """Запрещает количество, не кратное шагу товара от нуля."""
+
+
+class ExpirationDateNotAllowedError(InventoryError):
+    """Запрещает заполненный срок годности при выключенном учёте дат."""
+
+
+class ExpirationDateRequiredError(InventoryError):
+    """Сообщает об отсутствии обязательной даты перед поступлением."""

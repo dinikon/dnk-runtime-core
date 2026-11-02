@@ -2,6 +2,9 @@ from dataclasses import dataclass, replace
 from typing import Self
 
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
+from src.modules.inventory.domain.inventory_item.snapshot import (
+    InventoryItemTrackingSnapshot,
+)
 from src.modules.inventory.domain.inventory_item.entity.item_packaging import (
     ItemPackaging,
 )
@@ -115,6 +118,14 @@ class InventoryItem:
     def change_sku(self, sku: SkuVO) -> Self:
         """Возвращает позицию с новым ручным SKU и прежней идентичностью."""
         return self._with_changes(sku=sku)
+
+    def tracking_snapshot(self) -> InventoryItemTrackingSnapshot:
+        """Возвращает только идентичность товара и настройки прослеживаемости."""
+        return InventoryItemTrackingSnapshot(
+            inventory_item_id=self.id,
+            tracking_mode=self.tracking_mode,
+            expiration_mode=self.expiration_mode,
+        )
 
     def add_barcode(self, barcode: ItemBarcode) -> Self:
         """Добавляет идентификатор товара с проверкой уникальности внутри позиции."""

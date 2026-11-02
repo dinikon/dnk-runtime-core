@@ -21,6 +21,10 @@ class InvalidTrackingConfigurationError(InventoryItemError):
     """Сообщает о несовместимых настройках прослеживаемости и срока годности."""
 
 
+class InvalidInventoryItemTrackingSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке настроек прослеживаемости товара."""
+
+
 class InventoryItemConflictError(InventoryItemError):
     """Сообщает о дубликатах или конфликте зависимых частей агрегата."""
 

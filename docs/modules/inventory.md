@@ -1,7 +1,8 @@
-# Inventory: Domain-модель товара и упаковок
+# Inventory: Domain-модель товара, упаковок и партий
 
-Модуль `inventory` содержит самостоятельные корни `InventoryItem` и
-`PackagingType` в `domain/inventory_item/` и `domain/packaging_type/`.
+Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
+`PackagingType` и `StockLot` в `domain/inventory_item/`, `domain/packaging_type/`
+и `domain/stock_lot/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -217,8 +218,103 @@ QuantityVO по-прежнему допускает любое конечное 
 `controls_expiration` истинно только у `REQUIRED`. `NONE` и `OPTIONAL`
 совместимы с любым TrackingMode; `REQUIRED` требует `LOT`, `SERIAL`
 или `LOT_AND_SERIAL`. Учёт партии сам по себе не включает контроль срока.
-Фактические даты и StockExpirationPolicy реализуются вместе с соответствующими
-агрегатами и операциями.
+Фактические даты партии находятся в StockLot. В текущем срезе
+StockExpirationPolicy проверяет допустимость заполнения и обязательность даты.
+Правила приёмки просроченного товара, FEFO и расчёт доступности реализуются
+в последующих складских сценариях; дата операции для них должна передаваться явно.
+
+## Партия товара
+
+`StockLot` — самостоятельный Aggregate Root без дочерних Entity.
+InventoryItem не владеет коллекцией партий. Партия содержит:
+
+| Поле | Назначение |
+| --- | --- |
+| `id` | Постоянный `StockLotIdVO` |
+| `inventory_item_id` | Принадлежность конкретному InventoryItem |
+| `number` | Обязательный `LotNumberVO` — номер производителя или вручную заданный номер |
+| `dates` | `LotDatesVO` — календарные даты партии |
+
+Количество, склад, локация, владелец и состояние запасов принадлежат будущему
+StockPosition. Одна партия может находиться в нескольких учётных позициях.
+
+`LotNumberVO` применяет trim, запрещает пустые значения и управляющие/форматирующие
+символы Unicode, сохраняет регистр и ведущие нули. `000Lot-a` и `000LOT-A` —
+разные номера. Номер должен быть уникален в рамках InventoryItem одной tenant-схемы.
+Атомарная уникальность пары `(inventory_item_id, number)` относится к будущему
+SQL-срезу; текущий Domain не проверяет другие партии.
+
+`LotDatesVO` содержит `manufactured_on: date | None` и `expires_on: date | None`.
+Обе даты необязательны; `LotDatesVO()` представляет отсутствие дат.
+Для REQUIRED такая карточка пока не готова к поступлению.
+Принимается только календарный date: datetime, строки и неявные преобразования
+запрещены. Если обе даты заданы, производство не может быть позже окончания
+срока годности; равные даты допустимы. Исторические и будущие даты разрешены.
+Структурная корректность дат проверяется и для OPTIONAL, без оценки просрочки.
+
+`InventoryItem.tracking_snapshot()` возвращает неизменяемый
+`InventoryItemTrackingSnapshot` с `inventory_item_id`, `tracking_mode` и
+`expiration_mode`. Снимок не содержит коллекций или ссылки на корень товара.
+Потребитель проверяет тип снимка и его полей. Актуальный снимок для команды
+в дальнейшем будет передавать Application; Domain самостоятельно его не загружает.
+
+Чистая `StockLotPolicy.ensure_compatible` проверяет соответствие товара и
+допускает партию только для LOT и LOT_AND_SERIAL. NONE и SERIAL отклоняются
+с `LotTrackingNotAllowedError`, чужой товар — с `StockLotItemMismatchError`.
+
+Поведение фабрик и методов StockLot:
+
+- `create(identifier=..., inventory_item=..., number=..., dates=...)` выводит
+  принадлежность товару из снимка, проверяет партийный учёт и допустимость дат.
+  В NONE запрещён заполненный `expires_on`; дата производства допустима.
+  OPTIONAL допускает необязательную дату-заметку, REQUIRED — неполную карточку.
+- `restore(identifier=..., inventory_item_id=..., number=..., dates=...)`
+  восстанавливает собственные значения без текущего снимка товара и сохраняет ID
+  и исторические даты. Текущие межагрегатные ограничения проверяются при использовании.
+- `change_dates(dates, inventory_item=...)` проверяет собственные значения,
+  принадлежность и текущие настройки, возвращает новый экземпляр с прежними
+  ID и номером. Ошибка сохраняет исходную партию неизменной.
+- `ensure_ready_for_receipt(inventory_item=...) -> None` проверяет текущую
+  совместимость и полноту срока через StockExpirationPolicy. Для REQUIRED
+  отсутствие `expires_on` даёт `ExpirationDateRequiredError`.
+
+`StockExpirationPolicy.ensure_dates_allowed` проверяет допустимость заполнения;
+`ensure_ready_for_receipt` дополнительно требует дату только для REQUIRED.
+NONE со сроком даёт `ExpirationDateNotAllowedError`. OPTIONAL с прошедшей
+датой-заметкой проходит проверку. Проверка полноты не определяет допустимость
+приёмки просрочки, в том числе для REQUIRED, и не заменяет будущих правил проведения.
+В текущем срезе документ и проведение поступления ещё не реализованы.
+
+Например, для уже созданного InventoryItem с LOT и REQUIRED:
+
+```python
+from datetime import date
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_lot.aggregate import StockLot
+from src.modules.inventory.domain.stock_lot.value_object.identifier import StockLotIdVO
+from src.modules.inventory.domain.stock_lot.value_object.lot_dates import LotDatesVO
+from src.modules.inventory.domain.stock_lot.value_object.lot_number import LotNumberVO
+
+snapshot = item.tracking_snapshot()
+lot = StockLot.create(
+    identifier=StockLotIdVO(uuid4()),
+    inventory_item=snapshot,
+    number=LotNumberVO("000LOT-a"),
+    dates=LotDatesVO(),
+)
+# Проверка готовности lot сейчас дала бы ExpirationDateRequiredError.
+completed = lot.change_dates(
+    LotDatesVO(manufactured_on=date(2026, 1, 1), expires_on=date(2028, 1, 1)),
+    inventory_item=snapshot,
+)
+completed.ensure_ready_for_receipt(inventory_item=snapshot)
+# Исходный lot остаётся без дат; ID и номер completed совпадают с lot.
+```
+
+Изменение номера и контролируемые исправления дат после проведённых операций
+с сохранением истории относятся к последующим срезам. Проверка факта использования
+партии в текущий `change_dates` не входит: движения ещё не реализованы.
 
 ## Изменения, восстановление и проверки
 
@@ -233,6 +329,6 @@ QuantityVO по-прежнему допускает любое конечное 
 У дочерних Entity нет самостоятельных write repositories.
 
 Тесты находятся в `test/test_inventory_domain.py`,
-`test/test_inventory_packaging_domain.py`, `test/test_inventory_uom_domain.py`
-и `test/test_inventory_quantity_domain.py`.
+`test/test_inventory_packaging_domain.py`, `test/test_inventory_uom_domain.py`,
+`test/test_inventory_quantity_domain.py` и `test/test_inventory_stock_lot_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.
