@@ -210,7 +210,33 @@ class ChannelsPostgresTests(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         """Сохраняет две части и job; выдаёт только публичные поля и проверяет CSRF."""
         created = await self.create(" Store ")
+        self.assertEqual(set(created), {"id", "revision", "verification_job_id"})
         detail = await self.detail(created["id"])
+        self.assertEqual(
+            set(detail),
+            {
+                "id",
+                "name",
+                "platform_kind",
+                "revision",
+                "config",
+                "config_revision",
+                "identity",
+                "verification",
+                "created_at",
+                "updated_at",
+                "recovery_required",
+                "available_capabilities",
+            },
+        )
+        self.assertEqual(set(detail["config"]), {"version", "endpoint", "settings"})
+        self.assertEqual(
+            set(detail["verification"]),
+            {"job_id", "config_revision", "status", "checked_at", "error_code"},
+        )
+        listing = (await self.client.get(self.root)).json()
+        self.assertEqual(set(listing), {"items", "total", "offset", "limit"})
+        self.assertEqual(listing["items"], [detail])
         self.assertEqual(detail["name"], "Store")
         self.assertEqual(detail["available_capabilities"], ["verify_connection"])
         connection = (await self.rows(ConnectionModel))[0]

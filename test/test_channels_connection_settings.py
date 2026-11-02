@@ -6,14 +6,19 @@ from itertools import product
 from unittest.mock import AsyncMock
 
 from src.modules.channels.application.error import ChannelInputError
+from src.modules.channels.domain.error import InvalidResourceIdentityError
+from src.modules.channels.domain.value_object.resource_identity import (
+    ResourceIdentityVO,
+)
 from src.modules.channels.domain.value_object.connection_config import (
     ConnectionConfigVO,
 )
 from src.modules.channels.infrastructure.persistence.mapper import (
+    read_identity,
     to_domain,
-    to_read_row,
     write_verification,
 )
+from src.modules.channels.infrastructure.persistence.query_mapper import to_read_row
 from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
 from src.modules.channels.infrastructure.persistence.models.connection import (
     ConnectionModel,
@@ -35,6 +40,24 @@ from test import test_channels_domain as support
 class ConnectionSettingsTests(unittest.TestCase):
     """Конкретные пакеты владеют настройками и их схемами."""
 
+    def test_identity_mapping_accepts_only_absent_or_complete_pairs(self) -> None:
+        """Пустая пара отсутствует, полная восстанавливается, неполная отклоняется."""
+        self.assertIsNone(
+            read_identity(ConnectionModel(identity_namespace=None, identity_key=None))
+        )
+        self.assertEqual(
+            read_identity(
+                ConnectionModel(identity_namespace="prom.root_group", identity_key="7")
+            ),
+            ResourceIdentityVO(namespace="prom.root_group", key="7"),
+        )
+        for namespace, key in (("prom.root_group", None), (None, "7")):
+            with self.subTest(namespace=namespace, key=key):
+                with self.assertRaises(InvalidResourceIdentityError):
+                    read_identity(
+                        ConnectionModel(identity_namespace=namespace, identity_key=key)
+                    )
+
     def test_defaults_and_concrete_settings_schemas(self) -> None:
         """Пустые legacy-настройки получают defaults без изменения входного VO."""
         for kind, endpoint in (
@@ -47,7 +70,7 @@ class ConnectionSettingsTests(unittest.TestCase):
                 source = ConnectionConfigVO.create(
                     version=1, endpoint=endpoint, settings={}
                 )
-                result = platform.validate(source, None)
+                result = platform.validate_config(source)
                 expected = (
                     {"currency": "UAH", "locale": "uk"}
                     if kind == "woocommerce"
@@ -83,13 +106,12 @@ class ConnectionSettingsTests(unittest.TestCase):
             for locales in (["ru", "uk"], ["uk", "ru"]):
                 platform = InstalledPlatforms().get(kind)
                 original = list(locales)
-                result = platform.validate(
+                result = platform.validate_config(
                     ConnectionConfigVO.create(
                         version=1,
                         endpoint=endpoint,
                         settings={"currency": "UAH", "locales": locales},
-                    ),
-                    None,
+                    )
                 )
                 self.assertEqual(
                     result.config.settings, {"currency": "UAH", "locales": ["ru", "uk"]}
@@ -129,11 +151,10 @@ class ConnectionSettingsTests(unittest.TestCase):
                     self.subTest(kind=kind, settings=settings),
                     self.assertRaises(ChannelInputError) as error,
                 ):
-                    InstalledPlatforms().get(kind).validate(
+                    InstalledPlatforms().get(kind).validate_config(
                         ConnectionConfigVO.create(
                             version=1, endpoint=endpoint, settings=settings
-                        ),
-                        None,
+                        )
                     )
                 self.assertEqual(error.exception.code, "configuration_invalid")
 
@@ -143,11 +164,10 @@ class ConnectionSettingsTests(unittest.TestCase):
         for currency, locale in product(("UAH", "EUR", "USD"), ("uk", "ru", "en")):
             settings = {"currency": currency, "locale": locale}
             with self.subTest(settings=settings):
-                result = platform.validate(
+                result = platform.validate_config(
                     ConnectionConfigVO.create(
                         version=1, endpoint="https://shop.example", settings=settings
-                    ),
-                    None,
+                    )
                 )
                 self.assertEqual(result.config.settings, settings)
                 self.assertEqual(
@@ -162,11 +182,10 @@ class ConnectionSettingsTests(unittest.TestCase):
             {"stock_sync": {}},
         ):
             with self.subTest(settings=settings), self.assertRaises(ChannelInputError):
-                platform.validate(
+                platform.validate_config(
                     ConnectionConfigVO.create(
                         version=1, endpoint="https://shop.example", settings=settings
-                    ),
-                    None,
+                    )
                 )
 
     def test_mapper_roundtrip_has_no_retired_policy_and_preserves_secret(self) -> None:

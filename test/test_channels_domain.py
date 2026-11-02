@@ -130,6 +130,86 @@ class ChannelsDomainTests(unittest.TestCase):
                     self.channel.change_settings(**(valid | invalid))
                 self.assertEqual(self.channel, before)
 
+    def test_all_current_transitions_reject_invalid_time_atomically(self) -> None:
+        """Изменение, повтор и применение результата соблюдают одинаковую хронологию."""
+        for now in (
+            None,
+            self.now.replace(tzinfo=None),
+            self.now - timedelta(seconds=1),
+        ):
+            for operation in ("change", "request", "apply"):
+                before = deepcopy(self.channel)
+                with (
+                    self.subTest(operation=operation, now=now),
+                    self.assertRaises(InvalidChannelStateError),
+                ):
+                    if operation == "change":
+                        self.channel.change_settings(
+                            expected_revision=1,
+                            name=ChannelNameVO("New"),
+                            config=None,
+                            encrypted_credentials=b"new",
+                            job_id=self.job,
+                            actor_id=self.actor,
+                            now=now,
+                        )
+                    elif operation == "request":
+                        self.channel.request_verification(
+                            job_id=EntityIdVO(uuid4()), actor_id=self.actor, now=now
+                        )
+                    else:
+                        self.channel.apply_verification(
+                            job_id=self.job,
+                            config_revision=1,
+                            identity=self.identity,
+                            error_code=None,
+                            now=now,
+                        )
+                self.assertEqual(self.channel, before)
+
+    def test_verification_time_is_aware_and_restore_checks_audit_bounds(self) -> None:
+        """Документ требует timezone, агрегат связывает проверку со своим аудитом."""
+        with self.assertRaises(InvalidChannelStateError):
+            VerificationVO(
+                job_id=self.job,
+                config_revision=1,
+                status=VerificationStatus.VERIFIED,
+                checked_at=self.now.replace(tzinfo=None),
+            )
+        for checked_at in (
+            self.now - timedelta(seconds=1),
+            self.now + timedelta(seconds=1),
+        ):
+            verification = VerificationVO(
+                job_id=self.job,
+                config_revision=1,
+                status=VerificationStatus.VERIFIED,
+                checked_at=checked_at,
+            )
+            connection = Connection.restore(
+                connection_id=self.connection.id,
+                config=self.config,
+                encrypted_credentials=b"encrypted",
+                config_revision=1,
+                identity=self.identity,
+                verification=verification,
+            )
+            with (
+                self.subTest(checked_at=checked_at),
+                self.assertRaises(InvalidChannelStateError),
+            ):
+                Channel.restore(
+                    channel_id=self.channel.id,
+                    name=self.channel.name,
+                    platform_kind="prom",
+                    revision=2,
+                    connection=connection,
+                    created_at=self.now,
+                    updated_at=self.now,
+                    created_by=self.actor,
+                    updated_by=self.actor,
+                )
+
     def test_invalid_results_leave_pending_state_untouched(self) -> None:
         """Identity, причина и время проверяются до изменения подключения."""
         valid = dict(

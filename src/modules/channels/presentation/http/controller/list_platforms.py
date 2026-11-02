@@ -1,5 +1,3 @@
-from dataclasses import asdict
-
 from src.modules.channels.application.error import ChannelInputError
 from src.modules.channels.application.query.list_platforms.query import (
     ListPlatformsQuery,
@@ -30,4 +28,4 @@ async def list_platforms(
         result = await handler.execute(ListPlatformsQuery(tenant_id=tenant_id))
     except (ChannelError, ChannelInputError) as error:
         raise channel_http_error(error) from None
-    return ListPlatformsResponse.model_validate(asdict(result))
+    return ListPlatformsResponse.from_dto(result)

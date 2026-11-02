@@ -11,7 +11,8 @@ from src.modules.channels.domain.value_object.resource_identity import (
 )
 from src.modules.channels.infrastructure.persistence.mapper import (
     to_domain,
-    write_verification,
+    write_channel,
+    write_connection,
 )
 from src.modules.channels.infrastructure.persistence.models.channel import ChannelModel
 from src.modules.channels.infrastructure.persistence.models.connection import (
@@ -55,34 +56,14 @@ class SqlAlchemyChannelRepository:
         if row is None:
             row = ChannelModel(id=channel.id.uuid)
             self.session.add(row)
-        row.name, row.platform_kind, row.revision = (
-            channel.name.value,
-            channel.platform_kind,
-            channel.revision,
-        )
-        row.created_at, row.updated_at = channel.created_at, channel.updated_at
-        row.created_by, row.updated_by = (
-            channel.created_by.uuid,
-            channel.updated_by.uuid,
-        )
+        write_channel(row, channel)
         await self.session.flush()
         c = channel.connection
         stored = await self.session.get(ConnectionModel, c.id.uuid)
         if stored is None:
             stored = ConnectionModel(id=c.id.uuid, channel_id=channel.id.uuid)
             self.session.add(stored)
-        stored.config_version, stored.endpoint, stored.settings = (
-            c.config.version,
-            c.config.endpoint,
-            c.config.settings,
-        )
-        stored.encrypted_credentials, stored.config_revision = (
-            c.encrypted_credentials,
-            c.config_revision,
-        )
-        stored.identity_namespace = c.identity.namespace if c.identity else None
-        stored.identity_key = c.identity.key if c.identity else None
-        stored.verification = write_verification(c.verification)
+        write_connection(stored, c)
         await self.session.flush()
 
     async def delete(self, channel_id: EntityIdVO) -> None:

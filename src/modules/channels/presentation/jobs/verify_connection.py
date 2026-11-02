@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, datetime
 import logging
 from uuid import UUID
@@ -7,6 +6,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.config import dnk_config
+from src.modules.channels.application.command.check_connection_access.command import (
+    CheckConnectionAccessCommand,
+)
+from src.modules.channels.application.command.check_connection_access.handler import (
+    CheckConnectionAccessHandler,
+)
 from src.modules.channels.application.command.apply_verification.command import (
     ApplyVerificationCommand,
 )
@@ -19,14 +24,8 @@ from src.modules.channels.application.command.prepare_verification.command impor
 from src.modules.channels.application.command.prepare_verification.handler import (
     PrepareVerificationHandler,
 )
-from src.modules.channels.application.error import ChannelInputError
-from src.modules.channels.application.error import VerificationFailure
 from src.modules.channels.application.port.jobs import VerificationJob
 from src.modules.channels.application.port.platform import PlatformRegistry
-from src.modules.channels.domain.error import (
-    InvalidResourceIdentityError,
-    InvalidChannelStateError,
-)
 from src.modules.channels.infrastructure.jobs import (
     SharedVerificationJobs,
     JOB_TYPE,
@@ -36,10 +35,6 @@ from src.modules.channels.infrastructure.persistence.repository import (
 )
 from src.modules.channels.infrastructure.registry import InstalledPlatforms
 from src.modules.shared.application.crypto.cipher import Cipher
-from src.modules.shared.application.crypto.error import (
-    CipherNotConfigured,
-    CiphertextUnreadable,
-)
 from src.modules.shared.application.jobs.scheduled_job_deferred import (
     ScheduledJobDeferred,
 )
@@ -98,6 +93,9 @@ class ChannelsVerifyConnectionJobHandler:
         self.sessions = sessions
         self.platforms = platforms or InstalledPlatforms()
         self.cipher = cipher or get_cipher()
+        self._check_access = CheckConnectionAccessHandler(
+            platforms=self.platforms, cipher=self.cipher
+        )
 
     async def handle(self, scheduled: ScheduledJob) -> None:
         """Не допускает SQL-транзакции во время сети и применения устаревшего результата."""
@@ -131,40 +129,15 @@ class ChannelsVerifyConnectionJobHandler:
                     ).execute(PrepareVerificationCommand(job, scheduled.lock_token))
                 if snapshot is None:
                     return
-                identity, error_code = None, None
-                try:
-                    plaintext = self.cipher.decrypt(snapshot.encrypted_credentials)
-                    async with asyncio.timeout(30):
-                        identity = await self.platforms.get(
-                            snapshot.platform_kind
-                        ).verify(snapshot.config, plaintext)
-                except CipherNotConfigured:
-                    raise ScheduledJobDeferred(
-                        "Channels encryption key unavailable"
-                    ) from None
-                except CiphertextUnreadable:
-                    error_code = "credentials_unreadable"
-                except ChannelInputError as error:
-                    error_code = error.code
-                except InvalidResourceIdentityError:
-                    error_code = "resource_identity_unavailable"
-                except InvalidChannelStateError:
-                    error_code = "stored_channel_invalid"
-                except (ValidationError, ValueError):
-                    error_code = "provider_response_invalid"
-                except TimeoutError:
-                    if scheduled.attempts < dnk_config.SCHEDULED_JOBS.max_attempts:
-                        raise VerificationFailure(
-                            "network_timeout", retryable=True
-                        ) from None
-                    error_code = "network_timeout"
-                except VerificationFailure as error:
-                    if (
-                        error.retryable
-                        and scheduled.attempts < dnk_config.SCHEDULED_JOBS.max_attempts
-                    ):
-                        raise
-                    error_code = error.code
+                result = await self._check_access.execute(
+                    CheckConnectionAccessCommand(
+                        platform_kind=snapshot.platform_kind,
+                        config=snapshot.config,
+                        encrypted_credentials=snapshot.encrypted_credentials,
+                        attempt=scheduled.attempts,
+                        max_attempts=dnk_config.SCHEDULED_JOBS.max_attempts,
+                    )
+                )
                 async with UnitOfWork(sessions) as uow:
                     repository = SqlAlchemyChannelRepository(uow.session, job.tenant_id)
                     jobs = SharedVerificationJobs(
@@ -176,7 +149,10 @@ class ChannelsVerifyConnectionJobHandler:
                         lambda: datetime.now(UTC),
                     ).execute(
                         ApplyVerificationCommand(
-                            job, scheduled.lock_token, identity, error_code
+                            job,
+                            scheduled.lock_token,
+                            result.identity,
+                            result.error_code,
                         )
                     )
                 logger.info(

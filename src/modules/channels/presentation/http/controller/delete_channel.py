@@ -30,7 +30,7 @@ async def delete_channel(
         context, authorization, "manage", channel_id
     )
     try:
-        result = await handler.execute(
+        await handler.execute(
             DeleteChannelCommand(
                 tenant_id=tenant_id,
                 actor_id=actor_id,

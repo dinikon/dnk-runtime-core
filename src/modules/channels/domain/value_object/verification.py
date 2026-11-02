@@ -34,7 +34,10 @@ class VerificationVO:
                 raise InvalidChannelStateError(
                     "Ожидающая проверка не имеет результата."
                 )
-        elif not isinstance(self.checked_at, datetime):
+        elif (
+            not isinstance(self.checked_at, datetime)
+            or self.checked_at.utcoffset() is None
+        ):
             raise InvalidChannelStateError(
                 "Завершённая проверка требует времени результата."
             )

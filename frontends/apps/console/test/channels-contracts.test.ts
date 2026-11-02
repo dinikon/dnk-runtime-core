@@ -1,11 +1,11 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
 import {
   draftFor,
   saveDraft,
-  schemaFields,
-  shouldPoll,
-} from "../src/modules/channels/model/channel.schema.ts";
+} from "../src/modules/channels/model/channel.draft.ts";
+import { shouldPoll } from "../src/modules/channels/model/channel.verification.ts";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { schemaFields } from "../src/modules/channels/model/channel.schema.ts";
 import {
   createPayload,
   updatePayload,

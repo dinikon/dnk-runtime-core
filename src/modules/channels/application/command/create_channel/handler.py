@@ -51,18 +51,17 @@ class CreateChannelHandler:
 
     async def execute(self, command: CreateChannelCommand) -> CreateChannelDTO:
         """Валидирует локальные модели, шифрует секрет и планирует проверку."""
-        validated = self.platforms.get(command.platform_kind).validate(
-            command.config, command.credentials
-        )
+        platform = self.platforms.get(command.platform_kind)
+        validated = platform.validate_config(command.config)
+        credentials = platform.encode_credentials(command.credentials)
         await self.settings_catalog.ensure_available(
             currency=validated.currency, locales=validated.locales
         )
-        assert validated.credentials is not None
         now, job_id = self.clock(), self.uuid()
         connection = Connection.create(
             connection_id=EntityIdVO.from_value(self.uuid()),
             config=validated.config,
-            encrypted_credentials=self.cipher.encrypt(validated.credentials),
+            encrypted_credentials=self.cipher.encrypt(credentials),
             job_id=EntityIdVO.from_value(job_id),
         )
         channel = Channel.create(

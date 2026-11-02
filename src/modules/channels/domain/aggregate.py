@@ -98,11 +98,14 @@ class Channel:
             or revision < connection.config_revision
             or not isinstance(created_at, datetime)
             or not isinstance(updated_at, datetime)
-            or created_at.tzinfo is None
-            or updated_at.tzinfo is None
+            or created_at.utcoffset() is None
+            or updated_at.utcoffset() is None
             or updated_at < created_at
         ):
             raise InvalidChannelStateError("Некорректное состояние канала.")
+        checked_at = connection.verification.checked_at
+        if checked_at is not None and not created_at <= checked_at <= updated_at:
+            raise InvalidChannelStateError("Время проверки не согласовано с аудитом.")
         return cls(
             id=channel_id,
             name=name,
@@ -133,14 +136,11 @@ class Channel:
     ) -> bool:
         """Атомарно меняет настройки; возвращает необходимость проверки доступа."""
         self.require_revision(expected_revision)
-        if (
-            (name is not None and not isinstance(name, ChannelNameVO))
-            or not isinstance(actor_id, EntityIdVO)
-            or not isinstance(now, datetime)
-            or now.tzinfo is None
-            or now < self.updated_at
+        if (name is not None and not isinstance(name, ChannelNameVO)) or not isinstance(
+            actor_id, EntityIdVO
         ):
             raise InvalidChannelStateError("Некорректное изменение настроек канала.")
+        self._require_change_time(now)
         next_name = name if name is not None else self.name
         connection_changed = self.connection.change_settings(
             config=config,
@@ -156,8 +156,9 @@ class Channel:
         self, *, job_id: EntityIdVO, actor_id: EntityIdVO, now: datetime
     ) -> None:
         """Начинает новое поколение проверки сохранённого подключения."""
-        if not isinstance(actor_id, EntityIdVO) or not isinstance(now, datetime):
+        if not isinstance(actor_id, EntityIdVO):
             raise InvalidChannelStateError("Некорректный контекст проверки.")
+        self._require_change_time(now)
         self.connection.request_verification(job_id=job_id)
         self._touch(actor_id=actor_id, now=now)
 
@@ -181,6 +182,9 @@ class Channel:
         now: datetime,
     ) -> None:
         """Применяет результат, изменяя аудит только при актуальном поколении."""
+        if not self.accepts_result(job_id=job_id, config_revision=config_revision):
+            return
+        self._require_change_time(now)
         if self.connection.complete_verification(
             job_id=job_id,
             config_revision=config_revision,
@@ -189,6 +193,15 @@ class Channel:
             now=now,
         ):
             self._touch(actor_id=self.updated_by, now=now)
+
+    def _require_change_time(self, now: datetime) -> None:
+        """Проверяет хронологию аудита до изменения любой части агрегата."""
+        if (
+            not isinstance(now, datetime)
+            or now.utcoffset() is None
+            or now < self.updated_at
+        ):
+            raise InvalidChannelStateError("Некорректное время изменения канала.")
 
     def _touch(self, *, actor_id: EntityIdVO, now: datetime) -> None:
         """Фиксирует одно изменение агрегата и его инициатора."""

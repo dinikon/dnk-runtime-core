@@ -7,6 +7,7 @@ from src.modules.channels.application.query.list_channels.query import (
 )
 from src.modules.channels.application.query.list_channels.dto import (
     ListChannelsDTO,
+    ListChannelItemDTO,
 )
 
 
@@ -25,7 +26,10 @@ class ListChannelsHandler:
             query.search, query.platform_kind, query.status, query.offset, query.limit
         )
         return ListChannelsDTO(
-            await self.state.enrich(query.tenant_id, rows),
+            tuple(
+                ListChannelItemDTO.from_read_row(row)
+                for row in await self.state.enrich(query.tenant_id, rows)
+            ),
             total,
             query.offset,
             query.limit,

@@ -11,7 +11,7 @@ from src.modules.channels.infrastructure.persistence.models.channel import Chann
 from src.modules.channels.infrastructure.persistence.models.connection import (
     ConnectionModel,
 )
-from src.modules.channels.infrastructure.persistence.mapper import to_read_row
+from src.modules.channels.infrastructure.persistence.query_mapper import to_read_row
 
 
 class SqlAlchemyChannelQueryRepository:

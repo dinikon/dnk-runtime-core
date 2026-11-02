@@ -109,15 +109,13 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
         for kind, endpoint, settings, secrets, file, expected in cases:
             http = FixtureHttp([json.loads((FIXTURES / file).read_text())])
             platform = InstalledPlatforms(http).get(kind)
-            validated = platform.validate(
+            validated = platform.validate_config(
                 ConnectionConfigVO.create(
                     version=1, endpoint=endpoint, settings=settings
-                ),
-                secrets,
+                )
             )
-            self.assertEqual(
-                await platform.verify(validated.config, validated.credentials), expected
-            )
+            encoded = platform.encode_credentials(secrets)
+            self.assertEqual(await platform.verify(validated.config, encoded), expected)
             self.assertEqual(
                 platform.manifest.supported_capabilities,
                 ("verify_connection",),
@@ -154,17 +152,20 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
                     version=1, endpoint=endpoint, settings=settings
                 )
                 self.assertIsInstance(platform.decode_config(config), model)
-                validated = platform.validate(config, credentials)
-                self.assertEqual(json.loads(validated.credentials), credentials)
+                validated = platform.validate_config(config)
+                encoded = platform.encode_credentials(credentials)
+                self.assertEqual(json.loads(encoded), credentials)
                 cipher = FernetCipher(Fernet.generate_key().decode())
                 self.assertEqual(
-                    json.loads(cipher.decrypt(cipher.encrypt(validated.credentials))),
+                    json.loads(cipher.decrypt(cipher.encrypt(encoded))),
                     credentials,
                 )
-                self.assertIsNone(platform.validate(validated.config, None).credentials)
+                self.assertEqual(
+                    platform.validate_config(validated.config).config, validated.config
+                )
                 with self.assertRaises(ChannelInputError) as error:
-                    platform.validate(
-                        validated.config, credentials | {"secret-field": "secret-input"}
+                    platform.encode_credentials(
+                        credentials | {"secret-field": "secret-input"}
                     )
                 self.assertEqual(error.exception.field, "credentials")
                 self.assertNotIn("secret-", str(error.exception))
@@ -184,14 +185,14 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             [{"groups": [{"id": 0, "parent_group_id": None}]}],
         ]:
             p = InstalledPlatforms(FixtureHttp(pages)).get("prom")
-            v = p.validate(
+            v = p.validate_config(
                 ConnectionConfigVO.create(
                     version=1, endpoint="https://my.prom.ua", settings={}
-                ),
-                {"token": "test"},
+                )
             )
+            encoded = p.encode_credentials({"token": "test"})
             with self.assertRaises(VerificationFailure) as error:
-                await p.verify(v.config, v.credentials)
+                await p.verify(v.config, encoded)
             self.assertEqual(error.exception.code, "resource_identity_unavailable")
         first = {
             "groups": [
@@ -201,31 +202,31 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
         }
         http = FixtureHttp([first, {"groups": []}])
         p = InstalledPlatforms(http).get("prom")
-        v = p.validate(
+        v = p.validate_config(
             ConnectionConfigVO.create(
                 version=1, endpoint="https://my.prom.ua", settings={}
-            ),
-            {"token": "test"},
+            )
         )
-        self.assertEqual((await p.verify(v.config, v.credentials)).key, "200")
+        encoded = p.encode_credentials({"token": "test"})
+        self.assertEqual((await p.verify(v.config, encoded)).key, "200")
         self.assertIn("last_id=101", http.calls[1][1])
         p = InstalledPlatforms(FixtureHttp([first, first])).get("prom")
         with self.assertRaises(VerificationFailure):
-            await p.verify(v.config, v.credentials)
+            await p.verify(v.config, encoded)
 
     async def test_rozetka_http_200_auth_failure_is_not_verified(self) -> None:
         """Не принимает отказ авторизации с HTTP 200 за успешную проверку."""
         p = InstalledPlatforms(FixtureHttp([{"success": False}])).get("rozetka")
-        v = p.validate(
+        v = p.validate_config(
             ConnectionConfigVO.create(
                 version=1,
                 endpoint="https://api-seller.rozetka.com.ua",
                 settings={},
-            ),
-            {"token": "secret"},
+            )
         )
+        encoded = p.encode_credentials({"token": "secret"})
         with self.assertRaises(VerificationFailure) as error:
-            await p.verify(v.config, v.credentials)
+            await p.verify(v.config, encoded)
         self.assertEqual(error.exception.code, "invalid_credentials")
 
     async def test_missing_models_and_unsafe_urls_are_rejected(self) -> None:
@@ -240,9 +241,8 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             "https://localhost",
         ):
             with self.assertRaises(ChannelInputError):
-                registry.get("woocommerce").validate(
-                    ConnectionConfigVO.create(version=1, endpoint=url, settings={}),
-                    {"consumer_key": "ck", "consumer_secret": "cs"},
+                registry.get("woocommerce").validate_config(
+                    ConnectionConfigVO.create(version=1, endpoint=url, settings={})
                 )
         for credentials in (
             {},
@@ -250,21 +250,15 @@ class ChannelPlatformTests(unittest.IsolatedAsyncioTestCase):
             {"token": "secret", "unknown": "secret"},
         ):
             with self.assertRaises(ChannelInputError) as error:
-                registry.get("prom").validate(
-                    ConnectionConfigVO.create(
-                        version=1, endpoint="https://my.prom.ua", settings={}
-                    ),
-                    credentials,
-                )
+                registry.get("prom").encode_credentials(credentials)
             self.assertNotIn("secret", str(error.exception))
         with self.assertRaises(ChannelInputError):
             registry.get("unknown")
         with self.assertRaises(ChannelInputError):
-            registry.get("prom").validate(
+            registry.get("prom").validate_config(
                 ConnectionConfigVO.create(
                     version=2, endpoint="https://my.prom.ua", settings={}
-                ),
-                {"token": "secret"},
+                )
             )
 
     async def test_transport_rejects_mixed_dns_before_sending_credentials(self) -> None:

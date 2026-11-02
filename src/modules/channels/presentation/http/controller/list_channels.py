@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from typing import Literal
 
 from fastapi import Query
@@ -47,4 +46,4 @@ async def list_channels(
         )
     except (ChannelError, ChannelInputError) as error:
         raise channel_http_error(error) from None
-    return ListChannelsResponse.model_validate(asdict(result))
+    return ListChannelsResponse.from_dto(result)

@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from uuid import UUID
 
 from src.modules.channels.application.command.update_channel.command import (
@@ -59,4 +58,4 @@ async def update_channel(
         CiphertextUnreadable,
     ) as error:
         raise channel_http_error(error) from None
-    return UpdateChannelResponse.model_validate(asdict(result))
+    return UpdateChannelResponse.from_dto(result)

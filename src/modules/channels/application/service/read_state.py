@@ -37,13 +37,12 @@ class ChannelReadState:
         enriched = []
         for row in rows:
             platform = self.platforms.get(row.platform_kind)
-            config = platform.validate(
+            config = platform.validate_config(
                 ConnectionConfigVO.create(
                     version=row.config.version,
                     endpoint=row.config.endpoint,
                     settings=row.config.settings,
                 ),
-                None,
             ).config
             enriched.append(
                 replace(

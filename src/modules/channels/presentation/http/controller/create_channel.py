@@ -1,5 +1,3 @@
-from dataclasses import asdict
-
 from src.modules.channels.application.command.create_channel.command import (
     CreateChannelCommand,
 )
@@ -52,4 +50,4 @@ async def create_channel(
         CiphertextUnreadable,
     ) as error:
         raise channel_http_error(error) from None
-    return CreateChannelResponse.model_validate(asdict(result))
+    return CreateChannelResponse.from_dto(result)

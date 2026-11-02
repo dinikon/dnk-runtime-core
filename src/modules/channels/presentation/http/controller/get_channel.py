@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from uuid import UUID
 
 from src.modules.channels.application.error import ChannelInputError
@@ -34,4 +33,4 @@ async def get_channel(
         )
     except (ChannelError, ChannelInputError) as error:
         raise channel_http_error(error) from None
-    return GetChannelResponse.model_validate(asdict(result.channel))
+    return GetChannelResponse.from_dto(result)

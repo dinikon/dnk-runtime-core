@@ -23,4 +23,6 @@ class GetChannelHandler:
         row = await self.repository.get(query.channel_id)
         if row is None:
             raise ChannelNotFoundError("Канал не найден.")
-        return GetChannelDTO((await self.state.enrich(query.tenant_id, (row,)))[0])
+        return GetChannelDTO.from_read_row(
+            (await self.state.enrich(query.tenant_id, (row,)))[0]
+        )

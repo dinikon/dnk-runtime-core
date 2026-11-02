@@ -1,20 +1,6 @@
-from datetime import datetime
-from typing import Literal
-from uuid import UUID
-
-from pydantic import BaseModel, ConfigDict, Field
-
-from src.modules.channels.application.port.query_repository import (
-    ChannelReadRow,
-    ConnectionConfigReadRow,
-    ResourceIdentityReadRow,
-    VerificationReadRow,
-)
 from src.modules.channels.domain.aggregate import Channel
 from src.modules.channels.domain.connection import Connection
-from src.modules.channels.domain.enum.verification_status import (
-    VerificationStatus,
-)
+from src.modules.channels.domain.error import InvalidResourceIdentityError
 from src.modules.channels.domain.types import JsonObject
 from src.modules.channels.domain.value_object.channel_name import ChannelNameVO
 from src.modules.channels.domain.value_object.connection_config import (
@@ -28,19 +14,10 @@ from src.modules.channels.infrastructure.persistence.models.channel import Chann
 from src.modules.channels.infrastructure.persistence.models.connection import (
     ConnectionModel,
 )
+from src.modules.channels.infrastructure.persistence.verification_document import (
+    VerificationDocument,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-
-
-class VerificationDocument(BaseModel):
-    """Версионируемая SQL-форма текущей проверки."""
-
-    model_config = ConfigDict(extra="forbid")
-    version: Literal[1] = 1
-    job_id: UUID
-    config_revision: int = Field(gt=0)
-    status: VerificationStatus
-    checked_at: datetime | None
-    error_code: str | None
 
 
 def read_verification(row: ConnectionModel) -> VerificationVO:
@@ -68,26 +45,30 @@ def write_verification(value: VerificationVO) -> JsonObject:
 
 def read_identity(row: ConnectionModel) -> ResourceIdentityVO | None:
     """Читает нормализованную identity из индексируемых колонок."""
-    return (
-        ResourceIdentityVO(namespace=row.identity_namespace, key=row.identity_key)
-        if row.identity_namespace is not None or row.identity_key is not None
-        else None
-    )
+    namespace = row.identity_namespace
+    key = row.identity_key
+    if namespace is None and key is None:
+        return None
+    if namespace is None or key is None:
+        raise InvalidResourceIdentityError(
+            "Не удалось определить идентификатор магазина."
+        )
+    return ResourceIdentityVO(namespace=namespace, key=key)
 
 
-def to_domain(row: ChannelModel, c: ConnectionModel) -> Channel:
+def to_domain(row: ChannelModel, connection_row: ConnectionModel) -> Channel:
     """Восстанавливает Entity и Aggregate через явные фабрики."""
     connection = Connection.restore(
-        connection_id=EntityIdVO.from_value(c.id),
+        connection_id=EntityIdVO.from_value(connection_row.id),
         config=ConnectionConfigVO.create(
-            version=c.config_version,
-            endpoint=c.endpoint,
-            settings=c.settings,
+            version=connection_row.config_version,
+            endpoint=connection_row.endpoint,
+            settings=connection_row.settings,
         ),
-        encrypted_credentials=c.encrypted_credentials,
-        config_revision=c.config_revision,
-        identity=read_identity(c),
-        verification=read_verification(c),
+        encrypted_credentials=connection_row.encrypted_credentials,
+        config_revision=connection_row.config_revision,
+        identity=read_identity(connection_row),
+        verification=read_verification(connection_row),
     )
     return Channel.restore(
         channel_id=EntityIdVO.from_value(row.id),
@@ -102,33 +83,26 @@ def to_domain(row: ChannelModel, c: ConnectionModel) -> Channel:
     )
 
 
-def to_read_row(row: ChannelModel, c: ConnectionModel) -> ChannelReadRow:
-    """Читает публичные примитивы без восстановления и сериализации Domain VO."""
-    verification = VerificationDocument.model_validate(c.verification)
-    identity = (
-        ResourceIdentityReadRow(namespace=c.identity_namespace, key=c.identity_key)
-        if c.identity_namespace is not None and c.identity_key is not None
-        else None
+def write_channel(row: ChannelModel, channel: Channel) -> None:
+    """Переносит поля корня в SQL-модель без выполнения запросов."""
+    row.name = channel.name.value
+    row.platform_kind = channel.platform_kind
+    row.revision = channel.revision
+    row.created_at = channel.created_at
+    row.updated_at = channel.updated_at
+    row.created_by = channel.created_by.uuid
+    row.updated_by = channel.updated_by.uuid
+
+
+def write_connection(stored: ConnectionModel, connection: Connection) -> None:
+    """Переносит поля принадлежащего подключения в SQL-модель без I/O."""
+    stored.config_version = connection.config.version
+    stored.endpoint = connection.config.endpoint
+    stored.settings = connection.config.settings
+    stored.encrypted_credentials = connection.encrypted_credentials
+    stored.config_revision = connection.config_revision
+    stored.identity_namespace = (
+        connection.identity.namespace if connection.identity else None
     )
-    return ChannelReadRow(
-        id=row.id,
-        name=row.name,
-        platform_kind=row.platform_kind,
-        revision=row.revision,
-        config=ConnectionConfigReadRow(
-            version=c.config_version,
-            endpoint=c.endpoint,
-            settings=c.settings,
-        ),
-        config_revision=c.config_revision,
-        identity=identity,
-        verification=VerificationReadRow(
-            job_id=verification.job_id,
-            config_revision=verification.config_revision,
-            status=verification.status,
-            checked_at=verification.checked_at,
-            error_code=verification.error_code,
-        ),
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
+    stored.identity_key = connection.identity.key if connection.identity else None
+    stored.verification = write_verification(connection.verification)

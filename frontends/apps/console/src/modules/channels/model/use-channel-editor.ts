@@ -1,10 +1,11 @@
 import { computed, ref, watch, type Ref, type ComputedRef } from "vue";
 import { useChannel, useChannelPlatforms } from "./channel.queries";
-import { useSaveChannel } from "./use-save-channel";
+import { useCreateChannel } from "./use-create-channel";
+import { useUpdateChannel } from "./use-update-channel";
 import { useVerifyChannel } from "./use-verify-channel";
 import { useDeleteChannel } from "./use-delete-channel";
 import { useChannelScope } from "./use-channel-scope";
-import { draftFor, saveDraft } from "./channel.schema";
+import { draftFor, saveDraft } from "./channel.draft";
 import type { ChannelDraft } from "./channel.types";
 
 interface ChannelEditor {
@@ -29,7 +30,8 @@ export function useChannelEditor(id: Ref<string>): ChannelEditor {
   const scope = useChannelScope();
   const query = useChannel(id),
     platforms = useChannelPlatforms();
-  const saveAction = useSaveChannel(),
+  const createAction = useCreateChannel(),
+    updateAction = useUpdateChannel(),
     verifyAction = useVerifyChannel(),
     deleteAction = useDeleteChannel();
   const draft = ref<ChannelDraft | null>(null),
@@ -92,7 +94,8 @@ export function useChannelEditor(id: Ref<string>): ChannelEditor {
   );
   const busy = computed(
     () =>
-      saveAction.pending.value ||
+      createAction.pending.value ||
+      updateAction.pending.value ||
       verifyAction.pending.value ||
       deleteAction.pending.value,
   );
@@ -104,7 +107,10 @@ export function useChannelEditor(id: Ref<string>): ChannelEditor {
         Object.values(draft.value.credentials).some(Boolean)),
   );
   const error = computed(
-    () => saveAction.error.value || verifyAction.error.value,
+    () =>
+      createAction.error.value ||
+      updateAction.error.value ||
+      verifyAction.error.value,
   );
   function changePlatform(kind: string): void {
     const next = platforms.data.value?.find((p) => p.kind === kind);
@@ -114,11 +120,14 @@ export function useChannelEditor(id: Ref<string>): ChannelEditor {
   async function save(): Promise<string | undefined> {
     if (!draft.value || !platform.value || busy.value) return;
     const captured = contextKey.value;
-    const result = await saveAction.execute({
-      id: id.value || undefined,
-      revision: baseRevision.value,
-      value: saveDraft(draft.value, platform.value),
-    });
+    const value = saveDraft(draft.value, platform.value);
+    const result = id.value
+      ? await updateAction.execute({
+          id: id.value,
+          revision: baseRevision.value,
+          value,
+        })
+      : await createAction.execute(value);
     if (!result || contextKey.value !== captured) return;
     if (id.value) resetDraft();
     else {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
 import type { Channel } from "../model/channel.types";
-import { shouldPoll } from "../model/channel.schema";
+import { shouldPoll } from "../model/channel.verification";
 import { channelErrorMessage } from "../model/channel.errors";
 import ChannelStatus from "./ChannelStatus.vue";
 defineProps<{ channel: Channel; busy: boolean; dirty: boolean }>();

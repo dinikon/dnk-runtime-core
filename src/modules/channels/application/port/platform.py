@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol
 
 from src.modules.channels.application.capability import Capability
@@ -24,11 +24,10 @@ class PlatformManifest:
 
 
 @dataclass(frozen=True, slots=True)
-class ValidatedConnection:
-    """Нормализованная конфигурация и настоящий секрет для Shared Cipher."""
+class ValidatedConfig:
+    """Нормализованная конфигурация и коды для проверки общих справочников."""
 
     config: ConnectionConfigVO
-    credentials: bytes | None = field(repr=False)
     currency: str
     locales: tuple[str, ...]
 
@@ -38,10 +37,12 @@ class Platform(Protocol):
 
     manifest: PlatformManifest
 
-    def validate(
-        self, config: ConnectionConfigVO, credentials: JsonObject | None
-    ) -> ValidatedConnection:
-        """Проверяет настройки и явно сериализует credentials."""
+    def validate_config(self, config: ConnectionConfigVO) -> ValidatedConfig:
+        """Нормализует только публичные настройки подключения."""
+        ...
+
+    def encode_credentials(self, credentials: JsonObject) -> bytes:
+        """Проверяет полный комплект и сериализует настоящие значения секретов."""
         ...
 
     async def verify(

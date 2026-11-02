@@ -56,12 +56,16 @@ class UpdateChannelHandler:
         if channel is None:
             raise ChannelNotFoundError("Канал не найден.")
         channel.require_revision(command.expected_revision)
-        validated = self.platforms.get(channel.platform_kind).validate(
-            command.config or channel.connection.config, command.credentials
+        platform = self.platforms.get(channel.platform_kind)
+        validated = platform.validate_config(
+            command.config or channel.connection.config
         )
-        current = self.platforms.get(channel.platform_kind).validate(
-            channel.connection.config, None
+        credentials = (
+            platform.encode_credentials(command.credentials)
+            if command.credentials is not None
+            else None
         )
+        current = platform.validate_config(channel.connection.config)
         if (validated.currency, validated.locales) != (
             current.currency,
             current.locales,
@@ -70,9 +74,7 @@ class UpdateChannelHandler:
                 currency=validated.currency, locales=validated.locales
             )
         encrypted = (
-            self.cipher.encrypt(validated.credentials)
-            if validated.credentials is not None
-            else None
+            self.cipher.encrypt(credentials) if credentials is not None else None
         )
         now, job_id = self.clock(), self.uuid()
         connection_changed = channel.change_settings(

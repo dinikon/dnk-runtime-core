@@ -6,8 +6,9 @@ from src.modules.channels.application.error import (
 )
 from src.modules.channels.application.port.platform import (
     PlatformManifest,
-    ValidatedConnection,
+    ValidatedConfig,
 )
+from src.modules.channels.domain.error import InvalidResourceIdentityError
 from src.modules.channels.domain.value_object.connection_config import (
     ConnectionConfigVO,
 )
@@ -48,10 +49,8 @@ class RozetkaPlatform:
             }
         )
 
-    def validate(
-        self, config: ConnectionConfigVO, credentials: JsonObject | None
-    ) -> ValidatedConnection:
-        """Проверяет настройки и явно сериализует полный комплект credentials."""
+    def validate_config(self, config: ConnectionConfigVO) -> ValidatedConfig:
+        """Проверяет и нормализует публичные настройки платформы."""
         try:
             typed = self.decode_config(config)
         except ValidationError as error:
@@ -65,49 +64,54 @@ class RozetkaPlatform:
                 "configuration_invalid",
                 field="config" + ("." + location if location else ""),
             ) from None
-        encoded = None
-        if credentials is not None:
-            try:
-                secret = RozetkaCredentials.model_validate(credentials)
-            except ValidationError as error:
-                path = error.errors(include_input=False)[0]["loc"]
-                location = str(path[0]) if path and path[0] in {"token"} else ""
-                raise ChannelInputError(
-                    "credentials_invalid",
-                    field="credentials" + ("." + location if location else ""),
-                ) from None
-            encoded = json.dumps(
-                {"token": secret.token.get_secret_value()},
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        return ValidatedConnection(
+        return ValidatedConfig(
             config=ConnectionConfigVO.create(
                 version=typed.version,
                 endpoint=typed.endpoint,
                 settings=typed.settings.model_dump(mode="json"),
             ),
-            credentials=encoded,
             currency=typed.settings.currency,
             locales=typed.settings.locales,
         )
+
+    def encode_credentials(self, credentials: JsonObject) -> bytes:
+        """Сериализует полный комплект реальных секретов для Shared Cipher."""
+        try:
+            secret = RozetkaCredentials.model_validate(credentials)
+        except ValidationError as error:
+            path = error.errors(include_input=False)[0]["loc"]
+            location = str(path[0]) if path and path[0] in {"token"} else ""
+            raise ChannelInputError(
+                "credentials_invalid",
+                field="credentials" + ("." + location if location else ""),
+            ) from None
+        return json.dumps(
+            {"token": secret.token.get_secret_value()},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
 
     async def verify(
         self, config: ConnectionConfigVO, credentials: bytes
     ) -> ResourceIdentityVO:
         """Получает identity по постоянному токену без парольной авторизации."""
-        settings = self.decode_config(config)
-        secret = RozetkaCredentials.model_validate_json(credentials)
-        data = await self.http.request(
-            "GET",
-            settings.endpoint + "/sites/get-auth-data",
-            headers={"Authorization": "Bearer " + secret.token.get_secret_value()},
-        )
-        response = RozetkaLogin.model_validate(data)
-        if not response.success:
-            raise VerificationFailure("invalid_credentials")
-        if response.content is None:
-            raise VerificationFailure("resource_identity_unavailable")
-        return ResourceIdentityVO(
-            namespace="rozetka.market", key=str(response.content.market.id)
-        )
+        try:
+            settings = self.decode_config(config)
+            secret = RozetkaCredentials.model_validate_json(credentials)
+            data = await self.http.request(
+                "GET",
+                settings.endpoint + "/sites/get-auth-data",
+                headers={"Authorization": "Bearer " + secret.token.get_secret_value()},
+            )
+            response = RozetkaLogin.model_validate(data)
+            if not response.success:
+                raise VerificationFailure("invalid_credentials")
+            if response.content is None:
+                raise VerificationFailure("resource_identity_unavailable")
+            return ResourceIdentityVO(
+                namespace="rozetka.market", key=str(response.content.market.id)
+            )
+        except ValidationError:
+            raise VerificationFailure("provider_response_invalid") from None
+        except InvalidResourceIdentityError:
+            raise VerificationFailure("resource_identity_unavailable") from None

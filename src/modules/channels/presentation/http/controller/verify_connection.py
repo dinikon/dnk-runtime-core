@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from uuid import UUID
 
 from src.modules.channels.application.command.verify_connection.command import (
@@ -47,4 +46,4 @@ async def verify_connection(
         CiphertextUnreadable,
     ) as error:
         raise channel_http_error(error) from None
-    return VerifyConnectionResponse.model_validate(asdict(result))
+    return VerifyConnectionResponse.from_dto(result)
