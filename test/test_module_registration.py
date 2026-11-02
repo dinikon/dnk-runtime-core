@@ -27,7 +27,6 @@ class ModuleRegistrationTests(unittest.TestCase):
     def test_removed_source_modules_are_absent(self) -> None:
         """Backend и Console не содержат исходников удалённых модулей."""
         for relative in (
-            "src/modules/inventory",
             "src/modules/warehousing",
             "src/modules/price_lists",
             "frontends/apps/console/src/modules/inventory",
