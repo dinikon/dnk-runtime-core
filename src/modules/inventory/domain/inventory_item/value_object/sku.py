@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from unicodedata import category
 
-from src.modules.inventory.domain.error import InvalidSkuError
+from src.modules.inventory.domain.inventory_item.error import InvalidSkuError
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from unicodedata import category
 
-from src.modules.inventory.domain.error import InvalidBarcodeError
+from src.modules.inventory.domain.inventory_item.error import InvalidBarcodeError
 
 
 @dataclass(frozen=True, slots=True)

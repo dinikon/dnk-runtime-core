@@ -1,36 +1,45 @@
 """Проверки ручной номенклатуры, неизменяемого состава и настроек прослеживаемости."""
 
 import unittest
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, fields, replace
 from decimal import Decimal
 from uuid import uuid4
 
-from src.modules.inventory.domain.aggregate import InventoryItem
-from src.modules.inventory.domain.entity.item_barcode import ItemBarcode
-from src.modules.inventory.domain.entity.item_uom_conversion import ItemUomConversion
-from src.modules.inventory.domain.error import (
+from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
+from src.modules.inventory.domain.error import InvalidUomCodeError
+from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
+from src.modules.inventory.domain.inventory_item.entity.item_uom_conversion import (
+    ItemUomConversion,
+)
+from src.modules.inventory.domain.inventory_item.error import (
     InvalidBarcodeError,
     InvalidConversionFactorError,
     InvalidInventoryItemValueError,
     InvalidSkuError,
     InvalidTrackingConfigurationError,
-    InvalidUomCodeError,
     InventoryItemComponentNotFoundError,
     InventoryItemConflictError,
-    UnknownUomError,
 )
-from src.modules.inventory.domain.value_object.barcode import BarcodeVO
-from src.modules.inventory.domain.value_object.conversion_factor import (
+from src.modules.inventory.domain.inventory_item.value_object.barcode import BarcodeVO
+from src.modules.inventory.domain.inventory_item.value_object.conversion_factor import (
     ConversionFactorVO,
 )
-from src.modules.inventory.domain.value_object.expiration_mode import ExpirationMode
-from src.modules.inventory.domain.value_object.identifier import InventoryItemIdVO
-from src.modules.inventory.domain.value_object.item_barcode_id import ItemBarcodeIdVO
-from src.modules.inventory.domain.value_object.item_uom_conversion_id import (
+from src.modules.inventory.domain.inventory_item.value_object.expiration_mode import (
+    ExpirationMode,
+)
+from src.modules.inventory.domain.inventory_item.value_object.identifier import (
+    InventoryItemIdVO,
+)
+from src.modules.inventory.domain.inventory_item.value_object.item_barcode_id import (
+    ItemBarcodeIdVO,
+)
+from src.modules.inventory.domain.inventory_item.value_object.item_uom_conversion_id import (
     ItemUomConversionIdVO,
 )
-from src.modules.inventory.domain.value_object.sku import SkuVO
-from src.modules.inventory.domain.value_object.tracking_mode import TrackingMode
+from src.modules.inventory.domain.inventory_item.value_object.sku import SkuVO
+from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import (
+    TrackingMode,
+)
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 
 
@@ -114,10 +123,10 @@ class InventoryItemDomainTests(unittest.TestCase):
     """Проверяет границы агрегата через фабрики и публичные доменные операции."""
 
     def setUp(self) -> None:
-        """Готовит позицию, штуку и коробку с независимыми дочерними ID."""
+        """Готовит позицию, штуку и дюжину с независимыми дочерними ID."""
         self.identifier = InventoryItemIdVO(uuid4())
         self.pcs = UomCodeVO("PCS")
-        self.box = UomCodeVO("BOX")
+        self.box = UomCodeVO("DOZEN")
         self.conversion = ItemUomConversion.create(
             identifier=ItemUomConversionIdVO(uuid4()),
             uom=self.box,
@@ -126,7 +135,6 @@ class InventoryItemDomainTests(unittest.TestCase):
         self.barcode = ItemBarcode.create(
             identifier=ItemBarcodeIdVO(uuid4()),
             barcode=BarcodeVO("000123"),
-            uom=self.box,
         )
         self.item = self.make_item()
 
@@ -150,6 +158,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             identifier=self.item.id,
             sku=self.item.sku,
             base_uom=self.item.base_uom,
+            packagings=self.item.packagings,
             tracking_mode=self.item.tracking_mode,
             expiration_mode=self.item.expiration_mode,
             barcodes=self.item.barcodes,
@@ -161,7 +170,9 @@ class InventoryItemDomainTests(unittest.TestCase):
     def test_create_defaults_and_empty_collections(self) -> None:
         """Создаёт минимальную позицию только с обязательными ручными данными."""
         item = InventoryItem.create(
-            identifier=self.identifier, sku=SkuVO("MANUAL"), base_uom=self.pcs
+            identifier=self.identifier,
+            sku=SkuVO("MANUAL"),
+            base_uom=self.pcs,
         )
         self.assertEqual(item.sku, SkuVO("MANUAL"))
         self.assertIs(item.tracking_mode, TrackingMode.NONE)
@@ -251,7 +262,6 @@ class InventoryItemDomainTests(unittest.TestCase):
                     ItemBarcode.create(
                         identifier=ItemBarcodeIdVO(uuid4()),
                         barcode=BarcodeVO(" 000123 "),
-                        uom=self.pcs,
                     ),
                 )
             },
@@ -300,11 +310,13 @@ class InventoryItemDomainTests(unittest.TestCase):
                     with self.assertRaises(InvalidInventoryItemValueError):
                         factory(**changes)
 
-    def test_barcode_requires_a_declared_uom_at_both_factories(self) -> None:
-        """Не допускает единицу штрихкода без базовой единицы или конвертации."""
-        for factory in (self.make_item, self.restore_item):
-            with self.subTest(factory=factory), self.assertRaises(UnknownUomError):
-                factory(uom_conversions=())
+    def test_barcodes_identify_item_without_any_packaging(self) -> None:
+        """Штрихкод принадлежит товару и не задаёт упаковку, количество или единицу."""
+        self.assertEqual(
+            [field.name for field in fields(ItemBarcode)], ["id", "barcode"]
+        )
+        self.assertEqual(self.item.packagings, ())
+        self.assertEqual(self.restore_item().barcodes, (self.barcode,))
 
     def test_change_sku_preserves_identity_and_original_state(self) -> None:
         """Меняет ручной SKU только у нового экземпляра с прежним ID и составом."""
@@ -322,20 +334,19 @@ class InventoryItemDomainTests(unittest.TestCase):
         barcode = ItemBarcode.create(
             identifier=ItemBarcodeIdVO(uuid4()),
             barcode=BarcodeVO("000456"),
-            uom=self.pcs,
         )
         added = self.item.add_barcode(barcode)
         changed = added.change_barcode(
-            identifier=barcode.id, barcode=BarcodeVO("000789"), uom=self.box
+            identifier=barcode.id,
+            barcode=BarcodeVO("000789"),
         )
         self.assertEqual(changed.barcodes[-1].id, barcode.id)
         self.assertEqual(changed.barcodes[-1].barcode.value, "000789")
-        self.assertEqual(changed.barcodes[-1].uom, self.box)
         self.assertEqual(changed.remove_barcode(barcode.id), self.item)
         self.assertEqual(self.item.barcodes, (self.barcode,))
 
     def test_invalid_barcode_changes_leave_original_composition_intact(self) -> None:
-        """Отклоняет дубликаты и неизвестные единицы без частичных изменений."""
+        """Отклоняет дубликаты и неверные значения штрихкода без частичных изменений."""
         other = replace(
             self.barcode, id=ItemBarcodeIdVO(uuid4()), barcode=BarcodeVO("456")
         )
@@ -343,16 +354,15 @@ class InventoryItemDomainTests(unittest.TestCase):
         for action in (
             lambda: item.add_barcode(other),
             lambda: item.change_barcode(
-                identifier=other.id, barcode=self.barcode.barcode, uom=self.pcs
+                identifier=other.id,
+                barcode=self.barcode.barcode,
             ),
         ):
             with self.assertRaises(InventoryItemConflictError):
                 action()
             self.assertEqual(item.barcodes, (self.barcode, other))
-        with self.assertRaises(UnknownUomError):
-            item.change_barcode(
-                identifier=other.id, barcode=other.barcode, uom=UomCodeVO("UNKNOWN")
-            )
+        with self.assertRaises(InvalidInventoryItemValueError):
+            item.change_barcode(identifier=other.id, barcode=None)
         self.assertEqual(item.barcodes, (self.barcode, other))
 
     def test_conversion_lifecycle_preserves_id_and_decimal_factor(self) -> None:
@@ -371,30 +381,19 @@ class InventoryItemDomainTests(unittest.TestCase):
         self.assertEqual(changed.remove_uom_conversion(conversion.id), self.item)
         self.assertEqual(self.item.uom_conversions, (self.conversion,))
 
-    def test_used_conversion_cannot_be_removed_or_renamed(self) -> None:
-        """Защищает ссылки штрихкодов на единицу конвертации."""
-        with self.assertRaises(InventoryItemConflictError):
-            self.item.remove_uom_conversion(self.conversion.id)
-        with self.assertRaises(UnknownUomError):
-            self.item.change_uom_conversion(
-                identifier=self.conversion.id,
-                uom=UomCodeVO("PACK"),
-                factor=self.conversion.factor,
-            )
-        self.assertEqual(self.item.uom_conversions, (self.conversion,))
+    def test_unit_conversions_are_independent_of_barcodes(self) -> None:
+        """Изменение единиц не удаляет упаковки и не меняет смысл штрихкода."""
+        removed = self.item.remove_uom_conversion(self.conversion.id)
+        self.assertEqual(removed.uom_conversions, ())
+        self.assertEqual(removed.barcodes, self.item.barcodes)
         changed = self.item.change_uom_conversion(
             identifier=self.conversion.id,
-            uom=self.box,
+            uom=UomCodeVO("OTHER"),
             factor=ConversionFactorVO(Decimal(24)),
         )
         self.assertEqual(changed.uom_conversions[0].factor.value, Decimal(24))
-        self.assertEqual(self.item.uom_conversions[0].factor.value, Decimal(12))
-        self.assertEqual(
-            self.item.remove_barcode(self.barcode.id)
-            .remove_uom_conversion(self.conversion.id)
-            .uom_conversions,
-            (),
-        )
+        self.assertEqual(changed.barcodes, self.item.barcodes)
+        self.assertEqual(self.item.uom_conversions, (self.conversion,))
 
     def test_duplicate_and_base_conversions_are_rejected_during_changes(self) -> None:
         """Не допускает дубликаты единиц, ID и конвертацию базовой единицы."""
@@ -425,7 +424,8 @@ class InventoryItemDomainTests(unittest.TestCase):
         for action in (
             lambda: self.item.remove_barcode(barcode_id),
             lambda: self.item.change_barcode(
-                identifier=barcode_id, barcode=self.barcode.barcode, uom=self.pcs
+                identifier=barcode_id,
+                barcode=self.barcode.barcode,
             ),
             lambda: self.item.remove_uom_conversion(conversion_id),
             lambda: self.item.change_uom_conversion(
@@ -443,7 +443,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             (self.item, "tracking_mode", TrackingMode.SERIAL),
             (self.item, "expiration_mode", ExpirationMode.NONE),
             (self.item, "barcodes", ()),
-            (self.barcode, "uom", self.pcs),
+            (self.barcode, "barcode", BarcodeVO("CHANGED")),
             (self.conversion, "factor", ConversionFactorVO(Decimal(24))),
             (self.item.sku, "value", "CHANGED"),
         ):
@@ -462,7 +462,6 @@ class InventoryItemDomainTests(unittest.TestCase):
                 factory(
                     identifier=self.barcode.id,
                     barcode=self.barcode.barcode,
-                    uom=self.box,
                 ),
                 self.barcode,
             )
@@ -470,7 +469,6 @@ class InventoryItemDomainTests(unittest.TestCase):
                 factory(
                     identifier=self.identifier,
                     barcode=self.barcode.barcode,
-                    uom=self.box,
                 )
         for factory in (ItemUomConversion.create, ItemUomConversion.restore):
             self.assertEqual(

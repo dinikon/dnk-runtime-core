@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 from typing import Self
 
-from src.modules.inventory.domain.error import InvalidInventoryItemValueError
-from src.modules.inventory.domain.value_object.conversion_factor import (
+from src.modules.inventory.domain.inventory_item.error import (
+    InvalidInventoryItemValueError,
+)
+from src.modules.inventory.domain.inventory_item.value_object.conversion_factor import (
     ConversionFactorVO,
 )
-from src.modules.inventory.domain.value_object.item_uom_conversion_id import (
+from src.modules.inventory.domain.inventory_item.value_object.item_uom_conversion_id import (
     ItemUomConversionIdVO,
 )
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO

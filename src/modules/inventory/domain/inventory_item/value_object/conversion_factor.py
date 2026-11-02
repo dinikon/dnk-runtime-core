@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from src.modules.inventory.domain.error import InvalidConversionFactorError
+from src.modules.inventory.domain.inventory_item.error import (
+    InvalidConversionFactorError,
+)
 
 
 @dataclass(frozen=True, slots=True)
