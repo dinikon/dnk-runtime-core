@@ -38,12 +38,34 @@ class InventoryValueObjectTests(unittest.TestCase):
     """Проверяет нормализацию кодов и точность значений конвертации."""
 
     def test_text_values_trim_without_losing_identity(self) -> None:
-        """Сохраняет регистр SKU и ведущие нули штрихкода после trim."""
-        self.assertEqual(SkuVO("  SKU-a  ").value, "SKU-a")
-        self.assertNotEqual(SkuVO("SKU-a"), SkuVO("SKU-A"))
+        """Нормализует регистр SKU, сохраняя ведущие нули и регистр штрихкода."""
+        self.assertEqual(SkuVO("  SKU-a  ").value, "sku-a")
+        self.assertEqual(SkuVO("SKU-a"), SkuVO("SKU-A"))
+        self.assertEqual(hash(SkuVO("ABC")), hash(SkuVO("abc")))
+        self.assertEqual(len({SkuVO("ABC"), SkuVO(" abc ")}), 1)
         self.assertEqual(UomCodeVO(" PCS ").value, "PCS")
         self.assertEqual(BarcodeVO(" 000123 ").value, "000123")
-        self.assertEqual(SkuVO("Артикул/123").value, "Артикул/123")
+        self.assertEqual(SkuVO("Артикул/123").value, "артикул/123")
+        self.assertNotEqual(BarcodeVO("ABC"), BarcodeVO("abc"))
+
+    def test_sku_length_limit_applies_to_the_canonical_value(self) -> None:
+        """Принимает 25 символов после trim и учитывает расширение Unicode casefold."""
+        self.assertEqual(SkuVO(" " + "A" * 25 + " ").value, "a" * 25)
+        self.assertEqual(SkuVO("Straße"), SkuVO("STRASSE"))
+        self.assertEqual(SkuVO("A" * 23 + "ß").value, "a" * 23 + "ss")
+        for value in ("A" * 26, "A" * 24 + "ß"):
+            with self.subTest(value=value), self.assertRaises(InvalidSkuError):
+                SkuVO(value)
+
+    def test_optional_expiration_preserves_its_note_mode_without_date_control(
+        self,
+    ) -> None:
+        """Различает режим заметок и NONE при одинаково выключенном контроле дат."""
+        self.assertIsNot(ExpirationMode.NONE, ExpirationMode.OPTIONAL)
+        self.assertEqual(ExpirationMode("OPTIONAL"), ExpirationMode.OPTIONAL)
+        self.assertFalse(ExpirationMode.NONE.controls_expiration)
+        self.assertFalse(ExpirationMode.OPTIONAL.controls_expiration)
+        self.assertTrue(ExpirationMode.REQUIRED.controls_expiration)
 
     def test_invalid_text_is_rejected_with_domain_errors(self) -> None:
         """Отклоняет отсутствие, пустоту, неверные типы и управляющие символы."""
@@ -143,7 +165,7 @@ class InventoryItemDomainTests(unittest.TestCase):
         )
         self.assertEqual(item.sku, SkuVO("MANUAL"))
         self.assertIs(item.tracking_mode, TrackingMode.NONE)
-        self.assertIs(item.expiration_mode, ExpirationMode.DISABLED)
+        self.assertIs(item.expiration_mode, ExpirationMode.NONE)
         self.assertEqual((item.barcodes, item.uom_conversions), ((), ()))
 
     def test_restore_preserves_the_full_state_and_child_identity(self) -> None:
@@ -152,6 +174,32 @@ class InventoryItemDomainTests(unittest.TestCase):
         self.assertEqual(restored, self.item)
         self.assertIs(restored.barcodes[0].id, self.barcode.id)
         self.assertIs(restored.uom_conversions[0].id, self.conversion.id)
+
+    def test_optional_expiration_survives_restore_and_changes_without_tracking(
+        self,
+    ) -> None:
+        """Сохраняет необязательные заметки при выключенном контроле дат и NONE tracking."""
+        for factory in (self.make_item, self.restore_item):
+            with self.subTest(factory=factory):
+                item = factory(
+                    tracking_mode=TrackingMode.NONE,
+                    expiration_mode=ExpirationMode.OPTIONAL,
+                )
+                changed = item.change_sku(SkuVO("Another-SKU"))
+                self.assertIs(changed.expiration_mode, ExpirationMode.OPTIONAL)
+                self.assertIs(changed.tracking_mode, TrackingMode.NONE)
+                self.assertFalse(changed.expiration_mode.controls_expiration)
+
+    def test_sku_equality_uses_the_same_canonical_form_at_factories_and_changes(
+        self,
+    ) -> None:
+        """Сохраняет единый SKU при разных регистрах ввода, восстановлении и замене."""
+        for factory in (self.make_item, self.restore_item):
+            with self.subTest(factory=factory):
+                item = factory(sku=SkuVO(" AbC "))
+                changed = item.change_sku(SkuVO("aBc"))
+                self.assertEqual(changed, item)
+                self.assertEqual(changed.sku.value, "abc")
 
     def test_factories_enforce_tracking_expiration_matrix(self) -> None:
         """Разрешает независимые настройки и запрещает REQUIRED без прослеживаемости."""
@@ -197,6 +245,16 @@ class InventoryItemDomainTests(unittest.TestCase):
     def test_factories_reject_duplicate_child_ids_values_and_units(self) -> None:
         """Проверяет уникальность всего состава и при создании, и при восстановлении."""
         cases = (
+            {
+                "barcodes": (
+                    self.barcode,
+                    ItemBarcode.create(
+                        identifier=ItemBarcodeIdVO(uuid4()),
+                        barcode=BarcodeVO(" 000123 "),
+                        uom=self.pcs,
+                    ),
+                )
+            },
             {
                 "barcodes": (
                     self.barcode,
@@ -254,10 +312,10 @@ class InventoryItemDomainTests(unittest.TestCase):
         self.assertEqual(changed.sku.value, "replacement")
         self.assertEqual(changed.id, self.item.id)
         self.assertEqual(changed.barcodes, self.item.barcodes)
-        self.assertEqual(self.item.sku.value, "SKU-001")
+        self.assertEqual(self.item.sku.value, "sku-001")
         with self.assertRaises(InvalidInventoryItemValueError):
             self.item.change_sku(None)
-        self.assertEqual(self.item.sku.value, "SKU-001")
+        self.assertEqual(self.item.sku.value, "sku-001")
 
     def test_barcode_lifecycle_is_controlled_by_the_aggregate(self) -> None:
         """Добавляет, меняет и удаляет штрихкод с сохранением его ID."""
@@ -383,7 +441,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             (self.item, "id", InventoryItemIdVO(uuid4())),
             (self.item, "base_uom", self.box),
             (self.item, "tracking_mode", TrackingMode.SERIAL),
-            (self.item, "expiration_mode", ExpirationMode.DISABLED),
+            (self.item, "expiration_mode", ExpirationMode.NONE),
             (self.item, "barcodes", ()),
             (self.barcode, "uom", self.pcs),
             (self.conversion, "factor", ConversionFactorVO(Decimal(24))),

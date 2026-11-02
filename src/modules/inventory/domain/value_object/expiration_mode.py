@@ -2,7 +2,13 @@ from enum import StrEnum
 
 
 class ExpirationMode(StrEnum):
-    """Задаёт требование к датам будущих партий или серийных экземпляров."""
+    """Разделяет отсутствие дат, необязательные заметки и обязательный контроль."""
 
-    DISABLED = "DISABLED"
+    NONE = "NONE"
+    OPTIONAL = "OPTIONAL"
     REQUIRED = "REQUIRED"
+
+    @property
+    def controls_expiration(self) -> bool:
+        """Включает контроль срока и обязательность даты только для REQUIRED."""
+        return self is ExpirationMode.REQUIRED

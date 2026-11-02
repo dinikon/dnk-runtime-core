@@ -45,7 +45,7 @@ class InventoryItem:
         sku: SkuVO,
         base_uom: UomCodeVO,
         tracking_mode: TrackingMode = TrackingMode.NONE,
-        expiration_mode: ExpirationMode = ExpirationMode.DISABLED,
+        expiration_mode: ExpirationMode = ExpirationMode.NONE,
         barcodes: tuple[ItemBarcode, ...] = (),
         uom_conversions: tuple[ItemUomConversion, ...] = (),
     ) -> Self:
@@ -164,7 +164,7 @@ class InventoryItem:
             )
         if (
             self.tracking_mode is TrackingMode.NONE
-            and self.expiration_mode is ExpirationMode.REQUIRED
+            and self.expiration_mode.controls_expiration
         ):
             raise InvalidTrackingConfigurationError(
                 "Обязательный срок годности требует учёта по партиям или сериям."
