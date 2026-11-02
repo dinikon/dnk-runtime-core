@@ -175,7 +175,7 @@ class StockLotDomainTests(unittest.TestCase):
             identifier=InventoryItemIdVO(uuid4()),
             sku=SkuVO("VITAMINS"),
             base_uom=UomCodeVO("PCS"),
-            quantity_rules=QuantityRulesVO(Decimal(1), 0),
+            quantity_rules=QuantityRulesVO(Decimal(1)),
             tracking_mode=TrackingMode.LOT,
             expiration_mode=ExpirationMode.REQUIRED,
         )

@@ -34,11 +34,7 @@ class UomConversionError(InventoryError):
 
 
 class InvalidQuantityRulesError(InventoryError):
-    """Сообщает о некорректном шаге или точности количества."""
-
-
-class QuantityPrecisionError(InventoryError):
-    """Запрещает количество с большей точностью, чем разрешено товаром."""
+    """Сообщает о некорректном шаге количества."""
 
 
 class QuantityStepError(InventoryError):

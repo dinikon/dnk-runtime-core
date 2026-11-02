@@ -9,7 +9,7 @@ from src.modules.inventory.domain.error import (
     InvalidPackagingValueError,
     UnknownUomError,
     IncompatibleUomError,
-    QuantityPrecisionError,
+    QuantityStepError,
 )
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
@@ -161,9 +161,9 @@ class InventoryPackagingDomainTests(unittest.TestCase):
             sku=SkuVO("VITAMINS"),
             base_uom=self.pcs,
             quantity_rules=(
-                QuantityRulesVO(Decimal("0.001"), 3)
+                QuantityRulesVO(Decimal("0.001"))
                 if changes.get("base_uom", self.pcs) != self.pcs
-                else QuantityRulesVO(Decimal(1), 0)
+                else QuantityRulesVO(Decimal(1))
             ),
         )
         return InventoryItem.create(**(values | changes))
@@ -299,11 +299,11 @@ class InventoryPackagingDomainTests(unittest.TestCase):
                 invalid = self.packaging(
                     content_quantity=PackagingQuantityVO(Decimal("0.5"))
                 )
-                with self.assertRaises(QuantityPrecisionError):
+                with self.assertRaises(QuantityStepError):
                     empty.add_packaging(invalid, packaging_type=self.kind.snapshot())
-                with self.assertRaises(QuantityPrecisionError):
+                with self.assertRaises(QuantityStepError):
                     self.restore_item(empty, packagings=(invalid,))
-                with self.assertRaises(QuantityPrecisionError):
+                with self.assertRaises(QuantityStepError):
                     self.change_packaging(
                         item, content_quantity=invalid.content_quantity
                     )

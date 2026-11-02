@@ -9,7 +9,6 @@ from uuid import uuid4
 from src.modules.inventory.domain.error import (
     InvalidQuantityError,
     InvalidQuantityRulesError,
-    QuantityPrecisionError,
     QuantityStepError,
 )
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
@@ -43,26 +42,23 @@ from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 class QuantityRulesTests(unittest.TestCase):
     """Проверяет собственные значения неизменяемых правил количества."""
 
-    def test_step_must_be_representable_at_precision_ignoring_trailing_zeros(
-        self,
-    ) -> None:
-        """Разрешает произвольные точные шаги и точность микрограммов в килограммах."""
-        for step, precision in (("1.000", 0), ("0.0500", 2), ("2.5", 1), ("1E-9", 9)):
-            with self.subTest(step=step, precision=precision):
-                rules = QuantityRulesVO(Decimal(step), precision)
+    def test_step_accepts_whole_fractional_and_microgram_values(self) -> None:
+        """Шаг определяет допустимую дробность, включая микрограммы в килограммах."""
+        for step in ("1.000", "0.0500", "2.5", "1E-9"):
+            with self.subTest(step=step):
+                rules = QuantityRulesVO(Decimal(step))
                 self.assertEqual(rules.step, Decimal(step))
-                self.assertEqual(rules.precision, precision)
-        with self.assertRaises(InvalidQuantityRulesError):
-            QuantityRulesVO(Decimal("0.05"), 1)
 
-    def test_invalid_types_nonfinite_nonpositive_steps_and_precision_are_rejected(
+    def test_invalid_types_nonfinite_and_nonpositive_steps_are_rejected(
         self,
     ) -> None:
-        """Не принимает float, bool, отрицательную точность и недопустимый Decimal."""
+        """Не принимает float, bool, нулевой, отрицательный и нечисловой шаг."""
         for step in (
             None,
             1,
             0.1,
+            True,
+            False,
             "1",
             Decimal(0),
             Decimal(-1),
@@ -71,29 +67,23 @@ class QuantityRulesTests(unittest.TestCase):
             Decimal("Infinity"),
         ):
             with self.subTest(step=step), self.assertRaises(InvalidQuantityRulesError):
-                QuantityRulesVO(step, 3)
-        for precision in (None, True, False, -1, 2.0, "2", Decimal(2)):
-            with (
-                self.subTest(precision=precision),
-                self.assertRaises(InvalidQuantityRulesError),
-            ):
-                QuantityRulesVO(Decimal(1), precision)
+                QuantityRulesVO(step)
 
     def test_rules_are_immutable_values(self) -> None:
         """Эквивалентные Decimal-шаги равны, а настройки нельзя изменить на месте."""
-        rules = QuantityRulesVO(Decimal("1.00"), 0)
-        self.assertEqual(rules, QuantityRulesVO(Decimal(1), 0))
-        self.assertEqual(len({rules, QuantityRulesVO(Decimal(1), 0)}), 1)
+        rules = QuantityRulesVO(Decimal("1.00"))
+        self.assertEqual(rules, QuantityRulesVO(Decimal(1)))
+        self.assertEqual(len({rules, QuantityRulesVO(Decimal(1))}), 1)
         with self.assertRaises(FrozenInstanceError):
-            rules.precision = 2
+            rules.step = Decimal(2)
 
 
 class QuantityValidationTests(unittest.TestCase):
-    """Проверяет точность и кратность без округления и внешнего Decimal-контекста."""
+    """Проверяет точную кратность без округления и внешнего Decimal-контекста."""
 
-    def test_precision_and_step_are_independent_constraints(self) -> None:
-        """Различает избыточную точность и некратное шагу количество."""
-        rules = QuantityRulesVO(Decimal("0.05"), 2)
+    def test_step_defines_allowed_quantities_ignoring_trailing_zeros(self) -> None:
+        """Принимает точные кратные независимо от записи и отклоняет любые остальные."""
+        rules = QuantityRulesVO(Decimal("0.05"))
         for value in ("0", "-0.00000", "1.2500", "0.05", "10", "1E+30"):
             with self.subTest(value=value):
                 self.assertIsNone(
@@ -101,11 +91,8 @@ class QuantityValidationTests(unittest.TestCase):
                         quantity=QuantityVO(Decimal(value)), rules=rules
                     )
                 )
-        for value, error in (
-            ("1.251", QuantityPrecisionError),
-            ("1.23", QuantityStepError),
-        ):
-            with self.subTest(value=value), self.assertRaises(error):
+        for value in ("1.251", "1.23", "0.001"):
+            with self.subTest(value=value), self.assertRaises(QuantityStepError):
                 QuantityValidationPolicy.validate(
                     quantity=QuantityVO(Decimal(value)), rules=rules
                 )
@@ -114,7 +101,7 @@ class QuantityValidationTests(unittest.TestCase):
         """Policy не преобразует сырые числа или словари в доменные значения."""
         with self.assertRaises(InvalidQuantityError):
             QuantityValidationPolicy.validate(
-                quantity=Decimal(1), rules=QuantityRulesVO(Decimal(1), 0)
+                quantity=Decimal(1), rules=QuantityRulesVO(Decimal(1))
             )
         with self.assertRaises(InvalidQuantityRulesError):
             QuantityValidationPolicy.validate(
@@ -138,24 +125,12 @@ class QuantityValidationTests(unittest.TestCase):
                 "1E-9",
             )
         )
-        for step, precision in (
-            ("0.05", 2),
-            ("0.125", 3),
-            ("0.2", 1),
-            ("2.5", 1),
-            ("3", 0),
-            ("10", 0),
-        ):
-            rules = QuantityRulesVO(Decimal(step), precision)
+        for step in ("0.05", "0.125", "0.2", "2.5", "3", "10"):
+            rules = QuantityRulesVO(Decimal(step))
             for value in values:
                 fraction = Fraction(value)
                 with self.subTest(step=step, value=value):
-                    if (fraction * 10**precision).denominator != 1:
-                        with self.assertRaises(QuantityPrecisionError):
-                            QuantityValidationPolicy.validate(
-                                quantity=QuantityVO(value), rules=rules
-                            )
-                    elif (fraction / Fraction(rules.step)).denominator != 1:
+                    if (fraction / Fraction(rules.step)).denominator != 1:
                         with self.assertRaises(QuantityStepError):
                             QuantityValidationPolicy.validate(
                                 quantity=QuantityVO(value), rules=rules
@@ -174,7 +149,7 @@ class QuantityValidationTests(unittest.TestCase):
             context.rounding = ROUND_DOWN
             context.traps[Inexact] = True
             context.traps[Rounded] = True
-            rules = QuantityRulesVO(Decimal("0.0500"), 2)
+            rules = QuantityRulesVO(Decimal("0.0500"))
             QuantityValidationPolicy.validate(
                 quantity=QuantityVO(Decimal("12345678901234567890.2500")), rules=rules
             )
@@ -182,7 +157,7 @@ class QuantityValidationTests(unittest.TestCase):
                 QuantityValidationPolicy.validate(
                     quantity=QuantityVO(Decimal("12345678901234567890.23")), rules=rules
                 )
-            with self.assertRaises(QuantityPrecisionError):
+            with self.assertRaises(QuantityStepError):
                 QuantityValidationPolicy.validate(
                     quantity=QuantityVO(Decimal("1.251")), rules=rules
                 )
@@ -192,32 +167,32 @@ class QuantityValidationTests(unittest.TestCase):
         """Проверяет огромные порядки без построения целого числа из миллиардов цифр."""
         huge = QuantityVO(Decimal((0, (1,), MAX_EMAX)))
         QuantityValidationPolicy.validate(
-            quantity=huge, rules=QuantityRulesVO(Decimal(2), 0)
+            quantity=huge, rules=QuantityRulesVO(Decimal(2))
         )
         with self.assertRaises(QuantityStepError):
             QuantityValidationPolicy.validate(
-                quantity=huge, rules=QuantityRulesVO(Decimal(3), 0)
+                quantity=huge, rules=QuantityRulesVO(Decimal(3))
             )
         tiny = QuantityVO(Decimal((0, (1,), -MAX_EMAX)))
         QuantityValidationPolicy.validate(
-            quantity=tiny, rules=QuantityRulesVO(tiny.value, MAX_EMAX)
+            quantity=tiny, rules=QuantityRulesVO(tiny.value)
         )
         with self.assertRaises(QuantityStepError):
             QuantityValidationPolicy.validate(
-                quantity=tiny, rules=QuantityRulesVO(Decimal(1), MAX_EMAX)
+                quantity=tiny, rules=QuantityRulesVO(Decimal(1))
             )
 
 
 class InventoryItemQuantityTests(unittest.TestCase):
     """Проверяет инварианты количества через публичные фабрики и методы агрегата."""
 
-    def make_item(self, base: str, step: str, precision: int) -> InventoryItem:
+    def make_item(self, base: str, step: str) -> InventoryItem:
         """Создаёт позицию с явно выбранными правилами базового количества."""
         return InventoryItem.create(
             identifier=InventoryItemIdVO(uuid4()),
             sku=SkuVO("ITEM"),
             base_uom=UomCodeVO(base),
-            quantity_rules=QuantityRulesVO(Decimal(step), precision),
+            quantity_rules=QuantityRulesVO(Decimal(step)),
         )
 
     def restore_item(
@@ -237,18 +212,18 @@ class InventoryItemQuantityTests(unittest.TestCase):
 
     def test_rules_apply_after_conversion_for_every_accounting_dimension(self) -> None:
         """Правила относятся к базовой единице, а не к числу знаков исходного ввода."""
-        for base, step, precision, source, value, expected in (
-            ("PCS", "1", 0, "PCS", "12.000", "12"),
-            ("L", "0.001", 3, "ML", "1", "0.001"),
-            ("KG", "0.001", 3, "G", "1250", "1.25"),
-            ("KG", "0.001", 3, "G", "1", "0.001"),
-            ("M2", "0.01", 2, "CM2", "100", "0.01"),
-            ("M", "0.1", 1, "CM", "10", "0.1"),
-            ("G", "1", 0, "KG", "0.001", "1"),
-            ("KG", "0.000000001", 9, "UG", "1", "0.000000001"),
+        for base, step, source, value, expected in (
+            ("PCS", "1", "PCS", "12.000", "12"),
+            ("L", "0.001", "ML", "1", "0.001"),
+            ("KG", "0.001", "G", "1250", "1.25"),
+            ("KG", "0.001", "G", "1", "0.001"),
+            ("M2", "0.01", "CM2", "100", "0.01"),
+            ("M", "0.1", "CM", "10", "0.1"),
+            ("G", "1", "KG", "0.001", "1"),
+            ("KG", "0.000000001", "UG", "1", "0.000000001"),
         ):
             with self.subTest(base=base, source=source, value=value):
-                item = self.make_item(base, step, precision)
+                item = self.make_item(base, step)
                 result = item.to_base_quantity(
                     quantity=QuantityVO(Decimal(value)), uom=UomCodeVO(source)
                 )
@@ -267,13 +242,16 @@ class InventoryItemQuantityTests(unittest.TestCase):
         self,
     ) -> None:
         """Отклоняет дробную штуку, слишком малую массу и некратный шаг после пересчёта."""
-        for base, step, precision, source, value, error in (
-            ("PCS", "1", 0, "PCS", "0.5", QuantityPrecisionError),
-            ("KG", "0.001", 3, "MG", "1", QuantityPrecisionError),
-            ("KG", "0.05", 2, "G", "30", QuantityStepError),
+        for base, step, source, value in (
+            ("PCS", "1", "PCS", "0.5"),
+            ("KG", "0.001", "MG", "1"),
+            ("KG", "0.05", "G", "30"),
         ):
-            with self.subTest(base=base, value=value), self.assertRaises(error):
-                self.make_item(base, step, precision).to_base_quantity(
+            with (
+                self.subTest(base=base, value=value),
+                self.assertRaises(QuantityStepError),
+            ):
+                self.make_item(base, step).to_base_quantity(
                     quantity=QuantityVO(Decimal(value)), uom=UomCodeVO(source)
                 )
 
@@ -284,7 +262,7 @@ class InventoryItemQuantityTests(unittest.TestCase):
             code=PackagingCodeVO("BAG"),
             name=PackagingNameVO("Мешок"),
         )
-        item = self.make_item("KG", "0.05", 2)
+        item = self.make_item("KG", "0.05")
         valid = ItemPackaging.create(
             identifier=ItemPackagingIdVO(uuid4()),
             packaging_type_id=kind.id,
@@ -295,7 +273,7 @@ class InventoryItemQuantityTests(unittest.TestCase):
         )
         with_packaging = item.add_packaging(valid, packaging_type=kind.snapshot())
         self.assertEqual(self.restore_item(with_packaging, (valid,)), with_packaging)
-        for value, error in (("30", QuantityStepError), ("1", QuantityPrecisionError)):
+        for value in ("30", "1"):
             invalid = ItemPackaging.create(
                 identifier=valid.id,
                 packaging_type_id=kind.id,
@@ -305,11 +283,11 @@ class InventoryItemQuantityTests(unittest.TestCase):
                 content_uom=valid.content_uom,
             )
             with self.subTest(value=value):
-                with self.assertRaises(error):
+                with self.assertRaises(QuantityStepError):
                     item.add_packaging(invalid, packaging_type=kind.snapshot())
-                with self.assertRaises(error):
+                with self.assertRaises(QuantityStepError):
                     self.restore_item(item, (invalid,))
-                with self.assertRaises(error):
+                with self.assertRaises(QuantityStepError):
                     with_packaging.change_packaging(
                         identifier=valid.id,
                         packaging_type=kind.snapshot(),
@@ -331,4 +309,4 @@ class InventoryItemQuantityTests(unittest.TestCase):
         self.assertEqual(changed.packagings[0].content_quantity.value, Decimal(1500))
         self.assertEqual(with_packaging.packagings, (valid,))
         with self.assertRaises(FrozenInstanceError):
-            item.quantity_rules = QuantityRulesVO(Decimal(1), 0)
+            item.quantity_rules = QuantityRulesVO(Decimal(1))

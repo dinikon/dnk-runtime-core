@@ -231,7 +231,7 @@ class InventoryItemUomTests(unittest.TestCase):
             identifier=InventoryItemIdVO(uuid4()),
             sku=SkuVO("ITEM"),
             base_uom=UomCodeVO(base),
-            quantity_rules=QuantityRulesVO(Decimal("0.001"), 3),
+            quantity_rules=QuantityRulesVO(Decimal("0.001")),
         )
 
     def test_item_derives_units_and_converts_to_its_selected_base(self) -> None:

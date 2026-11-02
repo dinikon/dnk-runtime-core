@@ -160,7 +160,7 @@ class InventoryItem:
         return get_compatible_uoms(self.base_uom)
 
     def to_base_quantity(self, *, quantity: QuantityVO, uom: UomCodeVO) -> QuantityVO:
-        """Точно пересчитывает в базовую единицу и проверяет шаг и точность товара."""
+        """Точно пересчитывает в базовую единицу и проверяет кратность шагу товара."""
         converted = UomConversionPolicy.convert(
             quantity=quantity, from_uom=uom, to_uom=self.base_uom
         )
@@ -263,10 +263,9 @@ class InventoryItem:
         if self.tracking_mode.requires_serial and (
             self.base_uom != UomCodeVO("PCS")
             or self.quantity_rules.step != Decimal("1")
-            or self.quantity_rules.precision != 0
         ):
             raise InvalidTrackingConfigurationError(
-                "Серийный учёт требует базовую единицу PCS, шаг 1 и точность 0."
+                "Серийный учёт требует базовую единицу PCS и шаг 1."
             )
         for packaging in self.packagings:
             if not isinstance(packaging, ItemPackaging):

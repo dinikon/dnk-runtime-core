@@ -8,7 +8,7 @@ from uuid import uuid4
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
 from src.modules.inventory.domain.error import (
     InvalidUomCodeError,
-    QuantityPrecisionError,
+    QuantityStepError,
     UnknownUomError,
 )
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
@@ -116,7 +116,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             identifier=self.identifier,
             sku=SkuVO("SKU-001"),
             base_uom=self.pcs,
-            quantity_rules=QuantityRulesVO(Decimal(1), 0),
+            quantity_rules=QuantityRulesVO(Decimal(1)),
             tracking_mode=TrackingMode.LOT,
             expiration_mode=ExpirationMode.REQUIRED,
             barcodes=(self.barcode,),
@@ -145,7 +145,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             identifier=self.identifier,
             sku=SkuVO("MANUAL"),
             base_uom=self.pcs,
-            quantity_rules=QuantityRulesVO(Decimal(1), 0),
+            quantity_rules=QuantityRulesVO(Decimal(1)),
         )
         self.assertEqual(item.sku, SkuVO("MANUAL"))
         self.assertIs(item.tracking_mode, TrackingMode.NONE)
@@ -209,12 +209,11 @@ class InventoryItemDomainTests(unittest.TestCase):
     def test_factories_enforce_tracking_unit_rules_and_expiration_matrix(self) -> None:
         """Проверяет все системные единицы и режимы с допустимыми и конфликтными настройками."""
         configurations = (
-            (QuantityRulesVO(Decimal("1"), 0), True),
-            (QuantityRulesVO(Decimal("1.000"), 0), True),
-            (QuantityRulesVO(Decimal("0.5"), 1), False),
-            (QuantityRulesVO(Decimal("0.001"), 3), False),
-            (QuantityRulesVO(Decimal("2"), 0), False),
-            (QuantityRulesVO(Decimal("1"), 2), False),
+            (QuantityRulesVO(Decimal("1")), True),
+            (QuantityRulesVO(Decimal("1.000")), True),
+            (QuantityRulesVO(Decimal("0.5")), False),
+            (QuantityRulesVO(Decimal("0.001")), False),
+            (QuantityRulesVO(Decimal("2")), False),
         )
         for factory in (self.make_item, self.restore_item):
             for tracking in TrackingMode:
@@ -282,7 +281,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             for value in ("0.5", "1.001"):
                 with (
                     self.subTest(tracking=tracking, value=value),
-                    self.assertRaises(QuantityPrecisionError),
+                    self.assertRaises(QuantityStepError),
                 ):
                     item.to_base_quantity(
                         quantity=QuantityVO(Decimal(value)), uom=self.pcs
@@ -296,7 +295,7 @@ class InventoryItemDomainTests(unittest.TestCase):
                 {"sku": "MANUAL"},
                 {"base_uom": None},
                 {"quantity_rules": None},
-                {"quantity_rules": {"step": Decimal(1), "precision": 0}},
+                {"quantity_rules": {"step": Decimal(1)}},
                 {"identifier": self.barcode.id},
                 {"tracking_mode": "LOT"},
                 {"expiration_mode": "OPTIONAL"},

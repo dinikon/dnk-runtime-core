@@ -3,7 +3,6 @@ from decimal import Decimal
 from src.modules.inventory.domain.error import (
     InvalidQuantityError,
     InvalidQuantityRulesError,
-    QuantityPrecisionError,
     QuantityStepError,
 )
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
@@ -15,7 +14,7 @@ class QuantityValidationPolicy:
 
     @staticmethod
     def validate(*, quantity: QuantityVO, rules: QuantityRulesVO) -> None:
-        """Принимает ноль и точные кратные шага в пределах разрешённой точности."""
+        """Принимает ноль и точные кратные шага без ограничения формата записи Decimal."""
         if not isinstance(quantity, QuantityVO):
             raise InvalidQuantityError(
                 "Ожидалось типизированное количество QuantityVO."
@@ -25,10 +24,6 @@ class QuantityValidationPolicy:
         if quantity.value.is_zero():
             return
         coefficient, exponent = QuantityValidationPolicy._decimal_parts(quantity.value)
-        if max(0, -exponent) > rules.precision:
-            raise QuantityPrecisionError(
-                "Количество превышает разрешённую точность в базовой единице."
-            )
         step_coefficient, step_exponent = QuantityValidationPolicy._decimal_parts(
             rules.step
         )
