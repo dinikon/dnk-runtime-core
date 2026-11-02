@@ -29,6 +29,10 @@ class InvalidQuantityError(InventoryError):
     """Сообщает о некорректном неотрицательном количестве."""
 
 
+class InvalidStockDeltaError(InventoryError):
+    """Сообщает о некорректном знаковом изменении количества."""
+
+
 class UomConversionError(InventoryError):
     """Сообщает, что количество нельзя точно выразить в выбранной единице."""
 

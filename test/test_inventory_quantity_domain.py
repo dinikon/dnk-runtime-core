@@ -9,6 +9,7 @@ from uuid import uuid4
 from src.modules.inventory.domain.error import (
     InvalidQuantityError,
     InvalidQuantityRulesError,
+    InvalidStockDeltaError,
     QuantityStepError,
 )
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
@@ -36,7 +37,72 @@ from src.modules.inventory.domain.value_object.packaging_code import PackagingCo
 from src.modules.inventory.domain.value_object.packaging_name import PackagingNameVO
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
+from src.modules.inventory.domain.value_object.stock_delta import StockDeltaVO
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+
+
+class StockDeltaTests(unittest.TestCase):
+    """Проверяет собственные значения знакового изменения без правил движения запасов."""
+
+    def test_finite_values_preserve_sign_scale_and_magnitude(self) -> None:
+        """Разрешает любой знак и дробность, включая положительный и отрицательный ноль."""
+        for value in (
+            Decimal("-5"),
+            Decimal("5"),
+            Decimal("0"),
+            Decimal("-0.000"),
+            Decimal("+0.000"),
+            Decimal("-0.00100"),
+            Decimal("0.00100"),
+            Decimal((0, (1,), MAX_EMAX)),
+            Decimal((1, (1,), -MAX_EMAX)),
+        ):
+            with self.subTest(value=value):
+                delta = StockDeltaVO(value)
+                self.assertIs(delta.value, value)
+                self.assertEqual(delta.value.as_tuple(), value.as_tuple())
+
+    def test_untyped_and_nonfinite_values_are_domain_errors(self) -> None:
+        """Отклоняет неявные преобразования, bool, NaN и обе бесконечности."""
+        for value in (
+            None,
+            0,
+            -5,
+            5.0,
+            True,
+            False,
+            "-5",
+            Decimal("NaN"),
+            Decimal("-NaN"),
+            Decimal("sNaN"),
+            Decimal("Infinity"),
+            Decimal("-Infinity"),
+        ):
+            with self.subTest(value=value), self.assertRaises(InvalidStockDeltaError):
+                StockDeltaVO(value)
+
+    def test_external_context_does_not_round_or_limit_delta(self) -> None:
+        """Малая точность, границы порядка и строгие traps не меняют исходный Decimal."""
+        with localcontext() as context:
+            context.prec = 2
+            context.Emax = 2
+            context.Emin = -2
+            context.rounding = ROUND_DOWN
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            value = Decimal("-12345678901234567890.00000000100")
+            delta = StockDeltaVO(value)
+            self.assertEqual(delta.value.as_tuple(), value.as_tuple())
+            self.assertFalse(any(context.flags.values()))
+
+    def test_delta_is_an_immutable_value_with_numeric_equality(self) -> None:
+        """Эквивалентные Decimal равны и хешируются одинаково; изменение на месте запрещено."""
+        delta = StockDeltaVO(Decimal("-5.00"))
+        self.assertEqual(delta, StockDeltaVO(Decimal("-5")))
+        self.assertEqual(len({delta, StockDeltaVO(Decimal("-5"))}), 1)
+        self.assertEqual(StockDeltaVO(Decimal("-0")), StockDeltaVO(Decimal("0")))
+        with self.assertRaises(FrozenInstanceError):
+            delta.value = Decimal(5)
 
 
 class QuantityRulesTests(unittest.TestCase):
