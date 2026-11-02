@@ -5,26 +5,24 @@ from dataclasses import FrozenInstanceError, fields, replace
 from decimal import Decimal
 from uuid import uuid4
 
-from src.modules.inventory.domain.error import InvalidPackagingValueError
+from src.modules.inventory.domain.error import (
+    InvalidPackagingValueError,
+    UnknownUomError,
+    IncompatibleUomError,
+)
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
 from src.modules.inventory.domain.inventory_item.entity.item_packaging import (
     ItemPackaging,
-)
-from src.modules.inventory.domain.inventory_item.entity.item_uom_conversion import (
-    ItemUomConversion,
 )
 from src.modules.inventory.domain.inventory_item.error import (
     InvalidInventoryItemValueError,
     InvalidPackagingQuantityError,
     InventoryItemComponentNotFoundError,
     InventoryItemConflictError,
-    UnknownUomError,
 )
 from src.modules.inventory.domain.inventory_item.value_object.barcode import BarcodeVO
-from src.modules.inventory.domain.inventory_item.value_object.conversion_factor import (
-    ConversionFactorVO,
-)
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
     InventoryItemIdVO,
 )
@@ -33,9 +31,6 @@ from src.modules.inventory.domain.inventory_item.value_object.item_barcode_id im
 )
 from src.modules.inventory.domain.inventory_item.value_object.item_packaging_id import (
     ItemPackagingIdVO,
-)
-from src.modules.inventory.domain.inventory_item.value_object.item_uom_conversion_id import (
-    ItemUomConversionIdVO,
 )
 from src.modules.inventory.domain.inventory_item.value_object.packaging_quantity import (
     PackagingQuantityVO,
@@ -173,7 +168,6 @@ class InventoryPackagingDomainTests(unittest.TestCase):
             expiration_mode=item.expiration_mode,
             packagings=item.packagings,
             barcodes=item.barcodes,
-            uom_conversions=item.uom_conversions,
         )
         return InventoryItem.restore(**(values | changes))
 
@@ -264,38 +258,42 @@ class InventoryPackagingDomainTests(unittest.TestCase):
                 )
                 self.assertEqual(item.packagings[0].content_uom, uom)
 
-    def test_declared_additional_unit_and_conversion_dependencies(self) -> None:
-        """Допускает 500 мл для литрового товара и защищает используемую конвертацию."""
-        ml = UomCodeVO("ML")
+    def test_standard_content_unit_is_available_without_item_conversions(self) -> None:
+        """500 мл разрешены для литрового товара без настройки множителя пользователем."""
         item = self.create_item(base_uom=UomCodeVO("L"))
-        conversion = ItemUomConversion.create(
-            identifier=ItemUomConversionIdVO(uuid4()),
-            uom=ml,
-            factor=ConversionFactorVO(Decimal("0.001")),
-        )
-        item = item.add_uom_conversion(conversion)
         packaging = self.packaging(
-            content_quantity=PackagingQuantityVO(Decimal(500)), content_uom=ml
+            content_quantity=PackagingQuantityVO(Decimal(500)),
+            content_uom=UomCodeVO("ML"),
         )
         item = item.add_packaging(packaging, packaging_type=self.kind.snapshot())
-        self.assertEqual(item.packagings[0].content_quantity.value, Decimal(500))
-        self.assertEqual(item.packagings[0].content_uom, ml)
         self.assertEqual(self.restore_item(item), item)
-        with self.assertRaises(InventoryItemConflictError):
-            item.remove_uom_conversion(conversion.id)
-        with self.assertRaises(UnknownUomError):
-            item.change_uom_conversion(
-                identifier=conversion.id, uom=UomCodeVO("G"), factor=conversion.factor
-            )
-        self.assertEqual(
-            item.remove_packaging(packaging.id)
-            .remove_uom_conversion(conversion.id)
-            .uom_conversions,
-            (),
+        quantity = item.to_base_quantity(
+            quantity=QuantityVO(packaging.content_quantity.value),
+            uom=packaging.content_uom,
         )
+        self.assertEqual(quantity.value, Decimal("0.5"))
+        self.assertEqual(item.remove_packaging(packaging.id).packagings, ())
+
+    def test_incompatible_dimensions_are_rejected_on_add_change_and_restore(
+        self,
+    ) -> None:
+        """Масса упаковки не заменяет объём товара без отдельного правила плотности."""
+        item = self.create_item(base_uom=UomCodeVO("L"))
+        invalid = self.packaging(content_uom=UomCodeVO("KG"))
+        with self.assertRaises(IncompatibleUomError):
+            item.add_packaging(invalid, packaging_type=self.kind.snapshot())
+        with self.assertRaises(IncompatibleUomError):
+            self.restore_item(item, packagings=(invalid,))
+        packaging = self.packaging(content_uom=UomCodeVO("ML"))
+        item = item.add_packaging(packaging, packaging_type=self.kind.snapshot())
+        with self.assertRaises(IncompatibleUomError):
+            self.change_packaging(
+                item, identifier=packaging.id, content_uom=UomCodeVO("KG")
+            )
+        self.assertEqual(item.packagings, (packaging,))
 
     def test_unknown_content_unit_rejected_on_add_change_and_restore(self) -> None:
-        """Все пути записи сохраняют объявленность единицы содержимого."""
+        """Все пути записи отклоняют единицу, отсутствующую в системном справочнике."""
         unknown = UomCodeVO("UNKNOWN")
         invalid = self.packaging(content_uom=unknown)
         with self.assertRaises(UnknownUomError):

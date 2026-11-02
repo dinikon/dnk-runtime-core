@@ -1,10 +1,8 @@
 from dataclasses import dataclass, replace
 from typing import Self
 
+from src.modules.inventory.domain.error import IncompatibleUomError
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
-from src.modules.inventory.domain.inventory_item.entity.item_uom_conversion import (
-    ItemUomConversion,
-)
 from src.modules.inventory.domain.inventory_item.entity.item_packaging import (
     ItemPackaging,
 )
@@ -18,6 +16,10 @@ from src.modules.inventory.domain.packaging_type.snapshot import PackagingTypeSn
 from src.modules.inventory.domain.packaging_type.value_object.identifier import (
     PackagingTypeIdVO,
 )
+from src.modules.inventory.domain.policy.uom_conversion import UomConversionPolicy
+from src.modules.inventory.domain.uom_catalog import get_compatible_uoms, get_uom
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.uom_definition import UomDefinitionVO
 from src.modules.inventory.domain.value_object.packaging_code import PackagingCodeVO
 from src.modules.inventory.domain.value_object.packaging_name import PackagingNameVO
 from src.modules.inventory.domain.inventory_item.error import (
@@ -25,12 +27,8 @@ from src.modules.inventory.domain.inventory_item.error import (
     InvalidTrackingConfigurationError,
     InventoryItemComponentNotFoundError,
     InventoryItemConflictError,
-    UnknownUomError,
 )
 from src.modules.inventory.domain.inventory_item.value_object.barcode import BarcodeVO
-from src.modules.inventory.domain.inventory_item.value_object.conversion_factor import (
-    ConversionFactorVO,
-)
 from src.modules.inventory.domain.inventory_item.value_object.expiration_mode import (
     ExpirationMode,
 )
@@ -39,9 +37,6 @@ from src.modules.inventory.domain.inventory_item.value_object.identifier import 
 )
 from src.modules.inventory.domain.inventory_item.value_object.item_barcode_id import (
     ItemBarcodeIdVO,
-)
-from src.modules.inventory.domain.inventory_item.value_object.item_uom_conversion_id import (
-    ItemUomConversionIdVO,
 )
 from src.modules.inventory.domain.inventory_item.value_object.sku import SkuVO
 from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import (
@@ -61,7 +56,6 @@ class InventoryItem:
     expiration_mode: ExpirationMode
     packagings: tuple[ItemPackaging, ...]
     barcodes: tuple[ItemBarcode, ...]
-    uom_conversions: tuple[ItemUomConversion, ...]
 
     @classmethod
     def create(
@@ -73,7 +67,6 @@ class InventoryItem:
         tracking_mode: TrackingMode = TrackingMode.NONE,
         expiration_mode: ExpirationMode = ExpirationMode.NONE,
         barcodes: tuple[ItemBarcode, ...] = (),
-        uom_conversions: tuple[ItemUomConversion, ...] = (),
     ) -> Self:
         """Создаёт складской вариант с необязательными упаковками и штрихкодами."""
         return cls.restore(
@@ -84,7 +77,6 @@ class InventoryItem:
             tracking_mode=tracking_mode,
             expiration_mode=expiration_mode,
             barcodes=barcodes,
-            uom_conversions=uom_conversions,
         )
 
     @classmethod
@@ -98,7 +90,6 @@ class InventoryItem:
         expiration_mode: ExpirationMode,
         packagings: tuple[ItemPackaging, ...],
         barcodes: tuple[ItemBarcode, ...],
-        uom_conversions: tuple[ItemUomConversion, ...],
     ) -> Self:
         """Восстанавливает полный состав и проверяет все инварианты агрегата."""
         item = cls(
@@ -109,7 +100,6 @@ class InventoryItem:
             tracking_mode=tracking_mode,
             expiration_mode=expiration_mode,
             barcodes=barcodes,
-            uom_conversions=uom_conversions,
         )
         item._validate()
         return item
@@ -144,40 +134,15 @@ class InventoryItem:
             barcodes=tuple(item for item in self.barcodes if item.id != identifier)
         )
 
-    def add_uom_conversion(self, conversion: ItemUomConversion) -> Self:
-        """Добавляет прямую конвертацию дополнительной единицы в базовую."""
-        return self._with_changes(uom_conversions=(*self.uom_conversions, conversion))
+    @property
+    def available_uoms(self) -> tuple[UomDefinitionVO, ...]:
+        """Возвращает все единицы размерности товара без индивидуальных коэффициентов."""
+        return get_compatible_uoms(self.base_uom)
 
-    def change_uom_conversion(
-        self,
-        *,
-        identifier: ItemUomConversionIdVO,
-        uom: UomCodeVO,
-        factor: ConversionFactorVO,
-    ) -> Self:
-        """Заменяет собственную конвертацию с проверкой уникальности её единицы."""
-        self._find_uom_conversion(identifier)
-        changed = ItemUomConversion.create(
-            identifier=identifier, uom=uom, factor=factor
-        )
-        return self._with_changes(
-            uom_conversions=tuple(
-                changed if item.id == identifier else item
-                for item in self.uom_conversions
-            )
-        )
-
-    def remove_uom_conversion(self, identifier: ItemUomConversionIdVO) -> Self:
-        """Удаляет конвертацию, если её единицу не использует содержимое упаковок."""
-        conversion = self._find_uom_conversion(identifier)
-        if any(item.content_uom == conversion.uom for item in self.packagings):
-            raise InventoryItemConflictError(
-                "Единица конвертации используется содержимым упаковки."
-            )
-        return self._with_changes(
-            uom_conversions=tuple(
-                item for item in self.uom_conversions if item.id != identifier
-            )
+    def to_base_quantity(self, *, quantity: QuantityVO, uom: UomCodeVO) -> QuantityVO:
+        """Точно приводит количество к базовой единице по системному справочнику."""
+        return UomConversionPolicy.convert(
+            quantity=quantity, from_uom=uom, to_uom=self.base_uom
         )
 
     def get_packaging(self, identifier: ItemPackagingIdVO) -> ItemPackaging:
@@ -260,7 +225,6 @@ class InventoryItem:
             or not isinstance(self.expiration_mode, ExpirationMode)
             or not isinstance(self.packagings, tuple)
             or not isinstance(self.barcodes, tuple)
-            or not isinstance(self.uom_conversions, tuple)
         ):
             raise InvalidInventoryItemValueError(
                 "Нужны типизированные значения и неизменяемые коллекции позиции."
@@ -286,33 +250,18 @@ class InventoryItem:
             if not isinstance(barcode, ItemBarcode):
                 raise InvalidInventoryItemValueError("Ожидалась Entity ItemBarcode.")
             barcode.ensure_valid()
-        for conversion in self.uom_conversions:
-            if not isinstance(conversion, ItemUomConversion):
-                raise InvalidInventoryItemValueError(
-                    "Ожидалась Entity ItemUomConversion."
+        if len({item.id for item in self.barcodes}) != len(self.barcodes) or len(
+            {item.barcode for item in self.barcodes}
+        ) != len(self.barcodes):
+            raise InventoryItemConflictError(
+                "ID и значения штрихкодов должны быть уникальны."
+            )
+        base_dimension = get_uom(self.base_uom).dimension
+        for packaging in self.packagings:
+            if get_uom(packaging.content_uom).dimension is not base_dimension:
+                raise IncompatibleUomError(
+                    "Размерность содержимого упаковки должна совпадать с размерностью товара."
                 )
-            conversion.ensure_valid()
-        if (
-            len({item.id for item in self.barcodes}) != len(self.barcodes)
-            or len({item.barcode for item in self.barcodes}) != len(self.barcodes)
-            or len({item.id for item in self.uom_conversions})
-            != len(self.uom_conversions)
-            or len({item.uom for item in self.uom_conversions})
-            != len(self.uom_conversions)
-        ):
-            raise InventoryItemConflictError(
-                "Штрихкоды, единицы конвертации и ID внутри коллекций должны быть уникальны."
-            )
-        units = {item.uom for item in self.uom_conversions}
-        if self.base_uom in units:
-            raise InventoryItemConflictError(
-                "Конвертация базовой единицы в саму себя запрещена."
-            )
-        units.add(self.base_uom)
-        if any(item.content_uom not in units for item in self.packagings):
-            raise UnknownUomError(
-                "Единица содержимого должна быть базовой или иметь объявленную конвертацию."
-            )
 
     def _with_changes(self, **changes: object) -> Self:
         """Проверяет новый кандидат целиком, сохраняя исходный агрегат при отказе."""
@@ -326,12 +275,3 @@ class InventoryItem:
             if barcode.id == identifier:
                 return barcode
         raise InventoryItemComponentNotFoundError("Штрихкод отсутствует в позиции.")
-
-    def _find_uom_conversion(
-        self, identifier: ItemUomConversionIdVO
-    ) -> ItemUomConversion:
-        """Находит конвертацию только среди собственных дочерних Entity."""
-        for conversion in self.uom_conversions:
-            if conversion.id == identifier:
-                return conversion
-        raise InventoryItemComponentNotFoundError("Конвертация отсутствует в позиции.")

@@ -40,7 +40,7 @@ class ItemPackaging:
         content_quantity: PackagingQuantityVO,
         content_uom: UomCodeVO,
     ) -> Self:
-        """Создаёт вариант; объявленную единицу содержимого проверяет InventoryItem."""
+        """Создаёт вариант; размерность содержимого проверяет InventoryItem."""
         return cls.restore(
             identifier=identifier,
             packaging_type_id=packaging_type_id,

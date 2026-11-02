@@ -17,10 +17,6 @@ class InvalidBarcodeError(InventoryItemError):
     """Сообщает о недопустимом значении штрихкода."""
 
 
-class InvalidConversionFactorError(InventoryItemError):
-    """Сообщает о некорректном коэффициенте пересчёта в базовую единицу."""
-
-
 class InvalidTrackingConfigurationError(InventoryItemError):
     """Сообщает о несовместимых настройках прослеживаемости и срока годности."""
 
@@ -31,10 +27,6 @@ class InventoryItemConflictError(InventoryItemError):
 
 class InventoryItemComponentNotFoundError(InventoryItemError):
     """Сообщает об отсутствии дочернего объекта в данной позиции."""
-
-
-class UnknownUomError(InventoryItemError):
-    """Сообщает о необъявленной единице содержимого упаковки товара."""
 
 
 class InvalidPackagingQuantityError(InventoryItemError):
