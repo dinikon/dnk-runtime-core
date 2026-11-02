@@ -2,6 +2,7 @@
 
 import unittest
 from dataclasses import FrozenInstanceError, fields, replace
+from decimal import Decimal
 from uuid import uuid4
 
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
@@ -30,6 +31,7 @@ from src.modules.inventory.domain.inventory_item.value_object.tracking_mode impo
     TrackingMode,
 )
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
 
 
 class InventoryValueObjectTests(unittest.TestCase):
@@ -97,6 +99,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             identifier=self.identifier,
             sku=SkuVO("SKU-001"),
             base_uom=self.pcs,
+            quantity_rules=QuantityRulesVO(Decimal(1), 0),
             tracking_mode=TrackingMode.LOT,
             expiration_mode=ExpirationMode.REQUIRED,
             barcodes=(self.barcode,),
@@ -110,6 +113,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             identifier=self.item.id,
             sku=self.item.sku,
             base_uom=self.item.base_uom,
+            quantity_rules=self.item.quantity_rules,
             packagings=self.item.packagings,
             tracking_mode=self.item.tracking_mode,
             expiration_mode=self.item.expiration_mode,
@@ -124,6 +128,7 @@ class InventoryItemDomainTests(unittest.TestCase):
             identifier=self.identifier,
             sku=SkuVO("MANUAL"),
             base_uom=self.pcs,
+            quantity_rules=QuantityRulesVO(Decimal(1), 0),
         )
         self.assertEqual(item.sku, SkuVO("MANUAL"))
         self.assertIs(item.tracking_mode, TrackingMode.NONE)
@@ -191,6 +196,8 @@ class InventoryItemDomainTests(unittest.TestCase):
                 {"sku": None},
                 {"sku": "MANUAL"},
                 {"base_uom": None},
+                {"quantity_rules": None},
+                {"quantity_rules": {"step": Decimal(1), "precision": 0}},
                 {"identifier": self.barcode.id},
                 {"tracking_mode": "LOT"},
                 {"expiration_mode": "OPTIONAL"},

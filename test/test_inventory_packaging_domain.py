@@ -11,6 +11,7 @@ from src.modules.inventory.domain.error import (
     IncompatibleUomError,
 )
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
 from src.modules.inventory.domain.inventory_item.entity.item_packaging import (
@@ -155,6 +156,11 @@ class InventoryPackagingDomainTests(unittest.TestCase):
             identifier=InventoryItemIdVO(uuid4()),
             sku=SkuVO("VITAMINS"),
             base_uom=self.pcs,
+            quantity_rules=(
+                QuantityRulesVO(Decimal("0.001"), 3)
+                if changes.get("base_uom", self.pcs) != self.pcs
+                else QuantityRulesVO(Decimal(1), 0)
+            ),
         )
         return InventoryItem.create(**(values | changes))
 
@@ -164,6 +170,7 @@ class InventoryPackagingDomainTests(unittest.TestCase):
             identifier=item.id,
             sku=item.sku,
             base_uom=item.base_uom,
+            quantity_rules=item.quantity_rules,
             tracking_mode=item.tracking_mode,
             expiration_mode=item.expiration_mode,
             packagings=item.packagings,

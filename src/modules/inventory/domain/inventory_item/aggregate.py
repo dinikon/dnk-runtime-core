@@ -1,7 +1,6 @@
 from dataclasses import dataclass, replace
 from typing import Self
 
-from src.modules.inventory.domain.error import IncompatibleUomError
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
 from src.modules.inventory.domain.inventory_item.entity.item_packaging import (
     ItemPackaging,
@@ -17,8 +16,12 @@ from src.modules.inventory.domain.packaging_type.value_object.identifier import 
     PackagingTypeIdVO,
 )
 from src.modules.inventory.domain.policy.uom_conversion import UomConversionPolicy
+from src.modules.inventory.domain.policy.quantity_validation import (
+    QuantityValidationPolicy,
+)
 from src.modules.inventory.domain.uom_catalog import get_compatible_uoms, get_uom
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
 from src.modules.inventory.domain.value_object.uom_definition import UomDefinitionVO
 from src.modules.inventory.domain.value_object.packaging_code import PackagingCodeVO
 from src.modules.inventory.domain.value_object.packaging_name import PackagingNameVO
@@ -52,6 +55,7 @@ class InventoryItem:
     id: InventoryItemIdVO
     sku: SkuVO
     base_uom: UomCodeVO
+    quantity_rules: QuantityRulesVO
     tracking_mode: TrackingMode
     expiration_mode: ExpirationMode
     packagings: tuple[ItemPackaging, ...]
@@ -64,6 +68,7 @@ class InventoryItem:
         identifier: InventoryItemIdVO,
         sku: SkuVO,
         base_uom: UomCodeVO,
+        quantity_rules: QuantityRulesVO,
         tracking_mode: TrackingMode = TrackingMode.NONE,
         expiration_mode: ExpirationMode = ExpirationMode.NONE,
         barcodes: tuple[ItemBarcode, ...] = (),
@@ -74,6 +79,7 @@ class InventoryItem:
             packagings=(),
             sku=sku,
             base_uom=base_uom,
+            quantity_rules=quantity_rules,
             tracking_mode=tracking_mode,
             expiration_mode=expiration_mode,
             barcodes=barcodes,
@@ -86,6 +92,7 @@ class InventoryItem:
         identifier: InventoryItemIdVO,
         sku: SkuVO,
         base_uom: UomCodeVO,
+        quantity_rules: QuantityRulesVO,
         tracking_mode: TrackingMode,
         expiration_mode: ExpirationMode,
         packagings: tuple[ItemPackaging, ...],
@@ -97,6 +104,7 @@ class InventoryItem:
             packagings=packagings,
             sku=sku,
             base_uom=base_uom,
+            quantity_rules=quantity_rules,
             tracking_mode=tracking_mode,
             expiration_mode=expiration_mode,
             barcodes=barcodes,
@@ -140,10 +148,12 @@ class InventoryItem:
         return get_compatible_uoms(self.base_uom)
 
     def to_base_quantity(self, *, quantity: QuantityVO, uom: UomCodeVO) -> QuantityVO:
-        """Точно приводит количество к базовой единице по системному справочнику."""
-        return UomConversionPolicy.convert(
+        """Точно пересчитывает в базовую единицу и проверяет шаг и точность товара."""
+        converted = UomConversionPolicy.convert(
             quantity=quantity, from_uom=uom, to_uom=self.base_uom
         )
+        QuantityValidationPolicy.validate(quantity=converted, rules=self.quantity_rules)
+        return converted
 
     def get_packaging(self, identifier: ItemPackagingIdVO) -> ItemPackaging:
         """Находит только собственный вариант упаковки товара."""
@@ -221,6 +231,7 @@ class InventoryItem:
             not isinstance(self.id, InventoryItemIdVO)
             or not isinstance(self.sku, SkuVO)
             or not isinstance(self.base_uom, UomCodeVO)
+            or not isinstance(self.quantity_rules, QuantityRulesVO)
             or not isinstance(self.tracking_mode, TrackingMode)
             or not isinstance(self.expiration_mode, ExpirationMode)
             or not isinstance(self.packagings, tuple)
@@ -256,12 +267,12 @@ class InventoryItem:
             raise InventoryItemConflictError(
                 "ID и значения штрихкодов должны быть уникальны."
             )
-        base_dimension = get_uom(self.base_uom).dimension
+        get_uom(self.base_uom)
         for packaging in self.packagings:
-            if get_uom(packaging.content_uom).dimension is not base_dimension:
-                raise IncompatibleUomError(
-                    "Размерность содержимого упаковки должна совпадать с размерностью товара."
-                )
+            self.to_base_quantity(
+                quantity=QuantityVO(packaging.content_quantity.value),
+                uom=packaging.content_uom,
+            )
 
     def _with_changes(self, **changes: object) -> Self:
         """Проверяет новый кандидат целиком, сохраняя исходный агрегат при отказе."""

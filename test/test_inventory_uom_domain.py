@@ -25,6 +25,7 @@ from src.modules.inventory.domain.uom_catalog import (
     list_uoms,
 )
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 from src.modules.inventory.domain.value_object.uom_definition import UomDefinitionVO
 from src.modules.inventory.domain.value_object.uom_dimension import UomDimension
@@ -230,6 +231,7 @@ class InventoryItemUomTests(unittest.TestCase):
             identifier=InventoryItemIdVO(uuid4()),
             sku=SkuVO("ITEM"),
             base_uom=UomCodeVO(base),
+            quantity_rules=QuantityRulesVO(Decimal("0.001"), 3),
         )
 
     def test_item_derives_units_and_converts_to_its_selected_base(self) -> None:
@@ -268,6 +270,7 @@ class InventoryItemUomTests(unittest.TestCase):
                         identifier=InventoryItemIdVO(uuid4()),
                         sku=SkuVO("ITEM"),
                         base_uom=UomCodeVO(code),
+                        quantity_rules=valid.quantity_rules,
                         tracking_mode=valid.tracking_mode,
                         expiration_mode=valid.expiration_mode,
                         packagings=(),

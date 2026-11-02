@@ -31,3 +31,15 @@ class InvalidQuantityError(InventoryError):
 
 class UomConversionError(InventoryError):
     """Сообщает, что количество нельзя точно выразить в выбранной единице."""
+
+
+class InvalidQuantityRulesError(InventoryError):
+    """Сообщает о некорректном шаге или точности количества."""
+
+
+class QuantityPrecisionError(InventoryError):
+    """Запрещает количество с большей точностью, чем разрешено товаром."""
+
+
+class QuantityStepError(InventoryError):
+    """Запрещает количество, не кратное шагу товара от нуля."""
