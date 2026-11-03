@@ -1,12 +1,11 @@
-# Inventory: Domain-модель товара, складов и физического журнала
+# Inventory: Domain-модель товара, складов, плановых документов и физического журнала
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
-`PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`
-и `StockPosting`
+`PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`,
+`StockPosting`, `StockDocument` и `StockExecution`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
-`domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`
-и `domain/stock_posting/`. В `domain/stock_execution/` пока существует только
-StockExecutionIdVO для типизированной ссылки на будущее исполнение, без самого агрегата.
+`domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`,
+`domain/stock_posting/`, `domain/stock_document/` и `domain/stock_execution/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -749,16 +748,17 @@ changed = position.apply_delta(StockDeltaVO(Decimal("1.25")), **context)
 ```
 
 Это Domain-переход в памяти. Будущий Application-сценарий проведения должен сохранять
-StockPosting и новое состояние позиции в одной транзакции. SQL, API и исполнение
-документов пока отсутствуют; Domain-модель журнала описана ниже.
+StockPosting и новое состояние позиции в одной транзакции. SQL, API и атомарное
+проведение пока отсутствуют; Domain-модель журнала описана ниже.
 SupplierAvailability остаётся внешним наблюдением и не создаёт физические позиции.
 
 ## Неизменяемый журнал физических движений
 
 StockPosting — самостоятельный Aggregate Root завершённого проведения. Он владеет
 неизменяемыми дочерними StockLedgerEntry; собственных репозиториев у записей нет.
-Черновик, согласование и редактирование строк будут ответственностью StockDocument
-и StockExecution. У StockPosting нет методов редактирования, удаления и установки статуса.
+Черновик, подтверждение плана и редактирование плановых строк принадлежат StockDocument;
+фактическое исполнение принадлежит StockExecution. У StockPosting нет методов
+редактирования, удаления и установки статуса.
 
 | Поле StockPosting | Тип |
 | --- | --- |
@@ -770,8 +770,8 @@ StockPosting — самостоятельный Aggregate Root завершён�
 | reversal_of_id | StockPostingIdVO или None |
 
 ID и время передаются явно; Domain не генерирует их и не вызывает часы.
-StockExecutionIdVO — только контракт идентичности. Существование исполнения,
-принадлежность tenant и запрет повторного проведения проверит будущий сценарий.
+StockExecutionIdVO ссылается на отдельный корень исполнения. Существование записи,
+принадлежность tenant и запрет повторного проведения проверит будущий сценарий хранения.
 
 | Поле StockLedgerEntry | Тип |
 | --- | --- |
@@ -802,7 +802,7 @@ QuantityConversionSnapshotVO содержит положительное исх�
   несовпадение величин или нового коэффициента — QuantityConversionMismatchError.
 
 Пользовательская упаковка пока не является исходной единицей этого VO.
-Её содержимое и идентичность потребуют отдельного снимка в будущем StockExecution.
+Её содержимое и идентичность потребуют отдельного снимка в расширении StockExecution.
 
 ### Поддержанные операции и проверка контекста
 
@@ -918,6 +918,319 @@ StockPosition.apply_delta(), в том числе шаг, уход в минус
 Domain-фабрика не выполняет эти изменения, не открывает транзакций и не заменяет
 идемпотентность, защиту версий и Outbox. Отдельный write API прямого остатка не добавлен.
 
+## Плановый складской документ
+
+StockDocument — самостоятельный Aggregate Root намерения выполнить операцию.
+Он владеет неизменяемыми StockDocumentLine, связан с Warehouse и владельцем по ID
+и не содержит физических позиций, партий, серий или записей журнала.
+
+| Поле StockDocument | Тип и назначение |
+| --- | --- |
+| id | StockDocumentIdVO |
+| operation_type | Существующий StockOperationType: RECEIPT, ISSUE, INTERNAL_MOVE |
+| warehouse_id | WarehouseIdVO одного склада документа |
+| owner_id | Явный StockOwnerIdVO |
+| source | DocumentSourceVO или None для ручного документа |
+| status | StockDocumentStatus |
+| lines | tuple[StockDocumentLine, ...] |
+| created_at, updated_at | Явно переданное aware datetime, нормализованное в UTC |
+| version | Целая неотрицательная версия без bool |
+
+DocumentSourceVO содержит непустые system и reference без управляющих символов.
+Внешние пробелы удаляются, регистр обеих строк сохраняется. Ссылка не загружает
+другой агрегат, не подтверждает его существование и не заменяет идемпотентность.
+Номера документов, интеграции с основаниями и проверка владельца пока не реализованы.
+
+### Плановая строка и снимок товара
+
+StockDocumentLine содержит id: StockDocumentLineIdVO, inventory_item_id,
+исторический sku: SkuVO, base_uom: UomCodeVO, planned_qty: QuantityVO,
+conversion: QuantityConversionSnapshotVO и executed_qty: QuantityVO.
+План строго положительный; накопленное исполнение находится от нуля до плана.
+remaining_qty вычисляется как planned_qty − executed_qty без отдельного поля.
+Плановое количество строго положительное
+для всех видов операций; направление будущих дельт определит тип операции.
+
+StockDocumentLine.create() получает ID строки, InventoryItemDocumentSnapshot,
+исходные quantity и uom. Базовая единица и SKU выводятся из снимка товара,
+planned_qty точно вычисляется из сохранённого пересчёта, а не принимается произвольно.
+StockDocumentLinePolicy проверяет тот же товар и базовую единицу, текущий системный
+коэффициент и кратность результата шагу. SERIAL и LOT_AND_SERIAL требуют PCS/step=1;
+план на 12 экземпляров разрешён без предварительного выбора их серийных ID.
+
+InventoryItem.document_snapshot() проверяет исходный товар и возвращает только
+ID, SKU, base_uom, quantity_rules и tracking_mode. Снимок неизменяем; упаковки,
+штрихкоды и режим годности в него не включаются. Сам документ ещё не принимает товар:
+LOT/SERIAL, обязательные даты и фактические адреса проверяются при создании StockExecution.
+
+StockDocumentLine.restore() сохраняет полный собственный состав и проверяет типы,
+положительность, одну размерность единиц и равенство planned_qty сохранённому
+произведению. Исторический коэффициент и SKU не заменяются актуальными значениями.
+При добавлении, изменении количества и подтверждении план повторно сверяется
+с текущими снимками. Несовместимая базовая единица даёт StockDocumentUomMismatchError;
+нарушение шага — QuantityStepError. Черновую строку со старым некратным количеством
+можно исправить по новым правилам либо удалить.
+
+### Жизненный цикл и методы
+
+```text
+DRAFT → CONFIRMED → PARTIALLY_EXECUTED → COMPLETED
+          └──────────────────────────→ COMPLETED
+DRAFT / CONFIRMED (без исполнения) → CANCELLED
+```
+
+- create создаёт пустой DRAFT версии 0 по снимку активного склада с явными
+  владельцем и временем. Реквизиты операции после создания не меняются методами корня.
+- add_line добавляет Entity по снимку её товара. ID строк уникальны; повторяющийся
+  товар с разными ID строк разрешён без скрытой агрегации.
+- change_line меняет исходные quantity/uom с сохранением ID строки, товара,
+  исторического SKU и базовой единицы. Новая строка получает текущий SKU;
+  переименование товара не переписывает уже добавленные строки.
+- remove_line удаляет только существующую строку и может снова сделать черновик пустым.
+  get_line возвращает собственную неизменяемую Entity по типизированному ID.
+- confirm получает снимок того же активного склада и ровно по одному актуальному
+  снимку каждого уникального товара плана. StockDocumentConfirmationPolicy запрещает
+  пустой документ, лишние/отсутствующие/повторные снимки и несовместимые строки.
+- cancel отменяет DRAFT или CONFIRMED без исполненных количеств, сохраняя строки.
+  Текущие снимки товаров/склада для отмены не требуются. PARTIALLY_EXECUTED и COMPLETED
+  простой отменой не закрываются; такой вызов даёт StockDocumentNotDraftError.
+- Подтверждённый, частично исполненный, завершённый или отменённый документ
+  не разрешает редактирование плановых строк и повторное подтверждение.
+- register_execution принимает StockExecutionDocumentSnapshot по текущей версии
+  и увеличивает выполненные количества конкретных плановых строк. Статус становится
+  PARTIALLY_EXECUTED или COMPLETED; полное выполнение первым фактом сразу завершает план.
+
+Каждое фактическое изменение возвращает новый документ с прежним ID/created_at,
+новым updated_at и version +1. Время изменения не раньше предыдущего; равные
+моменты допустимы. Численно равный ввод в той же единице возвращает прежний объект
+без смены версии, времени и формата сохранённых Decimal. Проверки контекста
+и хронологии выполняются и для такого вызова. Смена исходной единицы при прежнем
+базовом количестве является изменением снимка пересчёта и увеличивает версию.
+
+StockDocument.restore() принимает все собственные поля без снимков текущих
+товаров/склада. Проверяются типы, уникальность строк, их собственные значения,
+UTC-хронология, версия и согласованность статуса с прогрессом. DRAFT/CONFIRMED/CANCELLED
+требуют нулевого исполнения; PARTIALLY_EXECUTED — ненулевого неполного; COMPLETED —
+полного исполнения каждой строки. Подтверждённые и исполняемые документы непустые.
+StockDocumentLine.restore() явно принимает executed_qty, без неявного обнуления истории.
+Текущий шаг, активность склада
+и межагрегатная совместимость повторно проверяются перед подтверждением.
+Прямое создание dataclass не обходит проверки публичных методов.
+
+Пример для ранее подготовленных item в KG с шагом 0.05, warehouse и owner_id:
+
+```python
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_document.aggregate import StockDocument
+from src.modules.inventory.domain.stock_document.entity.stock_document_line import StockDocumentLine
+from src.modules.inventory.domain.stock_document.value_object.document_source import DocumentSourceVO
+from src.modules.inventory.domain.stock_document.value_object.identifier import StockDocumentIdVO
+from src.modules.inventory.domain.stock_document.value_object.line_id import StockDocumentLineIdVO
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import StockOperationType
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+
+draft = StockDocument.create(
+    identifier=StockDocumentIdVO(uuid4()),
+    operation_type=StockOperationType.RECEIPT,
+    warehouse=warehouse.snapshot(),
+    owner_id=owner_id,
+    source=DocumentSourceVO("procurement", "PO-001"),
+    created_at=datetime(2026, 11, 3, 9, tzinfo=UTC),
+)
+line = StockDocumentLine.create(
+    identifier=StockDocumentLineIdVO(uuid4()),
+    inventory_item=item.document_snapshot(),
+    quantity=QuantityVO(Decimal("50000")),
+    uom=UomCodeVO("G"),
+)
+planned = draft.add_line(
+    line,
+    inventory_item=item.document_snapshot(),
+    updated_at=datetime(2026, 11, 3, 9, 1, tzinfo=UTC),
+)
+confirmed = planned.confirm(
+    warehouse=warehouse.snapshot(),
+    inventory_items=(item.document_snapshot(),),
+    updated_at=datetime(2026, 11, 3, 9, 2, tzinfo=UTC),
+)
+# draft: DRAFT, 0 строк, version=0.
+# planned: DRAFT, план 50 KG, version=1.
+# confirmed: CONFIRMED, тот же план 50 KG, version=2. Остатки не менялись.
+```
+
+CONFIRMED означает зафиксированный план. Создание StockPosting, применение дельт,
+резервирование и фактический приём/выдача в этот переход не входят.
+StockExecution связывает фактические строки с ID плановых строк и позволяет
+проверять частичное выполнение, например 100 = 40 + 35 + 25, и превышение плана.
+Хранение, конкурентная защита версии, API, Outbox и атомарное проведение остаются
+будущим Application/SQL-срезам.
+
+## Фактическое исполнение документа
+
+StockExecution — отдельный immutable Aggregate Root с полями id: StockExecutionIdVO,
+document_id: StockDocumentIdVO, document_version: int, operation_type,
+warehouse_id, owner_id, executed_at в UTC и непустым tuple StockExecutionLine.
+В первом срезе нет редактируемого черновика, статуса проведения или собственных
+часов. Факт создаётся в памяти после проверок; сам по себе он не означает commit.
+
+StockExecutionLine — дочерняя Entity с id: StockExecutionLineIdVO,
+document_line_id, inventory_item_id, base_uom, положительным quantity,
+QuantityConversionSnapshotVO и одним из маршрутов:
+
+| Маршрут | Физические измерения |
+| --- | --- |
+| ReceiptExecutionRouteVO | destination: StockDimensionsVO |
+| IssueExecutionRouteVO | source: StockDimensionsVO |
+| InternalMoveExecutionRouteVO | source и destination: StockDimensionsVO |
+
+Маршрут строго соответствует операции. Внутреннее перемещение меняет только
+локацию; товар, владелец, партия, серия и состояние сохраняются. Две локации
+различаются и принадлежат складу документа. Одна фактическая quantity выражает
+обе стороны, поэтому перемещение 10 кг увеличивает исполнение плана на 10, а не 20.
+Внешняя сторона прихода/расхода не становится фиктивной физической позицией.
+
+Строки одной плановой строки могут использовать разные адреса и партии.
+ID фактических строк уникальны. Один serial_id не повторяется в разных строках;
+внутри одного маршрута перемещения он используется на обеих сторонах. Для серии
+нужна quantity=1 PCS; план на 12 экземпляров исполняется 12 выбранными сериями.
+Маршрут обязан соответствовать товару строки и владельцу документа.
+
+### Создание и физический контекст
+
+StockExecution.create() принимает документный снимок, время, строки и ровно
+участвующие снимки warehouse, inventory_items, locations, lots и serials.
+Строки и корни других агрегатов не подменяют снимки.
+
+- StockDocument.execution_snapshot() возвращает StockDocumentExecutionSnapshot
+  с ID, операцией, складом, владельцем, статусом, версией, updated_at и лимитами
+  StockDocumentLineExecutionSnapshot: ID строки, товар, единица, план, исполнение.
+- InventoryItem.execution_snapshot() возвращает InventoryItemExecutionSnapshot:
+  ID, base_uom, quantity_rules, tracking_mode и expiration_mode, без SKU/коллекций.
+- StockSerial.execution_snapshot() возвращает StockSerialExecutionSnapshot с ID,
+  товаром, lot_id и собственными dates. SERIAL имеет собственные StockDatesVO;
+  LOT_AND_SERIAL — ссылку на партию без копии дат. Старый snapshot() остаётся минимальным.
+- Снимки склада, локаций и партий используются повторно. Лишние, отсутствующие
+  и повторные снимки отклоняются; один снимок может обслуживать несколько строк.
+
+StockExecutionDocumentPolicy требует CONFIRMED или PARTIALLY_EXECUTED,
+версию плана и совпадение документа/операции/склада/владельца. Количества
+суммируются по document_line_id; товар и единица должны совпадать с этой строкой.
+Выполнение не превышает её remaining_qty. Свободный лимит другой строки того же
+товара не покрывает превышение. executed_at не раньше updated_at снимка плана.
+
+StockExecutionContextPolicy проверяет текущий коэффициент, базовую единицу и шаг,
+активный склад и каждую фактическую локацию через LocationAvailabilityPolicy,
+а измерения — через StockDimensionsPolicy. NONE не допускает LOT/SERIAL;
+LOT требует партию; SERIAL — экземпляр без партии; LOT_AND_SERIAL — экземпляр
+соответствующей партии того же товара.
+
+Для RECEIPT используется StockExpirationPolicy.ensure_ready_for_receipt(): REQUIRED
+требует дату партии или самостоятельного экземпляра. OPTIONAL остаётся заметкой
+и не фильтрует операции по дате. Правила приёмки просрочки, продаж по срокам,
+FEFO и ограничения назначения зон в этот срез не добавлены; наличие даты не означает
+проверку её относительно текущего дня. Исполнение также не доказывает наличие
+достаточного физического остатка: это проверит StockPosition.apply_delta() при проведении.
+Ввод в пользовательских упаковках остаётся отдельным расширением; здесь используются
+системные единицы и сохранённый QuantityConversionSnapshotVO.
+
+StockExecution.restore() принимает весь собственный состав без актуальных снимков.
+Он сохраняет ID, версию основания, исходные количества и коэффициенты; проверяет
+типы, UTC-время, непустоту, уникальность строк/серий, соответствие маршрута операции
+и владельца/товара. Повторные проверки текущих дат, активности, шага и лимита плана
+выполняются при создании, а не при восстановлении исторического факта.
+
+### Регистрация прогресса и версии
+
+StockExecution.snapshot_for_document() возвращает минимальный StockExecutionDocumentSnapshot
+с ID исполнения, ID/версией документа, операцией, складом, владельцем, временем
+и tuple ExecutedDocumentLineQuantityVO. Итоги группируются по ID плановой строки;
+маршруты и исходные пересчёты сохраняются в самом исполнении, не копируются в документ.
+
+StockDocument.register_execution(snapshot, updated_at=...) повторяет проверку
+совместимости и оставшегося плана перед увеличением executed_qty. Версия основания
+обязана совпадать с текущей версией документа. Время регистрации не раньше факта;
+при успехе возвращается новый документ с version +1 и неизменными планом/SKU.
+Повтор исходного снимка отклоняется по устаревшей версии или завершённому состоянию.
+Глобальная дедупликация ID исполнения и конкурентная защита всё ещё требуют SQL/UoW.
+Коллекции всех исполнений и бесконечного списка их ID внутри документа нет.
+
+QuantityArithmeticPolicy точно складывает и вычитает QuantityVO для группировки,
+прогресса и remaining_qty через безопасную арифметику StockQuantityPolicy.
+Внешний Decimal context не влияет на результат; технический предел промежуточной
+арифметики и контролируемый StockQuantityArithmeticError сохраняются.
+
+Пример для подтверждённого document с одной строкой на 100 KG, подготовленных
+item, warehouse и location этого склада, без LOT/SERIAL:
+
+```python
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_execution.aggregate import StockExecution
+from src.modules.inventory.domain.stock_execution.entity.stock_execution_line import StockExecutionLine
+from src.modules.inventory.domain.stock_execution.value_object.identifier import StockExecutionIdVO
+from src.modules.inventory.domain.stock_execution.value_object.line_id import StockExecutionLineIdVO
+from src.modules.inventory.domain.stock_execution.value_object.receipt_route import ReceiptExecutionRouteVO
+from src.modules.inventory.domain.stock_position.value_object.dimensions import StockDimensionsVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.stock_status import StockStatus
+
+destination = StockDimensionsVO(
+    inventory_item_id=item.id,
+    location_id=location.id,
+    owner_id=document.owner_id,
+    lot_id=None,
+    serial_id=None,
+    stock_status=StockStatus.SELLABLE,
+)
+for index, amount in enumerate(("40", "35", "25")):
+    actual = StockExecutionLine.create(
+        identifier=StockExecutionLineIdVO(uuid4()),
+        document_line_id=document.lines[0].id,
+        inventory_item=item.execution_snapshot(),
+        quantity=QuantityVO(Decimal(amount)),
+        uom=item.base_uom,
+        route=ReceiptExecutionRouteVO(destination),
+    )
+    execution = StockExecution.create(
+        identifier=StockExecutionIdVO(uuid4()),
+        document=document.execution_snapshot(),
+        executed_at=datetime(2026, 11, 3, 9, 3 + index * 2, tzinfo=UTC),
+        lines=(actual,),
+        warehouse=warehouse.snapshot(),
+        inventory_items=(item.execution_snapshot(),),
+        locations=(location.snapshot(),),
+    )
+    document = document.register_execution(
+        execution.snapshot_for_document(),
+        updated_at=datetime(2026, 11, 3, 9, 4 + index * 2, tzinfo=UTC),
+    )
+# executed_qty: 40 → 75 → 100; remaining_qty: 60 → 25 → 0.
+# Статусы: PARTIALLY_EXECUTED → PARTIALLY_EXECUTED → COMPLETED.
+# Физические позиции и Ledger этот пример не изменяет.
+```
+
+### Граница проведения
+
+Создание исполнения и регистрация прогресса пока существуют в Domain в памяти.
+Автоматическое построение StockPosting и изменение StockPosition не добавлены.
+Одна запись Ledger допускается на позицию, а несколько фактических строк могут
+использовать одну позицию: потребуется отдельная политика построения/агрегации
+журнала с сохранением исходной детализации в StockExecution. Строки нельзя просто
+скопировать один к одному или скрыто сальдировать.
+
+Будущий Application обязан сохранить исполнение, прогресс документа, проведение
+и новые физические позиции одной транзакцией с проверкой версий и идемпотентности.
+Компенсация StockPosting сама по себе не уменьшает executed_qty. Согласованный
+откат исполнения и прогресса, частичное закрытие остатка плана, SQL, API и Outbox
+остаются следующими срезами. Нельзя независимо записывать прогресс в production
+как подтверждение физического проведения без этой координации.
+
 ## Изменения, восстановление и проверки
 
 Агрегаты и Entity имеют явные фабрики `create/restore`.
@@ -928,7 +1241,7 @@ Domain-фабрика не выполняет эти изменения, не о
 Базовая единица, правила количества и режимы прослеживаемости задаются при создании.
 Их изменение и защита использованных упаковок относятся к будущим контролируемым
 сценариям. Ledger уже сохраняет снимок исходного количества и системного пересчёта;
-снимок пользовательской упаковки появится вместе со строками исполнения.
+снимок пользовательской упаковки появится при расширении ввода строк исполнения.
 У дочерних Entity нет самостоятельных write repositories.
 
 Тесты находятся в `test/test_inventory_domain.py`,
@@ -936,6 +1249,7 @@ Domain-фабрика не выполняет эти изменения, не о
 `test/test_inventory_quantity_domain.py`, `test/test_inventory_stock_lot_domain.py`,
 `test/test_inventory_stock_serial_domain.py`, `test/test_inventory_warehouse_domain.py`,
 `test/test_inventory_stock_location_domain.py`, `test/test_inventory_stock_position_domain.py`,
-`test/test_inventory_stock_quantity_domain.py`, `test/test_inventory_ledger_conversion_domain.py`
-и `test/test_inventory_stock_posting_domain.py`.
+`test/test_inventory_stock_quantity_domain.py`, `test/test_inventory_ledger_conversion_domain.py`,
+`test/test_inventory_stock_posting_domain.py`, `test/test_inventory_stock_document_domain.py`
+и `test/test_inventory_stock_execution_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

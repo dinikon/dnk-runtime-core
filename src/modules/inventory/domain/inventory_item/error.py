@@ -29,6 +29,14 @@ class InvalidInventoryItemStockSnapshotError(InventoryItemError):
     """Сообщает о некорректном снимке учётных настроек товара."""
 
 
+class InvalidInventoryItemDocumentSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке товара для плановой строки документа."""
+
+
+class InvalidInventoryItemExecutionSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке правил фактического исполнения товара."""
+
+
 class InventoryItemConflictError(InventoryItemError):
     """Сообщает о дубликатах или конфликте зависимых частей агрегата."""
 
