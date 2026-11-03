@@ -33,6 +33,14 @@ class InvalidStockDeltaError(InventoryError):
     """Сообщает о некорректном знаковом изменении количества."""
 
 
+class NegativeStockQuantityError(InventoryError):
+    """Запрещает изменение, приводящее к отрицательному физическому остатку."""
+
+
+class StockQuantityArithmeticError(InventoryError):
+    """Сообщает о невозможности безопасно представить точный результат арифметики."""
+
+
 class InvalidStockDatesError(InventoryError):
     """Сообщает о неверных типах или порядке дат партии или серийного экземпляра."""
 

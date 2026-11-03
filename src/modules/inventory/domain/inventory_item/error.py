@@ -25,6 +25,10 @@ class InvalidInventoryItemTrackingSnapshotError(InventoryItemError):
     """Сообщает о некорректном снимке настроек прослеживаемости товара."""
 
 
+class InvalidInventoryItemStockSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке учётных настроек товара."""
+
+
 class InventoryItemConflictError(InventoryItemError):
     """Сообщает о дубликатах или конфликте зависимых частей агрегата."""
 

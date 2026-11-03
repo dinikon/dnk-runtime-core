@@ -410,7 +410,7 @@ Application-сценарий: оба агрегата и назначение о
 Stock Accounting
 │
 ├── StockPosition [Aggregate Root]
-│   └── StockDimensions [Value Object]
+│   └── StockDimensionsVO [Value Object]
 │
 └── StockPosting [Aggregate Root]
     ├── StockLedgerEntry [Entity]
@@ -419,19 +419,52 @@ Stock Accounting
 
 #### Aggregate: StockPosition
 
-Это физическая учетная позиция.
-
-Пример:
-
-```
-StockPosition(    inventory_item_id=...,    location_id=...,    owner_id=...,    lot_id=...,    serial_id=None,    stock_status="SELLABLE",    on_hand_qty=100,    version=7,)
-```
+Это физическая учётная позиция. Реализован первый Domain-срез с полями
+`id: StockPositionIdVO`, `dimensions: StockDimensionsVO`, `base_uom: UomCodeVO`,
+`on_hand_qty: QuantityVO`, `version: int`.
 
 У агрегата нет дочерних Entity.
 
 Он отвечает за физическое количество в конкретном сочетании измерений. Эти измерения формируют его неизменяемую учетную идентичность.
 
 Изменение локации, собственника или состояния товара не должно просто перезаписывать измерение. Оно проводится как уменьшение исходной позиции и увеличение другой.
+
+Согласованные правила реализованного среза:
+
+- StockDimensionsVO хранит inventory_item_id, location_id, явный StockOwnerIdVO,
+  необязательные lot_id/serial_id и StockStatus: SELLABLE, QUARANTINE, DAMAGED, BLOCKED.
+  Склад определяется через локацию; он не дублируется в ключе.
+  Владелец — ссылка на контрагента/юрлицо, без автоматического вывода из tenant.
+- Уникальность сочетания измерений в tenant-схеме, включая сочетания с NULL,
+  обеспечит срез хранения. Коллекции других позиций в агрегат не добавляются.
+- InventoryItem.stock_snapshot() возвращает ID, базовую единицу, QuantityRulesVO
+  и TrackingMode. StockSerial.snapshot() возвращает ID, ID товара и ID партии.
+  Это минимальные неизменяемые контракты без чужих корней и коллекций.
+- StockDimensionsPolicy проверяет ссылки по снимкам товара, адреса, склада,
+  партии и серии. NONE не допускает LOT/SERIAL; LOT требует партию; SERIAL —
+  серию без партии; LOT_AND_SERIAL — оба идентификатора и принадлежность серии
+  этой партии. Лишние или отсутствующие снимки отклоняются.
+- create создаёт только нулевую позицию версии 0 с единицей из снимка товара.
+  restore восстанавливает полный собственный состав без текущих снимков,
+  проверяет типы, известную единицу, целую неотрицательную версию и ограничения серии.
+- Для конкретного serial_id допустимы только PCS и on_hand_qty 0 или 1.
+  Глобальный запрет положительного остатка одной серии в нескольких позициях
+  потребует StockPosting, ограничений БД и конкурентной защиты.
+- apply_delta повторно проверяет контекст, совпадение базовой единицы и точную
+  кратность текущего количества, модуля дельты и результата шагу товара.
+  Ненулевое изменение возвращает новый экземпляр с version +1; нулевое после
+  проверок сохраняет состояние. Измерения и базовая единица неизменяемы.
+- StockQuantityPolicy выполняет точную арифметику в собственном Decimal Context.
+  Отрицательный остаток запрещён, округление не допускается. Внутренний предел
+  рабочей точности — 1 000 000 значащих цифр; неподдерживаемый точный результат
+  или переполнение дают StockQuantityArithmeticError вместо потери данных.
+- Физические остатки сохраняются и у неактивных складов/локаций и заблокированного
+  товара. Проверка допустимости операции, дат поступления и доступности для продажи
+  относится к будущему проведению. Резерв не вычитается из on_hand_qty.
+- Текущий переход существует только в Domain. Сохранение остатка должно появиться
+  вместе со StockPosting и неизменяемым журналом в одной транзакции; отдельная
+  команда/API прямого изменения остатка не добавляются. SQL и идемпотентность —
+  следующий этап. Версия Domain сама по себе не гарантирует конкурентную защиту.
 
 #### Aggregate: StockPosting
 
@@ -1192,9 +1225,11 @@ src/modules/inventory/
 └── presentation/
 ```
 
-В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial, Warehouse и StockLocation.
+В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial, Warehouse,
+StockLocation и StockPosition.
 Их код находится в `domain/inventory_item/`, `domain/packaging_type/`,
-`domain/stock_lot/`, `domain/stock_serial/`, `domain/warehouse/` и `domain/stock_location/`; общие VO —
+`domain/stock_lot/`, `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`
+и `domain/stock_position/`; общие VO —
 в `domain/value_object/`. Остальные агрегаты добавляются по мере реализации.
 
 Supplier Sourcing с тремя корнями использует структуру
@@ -1258,13 +1293,14 @@ src/modules/inventory/
             └── response/<scenario>.py
 ```
 
-Для шести текущих Aggregate Roots применяется группировка по агрегатам.
+Для семи текущих Aggregate Roots применяется группировка по агрегатам.
 InventoryItem находится в `src/modules/inventory/domain/inventory_item/aggregate.py`,
 PackagingType — в `src/modules/inventory/domain/packaging_type/aggregate.py`.
 StockLot — в `src/modules/inventory/domain/stock_lot/aggregate.py`.
 StockSerial — в `src/modules/inventory/domain/stock_serial/aggregate.py`.
 Warehouse — в `src/modules/inventory/domain/warehouse/aggregate.py`.
 StockLocation — в `src/modules/inventory/domain/stock_location/aggregate.py`.
+StockPosition — в `src/modules/inventory/domain/stock_position/aggregate.py`.
 Для будущего модуля с одним корнем дополнительный каталог агрегата не нужен,
 согласно общим правилам backend.
 

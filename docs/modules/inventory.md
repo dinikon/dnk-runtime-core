@@ -1,9 +1,9 @@
 # Inventory: Domain-модель товара, прослеживаемости и складов
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
-`PackagingType`, `StockLot`, `StockSerial`, `Warehouse` и `StockLocation`
+`PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation` и `StockPosition`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
-`domain/stock_serial/`, `domain/warehouse/` и `domain/stock_location/`.
+`domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/` и `domain/stock_position/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -619,6 +619,136 @@ Domain не загружает снимки и не определяет, уст
 срез обеспечит гарантию при параллельных командах. Автосоздание STORAGE в публичном
 сценарии, SQL, API, вместимость, физический адрес и ограничения товаров пока не реализованы.
 
+## Физическая учётная позиция
+
+StockPosition — самостоятельный Aggregate Root без дочерних Entity, резервов
+и истории движений. Поля:
+
+| Поле | Назначение |
+| --- | --- |
+| id | StockPositionIdVO |
+| dimensions | Неизменяемый StockDimensionsVO |
+| base_uom | Базовая единица UomCodeVO, зафиксированная из снимка товара |
+| on_hand_qty | Конечный неотрицательный QuantityVO |
+| version | Целая неотрицательная версия, без bool |
+
+StockDimensionsVO содержит inventory_item_id, location_id, явный owner_id,
+необязательные lot_id и serial_id, stock_status. Каждая ссылка типизирована.
+StockOwnerIdVO — ссылка на контрагента/юрлицо владельца; она не выводится из tenant
+или оператора склада. Существование и права владельца проверит будущий внешний сценарий.
+Склад определяется через неизменяемую принадлежность локации и не дублируется в ключе.
+
+StockStatus: SELLABLE, QUARANTINE, DAMAGED, BLOCKED. Состояние запаса независимо
+от назначения локации и факта истечения даты. Склад, товар, владелец, партия,
+серия и состояние не меняются через методы позиции. Перемещение или изменение
+состояния потребует уменьшения исходной позиции и увеличения другой.
+
+В tenant-схеме требуется одна позиция на сочетание
+`(inventory_item_id, location_id, owner_id, lot_id, serial_id, stock_status)`.
+Атомарная уникальность в срезе хранения должна охватывать и сочетания с NULL:
+отсутствие партии/серии не разрешает дубликаты. Domain не ищет другие позиции.
+
+Для физических количеств используются новые минимальные контракты:
+
+- `InventoryItem.stock_snapshot()` возвращает InventoryItemStockSnapshot с ID,
+  base_uom, quantity_rules и tracking_mode. Геттер проверяет собственный агрегат;
+  потребитель проверяет тип снимка, его поля, известную единицу и правила серий.
+- `StockSerial.snapshot()` возвращает StockSerialSnapshot с id, inventory_item_id
+  и lot_id. Даты и другие Aggregate Roots внутрь него не включаются.
+- Существующие снимки Warehouse, StockLocation и StockLot используются повторно.
+
+StockDimensionsPolicy сверяет товар, конкретную локацию и её склад, а также
+проверяет матрицу прослеживаемости:
+
+| TrackingMode | LOT | SERIAL |
+| --- | --- | --- |
+| NONE | Отсутствует | Отсутствует |
+| LOT | Обязателен | Отсутствует |
+| SERIAL | Отсутствует | Обязателен |
+| LOT_AND_SERIAL | Обязателен | Обязателен и принадлежит этой партии |
+
+ID и товар в снимках партии/серии должны совпадать с измерениями. Лишние снимки
+и отсутствие обязательных снимков отклоняются; корни агрегатов не передаются.
+Для конкретного serial_id разрешены только PCS и остаток 0 или 1.
+Проверка единичного положительного остатка серии во всех позициях tenant потребует
+StockPosting, ограничений хранения и конкурентной защиты. Локальный агрегат
+не подтверждает глобальную уникальность присутствия экземпляра.
+
+Фабрики и переход количества:
+
+- `create(identifier=..., dimensions=..., inventory_item=..., location=..., warehouse=..., lot=..., serial=...)`
+  проверяет снимки и создаёт только нулевой остаток версии 0. Базовая единица
+  выводится из снимка товара.
+- `restore(identifier=..., dimensions=..., base_uom=..., on_hand_qty=..., version=...)`
+  восстанавливает полный собственный состав без текущих снимков и I/O.
+  Проверяются типы, известная единица, версия и ограничение серии PCS / 0–1.
+  Шаг и текущий режим проверяются при последующем использовании со снимками.
+- `apply_delta(delta, inventory_item=..., location=..., warehouse=..., lot=..., serial=...)`
+  повторно проверяет контекст и совпадение базовой единицы, применяет StockQuantityPolicy
+  и возвращает новый экземпляр с прежними ID и измерениями. Ненулевая дельта
+  увеличивает version на 1. Нулевая дельта после проверок возвращает исходную позицию.
+
+StockQuantityPolicy проверяет кратность текущего остатка, модуля дельты и результата
+через QuantityValidationPolicy. Арифметика использует собственный Decimal Context,
+не зависит от внешних precision/rounding/traps и не возвращает округлённые значения.
+Уход в минус даёт NegativeStockQuantityError, нарушение шага — QuantityStepError,
+превышение количества конкретной серии — InvalidSerialStockQuantityError.
+Несовпадение единицы позиции и товара даёт StockPositionUomMismatchError без пересчёта
+или переинтерпретации уже существующего остатка.
+
+Внутренняя рабочая точность арифметики ограничена 1 000 000 значащих цифр для
+безопасной обработки большого разрыва порядков. Переполнение или невозможность
+точного результата в этих пределах дают StockQuantityArithmeticError.
+Это технический предел вычисления; дополнительного поля precision у товара нет.
+Нулевая дельта и точные крайние значения сохраняются без ненужного разворачивания.
+
+Физическая позиция существует и в неактивном складе/адресе или состоянии BLOCKED.
+Эти состояния не стирают её количество. Разрешение конкретного проведения,
+проверки дат поступления и доступность для продажи относятся к последующим Policy
+операций. on_hand_qty не уменьшается при резервировании; доступное количество
+будет отдельным расчётом. Изменение version в Domain не заменяет идемпотентность
+и проверку конкурентной записи в Application/SQL.
+
+Пример для товара item с NONE, базовой единицей KG и шагом 0.05,
+подготовленного склада prepared, адреса storage и явного StockOwnerIdVO owner_id:
+
+```python
+from decimal import Decimal
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_position.aggregate import StockPosition
+from src.modules.inventory.domain.stock_position.value_object.dimensions import StockDimensionsVO
+from src.modules.inventory.domain.stock_position.value_object.identifier import StockPositionIdVO
+from src.modules.inventory.domain.value_object.stock_delta import StockDeltaVO
+from src.modules.inventory.domain.value_object.stock_status import StockStatus
+
+dimensions = StockDimensionsVO(
+    inventory_item_id=item.id,
+    location_id=storage.id,
+    owner_id=owner_id,
+    lot_id=None,
+    serial_id=None,
+    stock_status=StockStatus.SELLABLE,
+)
+context = dict(
+    inventory_item=item.stock_snapshot(),
+    location=storage.snapshot(),
+    warehouse=prepared.snapshot(),
+)
+position = StockPosition.create(
+    identifier=StockPositionIdVO(uuid4()),
+    dimensions=dimensions,
+    **context,
+)
+changed = position.apply_delta(StockDeltaVO(Decimal("1.25")), **context)
+# changed: on_hand_qty=1.25, version=1; исходный position остаётся нулевым.
+```
+
+Это Domain-переход в памяти. Следующий StockPosting должен фиксировать Ledger
+и новое состояние позиции в одной транзакции. Отдельная Application-команда,
+API прямой установки остатка, SQL, журнал и движение документов в этот срез не входят.
+SupplierAvailability остаётся внешним наблюдением и не создаёт физические позиции.
+
 ## Изменения, восстановление и проверки
 
 Агрегаты и Entity имеют явные фабрики `create/restore`.
@@ -634,6 +764,7 @@ Domain не загружает снимки и не определяет, уст
 Тесты находятся в `test/test_inventory_domain.py`,
 `test/test_inventory_packaging_domain.py`, `test/test_inventory_uom_domain.py`,
 `test/test_inventory_quantity_domain.py`, `test/test_inventory_stock_lot_domain.py`,
-`test/test_inventory_stock_serial_domain.py`, `test/test_inventory_warehouse_domain.py`
-и `test/test_inventory_stock_location_domain.py`.
+`test/test_inventory_stock_serial_domain.py`, `test/test_inventory_warehouse_domain.py`,
+`test/test_inventory_stock_location_domain.py`, `test/test_inventory_stock_position_domain.py`
+и `test/test_inventory_stock_quantity_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

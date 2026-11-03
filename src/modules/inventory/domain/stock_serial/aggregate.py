@@ -1,6 +1,7 @@
 from dataclasses import dataclass, replace
 from typing import Self
 
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
 from src.modules.inventory.domain.inventory_item.error import (
     InvalidInventoryItemTrackingSnapshotError,
 )
@@ -81,6 +82,11 @@ class StockSerial:
         serial = cls(identifier, inventory_item_id, number, lot_id, dates)
         serial._validate()
         return serial
+
+    def snapshot(self) -> StockSerialSnapshot:
+        """Возвращает проверенную идентичность и связь с партией без передачи корня."""
+        self._validate()
+        return StockSerialSnapshot(self.id, self.inventory_item_id, self.lot_id)
 
     def change_dates(
         self, dates: StockDatesVO, *, inventory_item: InventoryItemTrackingSnapshot

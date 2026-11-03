@@ -27,3 +27,7 @@ class StockSerialItemMismatchError(StockSerialError):
 
 class StockSerialLotMismatchError(StockSerialError):
     """Сообщает о другой партии или товаре в снимке связанной партии."""
+
+
+class InvalidStockSerialSnapshotError(StockSerialError):
+    """Сообщает о некорректном снимке идентичности серийного экземпляра."""
