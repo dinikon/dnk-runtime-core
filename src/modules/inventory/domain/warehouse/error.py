@@ -19,3 +19,15 @@ class InvalidWarehouseNameError(WarehouseError):
 
 class WarehouseInactiveError(WarehouseError):
     """Запрещает использование административно неактивного склада."""
+
+
+class InvalidWarehouseSnapshotError(WarehouseError):
+    """Сообщает о некорректном снимке склада и основной локации."""
+
+
+class InvalidDefaultStorageLocationError(WarehouseError):
+    """Запрещает назначение локации другого назначения в качестве основной STORAGE."""
+
+
+class DefaultStorageLocationInUseError(WarehouseError):
+    """Требует переназначить основную локацию перед её деактивацией."""

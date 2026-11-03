@@ -1,9 +1,9 @@
 # Inventory: Domain-модель товара, прослеживаемости и складов
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
-`PackagingType`, `StockLot`, `StockSerial` и `Warehouse` в `domain/inventory_item/`,
-`domain/packaging_type/`, `domain/stock_lot/`, `domain/stock_serial/`
-и `domain/warehouse/`.
+`PackagingType`, `StockLot`, `StockSerial`, `Warehouse` и `StockLocation`
+в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
+`domain/stock_serial/`, `domain/warehouse/` и `domain/stock_location/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -469,6 +469,7 @@ serial.ensure_ready_for_receipt(
 | `code` | Обязательный канонический `WarehouseCodeVO` |
 | `name` | Обязательный `WarehouseNameVO` |
 | `is_active` | Настоящий bool административной активности |
+| `default_storage_location_id` | StockLocationIdVO основной STORAGE либо None |
 
 `WarehouseCodeVO` применяет `trim + casefold`: MAIN и main равны,
 каноническое значение — main. Ведущие нули сохраняются. WarehouseNameVO
@@ -482,8 +483,8 @@ serial.ensure_ready_for_receipt(
 
 Фабрики и методы:
 
-- `create(identifier=..., code=..., name=...)` создаёт активную карточку.
-- `restore(identifier=..., code=..., name=..., is_active=...)` принимает полное
+- `create(identifier=..., code=..., name=...)` создаёт активную карточку без основной локации.
+- `restore(identifier=..., code=..., name=..., is_active=..., default_storage_location_id=...)` принимает полное
   состояние и сохраняет идентичность. Сырые значения, VO другого назначения
   и значения активности вроде 0, 1 или строки отклоняются с InvalidWarehouseValueError.
 - `rename(name)` и `change_code(code)` возвращают новый экземпляр с прежним ID
@@ -492,6 +493,11 @@ serial.ensure_ready_for_receipt(
   Повторные переключения допустимы и дают эквивалентное состояние.
 - `ensure_available() -> None` проверяет собственное состояние и активность.
   Неактивный склад отклоняется с WarehouseInactiveError.
+- `snapshot()` возвращает WarehouseSnapshot с id, is_active и default_storage_location_id.
+- `set_default_storage_location(location)` принимает StockLocationSnapshot активной
+  STORAGE того же склада и возвращает новый склад с её ID. Повторное назначение
+  допустимо; остальные данные, включая активность, сохраняются. Настройка разрешена
+  и для неактивного склада без его автоматической активации.
 
 Деактивация означает административную блокировку. Проверки остатков,
 незавершённых документов и физического закрытия склада относятся к будущим
@@ -523,10 +529,95 @@ active.ensure_available()
 будущий Application-сценарий создаст Warehouse и StockLocation в одной транзакции.
 Текущий Warehouse.create создаёт только карточку склада.
 
-StockLocation, локации по умолчанию, WarehouseSettings, снимки и межагрегатные
-Policy появятся вместе с соответствующими правилами. Коллекции локаций,
-товаров, остатков и документов в Warehouse не добавляются. SQL и API в этот срез
-не входят.
+WarehouseSettings и проверки готовности конкретных складских операций добавляются
+в соответствующих срезах. Коллекции локаций, товаров, остатков и документов
+в Warehouse не добавляются. SQL и API в этот срез не входят.
+
+## Локации склада
+
+StockLocation — самостоятельный Aggregate Root без дочерних Entity и остатков.
+Он содержит:
+
+| Поле | Назначение |
+| --- | --- |
+| id | StockLocationIdVO |
+| warehouse_id | WarehouseIdVO принадлежности складу |
+| parent_location_id | StockLocationIdVO родителя либо None для корневого адреса |
+| code | LocationCodeVO: trim + casefold |
+| name | LocationNameVO: trim с сохранением регистра |
+| location_type | LocationType: STORAGE, RECEIVING, SHIPPING, QUARANTINE, TRANSIT |
+| is_active | Настоящий bool локальной активности |
+
+Код и название обязательны и запрещают управляющие/форматирующие символы Unicode.
+Канонический код должен быть уникален в сочетании `(warehouse_id, code)` одной
+tenant-схемы; одинаковые коды на разных складах допустимы. Атомарная уникальность,
+существование склада/родителя и внешние ключи относятся к срезу хранения.
+
+`create(identifier=..., warehouse=..., code=..., name=..., location_type=..., parent=...)`
+получает WarehouseSnapshot и необязательный StockLocationSnapshot родителя.
+LocationPlacementPolicy требует активный склад, тот же склад родителя и отсутствие
+самоссылки. warehouse_id и parent_location_id выводятся из снимков. Новая локация активна.
+Назначение локации не изменяет состояние товара автоматически.
+
+`restore` принимает все семь собственных полей, проверяет типы и прямую самоссылку
+без снимков и обхода дерева. Склад, родитель и тип после создания неизменяемы.
+Переподчинение ветвей и проверка полной цепочки предков — отдельный будущий сценарий.
+Текущий Domain не проверяет глобальную целостность произвольно восстановленного дерева.
+
+`rename`, `change_code` и `activate` возвращают новый проверенный экземпляр.
+`deactivate(warehouse=...)` принимает WarehouseSnapshot и запрещает деактивацию,
+если его default_storage_location_id ссылается на текущий адрес:
+выбрасывается DefaultStorageLocationInUseError. Требуется сначала назначить другую
+активную STORAGE. Защита действует и для неактивного склада. Для остальных
+адресов повторная деактивация идемпотентна.
+
+Активность локальная: переключение родителя не изменяет детей и не блокирует их
+посредством наследования. Неактивный родитель допустим как структурная ссылка
+при создании ребёнка. `ensure_available(warehouse=...)` через LocationAvailabilityPolicy
+требует совпадения склада и двух активных флагов: Warehouse и самой локации.
+Это административная проверка; правила отбора, карантина, транзита и размещения
+конкретного товара относятся к будущим операциям и ограничениям.
+
+`StockLocation.snapshot()` возвращает StockLocationSnapshot с id, warehouse_id,
+location_type и is_active. Новые снимки неизменяемы, имеют явную проверку собственных
+типов через ensure_valid; Policy проверяет также тип самого переданного контракта.
+Другая принадлежность даёт StockLocationWarehouseMismatchError, самоссылка —
+InvalidLocationHierarchyError, неактивный адрес — StockLocationInactiveError.
+
+DefaultStorageLocationPolicy проверяет назначение и защиту основной локации.
+STORAGE того же склада должна быть активна на момент назначения; другие типы,
+чужой склад и некорректные снимки отклоняются доменными ошибками.
+Warehouse.ensure_available сохраняет административную проверку даже при отсутствии
+основной локации. Восстановление Warehouse проверяет только тип ссылки и не загружает адрес.
+
+Последовательность подготовки склада в Domain для уже созданного warehouse:
+
+```python
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_location.aggregate import StockLocation
+from src.modules.inventory.domain.stock_location.value_object.code import LocationCodeVO
+from src.modules.inventory.domain.stock_location.value_object.identifier import StockLocationIdVO
+from src.modules.inventory.domain.stock_location.value_object.location_type import LocationType
+from src.modules.inventory.domain.stock_location.value_object.name import LocationNameVO
+
+storage = StockLocation.create(
+    identifier=StockLocationIdVO(uuid4()),
+    warehouse=warehouse.snapshot(),
+    code=LocationCodeVO("STORAGE"),
+    name=LocationNameVO("Основная зона хранения"),
+    location_type=LocationType.STORAGE,
+)
+prepared = warehouse.set_default_storage_location(storage.snapshot())
+storage.ensure_available(warehouse=prepared.snapshot())
+# storage.deactivate(warehouse=prepared.snapshot()) потребует переназначить основной адрес.
+```
+
+Domain не загружает снимки и не определяет, устарели ли они. Будущий Application
+должен получать актуальные данные и атомарно согласовывать назначение, переназначение
+и деактивацию локаций в tenant-UoW с защитой конкурентных изменений. Только этот
+срез обеспечит гарантию при параллельных командах. Автосоздание STORAGE в публичном
+сценарии, SQL, API, вместимость, физический адрес и ограничения товаров пока не реализованы.
 
 ## Изменения, восстановление и проверки
 
@@ -543,5 +634,6 @@ Policy появятся вместе с соответствующими пра�
 Тесты находятся в `test/test_inventory_domain.py`,
 `test/test_inventory_packaging_domain.py`, `test/test_inventory_uom_domain.py`,
 `test/test_inventory_quantity_domain.py`, `test/test_inventory_stock_lot_domain.py`,
-`test/test_inventory_stock_serial_domain.py` и `test/test_inventory_warehouse_domain.py`.
+`test/test_inventory_stock_serial_domain.py`, `test/test_inventory_warehouse_domain.py`
+и `test/test_inventory_stock_location_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

@@ -332,22 +332,25 @@ Warehouse Structure
 Это важно для масштабирования: склад может содержать сотни тысяч адресов. Изменение одной ячейки не должно блокировать весь Warehouse.
 
 MVP: создание склада автоматически создает основную локацию `STORAGE`. Это целевой
-Application-сценарий после реализации StockLocation: оба агрегата создаются
-в одной транзакции. Текущая Domain-фабрика Warehouse.create создаёт только карточку.
+Application-сценарий: оба агрегата и назначение основной локации сохраняются
+в одной транзакции. Domain-модели для этой последовательности реализованы;
+сама автоматическая сборка и хранение остаются следующим этапом.
+Текущая Domain-фабрика Warehouse.create создаёт карточку без основной локации.
 Дополнительно создаются необходимые приемочные, отгрузочные и карантинные локации.
 Для межскладских перемещений используются транзитные учетные локации.
 
 Карточка склада (реализованный Domain-срез):
 
 - Warehouse — самостоятельный корень с `id: WarehouseIdVO`, `code: WarehouseCodeVO`,
-  `name: WarehouseNameVO`, `is_active: bool`. Дочерних Entity и коллекций локаций,
+  `name: WarehouseNameVO`, `is_active: bool`,
+  `default_storage_location_id: StockLocationIdVO | None`. Дочерних Entity и коллекций локаций,
   товаров, остатков и документов нет.
 - WarehouseCodeVO обязателен и применяет trim + casefold: MAIN и main — один код.
   WarehouseNameVO обязателен, применяет trim и сохраняет регистр. Оба значения
   запрещают пустоту и управляющие/форматирующие символы Unicode.
 - Канонический код уникален в tenant-схеме; атомарное ограничение БД относится
   к срезу хранения. Текущий Domain не проверяет другие склады.
-- create создаёт активную карточку; restore принимает полный состав, проверяет
+- create создаёт активную карточку без основной локации; restore принимает полный состав, проверяет
   собственные типы, настоящий bool активности и сохраняет ID.
 - rename и change_code возвращают новый экземпляр с прежним ID и активностью.
   Изменение справочных данных неактивного склада разрешено.
@@ -357,8 +360,45 @@ Application-сценарий после реализации StockLocation: об
 - Деактивация означает административную блокировку. Проверки остатков,
   незавершённых документов и физического закрытия относятся к будущим сценариям.
   Административная активность сама по себе не означает готовность проводить операции.
-- StockLocation, локации по умолчанию, WarehouseSettings, снимки и межагрегатные
-  Policy добавляются вместе с соответствующими правилами. SQL и API — последующие срезы.
+- snapshot возвращает WarehouseSnapshot с ID, активностью и ID основной локации.
+  set_default_storage_location назначает активную STORAGE того же склада по снимку,
+  сохраняя остальные поля. Настройка разрешена и неактивному складу без его активации.
+- WarehouseSettings и правила готовности конкретных операций добавляются отдельно.
+  SQL и API — последующие срезы.
+
+Локации и основная STORAGE (реализованный Domain-срез):
+
+- StockLocation — самостоятельный корень с `id: StockLocationIdVO`,
+  `warehouse_id: WarehouseIdVO`, `parent_location_id: StockLocationIdVO | None`,
+  `code: LocationCodeVO`, `name: LocationNameVO`, `location_type: LocationType`,
+  `is_active: bool`. Дочерних Entity и остатков нет.
+- Код обязателен и применяет trim + casefold; название обязательно и сохраняет
+  регистр после trim. Управляющие/форматирующие символы запрещены.
+  Уникальность `(warehouse_id, code)` в tenant-схеме относится к хранению.
+- LocationType: STORAGE, RECEIVING, SHIPPING, QUARANTINE, TRANSIT. Тип задаёт
+  назначение, не переписывая состояние запасов автоматически.
+- create по WarehouseSnapshot и необязательному StockLocationSnapshot родителя
+  выводит принадлежность и родителя. LocationPlacementPolicy требует активный
+  склад, тот же склад родителя и отсутствие самоссылки. Новая локация активна.
+- restore проверяет полный собственный состав и прямую самоссылку без загрузки
+  склада/родителя. Склад, родитель и тип фиксированы. Переподчинение и проверка
+  всей цепочки предков — будущий сценарий; глобальную целостность произвольно
+  восстановленного дерева текущий Domain не подтверждает.
+- rename, change_code и activate возвращают новый экземпляр. Активность локальная,
+  без каскада и наследования. Неактивный родитель допустим как структурная ссылка.
+- ensure_available по LocationAvailabilityPolicy требует тот же активный склад
+  и локально активную локацию. Политики отбора, зон, карантина и транзита добавляются
+  вместе со складскими операциями.
+- snapshot возвращает StockLocationSnapshot с ID, ID склада, типом и активностью.
+  Новые снимки неизменяемы, с явной проверкой собственных типов; чужие корни вместо
+  снимков и сырые поля отклоняются доменными ошибками, без assert.
+- DefaultStorageLocationPolicy проверяет назначение активной STORAGE того же склада
+  и деактивацию по WarehouseSnapshot. Назначенную основную локацию нельзя
+  деактивировать даже у неактивного склада: сначала требуется переназначение.
+  Остальные локации деактивируются идемпотентно.
+- Актуальность снимков, существование ссылок, ограничения БД и атомарная защита
+  конкурентного назначения/деактивации относятся к будущему Application/UoW и хранению.
+  Вместимость, физический адрес, ограничения товаров, SQL и API пока не реализованы.
 
 В дальнейшем можно добавить стеллажи, уровни, маршруты, зоны комплектации, вместимость и динамическое размещение.
 
@@ -1152,9 +1192,9 @@ src/modules/inventory/
 └── presentation/
 ```
 
-В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial и Warehouse.
+В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial, Warehouse и StockLocation.
 Их код находится в `domain/inventory_item/`, `domain/packaging_type/`,
-`domain/stock_lot/`, `domain/stock_serial/` и `domain/warehouse/`; общие VO —
+`domain/stock_lot/`, `domain/stock_serial/`, `domain/warehouse/` и `domain/stock_location/`; общие VO —
 в `domain/value_object/`. Остальные агрегаты добавляются по мере реализации.
 
 Supplier Sourcing с тремя корнями использует структуру
@@ -1218,12 +1258,13 @@ src/modules/inventory/
             └── response/<scenario>.py
 ```
 
-Для пяти текущих Aggregate Roots применяется группировка по агрегатам.
+Для шести текущих Aggregate Roots применяется группировка по агрегатам.
 InventoryItem находится в `src/modules/inventory/domain/inventory_item/aggregate.py`,
 PackagingType — в `src/modules/inventory/domain/packaging_type/aggregate.py`.
 StockLot — в `src/modules/inventory/domain/stock_lot/aggregate.py`.
 StockSerial — в `src/modules/inventory/domain/stock_serial/aggregate.py`.
 Warehouse — в `src/modules/inventory/domain/warehouse/aggregate.py`.
+StockLocation — в `src/modules/inventory/domain/stock_location/aggregate.py`.
 Для будущего модуля с одним корнем дополнительный каталог агрегата не нужен,
 согласно общим правилам backend.
 

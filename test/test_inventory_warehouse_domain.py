@@ -93,6 +93,7 @@ class WarehouseDomainTests(unittest.TestCase):
             code=self.warehouse.code,
             name=self.warehouse.name,
             is_active=self.warehouse.is_active,
+            default_storage_location_id=self.warehouse.default_storage_location_id,
         )
         return Warehouse.restore(**(values | changes))
 
@@ -197,7 +198,7 @@ class WarehouseDomainTests(unittest.TestCase):
     def test_direct_invalid_state_cannot_bypass_availability_check(self) -> None:
         """Проверка доступности отклоняет сырое состояние вместо интерпретации его как bool."""
         invalid = Warehouse(
-            self.warehouse.id, self.warehouse.code, self.warehouse.name, 1
+            self.warehouse.id, self.warehouse.code, self.warehouse.name, 1, None
         )
         with self.assertRaises(InvalidWarehouseValueError):
             invalid.ensure_available()
