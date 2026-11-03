@@ -1,8 +1,9 @@
-# Inventory: Domain-модель товара, упаковок, партий и серийных экземпляров
+# Inventory: Domain-модель товара, прослеживаемости и складов
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
-`PackagingType`, `StockLot` и `StockSerial` в `domain/inventory_item/`,
-`domain/packaging_type/`, `domain/stock_lot/` и `domain/stock_serial/`.
+`PackagingType`, `StockLot`, `StockSerial` и `Warehouse` в `domain/inventory_item/`,
+`domain/packaging_type/`, `domain/stock_lot/`, `domain/stock_serial/`
+и `domain/warehouse/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -457,6 +458,76 @@ serial.ensure_ready_for_receipt(
 и защита от одновременного учёта одного экземпляра в разных позициях относятся
 к последующим складским сценариям. SQL, API и проведение движений не реализуются.
 
+## Карточка склада
+
+`Warehouse` — самостоятельный Aggregate Root без дочерних Entity.
+В текущем срезе он описывает идентичность и административную активность склада:
+
+| Поле | Назначение |
+| --- | --- |
+| `id` | Постоянный `WarehouseIdVO` |
+| `code` | Обязательный канонический `WarehouseCodeVO` |
+| `name` | Обязательный `WarehouseNameVO` |
+| `is_active` | Настоящий bool административной активности |
+
+`WarehouseCodeVO` применяет `trim + casefold`: MAIN и main равны,
+каноническое значение — main. Ведущие нули сохраняются. WarehouseNameVO
+применяет trim и сохраняет регистр. Оба VO запрещают пустоту, управляющие
+и форматирующие символы Unicode. Ошибки: InvalidWarehouseCodeError
+и InvalidWarehouseNameError. UUID склада типизирован и не взаимозаменяем
+с идентификаторами других агрегатов.
+
+Канонический код должен быть уникален в tenant-схеме. Атомарное ограничение БД
+относится к будущему срезу хранения; Domain не проверяет другие склады.
+
+Фабрики и методы:
+
+- `create(identifier=..., code=..., name=...)` создаёт активную карточку.
+- `restore(identifier=..., code=..., name=..., is_active=...)` принимает полное
+  состояние и сохраняет идентичность. Сырые значения, VO другого назначения
+  и значения активности вроде 0, 1 или строки отклоняются с InvalidWarehouseValueError.
+- `rename(name)` и `change_code(code)` возвращают новый экземпляр с прежним ID
+  и активностью. Справочные данные можно менять и у неактивного склада.
+- `activate()` и `deactivate()` возвращают новый корректный экземпляр.
+  Повторные переключения допустимы и дают эквивалентное состояние.
+- `ensure_available() -> None` проверяет собственное состояние и активность.
+  Неактивный склад отклоняется с WarehouseInactiveError.
+
+Деактивация означает административную блокировку. Проверки остатков,
+незавершённых документов и физического закрытия склада относятся к будущим
+складским сценариям. Исходный экземпляр остаётся неизменным при успехе и отказе.
+
+```python
+from uuid import uuid4
+
+from src.modules.inventory.domain.warehouse.aggregate import Warehouse
+from src.modules.inventory.domain.warehouse.value_object.code import WarehouseCodeVO
+from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
+from src.modules.inventory.domain.warehouse.value_object.name import WarehouseNameVO
+
+warehouse = Warehouse.create(
+    identifier=WarehouseIdVO(uuid4()),
+    code=WarehouseCodeVO(" MAIN "),
+    name=WarehouseNameVO("Основной склад"),
+)
+warehouse.ensure_available()
+blocked = warehouse.deactivate()
+# blocked.ensure_available() вызовет WarehouseInactiveError.
+active = blocked.activate()
+active.ensure_available()
+```
+
+Активность карточки проверяет только административное разрешение.
+Готовность к проведению операций дополнительно потребует локаций и их настроек.
+Требование автоматического создания основной локации STORAGE сохраняется:
+будущий Application-сценарий создаст Warehouse и StockLocation в одной транзакции.
+Текущий Warehouse.create создаёт только карточку склада.
+
+StockLocation, локации по умолчанию, WarehouseSettings, снимки и межагрегатные
+Policy появятся вместе с соответствующими правилами. Коллекции локаций,
+товаров, остатков и документов в Warehouse не добавляются. SQL и API в этот срез
+не входят.
+
 ## Изменения, восстановление и проверки
 
 Агрегаты и Entity имеют явные фабрики `create/restore`.
@@ -471,6 +542,6 @@ serial.ensure_ready_for_receipt(
 
 Тесты находятся в `test/test_inventory_domain.py`,
 `test/test_inventory_packaging_domain.py`, `test/test_inventory_uom_domain.py`,
-`test/test_inventory_quantity_domain.py`, `test/test_inventory_stock_lot_domain.py`
-и `test/test_inventory_stock_serial_domain.py`.
+`test/test_inventory_quantity_domain.py`, `test/test_inventory_stock_lot_domain.py`,
+`test/test_inventory_stock_serial_domain.py` и `test/test_inventory_warehouse_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

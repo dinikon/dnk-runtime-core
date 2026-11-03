@@ -311,7 +311,34 @@ Warehouse Structure
 
 Это важно для масштабирования: склад может содержать сотни тысяч адресов. Изменение одной ячейки не должно блокировать весь Warehouse.
 
-MVP: создание склада автоматически создает основную локацию `STORAGE`. Дополнительно создаются необходимые приемочные, отгрузочные и карантинные локации. Для межскладских перемещений используются транзитные учетные локации.
+MVP: создание склада автоматически создает основную локацию `STORAGE`. Это целевой
+Application-сценарий после реализации StockLocation: оба агрегата создаются
+в одной транзакции. Текущая Domain-фабрика Warehouse.create создаёт только карточку.
+Дополнительно создаются необходимые приемочные, отгрузочные и карантинные локации.
+Для межскладских перемещений используются транзитные учетные локации.
+
+Карточка склада (реализованный Domain-срез):
+
+- Warehouse — самостоятельный корень с `id: WarehouseIdVO`, `code: WarehouseCodeVO`,
+  `name: WarehouseNameVO`, `is_active: bool`. Дочерних Entity и коллекций локаций,
+  товаров, остатков и документов нет.
+- WarehouseCodeVO обязателен и применяет trim + casefold: MAIN и main — один код.
+  WarehouseNameVO обязателен, применяет trim и сохраняет регистр. Оба значения
+  запрещают пустоту и управляющие/форматирующие символы Unicode.
+- Канонический код уникален в tenant-схеме; атомарное ограничение БД относится
+  к срезу хранения. Текущий Domain не проверяет другие склады.
+- create создаёт активную карточку; restore принимает полный состав, проверяет
+  собственные типы, настоящий bool активности и сохраняет ID.
+- rename и change_code возвращают новый экземпляр с прежним ID и активностью.
+  Изменение справочных данных неактивного склада разрешено.
+- activate и deactivate идемпотентны по состоянию. ensure_available возвращает None
+  для активного склада и выбрасывает WarehouseInactiveError для неактивного.
+  Все проверки используют доменные ошибки, без assert.
+- Деактивация означает административную блокировку. Проверки остатков,
+  незавершённых документов и физического закрытия относятся к будущим сценариям.
+  Административная активность сама по себе не означает готовность проводить операции.
+- StockLocation, локации по умолчанию, WarehouseSettings, снимки и межагрегатные
+  Policy добавляются вместе с соответствующими правилами. SQL и API — последующие срезы.
 
 В дальнейшем можно добавить стеллажи, уровни, маршруты, зоны комплектации, вместимость и динамическое размещение.
 
@@ -748,9 +775,9 @@ src/modules/inventory/
 └── presentation/
 ```
 
-В Domain уже существуют InventoryItem, PackagingType, StockLot и StockSerial.
+В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial и Warehouse.
 Их код находится в `domain/inventory_item/`, `domain/packaging_type/`,
-`domain/stock_lot/` и `domain/stock_serial/`; общие VO —
+`domain/stock_lot/`, `domain/stock_serial/` и `domain/warehouse/`; общие VO —
 в `domain/value_object/`. Остальные агрегаты добавляются по мере реализации.
 
 Порядок каталогов: **модуль → слой → Aggregate Root → назначение**.
@@ -800,11 +827,12 @@ src/modules/inventory/
             └── response/<scenario>.py
 ```
 
-Для четырёх текущих Aggregate Roots применяется группировка по агрегатам.
+Для пяти текущих Aggregate Roots применяется группировка по агрегатам.
 InventoryItem находится в `src/modules/inventory/domain/inventory_item/aggregate.py`,
 PackagingType — в `src/modules/inventory/domain/packaging_type/aggregate.py`.
 StockLot — в `src/modules/inventory/domain/stock_lot/aggregate.py`.
 StockSerial — в `src/modules/inventory/domain/stock_serial/aggregate.py`.
+Warehouse — в `src/modules/inventory/domain/warehouse/aggregate.py`.
 Для будущего модуля с одним корнем дополнительный каталог агрегата не нужен,
 согласно общим правилам backend.
 
