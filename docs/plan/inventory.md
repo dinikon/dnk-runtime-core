@@ -68,10 +68,11 @@ Inventory Master
 │
 ├── StockLot [Aggregate Root]
 │   ├── LotNumberVO [Value Object]
-│   └── LotDatesVO [Value Object]
+│   └── StockDatesVO [Value Object]
 │
 ├── StockSerial [Aggregate Root]
-│   └── SerialNumber [Value Object]
+│   ├── SerialNumberVO [Value Object]
+│   └── StockDatesVO [общий Value Object, только для SERIAL]
 │
 └── PackagingType [Aggregate Root]
 ```
@@ -80,7 +81,7 @@ Inventory Master
 | --------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `InventoryItem` | Уникальность складского SKU, базовая системная единица, штрихкоды, упаковки, правила отслеживания |
 | `StockLot`      | Идентичность партии, номер производителя, дата производства, срок годности                                       |
-| `StockSerial`   | Идентичность конкретной серийной единицы, связь с SKU и необязательно с партией                                  |
+| `StockSerial`   | Идентичность серийного экземпляра, связь с товаром и партией согласно TrackingMode |
 
 Почему StockLot и StockSerial — отдельные агрегаты?
 
@@ -137,7 +138,7 @@ Inventory Master
 Даже прошедшая дата-заметка в режиме `OPTIONAL` не ограничивает операции.
 
 InventoryItem хранит требования, фактические даты принадлежат партиям,
-серийным экземплярам или контексту заметки. Для партий уже реализованы LotDatesVO
+серийным экземплярам или контексту заметки. Для партий уже реализованы StockDatesVO
 и StockExpirationPolicy, проверяющая допустимость заполнения и обязательность
 даты до поступления. Проверки просрочки и влияние на учёт остаются последующим
 складским сценариям: они должны получать дату операции явно и применять
@@ -147,14 +148,14 @@ InventoryItem хранит требования, фактические даты
 Партии товара (реализованный Domain-срез):
 
 - `StockLot` — самостоятельный корень с `id: StockLotIdVO`,
-  `inventory_item_id: InventoryItemIdVO`, `number: LotNumberVO`, `dates: LotDatesVO`.
+  `inventory_item_id: InventoryItemIdVO`, `number: LotNumberVO`, `dates: StockDatesVO`.
   У него нет дочерних Entity, количества, складов и остатков. Коллекция партий
   не добавляется в InventoryItem.
 - LotNumberVO обязателен, применяет trim, запрещает пустоту и управляющие символы,
   сохраняет регистр и ведущие нули. Уникальность номера внутри товара и tenant-схемы
   должна обеспечиваться атомарным ограничением `(inventory_item_id, number)`
   в срезе хранения; текущий Domain не проверяет другие партии.
-- LotDatesVO хранит необязательные `manufactured_on` и `expires_on` как date.
+- StockDatesVO хранит необязательные `manufactured_on` и `expires_on` как date.
   datetime и строки не принимаются. Производство не позже окончания срока;
   равные, исторические и будущие даты разрешены. Текущая дата в VO не используется.
 - `InventoryItem.tracking_snapshot()` возвращает InventoryItemTrackingSnapshot:
@@ -172,9 +173,42 @@ InventoryItem хранит требования, фактические даты
 - `ensure_ready_for_receipt` проверяет текущую совместимость и через
   StockExpirationPolicy требует срок для REQUIRED. Проверка полноты не определяет
   допустимость приёмки просрочки: это отдельное будущее правило проведения.
-- Изменение номера, исправления после проведённых операций, SQL, API, FEFO,
-  StockSerial и само проведение поступления остаются последующими срезами.
+- Изменение номера, исправления после проведённых операций, SQL, API, FEFO
+  и само проведение поступления остаются последующими срезами.
   Текущий change_dates не проверяет историю использования: движений ещё нет.
+
+Серийные экземпляры (реализованный Domain-срез):
+
+- StockSerial — самостоятельный корень с `id: StockSerialIdVO`,
+  `inventory_item_id: InventoryItemIdVO`, `number: SerialNumberVO`,
+  `lot_id: StockLotIdVO | None`, `dates: StockDatesVO | None`.
+  Количества, склада и дочерних Entity нет; коллекции экземпляров не добавляются
+  в InventoryItem или StockLot.
+- SerialNumberVO обязателен, применяет trim, запрещает пустоту и управляющие
+  символы, сохраняет регистр и ведущие нули. Атомарная уникальность
+  `(inventory_item_id, number)` внутри tenant-схемы относится к срезу хранения.
+- Общий StockDatesVO и InvalidStockDatesError используются партиями,
+  самостоятельными экземплярами и StockExpirationPolicy. Инварианты календарных
+  дат сохраняются: только date или None, производство не позже окончания срока.
+- NONE и LOT не допускают StockSerial. SERIAL требует собственный StockDatesVO
+  без партии. LOT_AND_SERIAL требует партию того же товара без собственных дат.
+  Источник дат один; две копии срока не создаются.
+- StockLot.snapshot() возвращает StockLotSnapshot с ID партии, ID товара и датами.
+  StockSerialPolicy.resolve_dates проверяет снимки, текущий режим и принадлежность,
+  выбирает собственные даты либо даты соответствующей партии.
+- create получает снимки товара и партии и выводит из них ID. Параметр dates
+  передаётся явно: StockDatesVO для SERIAL, None для LOT_AND_SERIAL.
+  restore не требует снимков и проверяет собственные типы и ровно один источник дат.
+- change_dates доступен только самостоятельному SERIAL, сохраняет ID и номер,
+  возвращает новый проверенный экземпляр. Даты партии изменяются через StockLot.
+- ensure_ready_for_receipt проверяет текущие снимки и полноту даты через
+  StockExpirationPolicy. REQUIRED допускает неполную карточку до поступления;
+  OPTIONAL с прошедшей заметкой не блокируется. Приёмка просрочки — отдельное правило.
+- Актуальные снимки передаёт будущий Application. Изменение партии учитывается
+  через новый снимок без копирования дат в экземпляр; старые снимки неизменяемы.
+  Номер и связь с партией не редактируются в текущем срезе.
+- SQL, API, исправления после проведения, соответствие количества серийным ID
+  и защита от одновременного учёта одного экземпляра остаются складским сценариям.
 
 Уточнение границ товара, идентификаторов и упаковок:
 
@@ -714,8 +748,9 @@ src/modules/inventory/
 └── presentation/
 ```
 
-В Domain уже существуют InventoryItem, PackagingType и StockLot. Их код находится
-в `domain/inventory_item/`, `domain/packaging_type/` и `domain/stock_lot/`; общие VO —
+В Domain уже существуют InventoryItem, PackagingType, StockLot и StockSerial.
+Их код находится в `domain/inventory_item/`, `domain/packaging_type/`,
+`domain/stock_lot/` и `domain/stock_serial/`; общие VO —
 в `domain/value_object/`. Остальные агрегаты добавляются по мере реализации.
 
 Порядок каталогов: **модуль → слой → Aggregate Root → назначение**.
@@ -765,10 +800,11 @@ src/modules/inventory/
             └── response/<scenario>.py
 ```
 
-Для трёх текущих Aggregate Roots применяется группировка по агрегатам.
+Для четырёх текущих Aggregate Roots применяется группировка по агрегатам.
 InventoryItem находится в `src/modules/inventory/domain/inventory_item/aggregate.py`,
 PackagingType — в `src/modules/inventory/domain/packaging_type/aggregate.py`.
 StockLot — в `src/modules/inventory/domain/stock_lot/aggregate.py`.
+StockSerial — в `src/modules/inventory/domain/stock_serial/aggregate.py`.
 Для будущего модуля с одним корнем дополнительный каталог агрегата не нужен,
 согласно общим правилам backend.
 

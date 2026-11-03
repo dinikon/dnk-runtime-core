@@ -33,6 +33,10 @@ class InvalidStockDeltaError(InventoryError):
     """Сообщает о некорректном знаковом изменении количества."""
 
 
+class InvalidStockDatesError(InventoryError):
+    """Сообщает о неверных типах или порядке дат партии или серийного экземпляра."""
+
+
 class UomConversionError(InventoryError):
     """Сообщает, что количество нельзя точно выразить в выбранной единице."""
 

@@ -1,8 +1,8 @@
-# Inventory: Domain-модель товара, упаковок и партий
+# Inventory: Domain-модель товара, упаковок, партий и серийных экземпляров
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
-`PackagingType` и `StockLot` в `domain/inventory_item/`, `domain/packaging_type/`
-и `domain/stock_lot/`.
+`PackagingType`, `StockLot` и `StockSerial` в `domain/inventory_item/`,
+`domain/packaging_type/`, `domain/stock_lot/` и `domain/stock_serial/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -231,8 +231,9 @@ QuantityVO по-прежнему допускает любое конечное 
 конечные нули Decimal не меняют его значения.
 
 Серийный товар допускает количества `0`, `1`, `12.000`, но не `0.5` или `1.001`.
-Это правило целого количества экземпляров. Связь каждого экземпляра со своим ID
-будет проверяться при реализации StockSerial и складских операций.
+Это правило целого количества экземпляров. StockSerial задаёт идентичность
+одного экземпляра; соответствие количества серийным ID будет проверяться
+в будущих складских операциях.
 Упаковка на `12 PCS` разрешена, на `0.5 PCS` — нет. Для нулевого содержимого
 упаковки сохраняется общий запрет.
 
@@ -284,7 +285,7 @@ InventoryItem не владеет коллекцией партий. Парти�
 | `id` | Постоянный `StockLotIdVO` |
 | `inventory_item_id` | Принадлежность конкретному InventoryItem |
 | `number` | Обязательный `LotNumberVO` — номер производителя или вручную заданный номер |
-| `dates` | `LotDatesVO` — календарные даты партии |
+| `dates` | `StockDatesVO` — календарные даты партии |
 
 Количество, склад, локация, владелец и состояние запасов принадлежат будущему
 StockPosition. Одна партия может находиться в нескольких учётных позициях.
@@ -295,13 +296,15 @@ StockPosition. Одна партия может находиться в неск
 Атомарная уникальность пары `(inventory_item_id, number)` относится к будущему
 SQL-срезу; текущий Domain не проверяет другие партии.
 
-`LotDatesVO` содержит `manufactured_on: date | None` и `expires_on: date | None`.
-Обе даты необязательны; `LotDatesVO()` представляет отсутствие дат.
+Общий `StockDatesVO` находится в `domain/value_object/stock_dates.py` и содержит
+`manufactured_on: date | None` и `expires_on: date | None`.
+Обе даты необязательны; `StockDatesVO()` представляет отсутствие дат.
 Для REQUIRED такая карточка пока не готова к поступлению.
 Принимается только календарный date: datetime, строки и неявные преобразования
 запрещены. Если обе даты заданы, производство не может быть позже окончания
 срока годности; равные даты допустимы. Исторические и будущие даты разрешены.
 Структурная корректность дат проверяется и для OPTIONAL, без оценки просрочки.
+Нарушение типа или порядка дат вызывает общий `InvalidStockDatesError`.
 
 `InventoryItem.tracking_snapshot()` возвращает неизменяемый
 `InventoryItemTrackingSnapshot` с `inventory_item_id`, `tracking_mode` и
@@ -344,7 +347,7 @@ from uuid import uuid4
 
 from src.modules.inventory.domain.stock_lot.aggregate import StockLot
 from src.modules.inventory.domain.stock_lot.value_object.identifier import StockLotIdVO
-from src.modules.inventory.domain.stock_lot.value_object.lot_dates import LotDatesVO
+from src.modules.inventory.domain.value_object.stock_dates import StockDatesVO
 from src.modules.inventory.domain.stock_lot.value_object.lot_number import LotNumberVO
 
 snapshot = item.tracking_snapshot()
@@ -352,20 +355,107 @@ lot = StockLot.create(
     identifier=StockLotIdVO(uuid4()),
     inventory_item=snapshot,
     number=LotNumberVO("000LOT-a"),
-    dates=LotDatesVO(),
+    dates=StockDatesVO(),
 )
 # Проверка готовности lot сейчас дала бы ExpirationDateRequiredError.
 completed = lot.change_dates(
-    LotDatesVO(manufactured_on=date(2026, 1, 1), expires_on=date(2028, 1, 1)),
+    StockDatesVO(manufactured_on=date(2026, 1, 1), expires_on=date(2028, 1, 1)),
     inventory_item=snapshot,
 )
 completed.ensure_ready_for_receipt(inventory_item=snapshot)
 # Исходный lot остаётся без дат; ID и номер completed совпадают с lot.
 ```
 
+`StockLot.snapshot()` возвращает неизменяемый `StockLotSnapshot` с `id`,
+`inventory_item_id` и `dates`. Он используется для проверки серийного экземпляра
+без передачи другого Aggregate Root.
+
 Изменение номера и контролируемые исправления дат после проведённых операций
 с сохранением истории относятся к последующим срезам. Проверка факта использования
 партии в текущий `change_dates` не входит: движения ещё не реализованы.
+
+## Серийный экземпляр товара
+
+`StockSerial` — самостоятельный Aggregate Root, идентифицирующий один физический
+экземпляр. У него нет дочерних Entity, количества, остатков и текущей локации.
+InventoryItem и StockLot не владеют коллекциями серийных экземпляров.
+
+| Поле | Назначение |
+| --- | --- |
+| `id` | Постоянный `StockSerialIdVO` |
+| `inventory_item_id` | Принадлежность конкретному товару |
+| `number` | Обязательный `SerialNumberVO` |
+| `lot_id` | `StockLotIdVO` для экземпляра партии либо None |
+| `dates` | Собственный `StockDatesVO` для самостоятельного экземпляра либо None |
+
+SerialNumberVO применяет trim, запрещает пустоту и управляющие/форматирующие
+символы Unicode, сохраняет регистр и ведущие нули. `000SN-a` и `000SN-A` — разные
+номера. Уникальность `(inventory_item_id, number)` в tenant-схеме не зависит от
+склада и относится к будущему атомарному ограничению БД. Domain не проверяет
+другие экземпляры. Серийный номер не является ItemBarcode.
+
+| TrackingMode | Создание экземпляра | Партия | Даты |
+| --- | --- | --- | --- |
+| `NONE`, `LOT` | Запрещено | — | — |
+| `SERIAL` | Разрешено | Отсутствует | Собственный StockDatesVO, в том числе пустой |
+| `LOT_AND_SERIAL` | Разрешено | Обязательна | Только из снимка партии; собственное поле dates равно None |
+
+Чистая `StockSerialPolicy.resolve_dates` проверяет типы снимков и собственного
+состояния, серийный режим, принадлежность товару и возвращает выбранный StockDatesVO.
+Для экземпляра партии снимок обязан совпадать с сохранённым lot_id и относиться
+к тому же InventoryItem. Передача партии в режиме SERIAL отклоняется.
+StockExpirationPolicy проверяет выбранные даты: NONE запрещает срок,
+OPTIONAL допускает заметку, REQUIRED требует срок только перед поступлением.
+
+Фабрики и методы:
+
+- `create(identifier=..., inventory_item=..., number=..., dates=..., lot=...)`
+  получает InventoryItemTrackingSnapshot и необязательный StockLotSnapshot.
+  ID товара и партии выводятся из снимков. Параметр dates обязателен:
+  для SERIAL передаётся StockDatesVO, для LOT_AND_SERIAL — None.
+  Пустой срок REQUIRED разрешён при создании обоих вариантов.
+- `restore(identifier=..., inventory_item_id=..., number=..., lot_id=..., dates=...)`
+  проверяет собственные типы и наличие ровно одного источника: либо собственных дат,
+  либо ссылки на партию. Снимки при восстановлении не требуются; ID сохраняются.
+- `change_dates(dates, inventory_item=...)` доступен только самостоятельному SERIAL.
+  Возвращает новый экземпляр с прежними ID и номером; отказ сохраняет исходный.
+  Даты LOT_AND_SERIAL изменяются через StockLot.
+- `ensure_ready_for_receipt(inventory_item=..., lot=...) -> None` проверяет
+  текущую совместимость и полноту даты. Для LOT_AND_SERIAL снимок партии обязателен
+  при каждом вызове; отсутствие или некорректный снимок отклоняется.
+
+Источник дат не копируется из партии в экземпляр. Новый снимок партии отражает
+её текущие даты; старые снимки неизменяемы. Application должен передавать
+актуальные снимки; Domain самостоятельно данные не загружает.
+Проверка готовности по-прежнему не определяет допустимость приёмки просрочки.
+
+Например, для товара `item` с LOT_AND_SERIAL и уже созданной партии `lot`:
+
+```python
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_serial.aggregate import StockSerial
+from src.modules.inventory.domain.stock_serial.value_object.identifier import StockSerialIdVO
+from src.modules.inventory.domain.stock_serial.value_object.serial_number import SerialNumberVO
+
+serial = StockSerial.create(
+    identifier=StockSerialIdVO(uuid4()),
+    inventory_item=item.tracking_snapshot(),
+    number=SerialNumberVO("000SN-a"),
+    lot=lot.snapshot(),
+    dates=None,
+)
+serial.ensure_ready_for_receipt(
+    inventory_item=item.tracking_snapshot(),
+    lot=lot.snapshot(),
+)
+# Для REQUIRED дата должна быть заполнена в lot.
+```
+
+Номер и принадлежность партии неизменяемы в текущем срезе. Исправления после
+проведения, проверка использования, соответствие серийных ID количеству операции
+и защита от одновременного учёта одного экземпляра в разных позициях относятся
+к последующим складским сценариям. SQL, API и проведение движений не реализуются.
 
 ## Изменения, восстановление и проверки
 
@@ -381,5 +471,6 @@ completed.ensure_ready_for_receipt(inventory_item=snapshot)
 
 Тесты находятся в `test/test_inventory_domain.py`,
 `test/test_inventory_packaging_domain.py`, `test/test_inventory_uom_domain.py`,
-`test/test_inventory_quantity_domain.py` и `test/test_inventory_stock_lot_domain.py`.
+`test/test_inventory_quantity_domain.py`, `test/test_inventory_stock_lot_domain.py`
+и `test/test_inventory_stock_serial_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

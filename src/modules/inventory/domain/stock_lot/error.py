@@ -13,13 +13,13 @@ class InvalidLotNumberError(StockLotError):
     """Сообщает о некорректном номере партии."""
 
 
-class InvalidLotDatesError(StockLotError):
-    """Сообщает о неверных типах или порядке дат партии."""
-
-
 class LotTrackingNotAllowedError(StockLotError):
     """Запрещает использование партии для товара без партийного учёта."""
 
 
 class StockLotItemMismatchError(StockLotError):
     """Сообщает, что партия и снимок относятся к разным товарам."""
+
+
+class InvalidStockLotSnapshotError(StockLotError):
+    """Сообщает о некорректном снимке идентичности и дат партии."""

@@ -9,6 +9,7 @@ from uuid import uuid4
 from src.modules.inventory.domain.error import (
     ExpirationDateNotAllowedError,
     ExpirationDateRequiredError,
+    InvalidStockDatesError,
 )
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
 from src.modules.inventory.domain.inventory_item.error import (
@@ -29,14 +30,13 @@ from src.modules.inventory.domain.policy.stock_expiration import StockExpiration
 from src.modules.inventory.domain.policy.stock_lot import StockLotPolicy
 from src.modules.inventory.domain.stock_lot.aggregate import StockLot
 from src.modules.inventory.domain.stock_lot.error import (
-    InvalidLotDatesError,
     InvalidLotNumberError,
     InvalidStockLotValueError,
     LotTrackingNotAllowedError,
     StockLotItemMismatchError,
 )
 from src.modules.inventory.domain.stock_lot.value_object.identifier import StockLotIdVO
-from src.modules.inventory.domain.stock_lot.value_object.lot_dates import LotDatesVO
+from src.modules.inventory.domain.value_object.stock_dates import StockDatesVO
 from src.modules.inventory.domain.stock_lot.value_object.lot_number import LotNumberVO
 from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
@@ -73,10 +73,10 @@ class StockLotValueObjectTests(unittest.TestCase):
             (date(9998, 1, 1), date(9999, 1, 1)),
         ):
             with self.subTest(manufactured_on=manufactured_on, expires_on=expires_on):
-                dates = LotDatesVO(manufactured_on, expires_on)
+                dates = StockDatesVO(manufactured_on, expires_on)
                 self.assertEqual(dates.manufactured_on, manufactured_on)
                 self.assertEqual(dates.expires_on, expires_on)
-        self.assertEqual(LotDatesVO(), LotDatesVO(None, None))
+        self.assertEqual(StockDatesVO(), StockDatesVO(None, None))
 
     def test_dates_reject_time_untyped_values_and_reversed_order(self) -> None:
         """Не превращает datetime и строки в календарные даты и проверяет их порядок."""
@@ -84,12 +84,12 @@ class StockLotValueObjectTests(unittest.TestCase):
             for value in ("2000-01-01", 0, False, datetime(2000, 1, 1), object()):
                 with (
                     self.subTest(name=name, value=value),
-                    self.assertRaises(InvalidLotDatesError),
+                    self.assertRaises(InvalidStockDatesError),
                 ):
-                    LotDatesVO(**{name: value})
-        with self.assertRaises(InvalidLotDatesError):
-            LotDatesVO(date(2001, 1, 1), date(2000, 1, 1))
-        dates = LotDatesVO(expires_on=date(2000, 1, 1))
+                    StockDatesVO(**{name: value})
+        with self.assertRaises(InvalidStockDatesError):
+            StockDatesVO(date(2001, 1, 1), date(2000, 1, 1))
+        dates = StockDatesVO(expires_on=date(2000, 1, 1))
         with self.assertRaises(FrozenInstanceError):
             dates.expires_on = None
 
@@ -107,7 +107,7 @@ class StockExpirationPolicyTests(unittest.TestCase):
 
     def test_all_modes_allow_incomplete_dates_but_required_is_not_ready(self) -> None:
         """Производственная дата не заменяет обязательное окончание срока годности."""
-        for dates in (LotDatesVO(), LotDatesVO(manufactured_on=date(2000, 1, 1))):
+        for dates in (StockDatesVO(), StockDatesVO(manufactured_on=date(2000, 1, 1))):
             for mode in ExpirationMode:
                 with self.subTest(dates=dates, mode=mode):
                     StockExpirationPolicy.ensure_dates_allowed(
@@ -128,7 +128,7 @@ class StockExpirationPolicyTests(unittest.TestCase):
     ) -> None:
         """NONE запрещает заполнение срока, OPTIONAL не оценивает прошедшую дату."""
         for expires_on in (date(2000, 1, 1), date(9999, 1, 1)):
-            dates = LotDatesVO(expires_on=expires_on)
+            dates = StockDatesVO(expires_on=expires_on)
             for check in (
                 StockExpirationPolicy.ensure_dates_allowed,
                 StockExpirationPolicy.ensure_ready_for_receipt,
@@ -143,7 +143,7 @@ class StockExpirationPolicyTests(unittest.TestCase):
     ) -> None:
         """Наличие даты и разрешение приёмки просрочки остаются разными проверками."""
         StockExpirationPolicy.ensure_ready_for_receipt(
-            dates=LotDatesVO(expires_on=date(2000, 1, 1)),
+            dates=StockDatesVO(expires_on=date(2000, 1, 1)),
             expiration_mode=ExpirationMode.REQUIRED,
         )
 
@@ -154,10 +154,10 @@ class StockExpirationPolicyTests(unittest.TestCase):
             StockExpirationPolicy.ensure_ready_for_receipt,
         ):
             with self.subTest(check=check):
-                with self.assertRaises(InvalidLotDatesError):
+                with self.assertRaises(InvalidStockDatesError):
                     check(dates=None, expiration_mode=ExpirationMode.OPTIONAL)
                 with self.assertRaises(InvalidTrackingConfigurationError):
-                    check(dates=LotDatesVO(), expiration_mode="OPTIONAL")
+                    check(dates=StockDatesVO(), expiration_mode="OPTIONAL")
 
 
 class StockLotDomainTests(unittest.TestCase):
@@ -187,7 +187,7 @@ class StockLotDomainTests(unittest.TestCase):
             identifier=StockLotIdVO(uuid4()),
             inventory_item=self.snapshot,
             number=LotNumberVO("000LOT-a"),
-            dates=LotDatesVO(),
+            dates=StockDatesVO(),
         )
         return StockLot.create(**(values | changes))
 
@@ -246,7 +246,7 @@ class StockLotDomainTests(unittest.TestCase):
         """Заполнение срока делает неполную партию готовой, сохраняя исходную карточку."""
         with self.assertRaises(ExpirationDateRequiredError):
             self.lot.ensure_ready_for_receipt(inventory_item=self.snapshot)
-        dates = LotDatesVO(date(2000, 1, 1), date(2001, 1, 1))
+        dates = StockDatesVO(date(2000, 1, 1), date(2001, 1, 1))
         completed = self.lot.change_dates(dates, inventory_item=self.snapshot)
         self.assertIsNone(
             completed.ensure_ready_for_receipt(inventory_item=self.snapshot)
@@ -256,9 +256,11 @@ class StockLotDomainTests(unittest.TestCase):
             (self.lot.id, self.item.id, self.lot.number),
         )
         self.assertIs(completed.dates, dates)
-        self.assertEqual(self.lot.dates, LotDatesVO())
+        self.assertEqual(self.lot.dates, StockDatesVO())
         self.assertEqual(self.restore_lot(dates=dates), completed)
-        incomplete = completed.change_dates(LotDatesVO(), inventory_item=self.snapshot)
+        incomplete = completed.change_dates(
+            StockDatesVO(), inventory_item=self.snapshot
+        )
         with self.assertRaises(ExpirationDateRequiredError):
             incomplete.ensure_ready_for_receipt(inventory_item=self.snapshot)
         self.assertEqual(completed.dates, dates)
@@ -269,10 +271,11 @@ class StockLotDomainTests(unittest.TestCase):
         """Неподходящая дата не попадает в партию и не меняет исходный экземпляр."""
         snapshot = replace(self.snapshot, expiration_mode=ExpirationMode.NONE)
         lot = self.create_lot(
-            inventory_item=snapshot, dates=LotDatesVO(manufactured_on=date(2000, 1, 1))
+            inventory_item=snapshot,
+            dates=StockDatesVO(manufactured_on=date(2000, 1, 1)),
         )
         lot.ensure_ready_for_receipt(inventory_item=snapshot)
-        dates = LotDatesVO(expires_on=date(2001, 1, 1))
+        dates = StockDatesVO(expires_on=date(2001, 1, 1))
         with self.assertRaises(ExpirationDateNotAllowedError):
             self.create_lot(inventory_item=snapshot, dates=dates)
         with self.assertRaises(ExpirationDateNotAllowedError):
@@ -282,7 +285,7 @@ class StockLotDomainTests(unittest.TestCase):
     def test_optional_past_note_is_ready_and_remains_a_distinct_mode(self) -> None:
         """Историческая дата в OPTIONAL не мешает прохождению проверки полноты."""
         snapshot = replace(self.snapshot, expiration_mode=ExpirationMode.OPTIONAL)
-        dates = LotDatesVO(expires_on=date(2000, 1, 1))
+        dates = StockDatesVO(expires_on=date(2000, 1, 1))
         lot = self.create_lot(inventory_item=snapshot, dates=dates)
         lot.ensure_ready_for_receipt(inventory_item=snapshot)
         self.assertEqual(lot.dates, dates)
@@ -293,17 +296,17 @@ class StockLotDomainTests(unittest.TestCase):
         foreign = self.make_item().tracking_snapshot()
         with self.assertRaises(StockLotItemMismatchError):
             self.lot.change_dates(
-                LotDatesVO(expires_on=date(2001, 1, 1)), inventory_item=foreign
+                StockDatesVO(expires_on=date(2001, 1, 1)), inventory_item=foreign
             )
         with self.assertRaises(StockLotItemMismatchError):
             self.lot.ensure_ready_for_receipt(inventory_item=foreign)
-        self.assertEqual(self.lot.dates, LotDatesVO())
+        self.assertEqual(self.lot.dates, StockDatesVO())
 
     def test_restore_preserves_history_and_current_rules_are_checked_on_use(
         self,
     ) -> None:
         """Восстановление истории не обращается к текущему товару и не стирает даты."""
-        dates = LotDatesVO(date(2000, 1, 1), date(2001, 1, 1))
+        dates = StockDatesVO(date(2000, 1, 1), date(2001, 1, 1))
         restored = self.restore_lot(dates=dates)
         self.assertIs(restored.id, self.lot.id)
         self.assertIs(restored.inventory_item_id, self.lot.inventory_item_id)
@@ -360,7 +363,7 @@ class StockLotDomainTests(unittest.TestCase):
                 with self.assertRaises(InvalidInventoryItemTrackingSnapshotError):
                     self.create_lot(inventory_item=invalid)
                 with self.assertRaises(InvalidInventoryItemTrackingSnapshotError):
-                    self.lot.change_dates(LotDatesVO(), inventory_item=invalid)
+                    self.lot.change_dates(StockDatesVO(), inventory_item=invalid)
                 with self.assertRaises(InvalidInventoryItemTrackingSnapshotError):
                     self.lot.ensure_ready_for_receipt(inventory_item=invalid)
         with self.assertRaises(InvalidStockLotValueError):
@@ -383,10 +386,12 @@ class StockLotDomainTests(unittest.TestCase):
         """Ошибка значения оставляет исходную партию целой; готовность проверяет собственный состав."""
         with self.assertRaises(InvalidStockLotValueError):
             self.lot.change_dates(None, inventory_item=self.snapshot)
-        invalid = StockLot(self.lot.id, self.lot.inventory_item_id, "LOT", LotDatesVO())
+        invalid = StockLot(
+            self.lot.id, self.lot.inventory_item_id, "LOT", StockDatesVO()
+        )
         with self.assertRaises(InvalidStockLotValueError):
             invalid.ensure_ready_for_receipt(inventory_item=self.snapshot)
-        self.assertEqual(self.lot.dates, LotDatesVO())
+        self.assertEqual(self.lot.dates, StockDatesVO())
 
     def test_lot_is_immutable_and_has_independent_identity_for_the_same_number(
         self,
@@ -396,7 +401,7 @@ class StockLotDomainTests(unittest.TestCase):
         self.assertNotEqual(other.id, self.lot.id)
         self.assertEqual(other.inventory_item_id, self.lot.inventory_item_id)
         for obj, name, value in (
-            (self.lot, "dates", LotDatesVO()),
+            (self.lot, "dates", StockDatesVO()),
             (self.lot, "inventory_item_id", other.inventory_item_id),
             (self.lot, "number", LotNumberVO("OTHER")),
             (self.lot, "id", other.id),
