@@ -1,0 +1,197 @@
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Self
+
+from src.modules.inventory.domain.policy.stock_movement_balance import (
+    StockMovementBalancePolicy,
+)
+from src.modules.inventory.domain.policy.stock_posting import StockPostingPolicy
+from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
+from src.modules.inventory.domain.stock_position.snapshot import StockPositionSnapshot
+from src.modules.inventory.domain.stock_posting.entity.stock_ledger_entry import (
+    StockLedgerEntry,
+)
+from src.modules.inventory.domain.stock_posting.error import (
+    InvalidPostingContextError,
+    InvalidStockPostingSnapshotError,
+    InvalidStockReversalError,
+)
+from src.modules.inventory.domain.stock_posting.snapshot import StockPostingSnapshot
+from src.modules.inventory.domain.stock_posting.value_object.identifier import (
+    StockPostingIdVO,
+)
+from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import (
+    StockLedgerEntryIdVO,
+)
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
+    StockOperationType,
+)
+from src.modules.inventory.domain.stock_posting.value_object.posting_source import (
+    PostingSourceVO,
+)
+from src.modules.inventory.domain.value_object.stock_delta import StockDeltaVO
+
+
+@dataclass(frozen=True, slots=True)
+class StockPosting:
+    """Неизменяемый факт проведения, владеющий журналом без прямого изменения позиций."""
+
+    id: StockPostingIdVO
+    source: PostingSourceVO
+    operation_type: StockOperationType
+    posted_at: datetime
+    entries: tuple[StockLedgerEntry, ...]
+    reversal_of_id: StockPostingIdVO | None
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        source: PostingSourceVO,
+        operation_type: StockOperationType,
+        posted_at: datetime,
+        entries: tuple[StockLedgerEntry, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...] = (),
+    ) -> Self:
+        """Создаёт завершённое обычное проведение по снимкам позиций и системному пересчёту."""
+        posting = cls.restore(
+            identifier=identifier,
+            source=source,
+            operation_type=operation_type,
+            posted_at=posted_at,
+            entries=entries,
+            reversal_of_id=None,
+        )
+        for entry in posting.entries:
+            entry.ensure_current_conversion()
+        posting._ensure_context(positions=positions, locations=locations)
+        return posting
+
+    @classmethod
+    def restore(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        source: PostingSourceVO,
+        operation_type: StockOperationType,
+        posted_at: datetime,
+        entries: tuple[StockLedgerEntry, ...],
+        reversal_of_id: StockPostingIdVO | None,
+    ) -> Self:
+        """Восстанавливает полный исторический состав без текущих снимков и новых коэффициентов."""
+        posting = cls(
+            identifier,
+            source,
+            operation_type,
+            StockPostingPolicy.normalize_time(posted_at),
+            entries,
+            reversal_of_id,
+        )
+        posting._validate()
+        return posting
+
+    @classmethod
+    def create_reversal(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        source: PostingSourceVO,
+        posted_at: datetime,
+        original: StockPostingSnapshot,
+        entry_ids: tuple[StockLedgerEntryIdVO, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...] = (),
+    ) -> Self:
+        """Создаёт точную компенсацию всех записей с новыми ID и основанием без правки оригинала."""
+        if not isinstance(original, StockPostingSnapshot):
+            raise InvalidStockPostingSnapshotError("Нужен снимок исходного проведения.")
+        original.ensure_valid()
+        normalized = StockPostingPolicy.normalize_time(posted_at)
+        if (
+            not isinstance(identifier, StockPostingIdVO)
+            or identifier == original.id
+            or not isinstance(source, PostingSourceVO)
+            or source.execution_id == original.source.execution_id
+            or normalized < original.posted_at
+            or not isinstance(entry_ids, tuple)
+            or len(entry_ids) != len(original.entries)
+        ):
+            raise InvalidStockReversalError(
+                "Компенсация требует новых ID и основания, полного состава и времени не раньше исходного."
+            )
+        original_ids = {entry.id for entry in original.entries}
+        entries = []
+        for entry_id, entry in zip(entry_ids, original.entries, strict=True):
+            if (
+                not isinstance(entry_id, StockLedgerEntryIdVO)
+                or entry_id in original_ids
+            ):
+                raise InvalidStockReversalError(
+                    "Каждая компенсирующая запись требует нового StockLedgerEntryIdVO."
+                )
+            entries.append(
+                StockLedgerEntry.restore(
+                    identifier=entry_id,
+                    position_id=entry.position_id,
+                    quantity_delta=StockDeltaVO(
+                        entry.quantity_delta.value.copy_negate()
+                    ),
+                    base_uom=entry.base_uom,
+                    conversion=entry.conversion,
+                )
+            )
+        posting = cls.restore(
+            identifier=identifier,
+            source=source,
+            operation_type=original.operation_type,
+            posted_at=normalized,
+            entries=tuple(entries),
+            reversal_of_id=original.id,
+        )
+        posting._ensure_context(positions=positions, locations=locations)
+        return posting
+
+    def snapshot(self) -> StockPostingSnapshot:
+        """Возвращает проверенный состав для будущей компенсации без чужих агрегатов."""
+        self._validate()
+        return StockPostingSnapshot(
+            self.id,
+            self.source,
+            self.operation_type,
+            self.posted_at,
+            self.entries,
+            self.reversal_of_id,
+        )
+
+    def _validate(self) -> None:
+        """Проверяет собственный состав и обычные знаки без текущих настроек и I/O."""
+        StockPostingPolicy.ensure_valid(
+            identifier=self.id,
+            source=self.source,
+            operation_type=self.operation_type,
+            posted_at=self.posted_at,
+            entries=self.entries,
+            reversal_of_id=self.reversal_of_id,
+        )
+
+    def _ensure_context(
+        self,
+        *,
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> None:
+        """Сверяет ссылки и баланс перемещения, оставляя доступность и физический переход позициям."""
+        if self.operation_type is StockOperationType.INTERNAL_MOVE:
+            StockMovementBalancePolicy.ensure_balanced(
+                entries=self.entries, positions=positions, locations=locations
+            )
+        else:
+            if not isinstance(locations, tuple) or locations:
+                raise InvalidPostingContextError(
+                    "Локации отдельно передаются только для внутреннего перемещения."
+                )
+            StockPostingPolicy.ensure_positions(
+                entries=self.entries, positions=positions
+            )

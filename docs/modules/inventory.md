@@ -1,9 +1,12 @@
-# Inventory: Domain-модель товара, прослеживаемости и складов
+# Inventory: Domain-модель товара, складов и физического журнала
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
-`PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation` и `StockPosition`
+`PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`
+и `StockPosting`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
-`domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/` и `domain/stock_position/`.
+`domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`
+и `domain/stock_posting/`. В `domain/stock_execution/` пока существует только
+StockExecutionIdVO для типизированной ссылки на будущее исполнение, без самого агрегата.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -161,10 +164,11 @@ Decimal Context с достаточной точностью для систем
 отклоняются с `InvalidStockDeltaError`. VO неизменяем и не зависит от внешнего
 Decimal context.
 
-Кратность шагу, допустимость нулевой записи журнала и проверка результирующего
-остатка относятся к отдельным политикам и будущим агрегатам складского учёта.
-Текущие QuantityValidationPolicy и UomConversionPolicy принимают QuantityVO;
-обработка знакового изменения в них в этот срез не входит.
+Кратность шагу и результирующий остаток проверяют QuantityValidationPolicy
+и StockQuantityPolicy. StockLedgerEntry запрещает нулевую дельту журнала,
+сохраняя допустимость нуля в общем StockDeltaVO и StockPosition.apply_delta().
+UomConversionPolicy принимает неотрицательную величину QuantityVO; знак движения
+сохраняется отдельно в quantity_delta записи.
 
 ## Шаг количества
 
@@ -744,10 +748,175 @@ changed = position.apply_delta(StockDeltaVO(Decimal("1.25")), **context)
 # changed: on_hand_qty=1.25, version=1; исходный position остаётся нулевым.
 ```
 
-Это Domain-переход в памяти. Следующий StockPosting должен фиксировать Ledger
-и новое состояние позиции в одной транзакции. Отдельная Application-команда,
-API прямой установки остатка, SQL, журнал и движение документов в этот срез не входят.
+Это Domain-переход в памяти. Будущий Application-сценарий проведения должен сохранять
+StockPosting и новое состояние позиции в одной транзакции. SQL, API и исполнение
+документов пока отсутствуют; Domain-модель журнала описана ниже.
 SupplierAvailability остаётся внешним наблюдением и не создаёт физические позиции.
+
+## Неизменяемый журнал физических движений
+
+StockPosting — самостоятельный Aggregate Root завершённого проведения. Он владеет
+неизменяемыми дочерними StockLedgerEntry; собственных репозиториев у записей нет.
+Черновик, согласование и редактирование строк будут ответственностью StockDocument
+и StockExecution. У StockPosting нет методов редактирования, удаления и установки статуса.
+
+| Поле StockPosting | Тип |
+| --- | --- |
+| id | StockPostingIdVO |
+| source | PostingSourceVO с execution_id: StockExecutionIdVO |
+| operation_type | StockOperationType |
+| posted_at | datetime с часовым поясом, нормализованный в UTC |
+| entries | Непустой tuple[StockLedgerEntry, ...] |
+| reversal_of_id | StockPostingIdVO или None |
+
+ID и время передаются явно; Domain не генерирует их и не вызывает часы.
+StockExecutionIdVO — только контракт идентичности. Существование исполнения,
+принадлежность tenant и запрет повторного проведения проверит будущий сценарий.
+
+| Поле StockLedgerEntry | Тип |
+| --- | --- |
+| id | StockLedgerEntryIdVO |
+| position_id | StockPositionIdVO |
+| quantity_delta | Ненулевой StockDeltaVO в базовой единице |
+| base_uom | UomCodeVO |
+| conversion | QuantityConversionSnapshotVO |
+
+Одна позиция встречается в проведении ровно один раз; ID записей также уникальны.
+Повторы отклоняются без скрытого объединения. Нулевая дельта, включая -0.000,
+даёт ZeroStockLedgerDeltaError. Проверки собственного состава повторяются
+при использовании снимков и непосредственно сконструированных записей.
+
+QuantityConversionSnapshotVO содержит положительное исходное quantity: QuantityVO,
+системную uom: UomCodeVO и конечный положительный factor_to_base: Decimal.
+Например, 5000 G × 0.001 = 5 KG. Знак задаёт quantity_delta; исходное количество
+не становится отрицательным при расходе или компенсации.
+
+- QuantityConversionSnapshotVO.create() получает коэффициент из системного справочника.
+- StockLedgerEntry.create() и обычный StockPosting.create() повторно сверяют его
+  с текущим системным коэффициентом. Произвольные межразмерные пересчёты запрещены.
+- StockLedgerEntry.restore() проверяет точное равенство сохранённого произведения
+  модулю дельты без замены коэффициента текущим. StockPosting.restore() сохраняет
+  этот состав. Поэтому исторический коэффициент остаётся авторитетным при восстановлении.
+- Арифметика не зависит от внешних Decimal precision/rounding/traps и не округляет
+  результат. Непредставимый точный пересчёт даёт InvalidQuantityConversionError,
+  несовпадение величин или нового коэффициента — QuantityConversionMismatchError.
+
+Пользовательская упаковка пока не является исходной единицей этого VO.
+Её содержимое и идентичность потребуют отдельного снимка в будущем StockExecution.
+
+### Поддержанные операции и проверка контекста
+
+| StockOperationType | Правило обычного проведения |
+| --- | --- |
+| RECEIPT | Каждая дельта положительная |
+| ISSUE | Каждая дельта отрицательная |
+| INTERNAL_MOVE | Точный баланс расхода и прихода между локациями одного склада |
+
+StockPostingPolicy проверяет состав, знаки и ссылки на позиции. Для каждой записи
+требуется ровно один StockPositionSnapshot с id, dimensions и base_uom, полученный
+через StockPosition.snapshot(). Лишние, повторные или отсутствующие снимки,
+различающиеся единицы и два ID позиции с одинаковыми измерениями отклоняются.
+Снимок не содержит текущего количества или версии и не доказывает наличие товара.
+
+StockMovementBalancePolicy дополнительно получает ровно участвующие снимки
+StockLocation и требует один склад. Приход и расход сравниваются отдельно по
+товару, владельцу, партии, серии, состоянию и базовой единице. Общий нулевой
+итог не разрешает подменить товар или изменить состояние. Внутри группы
+локации различаются; несколько товаров и распределение по адресам разрешены.
+Суммирование точное и использует безопасную арифметику StockQuantityPolicy.
+
+Для конкретного серийного экземпляра дельта равна +1 или -1 PCS. В одном
+проведении допускается не больше одного прихода и одного расхода serial_id.
+Положительное присутствие серии в других позициях tenant проверит будущий
+сценарий с блокировками и ограничениями БД.
+
+Журнал описывает физические факты и сам не разрешает проведение в неактивной
+локации, продажу BLOCKED или поступление без обязательной даты. Проверки
+активности, допустимости операции и сроков годности добавятся при её исполнении.
+ADJUSTMENT, WRITE_OFF, STATUS_CHANGE, RETURN и межскладские этапы пока не поддержаны
+StockOperationType; они остаются в целевом плане документов и расширений правил.
+
+### Создание, восстановление и компенсация
+
+StockPosting.create() получает поля проведения, entries и снимки positions;
+для INTERNAL_MOVE дополнительно locations. Создаётся только обычное проведение,
+без аргумента reversal_of_id. Для RECEIPT/ISSUE отдельные снимки locations не передаются.
+
+StockPosting.restore() принимает весь собственный состав, включая reversal_of_id,
+нормализует время и проверяет поля, уникальность записей, сохранённый пересчёт
+и знаки обычных операций. Текущие позиции и локации не загружаются. Баланс
+по измерениям и соответствие исходному проведению компенсации требуют внешних
+снимков при создании; восстановление не подтверждает эти межагрегатные отношения заново.
+
+StockPosting.create_reversal() получает проверенный StockPostingSnapshot оригинала,
+новые ID проведения и всех записей, новое основание, время не раньше оригинала
+и снимки позиций/локаций. entry_ids соответствуют порядку original.entries.
+Фабрика сама создаёт полный набор противоположных дельт: произвольные строки
+компенсации передать нельзя. Позиции, единицы и снимки пересчёта сохраняются,
+тип операции наследуется, reversal_of_id ссылается на оригинал. Обычное правило
+знаков RECEIPT/ISSUE к компенсации не применяется. Исходное проведение не изменяется.
+
+Компенсация компенсации может создать следующий факт с новой ссылкой в цепочке.
+Запрет повторной компенсации одного оригинала и глобальная уникальность ID/основания
+требуют будущего хранения. Наличие достаточного остатка для обратного движения
+проверяется через StockPosition.apply_delta(), а не самим снимком журнала.
+
+Пример для ранее подготовленной позиции position в KG:
+
+```python
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_execution.value_object.identifier import StockExecutionIdVO
+from src.modules.inventory.domain.stock_posting.aggregate import StockPosting
+from src.modules.inventory.domain.stock_posting.entity.stock_ledger_entry import StockLedgerEntry
+from src.modules.inventory.domain.stock_posting.value_object.identifier import StockPostingIdVO
+from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import StockLedgerEntryIdVO
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import StockOperationType
+from src.modules.inventory.domain.stock_posting.value_object.posting_source import PostingSourceVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.quantity_conversion_snapshot import QuantityConversionSnapshotVO
+from src.modules.inventory.domain.value_object.stock_delta import StockDeltaVO
+from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+
+conversion = QuantityConversionSnapshotVO.create(
+    quantity=QuantityVO(Decimal("5000")),
+    uom=UomCodeVO("G"),
+    base_uom=position.base_uom,
+)
+entry = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(uuid4()),
+    position_id=position.id,
+    quantity_delta=StockDeltaVO(Decimal("5")),
+    base_uom=position.base_uom,
+    conversion=conversion,
+)
+posting = StockPosting.create(
+    identifier=StockPostingIdVO(uuid4()),
+    source=PostingSourceVO(StockExecutionIdVO(uuid4())),
+    operation_type=StockOperationType.RECEIPT,
+    posted_at=datetime(2026, 11, 3, 12, tzinfo=UTC),
+    entries=(entry,),
+    positions=(position.snapshot(),),
+)
+compensation = StockPosting.create_reversal(
+    identifier=StockPostingIdVO(uuid4()),
+    source=PostingSourceVO(StockExecutionIdVO(uuid4())),
+    posted_at=datetime(2026, 11, 3, 13, tzinfo=UTC),
+    original=posting.snapshot(),
+    entry_ids=(StockLedgerEntryIdVO(uuid4()),),
+    positions=(position.snapshot(),),
+)
+# posting: +5 KG; compensation: -5 KG. Сама position здесь не изменяется.
+```
+
+Создание журнала ещё не доказывает возможность применить дельты. Будущий
+Application-сценарий проверяет актуальный контекст каждого изменения через
+StockPosition.apply_delta(), в том числе шаг, уход в минус и предел 0–1 серии,
+и сохраняет StockPosting вместе со всеми новыми позициями в одном UoW.
+Domain-фабрика не выполняет эти изменения, не открывает транзакций и не заменяет
+идемпотентность, защиту версий и Outbox. Отдельный write API прямого остатка не добавлен.
 
 ## Изменения, восстановление и проверки
 
@@ -757,14 +926,16 @@ SupplierAvailability остаётся внешним наблюдением и �
 при успехе и при отказе исходное состояние остаётся неизменным.
 
 Базовая единица, правила количества и режимы прослеживаемости задаются при создании.
-Их изменение, защита использованных упаковок и сохранение снимков коэффициентов
-в проведённых движениях относятся к будущим контролируемым сценариям.
+Их изменение и защита использованных упаковок относятся к будущим контролируемым
+сценариям. Ledger уже сохраняет снимок исходного количества и системного пересчёта;
+снимок пользовательской упаковки появится вместе со строками исполнения.
 У дочерних Entity нет самостоятельных write repositories.
 
 Тесты находятся в `test/test_inventory_domain.py`,
 `test/test_inventory_packaging_domain.py`, `test/test_inventory_uom_domain.py`,
 `test/test_inventory_quantity_domain.py`, `test/test_inventory_stock_lot_domain.py`,
 `test/test_inventory_stock_serial_domain.py`, `test/test_inventory_warehouse_domain.py`,
-`test/test_inventory_stock_location_domain.py`, `test/test_inventory_stock_position_domain.py`
-и `test/test_inventory_stock_quantity_domain.py`.
+`test/test_inventory_stock_location_domain.py`, `test/test_inventory_stock_position_domain.py`,
+`test/test_inventory_stock_quantity_domain.py`, `test/test_inventory_ledger_conversion_domain.py`
+и `test/test_inventory_stock_posting_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

@@ -41,6 +41,14 @@ class StockQuantityArithmeticError(InventoryError):
     """Сообщает о невозможности безопасно представить точный результат арифметики."""
 
 
+class InvalidQuantityConversionError(InventoryError):
+    """Сообщает о некорректном сохранённом количестве или коэффициенте пересчёта."""
+
+
+class QuantityConversionMismatchError(InventoryError):
+    """Сообщает о несоответствии исходного количества, коэффициента и базовой дельты."""
+
+
 class InvalidStockDatesError(InventoryError):
     """Сообщает о неверных типах или порядке дат партии или серийного экземпляра."""
 

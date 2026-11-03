@@ -14,6 +14,7 @@ from src.modules.inventory.domain.stock_position.error import (
     InvalidStockPositionValueError,
     StockPositionUomMismatchError,
 )
+from src.modules.inventory.domain.stock_position.snapshot import StockPositionSnapshot
 from src.modules.inventory.domain.stock_position.value_object.dimensions import (
     StockDimensionsVO,
 )
@@ -81,6 +82,11 @@ class StockPosition:
         position = cls(identifier, dimensions, base_uom, on_hand_qty, version)
         position._validate()
         return position
+
+    def snapshot(self) -> StockPositionSnapshot:
+        """Возвращает проверенные неизменяемые атрибуты без остатка и версии."""
+        self._validate()
+        return StockPositionSnapshot(self.id, self.dimensions, self.base_uom)
 
     def apply_delta(
         self,

@@ -9,6 +9,10 @@ class InvalidStockPositionValueError(StockPositionError):
     """Сообщает о некорректном собственном состоянии позиции."""
 
 
+class InvalidStockPositionSnapshotError(StockPositionError):
+    """Сообщает о некорректном снимке неизменяемых атрибутов позиции."""
+
+
 class InvalidStockDimensionsError(StockPositionError):
     """Сообщает о неверных типах учётных измерений."""
 

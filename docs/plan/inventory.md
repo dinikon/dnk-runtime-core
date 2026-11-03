@@ -468,12 +468,13 @@ Stock Accounting
 
 #### Aggregate: StockPosting
 
-Представляет подтвержденный факт учетного проведения.
+Представляет подтверждённый факт учётного проведения. Реализован первый
+Domain-срез неизменяемого журнала; сохранение и исполнение пока не реализованы.
 
 ```
 StockPosting
- ├── posting_id
- ├── execution_id
+ ├── id: StockPostingIdVO
+ ├── source: PostingSourceVO(execution_id: StockExecutionIdVO)
  ├── operation_type
  ├── posted_at
  ├── reversal_of_id?
@@ -481,8 +482,9 @@ StockPosting
  └── StockLedgerEntry[]
       ├── position_id
       ├── quantity_delta
-      ├── base_uom_id
-      └── entry_id
+      ├── base_uom: UomCodeVO
+      ├── id: StockLedgerEntryIdVO
+      └── conversion: QuantityConversionSnapshotVO
 ```
 
 Для перемещения десяти единиц:
@@ -502,6 +504,53 @@ StockPosting
 - `StockPosition.on_hand_qty` обновляется синхронно с Ledger в одной транзакции.
 - Из Ledger можно восстановить физические остатки.
 - Количества и единицы фиксируются с сохранением исходного коэффициента преобразования.
+
+Состав реализованного Domain-среза:
+
+- StockPosting — завершённый immutable Aggregate Root без DRAFT и методов
+  редактирования. Он владеет непустым tuple StockLedgerEntry; дочерние записи
+  не имеют самостоятельного репозитория. ID и aware datetime передаются явно,
+  время нормализуется в UTC. StockExecution пока представлен только ID-контрактом.
+- PostingSourceVO обязательно ссылается на фактическое исполнение. Проверка его
+  существования и уникального проведения относится к будущему Application/SQL.
+- StockLedgerEntry содержит ненулевой StockDeltaVO в базовой единице. Одна позиция
+  встречается в проведении один раз; повтор ID записи или position_id отклоняется
+  без скрытой агрегации. Общий StockDeltaVO по-прежнему допускает ноль.
+- QuantityConversionSnapshotVO фиксирует положительное исходное количество,
+  системную единицу и конечный положительный коэффициент в базовую единицу.
+  Модуль дельты точно равен сохранённому произведению. Создание обычной записи
+  и проведения сверяет коэффициент с текущим справочником. Restore и компенсация
+  используют историческое равенство без подмены коэффициента; межразмерные
+  пересчёты запрещены. Снимок пользовательской упаковки — будущая задача исполнения.
+- Первый набор StockOperationType: RECEIPT (все дельты > 0), ISSUE (все < 0),
+  INTERNAL_MOVE (баланс расхода и прихода в пределах одного склада).
+  StockPostingPolicy проверяет состав, знаки, ссылки и совпадение единиц.
+- StockPosition.snapshot() возвращает только ID, StockDimensionsVO и base_uom.
+  Нужны ровно участвующие снимки; повторы ID и одинаковых измерений отклоняются.
+  У снимка нет остатка и версии: он не подтверждает возможность списания.
+- StockMovementBalancePolicy получает также снимки локаций, требует один склад
+  и точный баланс отдельно по товару, владельцу, партии, серии, состоянию и
+  базовой единице. Только локация меняется; общий нулевой итог не заменяет
+  отдельные балансы. Несколько товаров и распределение по адресам разрешены.
+- Для serial_id движение равно ±1 PCS. В пределах одного проведения допускается
+  не больше одного прихода и одного расхода экземпляра; контроль его присутствия
+  вне этого набора потребует транзакции, блокировок и ограничений БД.
+- create проверяет собственный состав и переданные снимки. restore принимает
+  полный исторический состав без текущих позиций и локаций; проверяет собственные
+  инварианты и пересчёт, но не подтверждает заново межагрегатный баланс и основание
+  компенсации. Это ответственность проверенного создания и будущего хранения.
+- create_reversal получает StockPostingSnapshot оригинала, новые ID проведения
+  и каждой записи в порядке оригинала, новое основание и время не раньше исходного.
+  Фабрика сама создаёт полный набор противоположных дельт с прежними позициями,
+  единицами и пересчётами. Тип операции наследуется; обычные знаки RECEIPT/ISSUE
+  к компенсации не применяются. Оригинал неизменяем; возможна компенсация компенсации.
+- Запрет повторной компенсации, глобальная уникальность ID/оснований и проверка
+  актуальных физических остатков остаются будущему сценарию. Создание журнала
+  само по себе не вызывает apply_delta и не разрешает неактивные адреса или
+  поступление без обязательного срока годности. При исполнении потребуются
+  проверки контекста, дат, шага и количества и атомарное сохранение Ledger/позиций.
+- SQL, API, Outbox, операции ADJUSTMENT/WRITE_OFF/STATUS_CHANGE/RETURN и этапы
+  межскладского транзита в этот срез не входят. Они сохраняются в целевом плане.
 
 `StockPosition` — агрегат, обеспечивающий оперативную согласованность количества. Его данные одновременно являются материализованным состоянием, восстановимым из журнала.
 
@@ -1226,10 +1275,10 @@ src/modules/inventory/
 ```
 
 В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial, Warehouse,
-StockLocation и StockPosition.
+StockLocation, StockPosition и StockPosting.
 Их код находится в `domain/inventory_item/`, `domain/packaging_type/`,
-`domain/stock_lot/`, `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`
-и `domain/stock_position/`; общие VO —
+`domain/stock_lot/`, `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`,
+`domain/stock_position/` и `domain/stock_posting/`; общие VO —
 в `domain/value_object/`. Остальные агрегаты добавляются по мере реализации.
 
 Supplier Sourcing с тремя корнями использует структуру
@@ -1293,7 +1342,7 @@ src/modules/inventory/
             └── response/<scenario>.py
 ```
 
-Для семи текущих Aggregate Roots применяется группировка по агрегатам.
+Для восьми текущих Aggregate Roots применяется группировка по агрегатам.
 InventoryItem находится в `src/modules/inventory/domain/inventory_item/aggregate.py`,
 PackagingType — в `src/modules/inventory/domain/packaging_type/aggregate.py`.
 StockLot — в `src/modules/inventory/domain/stock_lot/aggregate.py`.
@@ -1301,6 +1350,9 @@ StockSerial — в `src/modules/inventory/domain/stock_serial/aggregate.py`.
 Warehouse — в `src/modules/inventory/domain/warehouse/aggregate.py`.
 StockLocation — в `src/modules/inventory/domain/stock_location/aggregate.py`.
 StockPosition — в `src/modules/inventory/domain/stock_position/aggregate.py`.
+StockPosting — в `src/modules/inventory/domain/stock_posting/aggregate.py`.
+В `domain/stock_execution/value_object/identifier.py` существует только
+StockExecutionIdVO для ссылки из PostingSourceVO; сам корень пока не реализован.
 Для будущего модуля с одним корнем дополнительный каталог агрегата не нужен,
 согласно общим правилам backend.
 
