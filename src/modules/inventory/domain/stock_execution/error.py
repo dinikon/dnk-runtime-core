@@ -43,3 +43,7 @@ class InvalidStockExecutionPostingSnapshotError(StockExecutionError):
 
 class InvalidStockExecutionReservationSnapshotError(StockExecutionError):
     """Сообщает о некорректном снимке фактических строк для погашения резервов."""
+
+
+class InvalidStockExecutionShipmentSnapshotError(StockExecutionError):
+    """Сообщает о некорректном снимке связи фактических строк с документом для отгрузки."""

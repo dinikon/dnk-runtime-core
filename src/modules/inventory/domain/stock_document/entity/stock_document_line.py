@@ -28,6 +28,9 @@ from src.modules.inventory.domain.stock_document.error import (
 from src.modules.inventory.domain.stock_document.value_object.line_id import (
     StockDocumentLineIdVO,
 )
+from src.modules.inventory.domain.stock_document.value_object.line_source import (
+    DocumentLineSourceVO,
+)
 from src.modules.inventory.domain.uom_catalog import get_uom
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.quantity_conversion_snapshot import (
@@ -47,6 +50,7 @@ class StockDocumentLine:
     planned_qty: QuantityVO
     conversion: QuantityConversionSnapshotVO
     executed_qty: QuantityVO
+    source: DocumentLineSourceVO | None
 
     @classmethod
     def create(
@@ -56,6 +60,7 @@ class StockDocumentLine:
         inventory_item: InventoryItemDocumentSnapshot,
         quantity: QuantityVO,
         uom: UomCodeVO,
+        source: DocumentLineSourceVO | None = None,
     ) -> Self:
         """Создаёт положительный план, вычисляя базовое количество и фиксируя SKU товара."""
         if not isinstance(inventory_item, InventoryItemDocumentSnapshot):
@@ -74,6 +79,7 @@ class StockDocumentLine:
             planned_qty=conversion.to_base_quantity(),
             conversion=conversion,
             executed_qty=QuantityVO(Decimal(0)),
+            source=source,
         )
         line.ensure_compatible(inventory_item)
         return line
@@ -89,6 +95,7 @@ class StockDocumentLine:
         planned_qty: QuantityVO,
         conversion: QuantityConversionSnapshotVO,
         executed_qty: QuantityVO,
+        source: DocumentLineSourceVO | None,
     ) -> Self:
         """Восстанавливает собственный исторический состав без текущих правил или смены SKU."""
         line = cls(
@@ -99,6 +106,7 @@ class StockDocumentLine:
             planned_qty,
             conversion,
             executed_qty,
+            source,
         )
         line.ensure_valid()
         return line
@@ -115,6 +123,10 @@ class StockDocumentLine:
             or not isinstance(self.conversion, QuantityConversionSnapshotVO)
             or not isinstance(self.executed_qty, QuantityVO)
             or self.executed_qty.value > self.planned_qty.value
+            or (
+                self.source is not None
+                and not isinstance(self.source, DocumentLineSourceVO)
+            )
         ):
             raise InvalidStockDocumentLineError(
                 "Строка требует типизированные значения и положительное плановое количество."

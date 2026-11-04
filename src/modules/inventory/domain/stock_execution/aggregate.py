@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Self
+from src.modules.inventory.domain.stock_execution.shipment_snapshot import (
+    StockExecutionShipmentLineSnapshot,
+    StockExecutionShipmentSnapshot,
+)
 
 from src.modules.inventory.domain.stock_execution.reservation_snapshot import (
     StockExecutionReservationLineSnapshot,
@@ -157,6 +161,29 @@ class StockExecution:
         )
         execution._validate()
         return execution
+
+    def shipment_snapshot(self) -> StockExecutionShipmentSnapshot:
+        """Передаёт проверенные фактические строки с ID/версией документа для автоматического назначения Shipment."""
+        self._validate()
+        return StockExecutionShipmentSnapshot(
+            self.id,
+            self.document_id,
+            self.document_version,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionShipmentLineSnapshot(
+                    line.id,
+                    line.document_line_id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                )
+                for line in self.lines
+            ),
+        )
 
     def reservation_snapshot(self) -> StockExecutionReservationSnapshot:
         """Возвращает проверенные базовые строки, область и время без передачи Entity погашению резервов."""

@@ -10,9 +10,10 @@ class DocumentSourceVO:
 
     system: str
     reference: str
+    version: int | None = None
 
     def __post_init__(self) -> None:
-        """Требует непустые строки без управляющих символов, сохраняя регистр ссылки."""
+        """Проверяет непустые строки без управляющих символов и необязательную строгую версию основания."""
         for name in ("system", "reference"):
             value = getattr(self, name)
             if (
@@ -24,3 +25,9 @@ class DocumentSourceVO:
                     "Укажите систему и внешнюю ссылку без управляющих символов."
                 )
             object.__setattr__(self, name, value.strip())
+        if self.version is not None and (
+            type(self.version) is not int or self.version < 0
+        ):
+            raise InvalidDocumentSourceError(
+                "Версия основания должна быть целой неотрицательной без bool или None."
+            )

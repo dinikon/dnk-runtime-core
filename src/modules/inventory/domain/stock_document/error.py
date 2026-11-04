@@ -63,3 +63,27 @@ class StaleStockDocumentVersionError(StockDocumentError):
 
 class StockDocumentOverExecutionError(StockDocumentError):
     """Запрещает суммарное выполнение сверх планового количества строки."""
+
+
+class InvalidDocumentLineSourceError(StockDocumentError):
+    """Сообщает о некорректной универсальной ссылке основания строки документа."""
+
+
+class InvalidShipmentDocumentLineBindingError(StockDocumentError):
+    """Требует типизированное однократное назначение новых ID строк документа строкам отправления."""
+
+
+class StockDocumentShipmentMismatchError(StockDocumentError):
+    """Отклоняет несовместимые основание отправления, область и состав его расходного документа."""
+
+
+class StaleShipmentDocumentSourceError(StockDocumentError):
+    """Отклоняет подтверждение документа по изменившейся версии отправления."""
+
+
+class StockDocumentShipmentQuantityExceededError(StockDocumentError):
+    """Запрещает планировать по строке отправления больше её текущего остатка."""
+
+
+class InvalidStockDocumentShipmentSnapshotError(StockDocumentError):
+    """Сообщает о некорректном снимке происхождения и прогресса расходного документа Shipment."""
