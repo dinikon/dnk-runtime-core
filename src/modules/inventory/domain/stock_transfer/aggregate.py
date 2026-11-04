@@ -2,8 +2,36 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Self
 
+from src.modules.inventory.domain.stock_transfer.dispatch_document_snapshot import (
+    StockTransferDispatchDocumentSnapshot,
+    StockTransferDispatchDocumentLineSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_transfer_receipt import (
+    StockTransferReceiptPolicy,
+)
+from src.modules.inventory.domain.stock_transfer.receipt_snapshot import (
+    StockTransferReceiptSnapshot,
+)
+from src.modules.inventory.domain.stock_transfer.receipt_plan_snapshot import (
+    StockTransferReceiptPlanLineSnapshot,
+    StockTransferReceiptPlanSnapshot,
+)
+
 from src.modules.inventory.domain.inventory_item.stock_snapshot import (
     InventoryItemStockSnapshot,
+)
+from src.modules.inventory.domain.policy.quantity_arithmetic import (
+    QuantityArithmeticPolicy,
+)
+from src.modules.inventory.domain.policy.stock_transfer_dispatch import (
+    StockTransferDispatchPolicy,
+)
+from src.modules.inventory.domain.stock_transfer.dispatch_plan_snapshot import (
+    StockTransferDispatchPlanLineSnapshot,
+    StockTransferDispatchPlanSnapshot,
+)
+from src.modules.inventory.domain.stock_transfer.dispatch_snapshot import (
+    StockTransferDispatchSnapshot,
 )
 from src.modules.inventory.domain.policy.stock_transfer_confirmation import (
     StockTransferConfirmationPolicy,
@@ -21,6 +49,7 @@ from src.modules.inventory.domain.stock_transfer.error import (
     StockTransferStatusError,
     StockTransferTimeError,
     StockTransferVersionConflictError,
+    StockTransferTransitMismatchError,
 )
 from src.modules.inventory.domain.stock_transfer.value_object.identifier import (
     StockTransferIdVO,
@@ -30,6 +59,9 @@ from src.modules.inventory.domain.stock_transfer.value_object.line_id import (
 )
 from src.modules.inventory.domain.stock_transfer.value_object.status import (
     StockTransferStatus,
+)
+from src.modules.inventory.domain.stock_transfer.value_object.transit import (
+    StockTransferTransitVO,
 )
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.quantity_conversion_snapshot import (
@@ -44,7 +76,7 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 
 @dataclass(frozen=True, slots=True)
 class StockTransfer:
-    """План перемещения одного владельца между складами без физической отправки, транзита и приёмки."""
+    """План, отправка и приёмка через фиксированный транзит без прямого изменения чужих остатков."""
 
     id: StockTransferIdVO
     source_warehouse_id: WarehouseIdVO
@@ -52,6 +84,7 @@ class StockTransfer:
     owner_id: StockOwnerIdVO
     status: StockTransferStatus
     lines: tuple[TransferLine, ...]
+    transit: StockTransferTransitVO | None
     created_at: datetime
     updated_at: datetime
     version: int
@@ -86,6 +119,7 @@ class StockTransfer:
             owner_id=owner_id,
             status=StockTransferStatus.DRAFT,
             lines=(),
+            transit=None,
             created_at=created_at,
             updated_at=created_at,
             version=0,
@@ -101,6 +135,7 @@ class StockTransfer:
         owner_id: StockOwnerIdVO,
         status: StockTransferStatus,
         lines: tuple[TransferLine, ...],
+        transit: StockTransferTransitVO | None,
         created_at: datetime,
         updated_at: datetime,
         version: int,
@@ -113,6 +148,7 @@ class StockTransfer:
             owner_id,
             status,
             lines,
+            transit,
             cls._normalize_time(created_at),
             cls._normalize_time(updated_at),
             version,
@@ -157,6 +193,8 @@ class StockTransfer:
             base_uom=previous.base_uom,
             planned_qty=conversion.to_base_quantity(),
             conversion=conversion,
+            dispatched_qty=previous.dispatched_qty,
+            received_qty=previous.received_qty,
         )
         changed.ensure_compatible(inventory_item=inventory_item)
         return self._changed(
@@ -211,10 +249,165 @@ class StockTransfer:
             updated_at=normalized, status=StockTransferStatus.CANCELLED
         )
 
+    def dispatch_document_snapshot(self) -> StockTransferDispatchDocumentSnapshot:
+        """Передаёт проверенные направление, версию и только положительные остатки для документов отправки."""
+        self._validate()
+        return StockTransferDispatchDocumentSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.source_warehouse_id,
+            self.destination_warehouse_id,
+            self.owner_id,
+            self.transit,
+            self.updated_at,
+            tuple(
+                StockTransferDispatchDocumentLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.remaining_to_dispatch_qty(),
+                )
+                for line in self.lines
+                if line.dispatched_qty != line.planned_qty
+            ),
+        )
+
+    def dispatch_snapshot(self) -> StockTransferDispatchPlanSnapshot:
+        """Передаёт проверенные версию, направление, транзит и прогресс строк для согласования пары фактов."""
+        self._validate()
+        return StockTransferDispatchPlanSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.source_warehouse_id,
+            self.destination_warehouse_id,
+            self.owner_id,
+            self.transit,
+            self.updated_at,
+            tuple(
+                StockTransferDispatchPlanLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.planned_qty,
+                    line.dispatched_qty,
+                )
+                for line in self.lines
+            ),
+        )
+
+    def register_dispatch(
+        self,
+        dispatch: StockTransferDispatchSnapshot,
+        *,
+        expected_version: int,
+        updated_at: datetime,
+    ) -> Self:
+        """Накопляет согласованную отправку одной версией и фиксирует транзит без проведения Ledger."""
+        normalized = self._prepare_transition(
+            expected_version, updated_at, draft_only=False
+        )
+        StockTransferDispatchPolicy.ensure_compatible(
+            transfer=self.dispatch_snapshot(), dispatch=dispatch
+        )
+        if normalized < dispatch.executed_at:
+            raise StockTransferTimeError(
+                "Регистрация не может предшествовать фактической отправке."
+            )
+        by_line = {line.transfer_line_id: line.quantity for line in dispatch.lines}
+        lines = tuple(
+            (
+                replace(
+                    line,
+                    dispatched_qty=QuantityArithmeticPolicy.add(
+                        line.dispatched_qty, by_line[line.id]
+                    ),
+                )
+                if line.id in by_line
+                else line
+            )
+            for line in self.lines
+        )
+        return self._changed(
+            updated_at=normalized,
+            lines=lines,
+            transit=dispatch.transit,
+            status=StockTransferStatus.IN_PROGRESS,
+        )
+
+    def receipt_snapshot(self) -> StockTransferReceiptPlanSnapshot:
+        """Передаёт текущий план и оба счётчика для восстановления транзита и согласования приёмки."""
+        self._validate()
+        return StockTransferReceiptPlanSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.source_warehouse_id,
+            self.destination_warehouse_id,
+            self.owner_id,
+            self.transit,
+            self.updated_at,
+            tuple(
+                StockTransferReceiptPlanLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.planned_qty,
+                    line.dispatched_qty,
+                    line.received_qty,
+                )
+                for line in self.lines
+            ),
+        )
+
+    def register_receipt(
+        self,
+        receipt: StockTransferReceiptSnapshot,
+        *,
+        expected_version: int,
+        updated_at: datetime,
+    ) -> Self:
+        """Накопляет проверенную приёмку одной версией и завершает полностью принятый план без проведения Ledger."""
+        normalized = self._prepare_transition(
+            expected_version, updated_at, draft_only=False
+        )
+        StockTransferReceiptPolicy.ensure_compatible(
+            transfer=self.receipt_snapshot(), receipt_result=receipt
+        )
+        if normalized < receipt.executed_at:
+            raise StockTransferTimeError(
+                "Регистрация не может предшествовать фактической приёмке."
+            )
+        quantities = {line.transfer_line_id: line.quantity for line in receipt.lines}
+        lines = tuple(
+            (
+                replace(
+                    line,
+                    received_qty=QuantityArithmeticPolicy.add(
+                        line.received_qty, quantities[line.id]
+                    ),
+                )
+                if line.id in quantities
+                else line
+            )
+            for line in self.lines
+        )
+        complete = all(line.received_qty == line.planned_qty for line in lines)
+        return self._changed(
+            updated_at=normalized,
+            lines=lines,
+            status=(
+                StockTransferStatus.COMPLETED
+                if complete
+                else StockTransferStatus.IN_PROGRESS
+            ),
+        )
+
     def _prepare_transition(
-        self, expected_version: int, updated_at: datetime
+        self, expected_version: int, updated_at: datetime, *, draft_only: bool = True
     ) -> datetime:
-        """Проверяет строгую версию до исторической арифметики, затем собственный состав, черновик и время."""
+        """Проверяет строгую версию до арифметики, собственный состав, при необходимости черновик и время."""
         if (
             type(self.version) is not int
             or self.version < 0
@@ -229,7 +422,7 @@ class StockTransfer:
                 "Ожидаемая версия не совпадает с текущей версией перемещения."
             )
         self._validate()
-        if self.status is not StockTransferStatus.DRAFT:
+        if draft_only and self.status is not StockTransferStatus.DRAFT:
             raise StockTransferStatusError(
                 "Редактирование, подтверждение и отмена доступны только черновику перемещения."
             )
@@ -260,7 +453,7 @@ class StockTransfer:
         return candidate
 
     def _validate(self) -> None:
-        """Проверяет типы, разные склады, уникальность строк, UTC-хронологию и непустой подтверждённый план."""
+        """Проверяет направление, UTC, уникальность строк и согласованность состояния с отправкой, приёмкой и транзитом."""
         if (
             not isinstance(self.id, StockTransferIdVO)
             or not isinstance(self.source_warehouse_id, WarehouseIdVO)
@@ -268,6 +461,10 @@ class StockTransfer:
             or not isinstance(self.owner_id, StockOwnerIdVO)
             or not isinstance(self.status, StockTransferStatus)
             or not isinstance(self.lines, tuple)
+            or (
+                self.transit is not None
+                and not isinstance(self.transit, StockTransferTransitVO)
+            )
             or type(self.version) is not int
             or self.version < 0
         ):
@@ -277,6 +474,13 @@ class StockTransfer:
         if self.source_warehouse_id == self.destination_warehouse_id:
             raise StockTransferSameWarehouseError(
                 "Исходный и целевой склады должны различаться."
+            )
+        if self.transit is not None and self.transit.warehouse_id in (
+            self.source_warehouse_id,
+            self.destination_warehouse_id,
+        ):
+            raise StockTransferTransitMismatchError(
+                "Транзитный склад должен отличаться от обоих конечных."
             )
         created, updated = self._normalize_time(self.created_at), self._normalize_time(
             self.updated_at
@@ -301,9 +505,34 @@ class StockTransfer:
                     "ID строк перемещения должны быть уникальны."
                 )
             ids.add(line.id)
-        if self.status is StockTransferStatus.CONFIRMED and not self.lines:
+        if (
+            self.status
+            in (
+                StockTransferStatus.CONFIRMED,
+                StockTransferStatus.IN_PROGRESS,
+                StockTransferStatus.COMPLETED,
+            )
+            and not self.lines
+        ):
             raise EmptyStockTransferError(
                 "Подтверждённый план перемещения не может быть пустым."
+            )
+        any_sent = any(not line.dispatched_qty.value.is_zero() for line in self.lines)
+        complete = bool(self.lines) and all(
+            line.received_qty == line.planned_qty for line in self.lines
+        )
+        progressing = self.status in (
+            StockTransferStatus.IN_PROGRESS,
+            StockTransferStatus.COMPLETED,
+        )
+        if (
+            (progressing and (not any_sent or self.transit is None))
+            or (not progressing and (any_sent or self.transit is not None))
+            or (self.status is StockTransferStatus.COMPLETED and not complete)
+            or (self.status is StockTransferStatus.IN_PROGRESS and complete)
+        ):
+            raise InvalidStockTransferValueError(
+                "Состояние перемещения не соответствует отправке, приёмке и транзиту."
             )
 
     @staticmethod

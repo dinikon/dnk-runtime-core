@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Self
+from src.modules.inventory.domain.stock_execution.transfer_snapshot import (
+    StockExecutionTransferLineSnapshot,
+    StockExecutionTransferSnapshot,
+)
 from src.modules.inventory.domain.stock_execution.shipment_snapshot import (
     StockExecutionShipmentLineSnapshot,
     StockExecutionShipmentSnapshot,
@@ -48,6 +52,7 @@ from src.modules.inventory.domain.stock_execution.error import (
     InvalidStockExecutionRouteError,
     InvalidStockExecutionValueError,
     StockExecutionTimeError,
+    InvalidStockExecutionTransferSnapshotError,
 )
 from src.modules.inventory.domain.stock_execution.value_object.document_line_quantity import (
     ExecutedDocumentLineQuantityVO,
@@ -161,6 +166,34 @@ class StockExecution:
         )
         execution._validate()
         return execution
+
+    def transfer_snapshot(self) -> StockExecutionTransferSnapshot:
+        """Передаёт проверенный расход/приход с физическими измерениями без исходного пересчёта и полного маршрута."""
+        self._validate()
+        if self.operation_type not in (
+            StockOperationType.ISSUE,
+            StockOperationType.RECEIPT,
+        ):
+            raise InvalidStockExecutionTransferSnapshotError(
+                "Для пары перемещения нужен ISSUE или RECEIPT, а не INTERNAL_MOVE."
+            )
+        return StockExecutionTransferSnapshot(
+            self.id,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionTransferLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                    line.route.dimensions[0],
+                )
+                for line in self.lines
+            ),
+        )
 
     def shipment_snapshot(self) -> StockExecutionShipmentSnapshot:
         """Передаёт проверенные фактические строки с ID/версией документа для автоматического назначения Shipment."""

@@ -1147,13 +1147,232 @@ StockTransfer
   StockPosition, StockReservation или AvailabilityPool. INTERNAL_MOVE по-прежнему
   ограничен одним складом. TRANSFER_OUT/TRANSFER_IN в целевом примере выше обозначают
   этапы процесса, новые значения StockOperationType не добавляются.
-- Физическая отправка, транзит и приёмка — последующие Domain-срезы. Перед ними
-  нужно определить учёт товара в пути; будущий инвариант исполнения:
-  0 <= received_qty <= dispatched_qty <= planned_qty. Эти счётчики пока не хранятся.
+- Отправка, транзит и частичная/полная приёмка реализованы срезами ниже.
+  Инвариант исполнения: 0 <= received_qty <= dispatched_qty <= planned_qty.
   SQL/API, проверка актуальности снимков, конкурентность, UoW/Outbox и глобальная
   дедупликация остаются Application/хранению. Целевой состав по-прежнему 23 AR.
 
 Тесты первого среза: `test/test_inventory_stock_transfer_domain.py`.
+
+Реализован Domain-срез регистрации отправки в транзит:
+
+- Транзит — обычный Warehouse T и StockLocation типа TRANSIT, отдельные от A/B.
+  Новых AR, WarehouseType или StockOperationType нет. Состояние товара не меняется:
+  SELLABLE в TRANSIT сохраняет физическое количество и исключается из пригодного
+  к резервированию запаса существующей политикой доступности.
+- Добавлены StockTransferTransitVO(warehouse_id, location_id) и
+  StockTransferExecutionBindingVO(execution_line_id, transfer_line_id). VO проверяют
+  только собственные типизированные ссылки. Корень хранит transit=None до первой
+  отправки; последующие отправки должны использовать тот же зафиксированный маршрут.
+- TransferLine.dispatched_qty создаётся с нулём, remaining_to_dispatch_qty() вычисляет
+  точный остаток. Собственный диапазон: 0 <= dispatched_qty <= planned_qty.
+  restore строки явно принимает прогресс, restore корня — transit. Исторический
+  пересчёт сохраняется без актуальных товарных правил/складов/фактов.
+- Новый статус IN_PROGRESS появляется после первого принятого факта отправки.
+  Требует непустой план, положительный прогресс хотя бы одной строки и transit.
+  DRAFT/CONFIRMED/CANCELLED имеют нулевой прогресс и transit=None. Полная отправка
+  не завершает перемещение до будущей приёмки; простая отмена/редактирование
+  по-прежнему только для DRAFT. Транзитный склад не совпадает с обоими конечными.
+- StockTransfer.dispatch_snapshot() возвращает StockTransferDispatchPlanSnapshot:
+  id/version/status, направление, owner_id, transit, updated_at, строки с ID,
+  товаром/единицей, planned_qty/dispatched_qty. StockExecution.transfer_snapshot()
+  валидирует полный факт и отдаёт StockExecutionTransferSnapshot: id, operation_type,
+  warehouse_id/owner_id, executed_at и строки id/item/base/quantity/dimensions.
+  Для ISSUE передаются измерения источника, для RECEIPT — назначения.
+  INTERNAL_MOVE не экспортируется этим снимком; прежние снимки остаются прежними.
+- Новая StockTransferDispatchPolicy.build_dispatch() принимает снимки плана,
+  ISSUE и RECEIPT, transit, три текущих WarehouseSnapshot, ровно участвующие
+  StockLocationSnapshot и два tuple явных назначений. Проверяет разные исполнения
+  и фактические ID, одну дату факта, одного владельца, источник A и приход в T,
+  активность всех трёх складов, активные исходные адреса A и единственную выбранную
+  активную TRANSIT-локацию T. Факт не раньше текущего состояния перемещения.
+- Все целые строки обеих сторон должны быть назначены без пропусков/лишних/повторов.
+  Несколько фактов могут соответствовать одной плановой строке. Расход 20 и приход
+  8+12 допустимы, как и отбор из нескольких исходных адресов в один транзит.
+  Для частичного назначения внутри 10 KG факт разделяется на отдельные строки.
+- Баланс через QuantityArithmeticPolicy проверяется по каждой комбинации
+  transfer_line_id, inventory_item_id, owner_id, lot_id, serial_id, stock_status,
+  base_uom. Локация меняется, остальной состав сохраняется. Нельзя подменить LOT,
+  SERIAL или состояние, даже при совпадении общего количества. Конкретная серия
+  требует 1 PCS, повтор экземпляра внутри стороны запрещён. Общий шаг/исходный
+  пересчёт повторно не интерпретируются: Policy принимает базовые количества фактов.
+- Результат StockTransferDispatchSnapshot фиксирует transfer_id/version,
+  направление, owner_id, transit, оба execution_id, executed_at и строки
+  StockTransferDispatchedLineSnapshot: transfer_line_id, товар/единица, quantity,
+  tuple issue_execution_line_ids и receipt_execution_line_ids. ID упорядочены по UUID.
+  Снимки frozen без __post_init__, потребители проверяют типы, UTC, строгие версии
+  без bool, положительные количества и уникальность фактических ID во всём наборе.
+- register_dispatch(dispatch, expected_version, updated_at) проверяет версии до
+  исторической арифметики, затем повторно сверяет цель/направление/владельца,
+  зафиксированный транзит, статус, строки и предел накопленной отправки.
+  Возвращает IN_PROGRESS одной версией +1 с обновлёнными dispatched_qty.
+  aware-время нормализуется в UTC, не раньше факта и прошлого изменения.
+- Пример: план 50 KG, A=50/T=0/B=0. Пара ISSUE 20 / RECEIPT 8+12 даёт
+  dispatched=20, A=30/T=20/B=0, IN_PROGRESS v3. Следующая отправка 30 даёт
+  dispatched=50, A=0/T=50/B=0, IN_PROGRESS v4. Общее количество владельца=50.
+  Оба StockPosting строятся прежним create_from_execution с общим posted_at,
+  записи применяются к позициям прежним apply_posting_entry. Транзитный eligible=0.
+- Policy и регистрация не проводят Ledger и не изменяют позиции/пулы/резервы.
+  Достаточность исходного физического остатка проверяется при применении записей;
+  согласованная пара этого не доказывает. Все кандидаты обеих сторон, прогресс
+  документов/перемещения, пересчёт доступности и Outbox требуют атомарного
+  Application/UoW. Отказ одной стороны исключает сохранение другой.
+- Документы отправки A → T строятся отдельным Domain-срезом ниже. Документы
+  приёмки T → B, резервирование под перемещение, SQL/API и глобальная
+  дедупликация фактов — последующие срезы. Старый результат отклоняется по версии;
+  одна новая версия не обеспечивает глобальную однократность пары.
+  История всех отправок не встраивается в агрегат; её состав LOT/SERIAL используется
+  при проверке приёмки ниже. Количество AR остаётся 14.
+
+Тесты отправки: `test/test_inventory_stock_transfer_dispatch_domain.py`.
+
+
+Реализован Domain-срез частичной и полной приёмки из транзита:
+
+- TransferLine хранит received_qty, создаваемый с нулём и обязательный при restore.
+  Инвариант: 0 <= received_qty <= dispatched_qty <= planned_qty.
+  in_transit_qty() точно вычисляет dispatched_qty − received_qty без нового поля.
+  Отправка после частичной приёмки сохраняет received_qty.
+- StockTransfer.receipt_snapshot() возвращает StockTransferReceiptPlanSnapshot
+  текущей версии с направлением, владельцем, фиксированным транзитом, UTC-временем
+  и строками StockTransferReceiptPlanLineSnapshot с тремя количествами.
+- StockTransferTransitBalancePolicy.build_balance() принимает этот снимок, tuple
+  ранее зарегистрированных StockTransferDispatchSnapshot/StockTransferReceiptSnapshot
+  и ровно соответствующие транзитные StockExecutionTransferSnapshot: RECEIPT в T
+  для отправки и ISSUE из T для приёмки. Полную принятую историю предоставляет
+  будущее Application/хранение. Policy не загружает её самостоятельно и не доказывает
+  факт сохранения по переданному dataclass.
+- История проверяется по области, маршруту, владельцу, времени, уникальным ID обеих
+  сторон и непрерывным версиям переходов до текущей версии − 1. transfer_version
+  результата обозначает версию ДО регистрации; первая версия зависит от правок
+  черновика. Фактические ID и суммы строк должны совпадать с принятыми результатами,
+  накопленные итоги — с dispatched_qty/received_qty корня. Пропуски и лишние факты
+  отклоняются. Расход не может использовать будущую отправку.
+- StockTransferTransitBalanceSnapshot фиксирует transfer_id/version, направление,
+  owner_id, transit, положительные строки StockTransferTransitBalanceLineSnapshot
+  (transfer_line_id, StockDimensionsVO, base_uom, quantity) и исторические
+  execution_ids/execution_line_ids обеих сторон. Нулевые остатки исключены;
+  отрицательные префиксы запрещены. Остаток рассчитан отдельно для каждой строки,
+  товара, владельца, LOT, SERIAL, состояния и единицы. Повтор отправки одной серии
+  в истории перемещения запрещён; серийный остаток — ровно 1 PCS.
+- StockTransferReceiptPolicy.build_receipt() принимает текущий план, свежий остаток,
+  новую пару ISSUE из T / RECEIPT в B, два текущих WarehouseSnapshot (T/B), ровно
+  участвующие StockLocationSnapshot и явные StockTransferExecutionBindingVO.
+  Исходный A не проверяется повторно: его деактивация не блокирует приёмку отправленного.
+  T/B и адреса активны, расход только из зафиксированной TRANSIT-локации; на B
+  допускаются разные активные адреса. Факты имеют разные ID и одно executed_at.
+- Целые фактические строки полностью назначены строкам плана. Сохраняемые измерения
+  балансируются точно; разделение 10 → 4+6 допустимо. Запрошенное количество
+  ограничено и dispatched_qty − received_qty, и остатком конкретного состава.
+  LOT A=8/B=12 не позволяет принять 10 из A; остаток S2 не покрывает повтор S1.
+  Использованные исторические ID запрещены в новой паре. Устаревший остаток
+  отклоняется по версии. Общая StockTransferExecutionGroupingPolicy используется
+  отправкой и приёмкой, арифметика — прежняя QuantityArithmeticPolicy.
+- StockTransferReceiptSnapshot и StockTransferReceivedLineSnapshot фиксируют
+  область/версию, маршрут, оба исполнения, время, количество строки и фактические
+  ID обеих сторон. register_receipt(receipt, expected_version, updated_at) повторно
+  проверяет собственные инварианты, область, маршрут, строки, единицы и предел
+  приёмки; явное aware-время нормализуется в UTC и не предшествует факту/корню.
+  Корень не хранит всю историю и не пересчитывает состав из результата регистрации.
+- Новый COMPLETED требует received_qty = dispatched_qty = planned_qty во ВСЕХ
+  строках. IN_PROGRESS требует положительную отправку, транзит и неполную приёмку
+  плана. Если весь отправленный товар принят, но часть плана не отправлена,
+  состояние остаётся IN_PROGRESS с нулевым остатком в пути. После COMPLETED
+  отправка и приёмка запрещены. DRAFT/CONFIRMED/CANCELLED имеют оба счётчика 0
+  и transit=None. Restore проверяет историю без актуальных внешних объектов.
+- Пример плана 50 KG: отправка 20 → v3 (A/T/B=30/20/0), приёмка 10 → v4
+  (30/10/10), отправка 30 → v5 (0/40/10), приёмка 40 → COMPLETED v6
+  (0/0/50). Оба StockPosting каждой пары имеют одно posted_at, общий запас = 50.
+  Регистрация меняет только корень; позиции, Ledger и доступность изменяются
+  прежними механизмами. Сохранение всех кандидатов и Outbox должно быть атомарным.
+- Domain не подтверждает достоверность/сохранение переданной истории и не заменяет
+  контроль физического остатка StockPosition. SQL/API/UoW, глобальная идемпотентность,
+  возвраты, недостачи, пересортица и изменение состояния в пути — будущие срезы.
+  Число реализованных корней — 14, целевой состав — 23.
+
+Тесты приёмки: `test/test_inventory_stock_transfer_receipt_domain.py`.
+
+
+Реализован Domain-срез построения документов отправки A → T из StockTransfer:
+
+- Новых AR и Entity нет: StockTransfer и два StockDocument самостоятельны.
+  Документы не становятся дочерними объектами перемещения. Создание/подтверждение
+  не меняет dispatched_qty/received_qty, транзит, StockPosition, Ledger или резервы.
+- StockTransfer.dispatch_document_snapshot() проверяет полный корень и возвращает
+  StockTransferDispatchDocumentSnapshot: id/version/status, source_warehouse_id,
+  destination_warehouse_id, owner_id, transit, updated_at и только открытые строки.
+  StockTransferDispatchDocumentLineSnapshot содержит transfer_line_id,
+  inventory_item_id, base_uom, remaining_qty = planned_qty − dispatched_qty.
+  Нулевые остатки исключены, точная арифметика — прежняя QuantityArithmeticPolicy.
+- StockTransferDispatchDocumentLineBindingVO(transfer_line_id,
+  issue_document_line_id, receipt_document_line_id) принимает новые ID извне.
+  Нужны ровно все открытые строки, без пропусков/лишних; ID всех новых строк
+  обеих сторон уникальны в переданном назначении. Domain не генерирует ID/время.
+- StockDocument.create_from_stock_transfer_dispatch(identifier, operation_type,
+  transfer, source_warehouse, destination_warehouse, transit_warehouse,
+  inventory_items, line_bindings, created_at) строит одну сторону пары.
+  ISSUE относится к A, RECEIPT — к T; другие операции запрещены. Два вызова
+  с разными ID документов и общими назначениями создают два DRAFT версии 0,
+  по одной строке на каждый открытый остаток, executed_qty=0. Количество вводится
+  в базовой единице с коэффициентом 1, текущий SKU берётся из товарного снимка.
+  Разные строки одного товара не объединяются; порядок — UUID строк основания.
+- StockTransferDispatchDocumentPolicy требует CONFIRMED/IN_PROGRESS с открытым
+  остатком, разные активные A/B/T, совпадение T с уже зафиксированным транзитом,
+  ровно участвующие текущие InventoryItemDocumentSnapshot, прежнюю базовую
+  единицу и текущий шаг. SERIAL планируется целыми PCS; партии/серии и локации
+  выбираются при StockExecution. Склад T задаётся в приходном плане, конкретная
+  TRANSIT-локация проверяется прежней StockTransferDispatchPolicy по фактам.
+  Сам корень фиксирует транзит только при register_dispatch().
+- В шапках сохраняется DocumentSourceVO с системами
+  inventory.stock_transfer.dispatch_issue / inventory.stock_transfer.dispatch_receipt,
+  каноническим UUID перемещения и его версией. В строках — DocumentLineSourceVO
+  с системой inventory.stock_transfer_line и UUID TransferLine. Проверки при
+  create/restore и изменениях документа требуют правильную операцию роли,
+  явную версию, канонические UUID и уникальные ссылки строк. Осиротевшие,
+  пропущенные или смешанные зарезервированные основания запрещены. Внешние
+  универсальные основания и контракты Shipment сохраняют прежнее поведение.
+- StockDocument.transfer_dispatch_snapshot() отдаёт
+  StockDocumentTransferDispatchSnapshot: собственные id/version/status,
+  operation_type, warehouse_id/owner_id, updated_at, transfer_id,
+  source_transfer_version и строки StockDocumentTransferDispatchLineSnapshot
+  с ID обеих сторон связи, товаром, единицей, planned_qty/executed_qty.
+  Версия документа отделена от исторической версии основания. Снимки frozen,
+  с явной проверкой типов/UTC/строгих версий и собственного прогресса.
+- Обычный StockDocument.confirm() для этих оснований обязательно получает
+  transfer=current_snapshot, companion_document=снимок другой стороны и
+  transfer_warehouses=tuple ровно активных A/B/T в любом порядке. Проверяет
+  текущие товарные правила и повторно согласует пару через Policy: разные ID
+  документов и строк, противоположные роли, того же владельца и transfer_id,
+  точное совпадение ОБЕИХ source_transfer_version с текущей версией основания,
+  одинаковые планы по каждой TransferLine и предел текущего остатка.
+  Партнёр — DRAFT или CONFIRMED без исполнения; отменённый или исполняемый
+  документ не подходит. Лишний контекст перемещения у обычного документа запрещён.
+- Редактирование черновиков сохраняет ссылки оснований и SKU. После изменения
+  одной стороны подтверждение блокируется до согласования второй. Одинаково
+  уменьшенные или сокращённые непустые планы допустимы в пределах остатка.
+  Подтверждение не может предшествовать актуальному основанию или любой стороне
+  пары; явное aware-время нормализуется в UTC. Restore не требует актуальных
+  внешних объектов и сохраняет историческую source.version.
+- Пример: StockTransfer CONFIRMED v2 на 50 KG → ISSUE A / RECEIPT T на 50,
+  оба DRAFT v0 → оба CONFIRMED v1; перемещение всё ещё v2, A=50/T=0.
+  Согласованные исполнения 20 дают два PARTIALLY_EXECUTED v2 и StockTransfer
+  IN_PROGRESS v3, A=30/T=20. Следующие исполнения 30 дают два COMPLETED v3
+  и StockTransfer IN_PROGRESS v4, A=0/T=50. Source.version обоих документов
+  остаётся 2; received_qty перемещения остаётся 0. Полная отправка не равна приёмке B.
+- Точное равенство версии основания требуется при подтверждении черновика,
+  а не при каждом дальнейшем частичном исполнении уже подтверждённых документов.
+  Новые факты и регистрация отправки используют текущие версии своих корней.
+  StockExecution, StockPosting и register_dispatch() используются прежние;
+  явные назначения фактов строкам перемещения пока передаются отдельно.
+- Фабрика и Policy не резервируют план между разными парами, не доказывают
+  сохранение/актуальность переданных снимков и не обеспечивают глобальную
+  однократность. Будущий Application/UoW атомарно подтверждает и сохраняет оба
+  кандидата, а при отправке — факты, документы, Ledger, позиции, перемещение,
+  доступность и Outbox. Документы приёмки T → B, автоматический вывод назначений
+  фактов из оснований, SQL/API и глобальная идемпотентность — последующие срезы.
+  Количество реализованных AR остаётся 14, целевой состав — 23.
+
+Тесты документов отправки: `test/test_inventory_stock_transfer_document_domain.py`.
 
 ### Область 7. Inventory Counting
 

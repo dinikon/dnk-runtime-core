@@ -87,3 +87,29 @@ class StockDocumentShipmentQuantityExceededError(StockDocumentError):
 
 class InvalidStockDocumentShipmentSnapshotError(StockDocumentError):
     """Сообщает о некорректном снимке происхождения и прогресса расходного документа Shipment."""
+
+
+class InvalidStockTransferDispatchDocumentLineBindingError(StockDocumentError):
+    """Требует однократное назначение новых ID строк обеих сторон строкам перемещения."""
+
+
+class InvalidStockDocumentTransferDispatchSnapshotError(StockDocumentError):
+    """Сообщает о неверном снимке плана документа отправки перемещения."""
+
+
+class StockDocumentTransferDispatchMismatchError(StockDocumentError):
+    """Отклоняет несовместимые основания, роли, склады или строки документов отправки."""
+
+
+class StaleStockTransferDocumentSourceError(StockDocumentError):
+    """Отклоняет подтверждение по изменившейся версии основания перемещения."""
+
+
+class StockDocumentTransferDispatchQuantityExceededError(StockDocumentError):
+    """Запрещает план документа сверх текущего остатка к отправке."""
+
+
+class UnbalancedStockTransferDispatchDocumentsError(
+    StockDocumentTransferDispatchMismatchError
+):
+    """Запрещает различие плановых строк и количеств расхода A и прихода T."""

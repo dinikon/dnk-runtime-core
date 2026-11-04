@@ -138,6 +138,8 @@ class StockTransferDomainTests(unittest.TestCase):
                     base_uom=self.line.base_uom,
                     planned_qty=self.line.planned_qty,
                     conversion=self.line.conversion,
+                    dispatched_qty=self.line.dispatched_qty,
+                    received_qty=self.line.received_qty,
                 )
                 | changes
             )
@@ -157,6 +159,7 @@ class StockTransferDomainTests(unittest.TestCase):
                     owner_id=reference.owner_id,
                     status=reference.status,
                     lines=reference.lines,
+                    transit=reference.transit,
                     created_at=reference.created_at,
                     updated_at=reference.updated_at,
                     version=reference.version,
@@ -288,6 +291,7 @@ class StockTransferDomainTests(unittest.TestCase):
                 "owner_id",
                 "status",
                 "lines",
+                "transit",
                 "created_at",
                 "updated_at",
                 "version",
@@ -346,7 +350,15 @@ class StockTransferDomainTests(unittest.TestCase):
         )
         self.assertEqual(
             set(line.__dataclass_fields__),
-            {"id", "inventory_item_id", "base_uom", "planned_qty", "conversion"},
+            {
+                "id",
+                "inventory_item_id",
+                "base_uom",
+                "planned_qty",
+                "conversion",
+                "dispatched_qty",
+                "received_qty",
+            },
         )
         with self.assertRaises(FrozenInstanceError):
             line.planned_qty = QuantityVO(Decimal(1))
