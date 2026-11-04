@@ -9,6 +9,12 @@ from src.modules.inventory.domain.policy.shipment_confirmation import (
     ShipmentConfirmationPolicy,
 )
 from src.modules.inventory.domain.policy.shipment_line import ShipmentLinePolicy
+from src.modules.inventory.domain.policy.quantity_arithmetic import (
+    QuantityArithmeticPolicy,
+)
+from src.modules.inventory.domain.policy.shipment_execution import (
+    ShipmentExecutionPolicy,
+)
 from src.modules.inventory.domain.shipment.entity.shipment_line import ShipmentLine
 from src.modules.inventory.domain.shipment.error import (
     EmptyShipmentError,
@@ -21,6 +27,13 @@ from src.modules.inventory.domain.shipment.error import (
     ShipmentVersionConflictError,
 )
 from src.modules.inventory.domain.shipment.order_snapshot import ShipmentOrderSnapshot
+from src.modules.inventory.domain.shipment.execution_snapshot import (
+    ShipmentExecutionPlanLineSnapshot,
+    ShipmentExecutionPlanSnapshot,
+)
+from src.modules.inventory.domain.shipment.registration_snapshot import (
+    ShipmentExecutionRegistrationSnapshot,
+)
 from src.modules.inventory.domain.shipment.value_object.identifier import ShipmentIdVO
 from src.modules.inventory.domain.shipment.value_object.line_id import ShipmentLineIdVO
 from src.modules.inventory.domain.shipment.value_object.order_ref import (
@@ -43,7 +56,7 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 
 @dataclass(frozen=True, slots=True)
 class Shipment:
-    """План собственной отгрузки одного заказа со склада без изменения удержаний и физического запаса."""
+    """План и накопленный прогресс отгрузки одного заказа без прямого изменения чужих агрегатов."""
 
     id: ShipmentIdVO
     order_ref: ShipmentOrderRefVO
@@ -159,6 +172,7 @@ class Shipment:
             base_uom=previous.base_uom,
             planned_qty=conversion.to_base_quantity(),
             conversion=conversion,
+            shipped_qty=previous.shipped_qty,
         )
         changed.ensure_compatible(
             inventory_item=inventory_item, reservation=reservation
@@ -221,10 +235,73 @@ class Shipment:
         normalized = self._prepare_transition(expected_version, updated_at)
         return self._changed(updated_at=normalized, status=ShipmentStatus.CANCELLED)
 
+    def execution_snapshot(self) -> ShipmentExecutionPlanSnapshot:
+        """Возвращает проверенные версию, область и прогресс плана для назначения фактических строк."""
+        self._validate()
+        return ShipmentExecutionPlanSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.warehouse_id,
+            self.owner_id,
+            self.updated_at,
+            tuple(
+                ShipmentExecutionPlanLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.reservation_id,
+                    line.planned_qty,
+                    line.shipped_qty,
+                )
+                for line in self.lines
+            ),
+        )
+
+    def register_execution(
+        self,
+        registration: ShipmentExecutionRegistrationSnapshot,
+        *,
+        expected_version: int,
+        updated_at: datetime,
+    ) -> Self:
+        """Накопляет проверенный факт одной версией, не проводя Ledger и не погашая резерв самостоятельно."""
+        normalized = self._prepare_transition(
+            expected_version, updated_at, draft_only=False
+        )
+        ShipmentExecutionPolicy.ensure_compatible(
+            shipment=self.execution_snapshot(),
+            registration=registration,
+        )
+        if normalized < registration.executed_at:
+            raise ShipmentTimeError(
+                "Регистрация не может предшествовать фактическому исполнению."
+            )
+        by_line = {line.shipment_line_id: line.quantity for line in registration.lines}
+        lines = tuple(
+            (
+                replace(
+                    line,
+                    shipped_qty=QuantityArithmeticPolicy.add(
+                        line.shipped_qty, by_line[line.id]
+                    ),
+                )
+                if line.id in by_line
+                else line
+            )
+            for line in self.lines
+        )
+        status = (
+            ShipmentStatus.SHIPPED
+            if all(line.shipped_qty == line.planned_qty for line in lines)
+            else ShipmentStatus.PARTIALLY_SHIPPED
+        )
+        return self._changed(updated_at=normalized, lines=lines, status=status)
+
     def _prepare_transition(
-        self, expected_version: int, updated_at: datetime
+        self, expected_version: int, updated_at: datetime, *, draft_only: bool = True
     ) -> datetime:
-        """Проверяет строгую версию до исторической арифметики, затем собственное состояние, черновик и время."""
+        """Проверяет строгую версию до арифметики, собственное состояние, при необходимости черновик и время."""
         if (
             type(self.version) is not int
             or self.version < 0
@@ -239,7 +316,7 @@ class Shipment:
                 "Ожидаемая версия не совпадает с текущей версией отгрузки."
             )
         self._validate()
-        if self.status is not ShipmentStatus.DRAFT:
+        if draft_only and self.status is not ShipmentStatus.DRAFT:
             raise ShipmentStatusError(
                 "Изменять, подтверждать и отменять можно только черновик отгрузки."
             )
@@ -307,9 +384,35 @@ class Shipment:
                 )
             ids.add(line.id)
             reservations.add(line.reservation_id)
-        if self.status is ShipmentStatus.CONFIRMED and not self.lines:
+        if (
+            self.status not in (ShipmentStatus.DRAFT, ShipmentStatus.CANCELLED)
+            and not self.lines
+        ):
             raise EmptyShipmentError(
                 "Подтверждённый план отгрузки не может быть пустым."
+            )
+        any_shipped = any(not line.shipped_qty.value.is_zero() for line in self.lines)
+        complete = bool(self.lines) and all(
+            line.shipped_qty == line.planned_qty for line in self.lines
+        )
+        if (
+            (
+                self.status
+                in (
+                    ShipmentStatus.DRAFT,
+                    ShipmentStatus.CONFIRMED,
+                    ShipmentStatus.CANCELLED,
+                )
+                and any_shipped
+            )
+            or (
+                self.status is ShipmentStatus.PARTIALLY_SHIPPED
+                and (not any_shipped or complete)
+            )
+            or (self.status is ShipmentStatus.SHIPPED and not complete)
+        ):
+            raise InvalidShipmentValueError(
+                "Статус Shipment не соответствует накопленному прогрессу строк."
             )
 
     @staticmethod

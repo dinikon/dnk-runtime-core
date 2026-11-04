@@ -1999,7 +1999,8 @@ pool_after = pool.consume_reservations(
 а внешний сценарий передаёт каждому пулу только его группу. Ссылка на заказ
 сама по себе здесь не проверяется: StockExecution пока не хранит связь со строкой
 заказа. Shipment проверяет принадлежность плановых строк заказу по отдельному
-снимку, но связь подтверждённого плана с фактическим расходом ещё предстоит реализовать.
+снимку. Связь подтверждённого плана с расходом и выбором его резервов реализована
+через ShipmentExecutionPolicy и явные назначения фактических строк, описанные ниже.
 Привязка фактического расхода не является предварительным жёстким резервом адреса/серии.
 
 Снимок исполнения не доказывает сохранение Ledger или актуальность прочитанного
@@ -2010,7 +2011,7 @@ pool_after = pool.consume_reservations(
 Глобальная дедупликация фактической строки, права доступа, SQL и компенсации
 погашений остаются будущим срезам. Низкоуровневые количественные методы сохранены.
 
-## План собственной отгрузки Shipment
+## План и прогресс собственной отгрузки Shipment
 
 Shipment — самостоятельный immutable Aggregate Root одного заказа, склада и владельца.
 Первый срез фиксирует план по существующим мягким резервам. SalesOrder остаётся
@@ -2020,7 +2021,7 @@ Shipment — самостоятельный immutable Aggregate Root одног�
 | --- | --- |
 | Shipment | id: ShipmentIdVO, order_ref: ShipmentOrderRefVO, warehouse_id, owner_id, status, tuple строк, created_at, updated_at, version |
 | ShipmentOrderRefVO | system, reference; обязательные строки с trim, без управляющих символов, регистр сохраняется |
-| ShipmentLine | id: ShipmentLineIdVO, source_ref: ReservationSourceVO, reservation_id, inventory_item_id, base_uom, planned_qty, conversion: QuantityConversionSnapshotVO |
+| ShipmentLine | id: ShipmentLineIdVO, source_ref: ReservationSourceVO, reservation_id, inventory_item_id, base_uom, planned_qty, conversion: QuantityConversionSnapshotVO, shipped_qty: QuantityVO |
 | StockReservationShipmentSnapshot | id, pool_id, key, source_ref, base_uom, reserved_qty, status, expires_at, updated_at, version |
 | ShipmentOrderSnapshot | order_ref, is_fulfillable: bool, tuple[ShipmentOrderLineSnapshot, ...] |
 | ShipmentOrderLineSnapshot | source_ref, inventory_item_id, base_uom, remaining_to_ship_qty |
@@ -2073,8 +2074,8 @@ updated_at, нормализуемое в UTC и не убывающее отн�
 и время не меняются. Равное базовое количество в другой исходной единице меняет
 сохранённый ввод и увеличивает версию. Исправление количества проверяет новый план,
 поэтому черновик можно уменьшить под сократившееся удержание или новый шаг товара.
-CONFIRMED и CANCELLED больше не редактируются; повторное подтверждение запрещено.
-Отмена подтверждённого плана отложена до реализации прогресса исполнения.
+CONFIRMED, PARTIALLY_SHIPPED, SHIPPED и CANCELLED больше не редактируются;
+повторное подтверждение запрещено. Отмена после подтверждения пока не реализована.
 
 restore() проверяет только собственную историю: типы, UTC-хронологию, версию,
 статус, уникальность строк/резервов, положительное количество и равенство
@@ -2135,11 +2136,141 @@ InvalidShipmentContextError и EmptyShipmentError. Ошибки единиц, п
 
 Подтверждение и отмена не изменяют резерв, пул, физические позиции и Ledger,
 не создают StockDocument/StockExecution. Связь плана с расходом, частичная отгрузка
-и погашение соответствующих резервов — следующий срез. Локальная проверка не
+и назначения соответствующим резервам реализованы ниже. Локальная проверка не
 учитывает назначения в других Shipment. Будущий Application/хранение должен
 контролировать общую назначенную величину по резерву и строке заказа, актуальность
 снимков, конкурентные изменения и атомарное сохранение. SQL, API, права, Outbox,
 перевозчики и упаковочные места сюда не входят.
+
+## Регистрация отгрузки Shipment по StockExecution
+
+ShipmentLine создаётся с shipped_qty=0. remaining_qty() вычисляет точную разность
+planned_qty − shipped_qty, отдельного хранимого остатка нет. Количество отгрузки
+берётся из выбранных фактических строк StockExecution; независимый пользовательский
+ввод shipped_qty в операциях регистрации отсутствует. План и его исходный пересчёт,
+ID строки, товар, базовая единица, основание и резерв при регистрации сохраняются.
+
+| Статус Shipment | Инвариант прогресса |
+| --- | --- |
+| DRAFT, CONFIRMED, CANCELLED | Все shipped_qty = 0 |
+| PARTIALLY_SHIPPED | Есть отгруженное количество и незавершённый остаток плана |
+| SHIPPED | Все строки непустого плана отгружены полностью |
+
+В каждой строке 0 <= shipped_qty <= planned_qty. register_execution() разрешён
+для CONFIRMED и PARTIALLY_SHIPPED. Полное исполнение одним фактом сразу даёт SHIPPED.
+Редактирование/отмена остаются только для DRAFT. restore() требует shipped_qty
+каждой строки явно, проверяет собственный прогресс и статус без текущих снимков
+или коэффициентов. __post_init__ у корней, Entity и снимков не используется.
+
+Shipment.execution_snapshot() возвращает проверенный ShipmentExecutionPlanSnapshot:
+id/version/status, warehouse_id/owner_id, updated_at и tuple строк
+ShipmentExecutionPlanLineSnapshot(id, inventory_item_id, base_uom, reservation_id,
+planned_qty, shipped_qty). Полные корни и снимки другого назначения не принимаются.
+
+ShipmentExecutionBindingVO(execution_line_id, shipment_line_id) связывает целую
+фактическую строку с одной строкой плана. Несколько фактических строк могут
+исполнять одну строку Shipment, например при отборе из разных локаций или партий.
+Для частичного назначения внутри 10 KG нужно разделить факт на строки 6 и 4 KG.
+Повторы фактических ID запрещены. Непривязанные строки допускаются: они не
+увеличивают этот Shipment и не включаются в его назначения резервам.
+
+ShipmentExecutionPolicy.build_registration(shipment, execution, bindings) принимает
+снимок плана, существующий StockExecutionReservationSnapshot и непустой tuple VO.
+Требует ISSUE, тот же склад/владельца, CONFIRMED/PARTIALLY_SHIPPED Shipment,
+известные фактические/плановые ID и совпадение товара/базовой единицы.
+Факт не раньше updated_at снимка плана. Суммы по плановым строкам ограничены
+planned_qty − shipped_qty и вычисляются QuantityArithmeticPolicy без округления
+и зависимости от внешнего Decimal context. Исходный ввод уже пересчитан исполнением:
+1000 G поступают в регистрацию как 1 KG. SERIAL/LOT_AND_SERIAL суммируют
+индивидуальные фактические строки по 1 PCS.
+
+Результат ShipmentExecutionRegistrationSnapshot содержит shipment_id/shipment_version,
+execution_id, operation_type=ISSUE, warehouse_id/owner_id, executed_at и строки
+ShipmentExecutionRegistrationLineSnapshot(shipment_line_id, inventory_item_id,
+base_uom, reservation_id, quantity, execution_line_ids). Резерв выводится из плана;
+количество и время — из факта. Составы упорядочены по UUID, количества положительны,
+фактические ID уникальны во всём результате. Снимки frozen и проверяются повторно
+потребителями через ensure_valid(), включая UTC и целую версию без bool.
+
+Shipment.register_execution(registration, expected_version=..., updated_at=...)
+сначала проверяет строгую текущую/ожидаемую версию, затем собственное состояние,
+совпадение ID/версии результата, области и неизменяемых привязок. Повторно проверяет
+лимит накопленного прогресса, увеличивает shipped_qty выбранных строк и определяет
+PARTIALLY_SHIPPED/SHIPPED. Один результат даёт одну версию +1.
+updated_at передаётся явно, нормализуется в UTC, не раньше факта и последнего
+изменения. Следующий факт не может предшествовать обновлённому состоянию плана;
+равные моменты разрешены. Исходные агрегаты остаются неизменными при успехе/отказе.
+
+registration.reservation_bindings() выводит существующие ReservationExecutionBindingVO
+из сохранённых строк и резервов. Далее применяются прежние build_consumptions(),
+StockReservation.consume_execution() и AvailabilityPool.consume_reservations().
+Ограничения текущего удержания, статуса, шага и expires_at проверяет резерв.
+Срок использования проверяется по executed_at, а не по времени поздней регистрации.
+Полное исполнение Shipment не освобождает избыточное удержание автоматически.
+
+Пример продолжает подтверждение выше. execution содержит ISSUE 1+1+1 KG для того
+же товара, склада и владельца: первые две строки относятся A, третья — B.
+context_after_issue содержит снимки физической позиции после всего расхода:
+из 10 KG остаётся 7 KG. Строки Shipment планируют 3+2 KG, резервы удерживают 4+3 KG.
+
+```python
+from src.modules.inventory.domain.policy.shipment_execution import ShipmentExecutionPolicy
+from src.modules.inventory.domain.policy.stock_execution_reservation import StockExecutionReservationPolicy
+from src.modules.inventory.domain.shipment.value_object.execution_binding import ShipmentExecutionBindingVO
+
+registration = ShipmentExecutionPolicy.build_registration(
+    shipment=shipment.execution_snapshot(), execution=execution.reservation_snapshot(),
+    bindings=(
+        ShipmentExecutionBindingVO(execution.lines[0].id, shipment.lines[0].id),
+        ShipmentExecutionBindingVO(execution.lines[1].id, shipment.lines[0].id),
+        ShipmentExecutionBindingVO(execution.lines[2].id, shipment.lines[1].id),
+    ),
+)
+shipment_after = shipment.register_execution(
+    registration, expected_version=shipment.version, updated_at=execution.executed_at,
+)
+consumptions = StockExecutionReservationPolicy.build_consumptions(
+    execution=execution.reservation_snapshot(), bindings=registration.reservation_bindings(),
+    reservations=(reservation_a.execution_snapshot(), reservation_b.execution_snapshot()),
+)
+by_reservation = {value.reservation_id: value for value in consumptions}
+a_after = reservation_a.consume_execution(
+    by_reservation[reservation_a.id], expected_version=reservation_a.version,
+    inventory_item=item.stock_snapshot(), updated_at=execution.executed_at,
+)
+b_after = reservation_b.consume_execution(
+    by_reservation[reservation_b.id], expected_version=reservation_b.version,
+    inventory_item=item.stock_snapshot(), updated_at=execution.executed_at,
+)
+pool_after = pool.consume_reservations(
+    consumptions, expected_version=pool.version, **context_after_issue,
+)
+# shipment_after: PARTIALLY_SHIPPED, v4, shipped_qty = 2+1 KG, остаток = 1+1 KG.
+# A: погашено 2, удерживается 2; B: погашено 1, удерживается 2.
+# pool_after: eligible=7, reserved=4, available=3.
+```
+
+Второе исполнение 1+1 KG по обновлённым снимкам даёт SHIPPED версии 5:
+накопленная отгрузка 3+2 KG. Оставшиеся удержания A=1/B=1 сохраняются.
+Непривязанный расход, если он есть, уменьшает физический остаток обычным путём
+проведения всего StockExecution, но не увеличивает Shipment и не погашает его резерв.
+
+Типовые ошибки: InvalidShipmentExecutionBindingError,
+InvalidShipmentExecutionPlanSnapshotError, InvalidShipmentExecutionRegistrationSnapshotError,
+ShipmentExecutionMismatchError, ShipmentQuantityExceededError. Версии, время и статус
+используют существующие ShipmentVersionConflictError/ShipmentTimeError/ShipmentStatusError.
+Ошибки арифметики и входного снимка исполнения сохраняют прежние Domain-контракты.
+
+Регистрация только готовит новое состояние Shipment: не создаёт документ, не
+проводит Ledger и не изменяет резерв/пул. Ни снимок факта, ни SHIPPED сами по себе
+не подтверждают сохранение физического движения. Будущий Application/UoW должен
+атомарно сохранять исполнение, Ledger, позиции, прогресс StockDocument/Shipment,
+резервы, пулы и Outbox. Старый подготовленный результат отклоняется по версии;
+повторная сборка того же факта по новой версии не заменяет глобальную дедупликацию.
+Однократность назначения фактической строки между Shipment требует внешнего
+хранения. История всех исполнений в корень не встраивается. Автоматическое построение
+StockDocument из Shipment, SQL/API, компенсации, возвраты, отмена подтверждённой
+отгрузки и обновление внешнего заказа остаются будущим срезам.
 
 ## Изменения, восстановление и проверки
 
@@ -2165,5 +2296,6 @@ InvalidShipmentContextError и EmptyShipmentError. Ошибки единиц, п
 `test/test_inventory_stock_execution_domain.py`, `test/test_inventory_execution_posting_domain.py`,
 `test/test_inventory_posting_application_domain.py`, `test/test_inventory_availability_domain.py`,
 `test/test_inventory_availability_pool_domain.py`, `test/test_inventory_stock_reservation_domain.py`,
-`test/test_inventory_execution_reservation_domain.py` и `test/test_inventory_shipment_domain.py`.
+`test/test_inventory_execution_reservation_domain.py`, `test/test_inventory_shipment_domain.py`
+и `test/test_inventory_shipment_execution_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

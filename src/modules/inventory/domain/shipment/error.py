@@ -26,7 +26,7 @@ class InvalidShipmentContextError(ShipmentError):
 
 
 class ShipmentStatusError(ShipmentError):
-    """Запрещает изменение плана вне черновика."""
+    """Запрещает операцию в неподходящем состоянии жизненного цикла отгрузки."""
 
 
 class ShipmentVersionConflictError(ShipmentError):
@@ -75,3 +75,23 @@ class ShipmentOrderUnavailableError(ShipmentError):
 
 class EmptyShipmentError(ShipmentError):
     """Запрещает подтверждение пустого плана отгрузки."""
+
+
+class InvalidShipmentExecutionBindingError(ShipmentError):
+    """Сообщает о нетипизированном соответствии фактической и плановой строки отгрузки."""
+
+
+class InvalidShipmentExecutionPlanSnapshotError(ShipmentError):
+    """Сообщает о некорректном снимке текущего плана и прогресса отгрузки."""
+
+
+class InvalidShipmentExecutionRegistrationSnapshotError(ShipmentError):
+    """Сообщает о некорректном результате назначения фактических строк отгрузке."""
+
+
+class ShipmentExecutionMismatchError(ShipmentError):
+    """Отклоняет несовместимые исполнение, область или привязки к строкам и резервам."""
+
+
+class ShipmentQuantityExceededError(ShipmentError):
+    """Запрещает накопленную отгрузку сверх планового количества строки."""

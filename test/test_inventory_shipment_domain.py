@@ -415,6 +415,7 @@ class ShipmentDomainTests(unittest.TestCase):
             inventory_item_id=self.item.id,
             base_uom=self.item.base_uom,
             planned_qty=QuantityVO(Decimal(6)),
+            shipped_qty=QuantityVO(Decimal(0)),
             conversion=QuantityConversionSnapshotVO(
                 QuantityVO(Decimal(3000)), UomCodeVO("G"), Decimal("0.002")
             ),

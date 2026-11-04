@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Self
 
 from src.modules.inventory.domain.error import (
@@ -15,7 +16,13 @@ from src.modules.inventory.domain.inventory_item.value_object.identifier import 
     InventoryItemIdVO,
 )
 from src.modules.inventory.domain.policy.shipment_line import ShipmentLinePolicy
-from src.modules.inventory.domain.shipment.error import InvalidShipmentLineError
+from src.modules.inventory.domain.policy.quantity_arithmetic import (
+    QuantityArithmeticPolicy,
+)
+from src.modules.inventory.domain.shipment.error import (
+    InvalidShipmentLineError,
+    ShipmentQuantityExceededError,
+)
 from src.modules.inventory.domain.shipment.value_object.line_id import ShipmentLineIdVO
 from src.modules.inventory.domain.stock_reservation.error import (
     InvalidStockReservationShipmentSnapshotError,
@@ -39,7 +46,7 @@ from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 
 @dataclass(frozen=True, slots=True)
 class ShipmentLine:
-    """Дочерний план количества под конкретное удержание без фактического исполнения."""
+    """Дочерний план под конкретное удержание с накопленным фактическим прогрессом."""
 
     id: ShipmentLineIdVO
     source_ref: ReservationSourceVO
@@ -48,6 +55,7 @@ class ShipmentLine:
     base_uom: UomCodeVO
     planned_qty: QuantityVO
     conversion: QuantityConversionSnapshotVO
+    shipped_qty: QuantityVO
 
     @classmethod
     def create(
@@ -81,6 +89,7 @@ class ShipmentLine:
             base_uom=reservation.base_uom,
             planned_qty=conversion.to_base_quantity(),
             conversion=conversion,
+            shipped_qty=QuantityVO(Decimal(0)),
         )
         line.ensure_compatible(inventory_item=inventory_item, reservation=reservation)
         return line
@@ -96,6 +105,7 @@ class ShipmentLine:
         base_uom: UomCodeVO,
         planned_qty: QuantityVO,
         conversion: QuantityConversionSnapshotVO,
+        shipped_qty: QuantityVO,
     ) -> Self:
         """Восстанавливает исторический план и исходный коэффициент без текущих снимков."""
         line = cls(
@@ -106,6 +116,7 @@ class ShipmentLine:
             base_uom,
             planned_qty,
             conversion,
+            shipped_qty,
         )
         line.ensure_valid()
         return line
@@ -121,9 +132,14 @@ class ShipmentLine:
             or not isinstance(self.planned_qty, QuantityVO)
             or self.planned_qty.value.is_zero()
             or not isinstance(self.conversion, QuantityConversionSnapshotVO)
+            or not isinstance(self.shipped_qty, QuantityVO)
         ):
             raise InvalidShipmentLineError(
                 "Нужна типизированная строка с положительным плановым количеством."
+            )
+        if self.shipped_qty.value > self.planned_qty.value:
+            raise ShipmentQuantityExceededError(
+                "Отгруженное количество превышает план строки."
             )
         if (
             get_uom(self.base_uom).dimension
@@ -136,6 +152,11 @@ class ShipmentLine:
             raise QuantityConversionMismatchError(
                 "Плановое количество не равно сохранённому пересчёту строки."
             )
+
+    def remaining_qty(self) -> QuantityVO:
+        """Вычисляет точный неотрицательный остаток плана без отдельного хранимого поля."""
+        self.ensure_valid()
+        return QuantityArithmeticPolicy.subtract(self.planned_qty, self.shipped_qty)
 
     def ensure_compatible(
         self,
