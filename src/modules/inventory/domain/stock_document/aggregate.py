@@ -3,6 +3,25 @@ from datetime import UTC, datetime, timedelta
 from typing import Self
 from uuid import UUID
 
+from src.modules.inventory.domain.policy.stock_transfer_document_source import (
+    StockTransferDocumentSourcePolicy,
+)
+from src.modules.inventory.domain.policy.stock_transfer_receipt_document import (
+    StockTransferReceiptDocumentPolicy,
+)
+from src.modules.inventory.domain.stock_transfer.receipt_plan_snapshot import (
+    StockTransferReceiptPlanSnapshot,
+)
+from src.modules.inventory.domain.stock_transfer.transit_balance_snapshot import (
+    StockTransferTransitBalanceSnapshot,
+)
+from src.modules.inventory.domain.stock_document.transfer_receipt_snapshot import (
+    StockDocumentTransferReceiptSnapshot,
+    StockDocumentTransferReceiptLineSnapshot,
+)
+from src.modules.inventory.domain.stock_document.value_object.transfer_receipt_line_binding import (
+    StockTransferReceiptDocumentLineBindingVO,
+)
 from src.modules.inventory.domain.policy.stock_transfer_dispatch_document import (
     StockTransferDispatchDocumentPolicy,
 )
@@ -61,6 +80,7 @@ from src.modules.inventory.domain.stock_document.error import (
     StockDocumentTimeError,
     StockDocumentShipmentMismatchError,
     StockDocumentTransferDispatchMismatchError,
+    StockDocumentTransferReceiptMismatchError,
 )
 from src.modules.inventory.domain.stock_document.shipment_snapshot import (
     StockDocumentShipmentLineSnapshot,
@@ -229,6 +249,53 @@ class StockDocument:
         )
 
     @classmethod
+    def create_from_stock_transfer_receipt(
+        cls,
+        *,
+        identifier: StockDocumentIdVO,
+        operation_type: StockOperationType,
+        transfer: StockTransferReceiptPlanSnapshot,
+        balance: StockTransferTransitBalanceSnapshot,
+        transit_warehouse: WarehouseSnapshot,
+        destination_warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        line_bindings: tuple[StockTransferReceiptDocumentLineBindingVO, ...],
+        created_at: datetime,
+    ) -> Self:
+        """Строит самостоятельный черновик ISSUE T или RECEIPT B на весь проверенный непринятый остаток транзита."""
+        normalized = cls._normalize_time(created_at)
+        lines = StockTransferReceiptDocumentPolicy.build_lines(
+            transfer=transfer,
+            balance=balance,
+            operation_type=operation_type,
+            transit_warehouse=transit_warehouse,
+            destination_warehouse=destination_warehouse,
+            inventory_items=inventory_items,
+            line_bindings=line_bindings,
+            as_of=normalized,
+        )
+        return cls.restore(
+            identifier=identifier,
+            operation_type=operation_type,
+            warehouse_id=(
+                transfer.transit.warehouse_id
+                if operation_type is StockOperationType.ISSUE
+                else transfer.destination_warehouse_id
+            ),
+            owner_id=transfer.owner_id,
+            source=DocumentSourceVO(
+                StockTransferReceiptDocumentPolicy.source_system(operation_type),
+                str(transfer.id.uuid),
+                transfer.version,
+            ),
+            status=StockDocumentStatus.DRAFT,
+            lines=lines,
+            created_at=normalized,
+            updated_at=normalized,
+            version=0,
+        )
+
+    @classmethod
     def restore(
         cls,
         *,
@@ -334,6 +401,10 @@ class StockDocument:
         transfer: StockTransferDispatchDocumentSnapshot | None = None,
         companion_document: StockDocumentTransferDispatchSnapshot | None = None,
         transfer_warehouses: tuple[WarehouseSnapshot, ...] | None = None,
+        receipt_transfer: StockTransferReceiptPlanSnapshot | None = None,
+        receipt_balance: StockTransferTransitBalanceSnapshot | None = None,
+        receipt_companion_document: StockDocumentTransferReceiptSnapshot | None = None,
+        receipt_warehouses: tuple[WarehouseSnapshot, ...] | None = None,
     ) -> Self:
         """Фиксирует непустой совместимый план без проведения, резервирования и изменения остатков."""
         self._ensure_draft()
@@ -362,6 +433,18 @@ class StockDocument:
             transfer=transfer,
             companion=companion_document,
             warehouses=transfer_warehouses,
+            as_of=normalized,
+        )
+        linked_receipt = self.source is not None and self.source.system in (
+            StockTransferReceiptDocumentPolicy.ISSUE_SOURCE_SYSTEM,
+            StockTransferReceiptDocumentPolicy.RECEIPT_SOURCE_SYSTEM,
+        )
+        StockTransferReceiptDocumentPolicy.ensure_confirmable(
+            document=self.transfer_receipt_snapshot() if linked_receipt else None,
+            companion=receipt_companion_document,
+            transfer=receipt_transfer,
+            balance=receipt_balance,
+            warehouses=receipt_warehouses,
             as_of=normalized,
         )
         return self._with_changes(
@@ -437,6 +520,39 @@ class StockDocument:
             self.source.version,
             tuple(
                 StockDocumentTransferDispatchLineSnapshot(
+                    line.id,
+                    StockTransferLineIdVO(UUID(line.source.reference)),
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.planned_qty,
+                    line.executed_qty,
+                )
+                for line in self.lines
+            ),
+        )
+
+    def transfer_receipt_snapshot(self) -> StockDocumentTransferReceiptSnapshot:
+        """Передаёт проверенное происхождение и прогресс приёмочного документа отдельно от этапа отправки."""
+        self._validate()
+        if self.source is None or self.source.system not in (
+            StockTransferReceiptDocumentPolicy.ISSUE_SOURCE_SYSTEM,
+            StockTransferReceiptDocumentPolicy.RECEIPT_SOURCE_SYSTEM,
+        ):
+            raise StockDocumentTransferReceiptMismatchError(
+                "Документ не имеет основания приёмки StockTransfer."
+            )
+        return StockDocumentTransferReceiptSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.updated_at,
+            StockTransferIdVO(UUID(self.source.reference)),
+            self.source.version,
+            tuple(
+                StockDocumentTransferReceiptLineSnapshot(
                     line.id,
                     StockTransferLineIdVO(UUID(line.source.reference)),
                     line.inventory_item_id,
@@ -582,7 +698,7 @@ class StockDocument:
             source=self.source,
             lines=self.lines,
         )
-        StockTransferDispatchDocumentPolicy.ensure_document_source(
+        StockTransferDocumentSourcePolicy.ensure_document_source(
             operation_type=self.operation_type,
             source=self.source,
             lines=self.lines,

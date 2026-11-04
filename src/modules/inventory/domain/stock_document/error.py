@@ -113,3 +113,25 @@ class UnbalancedStockTransferDispatchDocumentsError(
     StockDocumentTransferDispatchMismatchError
 ):
     """Запрещает различие плановых строк и количеств расхода A и прихода T."""
+
+
+class InvalidStockTransferReceiptDocumentLineBindingError(StockDocumentError):
+    """Требует уникальные новые ID обеих сторон приёмки для всех открытых строк транзита."""
+
+
+class InvalidStockDocumentTransferReceiptSnapshotError(StockDocumentError):
+    """Сообщает о некорректном снимке документа приёмки StockTransfer."""
+
+
+class StockDocumentTransferReceiptMismatchError(StockDocumentError):
+    """Отклоняет несовместимые основания, роли, склады или строки документов приёмки."""
+
+
+class StockDocumentTransferReceiptQuantityExceededError(StockDocumentError):
+    """Запрещает план приёмки сверх отправленного, но ещё не принятого количества."""
+
+
+class UnbalancedStockTransferReceiptDocumentsError(
+    StockDocumentTransferReceiptMismatchError
+):
+    """Запрещает разные планы расхода T и прихода B по строкам перемещения."""

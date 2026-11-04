@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
 from typing import ClassVar
-from uuid import UUID
+
+from src.modules.inventory.domain.policy.stock_transfer_document_source import (
+    StockTransferDocumentSourcePolicy,
+)
 
 from src.modules.inventory.domain.inventory_item.document_snapshot import (
     InventoryItemDocumentSnapshot,
@@ -17,7 +20,6 @@ from src.modules.inventory.domain.stock_document.entity.stock_document_line impo
 from src.modules.inventory.domain.stock_document.error import (
     EmptyStockDocumentError,
     InvalidStockDocumentContextError,
-    InvalidStockDocumentLineError,
     InvalidStockDocumentTransferDispatchSnapshotError,
     InvalidStockTransferDispatchDocumentLineBindingError,
     StockDocumentTransferDispatchMismatchError,
@@ -65,9 +67,15 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 class StockTransferDispatchDocumentPolicy:
     """Строит планы отправки A → T и повторно согласует их основания и количества перед подтверждением."""
 
-    ISSUE_SOURCE_SYSTEM: ClassVar[str] = "inventory.stock_transfer.dispatch_issue"
-    RECEIPT_SOURCE_SYSTEM: ClassVar[str] = "inventory.stock_transfer.dispatch_receipt"
-    LINE_SOURCE_SYSTEM: ClassVar[str] = "inventory.stock_transfer_line"
+    ISSUE_SOURCE_SYSTEM: ClassVar[str] = (
+        StockTransferDocumentSourcePolicy.DISPATCH_ISSUE_SYSTEM
+    )
+    RECEIPT_SOURCE_SYSTEM: ClassVar[str] = (
+        StockTransferDocumentSourcePolicy.DISPATCH_RECEIPT_SYSTEM
+    )
+    LINE_SOURCE_SYSTEM: ClassVar[str] = (
+        StockTransferDocumentSourcePolicy.LINE_SOURCE_SYSTEM
+    )
 
     @staticmethod
     def source_system(operation_type: StockOperationType) -> str:
@@ -189,58 +197,11 @@ class StockTransferDispatchDocumentPolicy:
         lines: tuple[StockDocumentLine, ...],
     ) -> None:
         """Проверяет собственную структуру зарезервированных оснований без актуального перемещения или парного документа."""
-        if (
-            source is not None and not isinstance(source, DocumentSourceVO)
-        ) or not isinstance(lines, tuple):
-            raise StockDocumentTransferDispatchMismatchError(
-                "Некорректные основание или состав документа отправки."
-            )
-        linked = source is not None and source.system in (
-            StockTransferDispatchDocumentPolicy.ISSUE_SOURCE_SYSTEM,
-            StockTransferDispatchDocumentPolicy.RECEIPT_SOURCE_SYSTEM,
+        StockTransferDocumentSourcePolicy.ensure_document_source(
+            operation_type=operation_type,
+            source=source,
+            lines=lines,
         )
-        if linked:
-            if (
-                source.system
-                != StockTransferDispatchDocumentPolicy.source_system(operation_type)
-                or source.version is None
-            ):
-                raise StockDocumentTransferDispatchMismatchError(
-                    "Роль основания должна соответствовать операции и содержать версию."
-                )
-            StockTransferDispatchDocumentPolicy._ensure_canonical_reference(
-                source.reference
-            )
-        refs = set()
-        for line in lines:
-            if not isinstance(line, StockDocumentLine):
-                raise InvalidStockDocumentLineError("Нужны строки StockDocumentLine.")
-            line.ensure_valid()
-            if linked:
-                if (
-                    line.source is None
-                    or line.source.system
-                    != StockTransferDispatchDocumentPolicy.LINE_SOURCE_SYSTEM
-                ):
-                    raise StockDocumentTransferDispatchMismatchError(
-                        "Каждая строка должна ссылаться на TransferLine."
-                    )
-                StockTransferDispatchDocumentPolicy._ensure_canonical_reference(
-                    line.source.reference
-                )
-                if line.source.reference in refs:
-                    raise StockDocumentTransferDispatchMismatchError(
-                        "Основания строк не должны повторяться."
-                    )
-                refs.add(line.source.reference)
-            elif (
-                line.source is not None
-                and line.source.system
-                == StockTransferDispatchDocumentPolicy.LINE_SOURCE_SYSTEM
-            ):
-                raise StockDocumentTransferDispatchMismatchError(
-                    "Основание TransferLine требует шапку документа отправки StockTransfer."
-                )
 
     @staticmethod
     def ensure_confirmable(
@@ -449,18 +410,4 @@ class StockTransferDispatchDocumentPolicy:
         }:
             raise InvalidStockDocumentContextError(
                 "Нужны ровно снимки исходного, конечного и транзитного складов."
-            )
-
-    @staticmethod
-    def _ensure_canonical_reference(reference: str) -> None:
-        """Требует канонический UUID в зарезервированном основании, не меняя внешние пользовательские ссылки."""
-        try:
-            identifier = UUID(reference)
-        except (ValueError, TypeError, AttributeError) as exc:
-            raise StockDocumentTransferDispatchMismatchError(
-                "Основание перемещения должно содержать UUID."
-            ) from exc
-        if str(identifier) != reference:
-            raise StockDocumentTransferDispatchMismatchError(
-                "UUID основания должен иметь каноническую строковую форму."
             )

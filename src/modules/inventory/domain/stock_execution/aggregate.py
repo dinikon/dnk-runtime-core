@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Self
+from src.modules.inventory.domain.stock_execution.transfer_document_snapshot import (
+    StockExecutionTransferDocumentSnapshot,
+    StockExecutionTransferDocumentLineSnapshot,
+)
 from src.modules.inventory.domain.stock_execution.transfer_snapshot import (
     StockExecutionTransferLineSnapshot,
     StockExecutionTransferSnapshot,
@@ -53,6 +57,7 @@ from src.modules.inventory.domain.stock_execution.error import (
     InvalidStockExecutionValueError,
     StockExecutionTimeError,
     InvalidStockExecutionTransferSnapshotError,
+    InvalidStockExecutionTransferDocumentSnapshotError,
 )
 from src.modules.inventory.domain.stock_execution.value_object.document_line_quantity import (
     ExecutedDocumentLineQuantityVO,
@@ -166,6 +171,37 @@ class StockExecution:
         )
         execution._validate()
         return execution
+
+    def transfer_document_snapshot(self) -> StockExecutionTransferDocumentSnapshot:
+        """Передаёт проверенный физический факт вместе с основанием и версией документа для автоматической регистрации отправки."""
+        self._validate()
+        if self.operation_type not in (
+            StockOperationType.ISSUE,
+            StockOperationType.RECEIPT,
+        ):
+            raise InvalidStockExecutionTransferDocumentSnapshotError(
+                "Документный снимок перемещения поддерживает только ISSUE и RECEIPT."
+            )
+        return StockExecutionTransferDocumentSnapshot(
+            self.id,
+            self.document_id,
+            self.document_version,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionTransferDocumentLineSnapshot(
+                    line.id,
+                    line.document_line_id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                    line.route.dimensions[0],
+                )
+                for line in self.lines
+            ),
+        )
 
     def transfer_snapshot(self) -> StockExecutionTransferSnapshot:
         """Передаёт проверенный расход/приход с физическими измерениями без исходного пересчёта и полного маршрута."""

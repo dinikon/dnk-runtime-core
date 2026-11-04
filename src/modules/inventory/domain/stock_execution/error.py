@@ -51,3 +51,7 @@ class InvalidStockExecutionShipmentSnapshotError(StockExecutionError):
 
 class InvalidStockExecutionTransferSnapshotError(StockExecutionError):
     """Сообщает о некорректном снимке расхода/прихода с физическими измерениями для перемещения."""
+
+
+class InvalidStockExecutionTransferDocumentSnapshotError(StockExecutionError):
+    """Сообщает о некорректном снимке физических строк с основанием и версией документа."""

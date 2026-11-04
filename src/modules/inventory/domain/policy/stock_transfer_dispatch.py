@@ -1,3 +1,34 @@
+from src.modules.inventory.domain.policy.stock_execution_document import (
+    StockExecutionDocumentPolicy,
+)
+from src.modules.inventory.domain.stock_document.execution_snapshot import (
+    StockDocumentExecutionSnapshot,
+    StockDocumentLineExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_document.transfer_dispatch_snapshot import (
+    StockDocumentTransferDispatchSnapshot,
+)
+from src.modules.inventory.domain.stock_document.error import (
+    InvalidStockDocumentContextError,
+    InvalidStockDocumentTransferDispatchSnapshotError,
+    StockDocumentExecutionNotAllowedError,
+)
+from src.modules.inventory.domain.stock_document.value_object.line_id import (
+    StockDocumentLineIdVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.status import (
+    StockDocumentStatus,
+)
+from src.modules.inventory.domain.stock_execution.document_snapshot import (
+    StockExecutionDocumentSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.transfer_document_snapshot import (
+    StockExecutionTransferDocumentSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.value_object.document_line_quantity import (
+    ExecutedDocumentLineQuantityVO,
+)
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.policy.stock_transfer_execution_grouping import (
     StockTransferExecutionGroupingPolicy,
 )
@@ -12,6 +43,7 @@ from src.modules.inventory.domain.policy.stock_transfer_confirmation import (
 )
 from src.modules.inventory.domain.stock_execution.error import (
     InvalidStockExecutionTransferSnapshotError,
+    InvalidStockExecutionTransferDocumentSnapshotError,
 )
 from src.modules.inventory.domain.stock_execution.transfer_snapshot import (
     StockExecutionTransferSnapshot,
@@ -60,6 +92,208 @@ from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
 
 class StockTransferDispatchPolicy:
     """Согласует расход исходного склада и приход в транзит без изменения запасов или других корней."""
+
+    @staticmethod
+    def build_dispatch_from_documents(
+        *,
+        transfer: StockTransferDispatchPlanSnapshot,
+        issue_document: StockDocumentTransferDispatchSnapshot,
+        receipt_document: StockDocumentTransferDispatchSnapshot,
+        issue: StockExecutionTransferDocumentSnapshot,
+        receipt: StockExecutionTransferDocumentSnapshot,
+        transit: StockTransferTransitVO,
+        source_warehouse: WarehouseSnapshot,
+        destination_warehouse: WarehouseSnapshot,
+        transit_warehouse: WarehouseSnapshot,
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> StockTransferDispatchSnapshot:
+        """Выводит все назначения из оснований двух текущих документов, проверяет их лимиты и передаёт физическую пару прежней политике."""
+        if not isinstance(transfer, StockTransferDispatchPlanSnapshot):
+            raise InvalidStockTransferDispatchPlanSnapshotError(
+                "Нужен полный текущий снимок плана StockTransfer."
+            )
+        transfer.ensure_valid()
+        if transfer.status not in (
+            StockTransferStatus.CONFIRMED,
+            StockTransferStatus.IN_PROGRESS,
+        ):
+            raise StockTransferStatusError(
+                "Автоматическая отправка доступна подтверждённому или исполняемому перемещению."
+            )
+        plan = {line.id: line for line in transfer.lines}
+        for document in (issue_document, receipt_document):
+            if not isinstance(document, StockDocumentTransferDispatchSnapshot):
+                raise InvalidStockDocumentTransferDispatchSnapshotError(
+                    "Нужны снимки оснований обоих документов отправки."
+                )
+            document.ensure_valid()
+            if document.status not in (
+                StockDocumentStatus.CONFIRMED,
+                StockDocumentStatus.PARTIALLY_EXECUTED,
+            ):
+                raise StockDocumentExecutionNotAllowedError(
+                    "Отправка требует подтверждённые или частично исполненные документы."
+                )
+            if (
+                document.transfer_id != transfer.id
+                or document.owner_id != transfer.owner_id
+            ):
+                raise StockTransferDispatchMismatchError(
+                    "Основание и владелец каждого документа должны соответствовать перемещению."
+                )
+            for row in document.lines:
+                target = plan.get(row.transfer_line_id)
+                if (
+                    target is None
+                    or target.inventory_item_id != row.inventory_item_id
+                    or target.base_uom != row.base_uom
+                ):
+                    raise StockTransferDispatchMismatchError(
+                        "Все строки документа должны соответствовать строкам, товарам и единицам текущего перемещения."
+                    )
+        if (
+            issue_document.id == receipt_document.id
+            or issue_document.operation_type is not StockOperationType.ISSUE
+            or receipt_document.operation_type is not StockOperationType.RECEIPT
+        ):
+            raise StockTransferDispatchMismatchError(
+                "Нужны разные документы расхода A и прихода T в соответствующих ролях."
+            )
+        if (
+            issue_document.source_transfer_version
+            != receipt_document.source_transfer_version
+            or issue_document.source_transfer_version > transfer.version
+        ):
+            raise StockTransferVersionConflictError(
+                "Исторические версии основания обеих сторон должны совпадать и не превышать текущую версию StockTransfer."
+            )
+        if {line.document_line_id for line in issue_document.lines}.intersection(
+            line.document_line_id for line in receipt_document.lines
+        ):
+            raise StockTransferDispatchMismatchError(
+                "Плановые ID строк обеих сторон должны различаться."
+            )
+        outgoing = {
+            row.transfer_line_id: (
+                row.inventory_item_id,
+                row.base_uom,
+                row.planned_qty,
+                row.executed_qty,
+            )
+            for row in issue_document.lines
+        }
+        incoming = {
+            row.transfer_line_id: (
+                row.inventory_item_id,
+                row.base_uom,
+                row.planned_qty,
+                row.executed_qty,
+            )
+            for row in receipt_document.lines
+        }
+        if outgoing != incoming:
+            raise StockTransferDispatchMismatchError(
+                "Планы и накопленное исполнение пары должны совпадать по каждой строке перемещения."
+            )
+        for execution in (issue, receipt):
+            if not isinstance(execution, StockExecutionTransferDocumentSnapshot):
+                raise InvalidStockExecutionTransferDocumentSnapshotError(
+                    "Нужны физические снимки фактов с документными связями."
+                )
+            execution.ensure_valid()
+        issue_bindings = StockTransferDispatchPolicy._bindings_from_document(
+            issue_document, issue
+        )
+        receipt_bindings = StockTransferDispatchPolicy._bindings_from_document(
+            receipt_document, receipt
+        )
+        return StockTransferDispatchPolicy.build_dispatch(
+            transfer=transfer,
+            issue=issue.transfer_snapshot(),
+            receipt=receipt.transfer_snapshot(),
+            transit=transit,
+            source_warehouse=source_warehouse,
+            destination_warehouse=destination_warehouse,
+            transit_warehouse=transit_warehouse,
+            locations=locations,
+            issue_bindings=issue_bindings,
+            receipt_bindings=receipt_bindings,
+        )
+
+    @staticmethod
+    def _bindings_from_document(
+        document: StockDocumentTransferDispatchSnapshot,
+        execution: StockExecutionTransferDocumentSnapshot,
+    ) -> tuple[StockTransferExecutionBindingVO, ...]:
+        """Назначает все целые фактические строки и проверяет точные суммы относительно версии и остатка своего документа."""
+        by_line = {line.document_line_id: line for line in document.lines}
+        quantities: dict[StockDocumentLineIdVO, QuantityVO] = {}
+        bindings = []
+        for actual in sorted(
+            execution.lines, key=lambda line: line.execution_line_id.uuid.int
+        ):
+            planned = by_line.get(actual.document_line_id)
+            if (
+                planned is None
+                or planned.inventory_item_id != actual.inventory_item_id
+                or planned.base_uom != actual.base_uom
+            ):
+                raise InvalidStockDocumentContextError(
+                    "Каждый факт должен соответствовать строке, товару и единице своего документа."
+                )
+            previous = quantities.get(actual.document_line_id)
+            quantities[actual.document_line_id] = (
+                actual.quantity
+                if previous is None
+                else QuantityArithmeticPolicy.add(previous, actual.quantity)
+            )
+            bindings.append(
+                StockTransferExecutionBindingVO(
+                    actual.execution_line_id, planned.transfer_line_id
+                )
+            )
+        StockExecutionDocumentPolicy.ensure_compatible(
+            document=StockDocumentExecutionSnapshot(
+                document.id,
+                document.operation_type,
+                document.warehouse_id,
+                document.owner_id,
+                document.status,
+                document.version,
+                document.updated_at,
+                tuple(
+                    StockDocumentLineExecutionSnapshot(
+                        line.document_line_id,
+                        line.inventory_item_id,
+                        line.base_uom,
+                        line.planned_qty,
+                        line.executed_qty,
+                    )
+                    for line in document.lines
+                ),
+            ),
+            execution=StockExecutionDocumentSnapshot(
+                execution.id,
+                execution.document_id,
+                execution.document_version,
+                execution.operation_type,
+                execution.warehouse_id,
+                execution.owner_id,
+                execution.executed_at,
+                tuple(
+                    ExecutedDocumentLineQuantityVO(
+                        identifier,
+                        by_line[identifier].inventory_item_id,
+                        by_line[identifier].base_uom,
+                        quantities[identifier],
+                    )
+                    for identifier in sorted(
+                        quantities, key=lambda value: value.uuid.int
+                    )
+                ),
+            ),
+        )
+        return tuple(bindings)
 
     @staticmethod
     def build_dispatch(
