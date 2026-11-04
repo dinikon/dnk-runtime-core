@@ -86,7 +86,7 @@ class StockReservation:
         created_at: datetime,
         expires_at: datetime | None = None,
     ) -> Self:
-        """Создаёт ожидание версии 0 с нулевым удержанием и проверенной привязкой к пулу."""
+        """Создаёт ожидание версии 0 с нулевыми удержанием и погашением и проверенной привязкой к пулу."""
         if not isinstance(pool, AvailabilityPoolReservationSnapshot):
             raise InvalidAvailabilityPoolReservationSnapshotError(
                 "Нужен снимок привязки к пулу, а не полный агрегат или его свободное количество."
@@ -329,7 +329,7 @@ class StockReservation:
         return reservation
 
     def _validate(self) -> None:
-        """Проверяет собственный состав, предел удержания, матрицу статусов и UTC-хронологию."""
+        """Проверяет собственный состав, сумму удержания и погашения, статусы и UTC-хронологию."""
         if (
             not isinstance(self.id, StockReservationIdVO)
             or not isinstance(self.source_ref, ReservationSourceVO)

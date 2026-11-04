@@ -854,10 +854,12 @@ ReservationAllocation остаётся целевой Entity будущего ж
 
 - StockReservation — immutable самостоятельный AR с StockReservationIdVO,
   обязательным source_ref: ReservationSourceVO, pool_id: AvailabilityPoolIdVO,
-  key: AvailabilityPoolKeyVO, неизменяемой base_uom, requested_qty и reserved_qty
-  как QuantityVO, StockReservationStatus, expires_at: datetime | None,
+  key: AvailabilityPoolKeyVO, неизменяемой base_uom, requested_qty, reserved_qty
+  и consumed_qty как QuantityVO, StockReservationStatus, expires_at: datetime | None,
   created_at/updated_at в UTC и целой неотрицательной version без bool.
-  Запрос положителен, 0 <= reserved_qty <= requested_qty.
+  Запрос положителен, reserved_qty и consumed_qty неотрицательны,
+  reserved_qty + consumed_qty <= requested_qty. Погашение — накопленная история
+  использования, которую освобождение и истечение не обнуляют.
 - ReservationSourceVO хранит system/reference конкретной строки обязательства.
   Значения непустые после trim, без Cc/Cf, с сохранением регистра и ведущих нулей.
   Проверки существования основания и глобальных дубликатов не выполняются Domain.
@@ -866,32 +868,47 @@ ReservationAllocation остаётся целевой Entity будущего ж
   валидирует immutable-снимок. Он не содержит свободного количества/версии и не
   является разрешением на резерв; типовые ошибки — InvalidAvailabilityPoolReservationSnapshotError.
 - create выводит привязку и единицу из снимка пула, сверяет InventoryItemStockSnapshot,
-  проверяет текущий шаг запроса и создаёт PENDING/0/version=0. ID, основание, время
+  проверяет текущий шаг запроса и создаёт PENDING с двумя нулями/version=0. ID, основание, время
   и необязательный срок передаются явно. Срок строго позже создания.
   restore получает полный собственный состав без текущих снимков, сохраняет
   исторические количества и ссылки, нормализует aware-время в UTC и проверяет
   пределы, хронологию и матрицу статусов без повторного применения текущего шага.
-- PENDING требует нулевое удержание; PARTIALLY_RESERVED — положительное неполное;
-  RESERVED — равное запросу; RELEASED и EXPIRED — ноль. Последние два терминальны.
+  consumed_qty обязателен в restore явно, не выводится из удержания или статуса.
+- При consumed_qty=0 PENDING требует нулевое удержание, PARTIALLY_RESERVED —
+  положительное неполное, RESERVED — равное запросу. PARTIALLY_CONSUMED требует
+  0 < consumed_qty < requested_qty и допускает нулевое удержание. CONSUMED требует
+  consumed_qty=requested_qty/reserved_qty=0 и терминален. RELEASED и EXPIRED
+  терминальны, требуют нулевое удержание и consumed_qty < requested_qty.
   EXPIRED требует заданный срок и updated_at >= expires_at.
 - add_reserved(quantity, expected_version, inventory_item, updated_at) регистрирует
-  положительное кратное увеличение до requested_qty. Получается PARTIALLY_RESERVED
-  или RESERVED. При updated_at >= expires_at увеличение запрещено.
+  положительное кратное увеличение с пределом reserved_qty + quantity + consumed_qty
+  <= requested_qty. Без погашения получается PARTIALLY_RESERVED/RESERVED, после
+  частичного погашения — PARTIALLY_CONSUMED. При updated_at >= expires_at увеличение запрещено.
 - release(quantity, ...) освобождает положительное кратное количество не больше
   собственного удержания. Ноль результата закрывает в RELEASED, иначе статус
-  PARTIALLY_RESERVED. После срока освобождение разрешено; открытое частичное
-  удержание можно снова увеличить до прежнего лимита.
+  PARTIALLY_RESERVED или PARTIALLY_CONSUMED. После срока освобождение разрешено;
+  погашение сохраняется, повторно резервируется лишь неиспользованная часть.
+- consume(quantity, expected_version, inventory_item, consumed_at, updated_at)
+  переносит положительное кратное количество из reserved_qty в consumed_qty,
+  не превышая удержание. Статус PARTIALLY_CONSUMED или терминальный CONSUMED.
+  При частичном погашении с нулевым удержанием неисполненный остаток можно
+  зарезервировать позднее, пока объект открыт и срок не истёк.
+  Факт consumed_at — aware datetime: created_at <= consumed_at <= updated_at,
+  при заданном сроке consumed_at < expires_at. Своевременный факт разрешено
+  зарегистрировать позднее срока в ещё открытом объекте; закрытый не восстанавливается.
 - release_all(expected_version, updated_at) закрывает в RELEASED, включая PENDING/0.
   expire(expected_version, updated_at) закрывает в EXPIRED только на границе срока
   или позже; без срока/раньше него запрещён. Эти два метода используют собственную
-  историю без текущих снимков товара и пула. Терминальные состояния не изменяются.
-- Все переходы проверяют собственное состояние и строгую ожидаемую версию до
-  арифметики. Время нормализуется в UTC и не убывает; равные моменты допустимы.
+  историю без текущих снимков товара и пула, сохраняя consumed_qty.
+  Терминальные состояния не изменяются, CONSUMED не закрывается повторно.
+- Все переходы проверяют типы текущей/ожидаемой версии и их совпадение до арифметики
+  инварианта, затем собственное состояние и открытый статус. Время нормализуется
+  в UTC и не убывает; равные моменты допустимы.
   Каждое изменение возвращает новую версию +1 с прежними ID, основанием, областью,
   единицей, запросом, сроком и created_at; исходные объекты не меняются.
 - Количества проверяются QuantityValidationPolicy, арифметика — QuantityArithmeticPolicy
   без округления и внешнего Decimal context, с прежним защитным пределом.
-  При add/release текущий шаг проверяется для запроса, удержания и изменения.
+  При add/release/consume текущий шаг проверяется для запроса, удержания, погашения и изменения.
   Для SERIAL мягкое удержание может включать много экземпляров PCS/шага 1.
 - Срок expires_at обязательства независим от годности товара и допустим при NONE.
   Чтение статуса или течение времени не освобождает удержание: нужен явный переход.
@@ -899,17 +916,21 @@ ReservationAllocation остаётся целевой Entity будущего ж
 - Общую вместимость проверяет только AvailabilityPool.reserve(). Собственный лимит
   StockReservation её не заменяет. Будущий Application сохраняет пару новых
   состояний одним UoW: add_reserved с pool.reserve, release/закрытие/истечение с
-  освобождением ровно уменьшенного собственного удержания. При нуле pool.release
+  освобождением ровно уменьшенного собственного удержания; consume — с
+  pool.consume_reserved и снимками после расхода. При нуле pool.release
   не вызывается. Пример: 0 → 4 → 7 → 5 → 0 под запрос 7, дельты пула +4/+3/−2/−5.
 - Типовые ошибки: InvalidStockReservationValueError, StockReservationVersionConflictError,
   StockReservationStatusError, StockReservationTimeError, InvalidStockReservationQuantityError,
   StockReservationLimitExceededError, StockReservationReleaseExceededError,
+  StockReservationConsumptionExceededError,
   StockReservationExpiredError, StockReservationExpirationError,
   StockReservationItemMismatchError и StockReservationUomMismatchError.
 - SQL, глобальная идемпотентность, планировщик истечения, Outbox и конкурентная
   защита остаются Application/хранению. Domain-версии не блокируют две ветви
   исходного состояния, а актуальная версия сама по себе не дедуплицирует команду.
-  Погашение при отгрузке, связь со StockExecution и жёсткие allocation — будущие срезы.
+  Количественное погашение реализовано, но соответствие расходу оно не подтверждает.
+  Сопоставление строк StockExecution(ISSUE) с резервами, выбор правильного pool_id
+  и жёсткие allocation — следующие срезы, не скрытые проверки по совпавшему SKU.
 
 #### Aggregate: AvailabilityPool
 
@@ -957,6 +978,13 @@ ReservationAllocation остаётся целевой Entity будущего ж
   и не больше reserved_qty. Превышение — ExcessiveReservationReleaseError.
   Свежая дата, активный склад и физический контекст не нужны. eligible_qty и
   assessed_on сохраняются, резерв уменьшается даже при историческом дефиците.
+- consume_reserved получает положительный кратный QuantityVO, expected_version и
+  полный контекст StockAvailabilityPolicy после расхода. Количество не больше
+  текущего reserved_qty, иначе ExcessiveReservationConsumptionError.
+  Уменьшает общий резерв и заново рассчитывает eligible_qty/assessed_on одной
+  следующей версией. Прямого вычитания quantity из eligible_qty нет, чтобы не
+  учесть расход дважды. Свободная ёмкость не требуется, дефицит других обязательств
+  допустим. Корректная пустая выборка после расхода даёт нулевую пригодность.
 - Все переходы проверяют собственное состояние и строгую ожидаемую версию до
   расчёта. Конфликт — AvailabilityPoolVersionConflictError, неверный собственный
   тип/версия — InvalidAvailabilityPoolValueError. Чужой товар/склад —
@@ -976,7 +1004,10 @@ ReservationAllocation остаётся целевой Entity будущего ж
   состояния могут быть подготовлены в памяти. Глобальная идемпотентность, полнота
   и согласованность выборки, SQL, Outbox и единый UoW пула с конкретным резервом
   остаются будущему Application/хранению. StockReservation поддерживает явное
-  истечение; планировщик, погашение при отгрузке и жёсткие привязки остаются будущим срезам.
+  истечение и количественное погашение. Пример: физически 10, резерв 7; после
+  расхода 4 пул получает eligible=6/reserved=3/available=3, обязательство —
+  reserved=3/consumed=4. Реальность/состав расхода, планировщик и жёсткие привязки
+  остаются следующим срезам. Пул сам не изменяет позиции или Ledger.
 
 ### Область 6. Stock Transfer
 

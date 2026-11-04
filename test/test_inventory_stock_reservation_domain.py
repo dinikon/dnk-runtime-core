@@ -10,6 +10,7 @@ from uuid import uuid4
 from src.modules.inventory.domain.availability_pool.aggregate import AvailabilityPool
 from src.modules.inventory.domain.availability_pool.error import (
     InsufficientAvailableStockError,
+    ExcessiveReservationConsumptionError,
     InvalidAvailabilityPoolReservationSnapshotError,
     InvalidAvailabilityPoolValueError,
 )
@@ -1319,10 +1320,6 @@ class StockReservationDomainTests(unittest.TestCase):
         reserved = self.add(self.create(), "7")
         candidate = self.consume(reserved, "4")
         empty_pool = self.pool
-        from src.modules.inventory.domain.availability_pool.error import (
-            ExcessiveReservationConsumptionError,
-        )
-
         with self.assertRaises(ExcessiveReservationConsumptionError):
             empty_pool.consume_reserved(
                 QuantityVO(Decimal(4)), expected_version=0, **self.pool_context()

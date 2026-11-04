@@ -14,6 +14,7 @@ from src.modules.inventory.domain.availability_pool.error import (
     AvailabilityPoolUomMismatchError,
     AvailabilityPoolVersionConflictError,
     ExcessiveReservationReleaseError,
+    ExcessiveReservationConsumptionError,
     InsufficientAvailableStockError,
     InvalidAvailabilityPoolKeyError,
     InvalidAvailabilityPoolValueError,
@@ -26,6 +27,7 @@ from src.modules.inventory.domain.availability_pool.value_object.key import (
     AvailabilityPoolKeyVO,
 )
 from src.modules.inventory.domain.error import (
+    ExpirationDateRequiredError,
     ExpirationDateRequiredError,
     InvalidQuantityError,
     InvalidStockAvailabilityContextError,
@@ -215,6 +217,20 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
         """Повторно рассчитывает пригодность с явной ожидаемой версией."""
         return pool.refresh_eligible_quantity(
             **(dict(expected_version=pool.version) | self.context() | changes)
+        )
+
+    def consume(
+        self, pool: AvailabilityPool, amount: str = "4", **changes: object
+    ) -> AvailabilityPool:
+        """Погашает общий резерв с пересчётом переданных физических снимков после расхода."""
+        return pool.consume_reserved(
+            **(
+                dict(
+                    quantity=QuantityVO(Decimal(amount)), expected_version=pool.version
+                )
+                | self.context()
+                | changes
+            )
         )
 
     def release(
@@ -509,7 +525,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
             datetime(2026, 11, 4),
             self.day - timedelta(days=1),
         ):
-            for operation in (self.reserve, self.refresh):
+            for operation in (self.reserve, self.refresh, self.consume):
                 with (
                     self.subTest(value=value, operation=operation.__name__),
                     self.assertRaises(AvailabilityAssessmentDateError),
@@ -521,7 +537,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
     def test_all_transitions_require_strict_expected_version(self) -> None:
         """Bool, отрицательные и нетипизированные версии отклоняются до перехода состояния."""
         pool = self.reserve(self.create())
-        for operation in (self.reserve, self.release, self.refresh):
+        for operation in (self.reserve, self.release, self.refresh, self.consume):
             for value in (True, False, -1, None, "1", Decimal(1), 1.0):
                 with (
                     self.subTest(operation=operation.__name__, value=value),
@@ -540,7 +556,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
             "calculate_eligible_quantity",
             side_effect=RuntimeError("Не считать"),
         ):
-            for operation in (self.reserve, self.refresh):
+            for operation in (self.reserve, self.refresh, self.consume):
                 with self.assertRaises(AvailabilityPoolVersionConflictError):
                     operation(pool, expected_version=0)
         with patch(
@@ -569,7 +585,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
     ) -> None:
         """Операции не допускают нулевое количество и не округляют ввод пользователя."""
         pool = self.reserve(self.create())
-        for operation in (self.reserve, self.release):
+        for operation in (self.reserve, self.release, self.consume):
             for value in ("0", "-0.000"):
                 with self.assertRaises(InvalidReservationQuantityError):
                     operation(pool, value)
@@ -619,7 +635,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
     def test_all_methods_check_current_item_and_immutable_unit(self) -> None:
         """Чужой товар и новая базовая единица не могут изменить исторические счётчики."""
         pool = self.reserve(self.create())
-        for operation in (self.reserve, self.release, self.refresh):
+        for operation in (self.reserve, self.release, self.refresh, self.consume):
             item = (
                 self.item.stock_snapshot()
                 if operation == self.release
@@ -637,7 +653,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
                     self.assertRaises(error),
                 ):
                     operation(pool, inventory_item=replace(item, **changes))
-        for operation in (self.reserve, self.refresh):
+        for operation in (self.reserve, self.refresh, self.consume):
             with self.assertRaises(AvailabilityPoolContextMismatchError):
                 operation(
                     pool, warehouse=replace(self.warehouse, id=WarehouseIdVO(uuid4()))
@@ -648,7 +664,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
     ) -> None:
         """Собственное восстановление не проверяет текущий шаг; использование счётчика проверяет."""
         pool = self.restore(reserved_qty=QuantityVO(Decimal("1.23")))
-        for operation in (self.reserve, self.release, self.refresh):
+        for operation in (self.reserve, self.release, self.refresh, self.consume):
             with self.assertRaises(QuantityStepError):
                 (
                     operation(pool, "0.05")
@@ -661,7 +677,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
         with self.assertRaises(InvalidInventoryItemAvailabilitySnapshotError):
             self.create(inventory_item=self.item)
         pool = self.reserve(self.create())
-        for operation in (self.reserve, self.refresh):
+        for operation in (self.reserve, self.refresh, self.consume):
             with self.assertRaises(InvalidInventoryItemAvailabilitySnapshotError):
                 operation(pool, inventory_item=self.item.stock_snapshot())
             with self.assertRaises(InvalidWarehouseSnapshotError):
@@ -785,7 +801,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
             dict(assessed_on="2026-11-04"),
         ):
             malformed = replace(pool, **changes)
-            for operation in (self.reserve, self.release, self.refresh):
+            for operation in (self.reserve, self.release, self.refresh, self.consume):
                 with self.assertRaises(InvalidAvailabilityPoolValueError):
                     operation(malformed)
             for field in ("available_qty", "deficit_qty"):
@@ -804,6 +820,171 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
         self.assertEqual(self.position.availability_snapshot(), position_before)
         with self.assertRaises(FrozenInstanceError):
             changed.reserved_qty = QuantityVO(Decimal(0))
+
+    def test_consumption_recalculates_post_issue_stock_and_advances_once(self) -> None:
+        """Погашение 4 из резерва 7 по остатку 6 даёт 6/3, не вычитая расход второй раз."""
+        pool = self.reserve(self.create())
+        after = replace(
+            self.position.availability_snapshot(), on_hand_qty=QuantityVO(Decimal(6))
+        )
+        changed = self.consume(
+            pool, positions=(after,), as_of=self.day + timedelta(days=1)
+        )
+        self.assertEqual(
+            (
+                changed.eligible_qty.value,
+                changed.reserved_qty.value,
+                changed.available_qty.value,
+                changed.deficit_qty.value,
+                changed.version,
+            ),
+            (Decimal(6), Decimal(3), Decimal(3), Decimal(0), 2),
+        )
+        self.assertEqual(changed.assessed_on, self.day + timedelta(days=1))
+        self.assertEqual(
+            (pool.eligible_qty.value, pool.reserved_qty.value, pool.version),
+            (Decimal(10), Decimal(7), 1),
+        )
+        self.assertIs(changed.id, pool.id)
+        self.assertIs(changed.key, pool.key)
+        self.assertIs(changed.base_uom, pool.base_uom)
+
+    def test_consumption_preserves_deficit_and_does_not_require_free_capacity(
+        self,
+    ) -> None:
+        """Погашение уменьшает обязательства даже при нехватке пригодного запаса у остальных резервов."""
+        pool = self.reserve(self.create())
+        after = replace(
+            self.position.availability_snapshot(), on_hand_qty=QuantityVO(Decimal(1))
+        )
+        changed = self.consume(pool, positions=(after,))
+        self.assertEqual(
+            (
+                changed.reserved_qty.value,
+                changed.eligible_qty.value,
+                changed.available_qty.value,
+                changed.deficit_qty.value,
+            ),
+            (Decimal(3), Decimal(1), Decimal(0), Decimal(2)),
+        )
+        inactive = self.consume(
+            pool, warehouse=replace(self.warehouse, is_active=False)
+        )
+        self.assertEqual(
+            (
+                inactive.reserved_qty.value,
+                inactive.eligible_qty.value,
+                inactive.deficit_qty.value,
+            ),
+            (Decimal(3), Decimal(0), Decimal(3)),
+        )
+
+    def test_consumption_can_complete_hold_with_empty_post_issue_scope(self) -> None:
+        """Нулевой остаток после полного расхода не мешает обнулить удержание."""
+        pool = self.reserve(self.create())
+        changed = self.consume(pool, "7", positions=(), locations=())
+        self.assertEqual(
+            (
+                changed.eligible_qty.value,
+                changed.reserved_qty.value,
+                changed.available_qty.value,
+                changed.version,
+            ),
+            (Decimal(0), Decimal(0), Decimal(0), 2),
+        )
+        with self.assertRaises(ExcessiveReservationConsumptionError):
+            self.consume(pool, "7.05", positions=(), locations=())
+        with self.assertRaises(ExcessiveReservationConsumptionError):
+            self.consume(self.create(), "1")
+
+    def test_consumption_checks_post_issue_context_even_for_complete_release(
+        self,
+    ) -> None:
+        """Погашение не скрывает ошибки снимков, обязательной даты и текущего шага."""
+        pool = self.reserve(self.create())
+        with self.assertRaises(InvalidStockAvailabilityContextError):
+            self.consume(pool, "7", locations=())
+        with self.assertRaises(QuantityStepError):
+            self.consume(
+                pool,
+                positions=(
+                    replace(
+                        self.position.availability_snapshot(),
+                        on_hand_qty=QuantityVO(Decimal("1.23")),
+                    ),
+                ),
+            )
+        self.configure(TrackingMode.LOT, ExpirationMode.REQUIRED)
+        pool = self.reserve(self.create())
+        self.lot = replace(self.lot, dates=StockDatesVO())
+        with self.assertRaises(ExpirationDateRequiredError):
+            self.consume(pool)
+
+    def test_consumption_recomputes_known_rules_without_deducting_quantity_from_total(
+        self,
+    ) -> None:
+        """Пул принимает итоговый физический контекст; соответствие его расходу установит следующий срез."""
+        pool = self.reserve(self.create())
+        changed = self.consume(pool)
+        self.assertEqual(
+            (changed.eligible_qty.value, changed.reserved_qty.value),
+            (Decimal(10), Decimal(3)),
+        )
+        self.assertEqual(self.position.on_hand_qty.value, Decimal(10))
+
+    def test_serial_pool_consumption_uses_integer_step_and_zero_position(self) -> None:
+        """После выдачи одного серийного экземпляра нулевая позиция и резерв дают нулевой пул."""
+        self.configure(TrackingMode.SERIAL)
+        pool = self.reserve(self.create(), "1")
+        after = replace(
+            self.position.availability_snapshot(), on_hand_qty=QuantityVO(Decimal(0))
+        )
+        with self.assertRaises(QuantityStepError):
+            self.consume(pool, "0.5", positions=(after,))
+        changed = self.consume(pool, "1", positions=(after,))
+        self.assertEqual(
+            (
+                changed.eligible_qty.value,
+                changed.reserved_qty.value,
+                changed.available_qty.value,
+            ),
+            (Decimal(0), Decimal(0), Decimal(0)),
+        )
+
+    def test_consumption_hostile_decimal_context_is_exact(self) -> None:
+        """Погашение и новый свободный остаток точно рассчитываются вне внешнего Decimal context."""
+        pool = self.restore(
+            eligible_qty=QuantityVO(Decimal("12345678901234567890.15")),
+            reserved_qty=QuantityVO(Decimal("12345678901234567890.10")),
+        )
+        after = replace(
+            self.position.availability_snapshot(),
+            on_hand_qty=QuantityVO(Decimal("12345678901234567890.10")),
+        )
+        with localcontext() as context:
+            context.prec = 2
+            context.Emax = 2
+            context.Emin = -2
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            changed = self.consume(pool, "0.05", positions=(after,))
+            self.assertEqual(
+                changed.reserved_qty.value, Decimal("12345678901234567890.05")
+            )
+            self.assertEqual(changed.available_qty.value, Decimal("0.05"))
+            self.assertFalse(any(context.flags.values()))
+
+    def test_consumption_unrepresentable_subtraction_leaves_source_unchanged(
+        self,
+    ) -> None:
+        """Погашение не сохраняет округлённый резерв при недопустимом разрыве порядков."""
+        pool = self.restore(
+            eligible_qty=QuantityVO(Decimal("1E+1000001")),
+            reserved_qty=QuantityVO(Decimal("1E+1000001")),
+        )
+        with self.assertRaises(StockQuantityArithmeticError):
+            self.consume(pool, "1", positions=(), locations=())
+        self.assertEqual(pool.reserved_qty.value, Decimal("1E+1000001"))
 
 
 if __name__ == "__main__":

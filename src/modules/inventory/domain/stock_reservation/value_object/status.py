@@ -14,7 +14,7 @@ class StockReservationStatus(StrEnum):
 
     @property
     def is_terminal(self) -> bool:
-        """Запрещает повторные изменения закрытого или завершённого по сроку обязательства."""
+        """Запрещает повторные изменения закрытого, истёкшего или полностью использованного обязательства."""
         return self in (
             StockReservationStatus.RELEASED,
             StockReservationStatus.EXPIRED,
