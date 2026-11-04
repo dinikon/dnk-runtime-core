@@ -37,6 +37,10 @@ class InvalidInventoryItemExecutionSnapshotError(InventoryItemError):
     """Сообщает о некорректном снимке правил фактического исполнения товара."""
 
 
+class InvalidInventoryItemAvailabilitySnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке правил доступности товара."""
+
+
 class InventoryItemConflictError(InventoryItemError):
     """Сообщает о дубликатах или конфликте зависимых частей агрегата."""
 

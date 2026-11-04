@@ -70,4 +70,12 @@ class ExpirationDateNotAllowedError(InventoryError):
 
 
 class ExpirationDateRequiredError(InventoryError):
-    """Сообщает об отсутствии обязательной даты перед поступлением."""
+    """Сообщает об отсутствии обязательного срока для поступления или расчёта доступности."""
+
+
+class InvalidStockAvailabilityContextError(InventoryError):
+    """Сообщает о некорректной области, дате или составе снимков расчёта доступности."""
+
+
+class DuplicatePositiveSerialStockError(InventoryError):
+    """Запрещает положительный остаток одного экземпляра в нескольких переданных позициях."""

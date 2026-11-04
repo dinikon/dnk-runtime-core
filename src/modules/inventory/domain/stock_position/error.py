@@ -13,6 +13,10 @@ class InvalidStockPositionSnapshotError(StockPositionError):
     """Сообщает о некорректном снимке неизменяемых атрибутов позиции."""
 
 
+class InvalidStockPositionAvailabilitySnapshotError(StockPositionError):
+    """Сообщает о некорректном снимке физического количества для расчёта доступности."""
+
+
 class InvalidStockDimensionsError(StockPositionError):
     """Сообщает о неверных типах учётных измерений."""
 
@@ -31,3 +35,11 @@ class InvalidSerialStockQuantityError(StockPositionError):
 
 class StockPositionUomMismatchError(StockPositionError):
     """Запрещает переинтерпретацию остатка в другой базовой единице товара."""
+
+
+class StockPositionVersionConflictError(StockPositionError):
+    """Отклоняет применение записи по версии, не совпадающей с текущей версией позиции."""
+
+
+class StockPostingPositionMismatchError(StockPositionError):
+    """Запрещает применять запись Ledger к другой физической позиции."""

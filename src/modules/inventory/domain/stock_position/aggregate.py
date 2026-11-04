@@ -2,6 +2,10 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.stock_position.availability_snapshot import (
+    StockPositionAvailabilitySnapshot,
+)
+
 from src.modules.inventory.domain.inventory_item.stock_snapshot import (
     InventoryItemStockSnapshot,
 )
@@ -13,6 +17,14 @@ from src.modules.inventory.domain.stock_position.error import (
     InvalidSerialStockQuantityError,
     InvalidStockPositionValueError,
     StockPositionUomMismatchError,
+    StockPositionVersionConflictError,
+    StockPostingPositionMismatchError,
+)
+from src.modules.inventory.domain.stock_posting.error import (
+    InvalidStockLedgerEntrySnapshotError,
+)
+from src.modules.inventory.domain.stock_posting.ledger_entry_snapshot import (
+    StockLedgerEntrySnapshot,
 )
 from src.modules.inventory.domain.stock_position.snapshot import StockPositionSnapshot
 from src.modules.inventory.domain.stock_position.value_object.dimensions import (
@@ -83,10 +95,60 @@ class StockPosition:
         position._validate()
         return position
 
+    def availability_snapshot(self) -> StockPositionAvailabilitySnapshot:
+        """Возвращает проверенный физический остаток для расчёта пригодного к резервированию количества."""
+        self._validate()
+        return StockPositionAvailabilitySnapshot(
+            self.id, self.dimensions, self.base_uom, self.on_hand_qty
+        )
+
     def snapshot(self) -> StockPositionSnapshot:
         """Возвращает проверенные неизменяемые атрибуты без остатка и версии."""
         self._validate()
         return StockPositionSnapshot(self.id, self.dimensions, self.base_uom)
+
+    def apply_posting_entry(
+        self,
+        entry: StockLedgerEntrySnapshot,
+        *,
+        expected_version: int,
+        inventory_item: InventoryItemStockSnapshot,
+        location: StockLocationSnapshot,
+        warehouse: WarehouseSnapshot,
+        lot: StockLotSnapshot | None = None,
+        serial: StockSerialSnapshot | None = None,
+    ) -> Self:
+        """Проверяет целевую позицию, единицу и ожидаемую версию перед применением записи журнала."""
+        self._validate()
+        if not isinstance(entry, StockLedgerEntrySnapshot):
+            raise InvalidStockLedgerEntrySnapshotError(
+                "Нужен снимок записи Ledger, а не Entity или сырая дельта."
+            )
+        entry.ensure_valid()
+        if type(expected_version) is not int or expected_version < 0:
+            raise InvalidStockPositionValueError(
+                "Ожидаемая версия должна быть целым неотрицательным числом без bool."
+            )
+        if expected_version != self.version:
+            raise StockPositionVersionConflictError(
+                "Ожидаемая версия не совпадает с текущей версией позиции."
+            )
+        if entry.position_id != self.id:
+            raise StockPostingPositionMismatchError(
+                "Запись Ledger предназначена для другой физической позиции."
+            )
+        if entry.base_uom != self.base_uom:
+            raise StockPositionUomMismatchError(
+                "Базовая единица записи Ledger не соответствует позиции."
+            )
+        return self.apply_delta(
+            entry.quantity_delta,
+            inventory_item=inventory_item,
+            location=location,
+            warehouse=warehouse,
+            lot=lot,
+            serial=serial,
+        )
 
     def apply_delta(
         self,

@@ -14,6 +14,9 @@ from src.modules.inventory.domain.stock_posting.error import (
     InvalidStockLedgerEntryError,
     ZeroStockLedgerDeltaError,
 )
+from src.modules.inventory.domain.stock_posting.ledger_entry_snapshot import (
+    StockLedgerEntrySnapshot,
+)
 from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import (
     StockLedgerEntryIdVO,
 )
@@ -71,6 +74,13 @@ class StockLedgerEntry:
         entry = cls(identifier, position_id, quantity_delta, base_uom, conversion)
         entry.ensure_valid()
         return entry
+
+    def snapshot(self) -> StockLedgerEntrySnapshot:
+        """Возвращает проверенные идентичность, цель и базовую дельту для физической позиции."""
+        self.ensure_valid()
+        return StockLedgerEntrySnapshot(
+            self.id, self.position_id, self.quantity_delta, self.base_uom
+        )
 
     def ensure_current_conversion(self) -> None:
         """Проверяет системный коэффициент при новом обычном проведении без изменения истории."""

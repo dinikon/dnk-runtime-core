@@ -17,6 +17,10 @@ class InvalidStockLedgerEntryError(StockPostingError):
     """Сообщает о некорректном собственном составе записи журнала."""
 
 
+class InvalidStockLedgerEntrySnapshotError(InvalidStockLedgerEntryError):
+    """Сообщает о некорректном снимке записи для применения к физической позиции."""
+
+
 class ZeroStockLedgerDeltaError(StockPostingError):
     """Запрещает нулевую запись физического движения."""
 

@@ -2,6 +2,9 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.inventory_item.availability_snapshot import (
+    InventoryItemAvailabilitySnapshot,
+)
 from src.modules.inventory.domain.inventory_item.execution_snapshot import (
     InventoryItemExecutionSnapshot,
 )
@@ -128,6 +131,17 @@ class InventoryItem:
     def change_sku(self, sku: SkuVO) -> Self:
         """Возвращает позицию с новым ручным SKU и прежней идентичностью."""
         return self._with_changes(sku=sku)
+
+    def availability_snapshot(self) -> InventoryItemAvailabilitySnapshot:
+        """Возвращает проверенные настройки количества, прослеживаемости и срока для доступности."""
+        self._validate()
+        return InventoryItemAvailabilitySnapshot(
+            self.id,
+            self.base_uom,
+            self.quantity_rules,
+            self.tracking_mode,
+            self.expiration_mode,
+        )
 
     def execution_snapshot(self) -> InventoryItemExecutionSnapshot:
         """Возвращает проверенные правила количества, прослеживаемости и дат для исполнения."""

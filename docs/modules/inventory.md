@@ -2,10 +2,11 @@
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
 `PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`,
-`StockPosting`, `StockDocument` и `StockExecution`
+`StockPosting`, `StockDocument`, `StockExecution` и `AvailabilityPool`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
 `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`,
-`domain/stock_posting/`, `domain/stock_document/` и `domain/stock_execution/`.
+`domain/stock_posting/`, `domain/stock_document/`, `domain/stock_execution/`
+и `domain/availability_pool/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -276,8 +277,9 @@ NONE и LOT не накладывают дополнительных огран�
 или `LOT_AND_SERIAL`. Учёт партии сам по себе не включает контроль срока.
 Фактические даты партии находятся в StockLot. В текущем срезе
 StockExpirationPolicy проверяет допустимость заполнения и обязательность даты.
-Правила приёмки просроченного товара, FEFO и расчёт доступности реализуются
-в последующих складских сценариях; дата операции для них должна передаваться явно.
+StockAvailabilityPolicy рассчитывает пригодность физического остатка по явно
+переданной календарной дате. Правила приёмки просроченного товара и FEFO
+остаются последующими складскими сценариями.
 
 ## Партия товара
 
@@ -690,6 +692,9 @@ StockPosting, ограничений хранения и конкурентно�
   повторно проверяет контекст и совпадение базовой единицы, применяет StockQuantityPolicy
   и возвращает новый экземпляр с прежними ID и измерениями. Ненулевая дельта
   увеличивает version на 1. Нулевая дельта после проверок возвращает исходную позицию.
+- `apply_posting_entry(entry, expected_version=..., inventory_item=..., location=..., warehouse=..., lot=..., serial=...)`
+  дополнительно связывает запись Ledger с конкретными ID позиции, базовой единицей
+  и ожидаемой версией. Расчёт делегируется apply_delta(); подробный контракт приведён ниже.
 
 StockQuantityPolicy проверяет кратность текущего остатка, модуля дельты и результата
 через QuantityValidationPolicy. Арифметика использует собственный Decimal Context,
@@ -707,9 +712,10 @@ StockQuantityPolicy проверяет кратность текущего ос�
 
 Физическая позиция существует и в неактивном складе/адресе или состоянии BLOCKED.
 Эти состояния не стирают её количество. Разрешение конкретного проведения,
-проверки дат поступления и доступность для продажи относятся к последующим Policy
-операций. on_hand_qty не уменьшается при резервировании; доступное количество
-будет отдельным расчётом. Изменение version в Domain не заменяет идемпотентность
+проверки дат поступления и отгрузки относятся к Policy соответствующих операций.
+StockAvailabilityPolicy отдельно рассчитывает пригодный к резервированию запас.
+on_hand_qty не уменьшается при резервировании; AvailabilityPool отдельно вычитает
+общий действующий резерв из пригодного количества. Изменение version в Domain не заменяет идемпотентность
 и проверку конкурентной записи в Application/SQL.
 
 Пример для товара item с NONE, базовой единицей KG и шагом 0.05,
@@ -1220,7 +1226,8 @@ for index, amount in enumerate(("40", "35", "25")):
 Создание исполнения и регистрация прогресса пока существуют в Domain в памяти.
 StockPosting.create_from_execution() строит журнал по физическим маршрутам
 через StockExecutionPostingPolicy. Фабрика и её ограничения описаны ниже.
-Изменение StockPosition и атомарное сохранение с прогрессом документа пока не добавлены.
+StockPosition.apply_posting_entry() применяет запись к одной позиции в памяти;
+атомарное сохранение всех позиций с прогрессом документа пока не добавлено.
 
 Будущий Application обязан сохранить исполнение, прогресс документа, проведение
 и новые физические позиции одной транзакцией с проверкой версий и идемпотентности.
@@ -1347,11 +1354,319 @@ posting = StockPosting.create_from_execution(
 # Документ и физическая position этим вызовом не изменяются.
 ```
 
-Достаточность количества и текущий шаг проверит StockPosition.apply_delta().
+Применение записи к конкретной позиции выполняется через StockPosition.apply_posting_entry(),
+который делегирует проверки количества и шага существующему apply_delta().
 Регистрация прогресса StockDocument, исполнение, журнал и новые состояния позиций
 должны сохраняться будущим Application-сценарием одним UoW с проверкой версий,
 глобальной дедупликацией и Outbox. SQL, write API прямого остатка, согласованный
 откат исполнения/прогресса и глобальная защита присутствия серии не добавлены.
+
+## Применение записи Ledger к позиции
+
+StockLedgerEntry.snapshot() проверяет полное собственное состояние Entity,
+включая сохранённое равенство исходного пересчёта, и возвращает immutable
+StockLedgerEntrySnapshot. Он содержит только:
+
+| Поле | Тип |
+| --- | --- |
+| id | StockLedgerEntryIdVO |
+| position_id | StockPositionIdVO |
+| quantity_delta | Ненулевой StockDeltaVO |
+| base_uom | Известный UomCodeVO |
+
+Потребитель повторно проверяет снимок. Сырые UUID/числа/единицы, Entity или
+произвольные объекты вместо него дают InvalidStockLedgerEntrySnapshotError.
+Нулевая дельта, включая -0.000, запрещена с ZeroStockLedgerDeltaError.
+Источник, исходный коэффициент и полная Entity в позицию не передаются:
+это уже рассчитанное изменение в базовой единице. Исторический пересчёт записи
+при получении снимка не заменяется текущим коэффициентом.
+
+StockPosition.apply_posting_entry() выполняет проверки перед изменением:
+
+1. Проверяет собственное состояние и типизированный ненулевой снимок записи.
+2. Требует expected_version как целое неотрицательное число без bool.
+3. Сравнивает expected_version с текущей version; несовпадение даёт
+   StockPositionVersionConflictError, некорректный тип — InvalidStockPositionValueError.
+4. Сверяет entry.position_id с self.id; другая позиция даёт
+   StockPostingPositionMismatchError, даже если её товар и измерения совпадают.
+5. Сверяет базовую единицу записи с позицией без неявного пересчёта;
+   несовпадение даёт StockPositionUomMismatchError.
+6. Вызывает существующий apply_delta(), повторно проверяя снимки товара,
+   локации/склада, партии/серии, текущую единицу товара, шаг, неотрицательный
+   результат и ограничение конкретной серии 0–1 PCS.
+
+При успехе возвращается новый экземпляр с version +1. ID, измерения и базовая
+единица сохраняются. Исходные позиция, запись и снимок не меняются ни при успехе,
+ни при ошибке. Компенсирующие записи применяются этим же методом и проходят
+обычные проверки доступного физического количества.
+Низкоуровневый apply_delta() продолжает принимать ноль; ограничение ненулевой
+дельты относится к журналу и новому пути применения его записей.
+
+Пример: position содержит 10 KG версии 7, а posting.entries[0] — её запись −4 KG.
+context содержит существующие снимки inventory_item, location, warehouse
+и при необходимости lot/serial:
+
+```python
+expected_version = position.version
+entry_snapshot = posting.entries[0].snapshot()
+changed = position.apply_posting_entry(
+    entry=entry_snapshot,
+    expected_version=expected_version,
+    **context,
+)
+# changed: 6 KG, version=8; исходная position: 10 KG, version=7.
+# Повторный вызов для changed с expected_version=7 даст конфликт версии.
+```
+
+Для перемещения A:10 KG/v7 → B:0 KG/v2 записи −4/+4 применяются к своим
+позициям с ожидаемыми версиями 7 и 2. Получаются A:6 KG/v8 и B:4 KG/v3.
+Если одна сторона отклоняется, уже вычисленный кандидат другой стороны
+остаётся только объектом в памяти; исходные позиции не изменены.
+Все кандидаты и журнал необходимо сохранять одной будущей транзакцией.
+
+Проверка expected_version — Domain-проверка переданного состояния. Она не
+выполняет compare-and-set в БД и не заменяет блокировки. Позиция не хранит
+историю применённых ID записей: повтор той же записи с новой актуальной версией
+не запрещается локальным агрегатом. Глобальная идемпотентность проведения,
+проверка присутствия серии в других позициях, регистрация прогресса документа,
+общий commit/rollback и Outbox относятся к будущему Application/SQL-срезу.
+
+## Физический запас, пригодный к резервированию
+
+StockAvailabilityPolicy.calculate_eligible_quantity() — чистый расчёт для одного
+сочетания InventoryItem + Warehouse + Owner. Возвращает eligible_qty: QuantityVO
+в базовой единице товара. Это физический запас, удовлетворяющий текущим правилам
+пригодности; действующие резервы ещё не вычитаются. Физический on_hand_qty,
+пригодный eligible_qty и будущий свободный остаток после резервов имеют разный смысл.
+Расчёт не создаёт новых Aggregate Roots, Entity, резервов или движений.
+
+Контракт получает один InventoryItemAvailabilitySnapshot, WarehouseSnapshot,
+явные owner_id: StockOwnerIdVO и as_of: date, tuple позиций и ровно участвующие
+снимки локаций, партий и экземпляров. datetime, строки и системное время
+не используются вместо календарной даты. Выбор календарного дня склада относится
+к вызывающему сценарию. Пустые positions/locations/lots/serials дают QuantityVO(0).
+
+Три специализированных immutable-снимка получаются через availability_snapshot():
+
+| Снимок | Поля |
+| --- | --- |
+| InventoryItemAvailabilitySnapshot | inventory_item_id, base_uom, quantity_rules, tracking_mode, expiration_mode |
+| StockPositionAvailabilitySnapshot | id, dimensions, base_uom, on_hand_qty |
+| StockSerialAvailabilitySnapshot | id, inventory_item_id, lot_id, dates |
+
+Геттеры проверяют исходный агрегат; Policy повторно проверяет снимки через
+ensure_valid(). Полные корни, учётный StockPositionSnapshot без количества и
+снимки исполнения вместо специализированных снимков не принимаются.
+StockPositionSnapshot для журнала остаётся без количества и версии.
+Контракты не подтверждают согласованность чтения или актуальную версию в БД.
+
+В первом правиле пригодности суммируются только позиции со StockStatus.SELLABLE
+в локально активных локациях STORAGE активного склада. RECEIVING, SHIPPING,
+QUARANTINE и TRANSIT исключены. Неактивность или другое состояние дают нулевой
+вклад, сохраняя физический остаток. Обход активности родителей дерева не добавлен.
+Расширение допустимых зон и правила отдельных операций остаются самостоятельными.
+
+Товар, владелец, склад через локацию, базовая единица и матрица LOT/SERIAL должны
+совпадать с областью расчёта. Количество каждой позиции проверяется по текущему
+шагу товара, включая исключаемые позиции. Другой UOM не пересчитывается молча.
+Неверные ссылки и настройки вызывают доменную ошибку, а не дают нулевой вклад.
+Повтор ID позиции или полного ключа измерений запрещён. Повторные, отсутствующие
+и лишние снимки контекста запрещены с InvalidStockAvailabilityContextError либо
+соответствующей существующей ошибкой измерений/снимка. Некорректные новые снимки
+товара и позиции дают InvalidInventoryItemAvailabilitySnapshotError и
+InvalidStockPositionAvailabilitySnapshotError.
+
+Срок проверяется только при REQUIRED: expires_on >= as_of разрешено,
+expires_on < as_of исключает позицию. Последний день считается допустимым.
+LOT и LOT_AND_SERIAL используют даты партии, SERIAL — собственные даты экземпляра
+без копии партийных дат. Отсутствующий срок у положительного остатка даёт
+ExpirationDateRequiredError даже при DAMAGED или неактивном адресе/складе.
+Нулевая позиция может иметь неполную карточку, но её ссылки всё равно обязательны.
+OPTIONAL не фильтрует по сроку, включая прошедшие даты-заметки. NONE не оценивает
+дату производства, сохраняя существующий запрет заполненного expires_on.
+Расчёт доступности не меняет допустимость приёмки просрочки, отгрузки или FEFO.
+
+Количество конкретного экземпляра остаётся 0 или 1 PCS. Положительный остаток
+одного serial_id в нескольких переданных позициях даёт DuplicatePositiveSerialStockError,
+включая исключаемые по состоянию/активности позиции. Нулевые позиции той же серии
+не создают повторного физического присутствия. Это проверка только данного набора,
+не глобальная гарантия уникальности серии в tenant-хранении.
+
+Сложение использует QuantityArithmeticPolicy без округления и влияния внешнего
+Decimal context. Позиции суммируются в порядке UUID; перестановка входных данных
+не меняет результат. Сохраняется контролируемый предел точной арифметики и
+StockQuantityArithmeticError. Все исходные объекты остаются неизменными при успехе
+и при ошибке.
+
+Пример для одного LOT-товара в KG с REQUIRED, одного склада и владельца:
+
+| Физический остаток | Условия | Вклад в eligible_qty |
+| --- | --- | --- |
+| 10 KG | STORAGE, SELLABLE, срок действителен | 10 KG |
+| 3 KG | STORAGE, DAMAGED | 0 |
+| 2 KG | SHIPPING, SELLABLE | 0 |
+| 5 KG | STORAGE, SELLABLE, срок истёк | 0 |
+
+Физически 20 KG, пригодно 10 KG; при OPTIONAL с теми же датами — 15 KG.
+В следующем примере item — карточка такого товара, positions — tuple четырёх
+StockPosition из таблицы, locations — снимки двух адресов, lots — карточки
+участвующих партий. warehouse и owner_id задают общую область расчёта:
+
+```python
+from datetime import date
+
+from src.modules.inventory.domain.policy.stock_availability import StockAvailabilityPolicy
+
+eligible_qty = StockAvailabilityPolicy.calculate_eligible_quantity(
+    inventory_item=item.availability_snapshot(),
+    warehouse=warehouse,
+    owner_id=owner_id,
+    as_of=date(2026, 11, 4),
+    positions=tuple(position.availability_snapshot() for position in positions),
+    locations=locations,
+    lots=tuple(lot.snapshot() for lot in lots),
+)
+# eligible_qty.value == Decimal("10"); исходные позиции не изменяются.
+```
+
+Полноту выборки и согласованный момент чтения должен обеспечить будущий Application
+и слой хранения. Policy сама не ведёт резерв: общий счётчик реализован отдельным
+AvailabilityPool ниже. StockReservation, защита от двойной продажи в хранении,
+SQL, блокировки, идемпотентность и Outbox этим расчётом не реализуются.
+Изменение пригодности по календарной дате при REQUIRED не создаёт движения Ledger.
+
+## Общий пул доступности и мягких резервов
+
+AvailabilityPool — самостоятельный immutable Aggregate Root без дочерних Entity,
+коллекций позиций, партий, серий и резервов. Он хранит общий резерв для одного
+товара, склада и владельца. Принадлежность конкретного обязательства заказу
+и его жизненный цикл появятся в отдельном StockReservation.
+
+| Поле | Тип и назначение |
+| --- | --- |
+| id | AvailabilityPoolIdVO |
+| key | AvailabilityPoolKeyVO: inventory_item_id, warehouse_id, owner_id |
+| base_uom | Неизменяемый известный UomCodeVO |
+| eligible_qty | QuantityVO, последний рассчитанный пригодный физический запас |
+| reserved_qty | QuantityVO, общий действующий резерв |
+| assessed_on | date, календарный день оценки пригодности |
+| version | Целое неотрицательное число без bool |
+
+AvailabilityPoolKeyVO проверяет собственные типы ссылок, не включая локацию,
+партию или серию в ключ. Уникальность этого ключа в tenant-схеме относится
+к будущему ограничению БД; Domain не проверяет другие экземпляры пула.
+
+available_qty и deficit_qty — вычисляемые QuantityVO без самостоятельного хранения:
+available_qty = max(eligible_qty − reserved_qty, 0),
+deficit_qty = max(reserved_qty − eligible_qty, 0).
+Сравнение выполняется до вычитания, отрицательный QuantityVO не создаётся.
+Арифметика использует QuantityArithmeticPolicy с прежней защитой точности.
+
+reserved_qty может превышать eligible_qty: после просрочки, блокировки или
+уменьшения физического запаса существующие обязательства сохраняются.
+Тогда свободное количество равно нулю и видна величина дефицита. Пригодность
+не определяет автоматически, какой конкретный резерв отменять.
+Свойства показывают сохранённую оценку на assessed_on, не читают системные часы
+и не пересчитываются при обращении.
+
+- create получает явные ID, ключ, as_of и полный контекст StockAvailabilityPolicy.
+  Проверяет соответствие снимков товара/склада ключу, выводит base_uom из товара,
+  рассчитывает eligible_qty, устанавливает reserved_qty=0 и version=0.
+  Пустая область и неактивный склад допустимы с нулевым пригодным запасом.
+  Сырые eligible_qty вместо расчёта фабрика не принимает.
+- restore получает полный исторический состав без текущих снимков. Проверяет
+  собственные типы, известную единицу, календарную дату и версию; допускает
+  дефицит и не переписывает старые значения по текущему шагу товара.
+- refresh_eligible_quantity получает expected_version, as_of и текущий физический
+  контекст. Повторно рассчитывает eligible_qty, сохраняет reserved_qty и обновляет
+  assessed_on. День оценки не убывает, datetime/строки не принимаются.
+  Новое количество в том же дне допустимо. Если дата и числовой результат прежние,
+  возвращает исходный объект после всех проверок. Новый день с прежним количеством
+  является изменением и увеличивает версию.
+- reserve(quantity, ...) также получает expected_version и полный текущий контекст.
+  Заново рассчитывает пригодность перед проверкой количества. quantity — строго
+  положительный QuantityVO, кратный шагу товара. Требуется quantity <= available_qty
+  по новой оценке; иначе InsufficientAvailableStockError без частичного резерва.
+  Успех сохраняет новую оценку, дату и увеличенный общий резерв одной следующей
+  версии, даже если одновременно изменилось пригодное количество.
+- release(quantity, expected_version=..., inventory_item=...) получает только
+  InventoryItemStockSnapshot, не снимок доступности или исполнения. Проверяет
+  тот же товар, базовую единицу, текущий шаг и quantity <= reserved_qty, затем
+  уменьшает общий резерв. Превышение даёт ExcessiveReservationReleaseError.
+  Активность склада, свежая дата и физический контекст не требуются: освобождение
+  доступно при исторической оценке и дефиците. eligible_qty и assessed_on сохраняются.
+
+Все переходы повторно проверяют собственное состояние и expected_version до
+расчёта. Несовпадение версии даёт AvailabilityPoolVersionConflictError;
+нецелая/отрицательная версия или bool — InvalidAvailabilityPoolValueError.
+Неверные собственные значения restore/create также дают InvalidAvailabilityPoolValueError.
+Чужой товар или склад даёт AvailabilityPoolContextMismatchError, смена базовой
+единицы — AvailabilityPoolUomMismatchError без неявного пересчёта. Некалендарная
+или убывающая дата пересчёта даёт AvailabilityAssessmentDateError.
+Ноль и отрицательный ноль в reserve/release запрещены с InvalidReservationQuantityError;
+сырые количества и нарушение шага отклоняются существующими доменными ошибками.
+При текущем использовании reserved_qty также проверяется по текущему шагу товара.
+Изменение правил количества остаётся отдельной контролируемой задачей.
+
+Каждое изменение возвращает новый объект версии +1 с прежними ID, ключом и
+единицей. Исходный пул и физические позиции неизменны при успехе и при ошибке.
+При отказе reserve новая оценка тоже не сохраняется; для отдельного обновления
+оценки служит refresh_eligible_quantity. SERIAL/LOT_AND_SERIAL требуют PCS и
+шаг 1, но общий пул может содержать 12 разных экземпляров: ограничение 0–1
+относится к физической позиции конкретной серии, не к общему резерву.
+
+Пример для KG/шага 0.05 и TrackingMode.NONE. item — карточка товара, warehouse
+и storage — снимки активного склада и STORAGE, owner_id и pool_id — явные
+типизированные ID. position содержит 10 KG, updated_position содержит 5 KG после
+отдельной учётной операции; пул не изменяет эти позиции самостоятельно:
+
+```python
+from datetime import date
+from decimal import Decimal
+
+from src.modules.inventory.domain.availability_pool.aggregate import AvailabilityPool
+from src.modules.inventory.domain.availability_pool.value_object.key import AvailabilityPoolKeyVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+
+context = dict(
+    inventory_item=item.availability_snapshot(),
+    warehouse=warehouse,
+    as_of=date(2026, 11, 4),
+    positions=(position.availability_snapshot(),),
+    locations=(storage,),
+)
+pool = AvailabilityPool.create(
+    identifier=pool_id,
+    key=AvailabilityPoolKeyVO(item.id, warehouse.id, owner_id),
+    **context,
+)
+reserved = pool.reserve(QuantityVO(Decimal("7")), expected_version=0, **context)
+deficit = reserved.refresh_eligible_quantity(
+    expected_version=1,
+    **(context | {"positions": (updated_position.availability_snapshot(),)}),
+)
+released = deficit.release(
+    QuantityVO(Decimal("3")),
+    expected_version=2,
+    inventory_item=item.stock_snapshot(),
+)
+```
+
+| Состояние | eligible_qty | reserved_qty | available_qty | deficit_qty | version |
+| --- | --- | --- | --- | --- | --- |
+| pool | 10 | 0 | 10 | 0 | 0 |
+| reserved | 10 | 7 | 3 | 0 | 1 |
+| deficit | 5 | 7 | 0 | 2 | 2 |
+| released | 5 | 4 | 1 | 0 | 3 |
+
+expected_version — проверка переданного Domain-состояния, не блокировка в БД.
+Два вызова от одного исходного объекта могут подготовить две ветви версии +1;
+конфликт их сохранения обязан обнаружить будущий Application/SQL. Счётчик пула
+не хранит историю команд и не гарантирует идемпотентность повторного reserve/release.
+Полнота и согласованность физической выборки тоже остаются обязанностью внешнего
+сценария. В будущем пул и конкретный StockReservation изменяются одним UoW.
+Погашение при отгрузке, SQL, Outbox, жёсткие привязки к позициям и автоматическое
+истечение резервов в текущий срез не входят. StockPosition и Ledger не изменяются.
 
 ## Изменения, восстановление и проверки
 
@@ -1374,5 +1689,7 @@ posting = StockPosting.create_from_execution(
 `test/test_inventory_stock_location_domain.py`, `test/test_inventory_stock_position_domain.py`,
 `test/test_inventory_stock_quantity_domain.py`, `test/test_inventory_ledger_conversion_domain.py`,
 `test/test_inventory_stock_posting_domain.py`, `test/test_inventory_stock_document_domain.py`,
-`test/test_inventory_stock_execution_domain.py` и `test/test_inventory_execution_posting_domain.py`.
+`test/test_inventory_stock_execution_domain.py`, `test/test_inventory_execution_posting_domain.py`,
+`test/test_inventory_posting_application_domain.py`, `test/test_inventory_availability_domain.py`
+и `test/test_inventory_availability_pool_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.
