@@ -1100,6 +1100,61 @@ StockTransfer
 
 Объемы уже отправленного и принятого товара должны согласовываться с проведенными документами. Одно подтвержденное физическое действие не может быть учтено дважды.
 
+Реализован первый Domain-срез — план межскладского перемещения:
+
+- Новый immutable Aggregate Root `StockTransfer`: id: StockTransferIdVO,
+  source_warehouse_id, destination_warehouse_id, owner_id, status: StockTransferStatus,
+  tuple[TransferLine, ...], created_at/updated_at в UTC и строгая целая
+  неотрицательная version без bool. Направление и владелец задаются при создании
+  и не меняются публичными методами. Межскладское перемещение требует разные склады,
+  включая восстановленную историю. В Domain теперь 14 самостоятельных корней.
+- `TransferLine` — дочерняя Entity: id: StockTransferLineIdVO, inventory_item_id,
+  base_uom, положительный planned_qty и QuantityConversionSnapshotVO. create()
+  выводит товар/единицу из InventoryItemStockSnapshot и точно пересчитывает ввод.
+  Исходные количество/единица/коэффициент сохраняются. ID строк уникальны;
+  один товар в нескольких строках допустим, автоматического объединения нет.
+- `StockTransferLinePolicy` повторно проверяет типизированный учётный снимок,
+  идентичность товара, прежнюю базовую единицу, текущий системный коэффициент
+  и кратность шагу. SERIAL/LOT_AND_SERIAL допускают несколько целых PCS с шагом 1.
+  Партии, экземпляры, даты и локации на стадии планирования не выбираются.
+- `StockTransferConfirmationPolicy` требует два разных активных WarehouseSnapshot
+  с ID из направления. Основные локации и физические позиции не обязательны.
+  Для подтверждения нужны непустой tuple строк и ровно участвующие уникальные
+  InventoryItemStockSnapshot без пропусков/лишних значений; каждая строка
+  повторно проверяется по текущим настройкам количества.
+- `create()` создаёт пустой DRAFT версии 0. add_line(), change_line_quantity(),
+  remove_line(), confirm() и cancel() требуют expected_version и явное updated_at.
+  Текущая/ожидаемая версии проверяются до исторической арифметики; время с часовым
+  поясом нормализуется в UTC и не убывает. Равные моменты допустимы. Каждое
+  реальное изменение возвращает новый экземпляр версии +1, исходный неизменен.
+- Переходы: DRAFT → CONFIRMED или DRAFT → CANCELLED. Редактирование, подтверждение
+  и отмена доступны только в DRAFT. Отмена сохраняет строки, пустой черновик
+  можно отменить. Подтверждённый план всегда непустой, его повторная отмена
+  или редактирование в этом срезе не разрешены.
+- change_line_quantity() сохраняет ID, товар и базовую единицу строки, заново
+  пересчитывает новый ввод и проверяет именно новое количество. Старый некратный
+  черновик можно исправить под текущий шаг или удалить без товарного снимка.
+  Численно равный ввод в той же исходной единице после проверок возвращает
+  исходный объект без изменения времени/версии. Другая единица меняет сохранённый ввод.
+- restore() принимает полный собственный состав без текущих складов/товаров,
+  проверяет типы, направление, UTC-хронологию, версию, уникальность строк,
+  положительность и равенство исторического пересчёта. Исторический коэффициент
+  не заменяется текущим; повторное использование черновика проверяет актуальный.
+- Пример: создать направление A → B (DRAFT v0), добавить 50000 G = 50 KG
+  (DRAFT v1), подтвердить (CONFIRMED v2). Остатки обоих складов не меняются.
+  Наличие и резервирование не являются обещанием подтверждённого плана.
+- Корень не создаёт StockDocument/StockExecution/StockPosting и не изменяет
+  StockPosition, StockReservation или AvailabilityPool. INTERNAL_MOVE по-прежнему
+  ограничен одним складом. TRANSFER_OUT/TRANSFER_IN в целевом примере выше обозначают
+  этапы процесса, новые значения StockOperationType не добавляются.
+- Физическая отправка, транзит и приёмка — последующие Domain-срезы. Перед ними
+  нужно определить учёт товара в пути; будущий инвариант исполнения:
+  0 <= received_qty <= dispatched_qty <= planned_qty. Эти счётчики пока не хранятся.
+  SQL/API, проверка актуальности снимков, конкурентность, UoW/Outbox и глобальная
+  дедупликация остаются Application/хранению. Целевой состав по-прежнему 23 AR.
+
+Тесты первого среза: `test/test_inventory_stock_transfer_domain.py`.
+
 ### Область 7. Inventory Counting
 
 Ответственность: организация инвентаризации, сохранение результатов пересчета и согласование расхождений.
@@ -1338,7 +1393,7 @@ SalesOrder остается агрегатом контекста заказов
   Ledger. Устаревший результат не применяется по новой версии Shipment, но повторная
   сборка того же факта по текущему состоянию не является глобальной дедупликацией.
   Однократное назначение фактического ID между отправлениями требует будущего хранения.
-  История всех исполнений в Shipment не встраивается; количество AR остаётся 13.
+  История всех исполнений в Shipment не встраивается; срез не добавляет новых AR.
 - Построение StockDocument из Shipment реализовано следующим срезом ниже.
   API/SQL/UoW, возвраты, отмена после
   подтверждения, компенсации и обновление внешнего заказа — последующие срезы.
@@ -1905,12 +1960,12 @@ src/modules/inventory/
 
 В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial, Warehouse,
 StockLocation, StockPosition, StockPosting, StockDocument, StockExecution,
-AvailabilityPool, StockReservation и Shipment.
+AvailabilityPool, StockReservation, Shipment и StockTransfer.
 Их код находится в `domain/inventory_item/`, `domain/packaging_type/`,
 `domain/stock_lot/`, `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`,
 `domain/stock_position/`, `domain/stock_posting/`, `domain/stock_document/`
 и `domain/stock_execution/`, `domain/availability_pool/`, `domain/stock_reservation/`,
-`domain/shipment/`; общие VO —
+`domain/shipment/`, `domain/stock_transfer/`; общие VO —
 в `domain/value_object/`. Остальные агрегаты добавляются по мере реализации.
 
 Supplier Sourcing с тремя корнями использует структуру
@@ -1974,7 +2029,7 @@ src/modules/inventory/
             └── response/<scenario>.py
 ```
 
-Для тринадцати текущих Aggregate Roots применяется группировка по агрегатам.
+Для четырнадцати текущих Aggregate Roots применяется группировка по агрегатам.
 InventoryItem находится в `src/modules/inventory/domain/inventory_item/aggregate.py`,
 PackagingType — в `src/modules/inventory/domain/packaging_type/aggregate.py`.
 StockLot — в `src/modules/inventory/domain/stock_lot/aggregate.py`.
@@ -1988,6 +2043,7 @@ StockExecution — в `src/modules/inventory/domain/stock_execution/aggregate.py
 AvailabilityPool — в `src/modules/inventory/domain/availability_pool/aggregate.py`.
 StockReservation — в `src/modules/inventory/domain/stock_reservation/aggregate.py`.
 Shipment — в `src/modules/inventory/domain/shipment/aggregate.py`.
+StockTransfer — в `src/modules/inventory/domain/stock_transfer/aggregate.py`.
 Для будущего модуля с одним корнем дополнительный каталог агрегата не нужен,
 согласно общим правилам backend.
 

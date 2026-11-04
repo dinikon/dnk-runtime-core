@@ -2,11 +2,11 @@
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
 `PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`,
-`StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool`, `StockReservation` и `Shipment`
+`StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool`, `StockReservation`, `Shipment` и `StockTransfer`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
 `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`,
 `domain/stock_posting/`, `domain/stock_document/`, `domain/stock_execution/`,
-`domain/availability_pool/`, `domain/stock_reservation/` и `domain/shipment/`.
+`domain/availability_pool/`, `domain/stock_reservation/`, `domain/shipment/` и `domain/stock_transfer/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -2509,6 +2509,120 @@ Policy возвращает прежний ShipmentExecutionRegistrationSnapshot
 однократность фактических ID остаются хранению; локальные версии не заменяют
 идемпотентность. SQL/API/UoW, возвраты и компенсации в этот срез не входят.
 
+## План межскладского перемещения StockTransfer
+
+StockTransfer — самостоятельный immutable Aggregate Root одного владельца между
+двумя разными складами. Первый срез содержит плановые строки и жизненный цикл
+подтверждения без фактической отправки, транзита и приёмки. Склады, товары,
+резервы, физические позиции и складские документы не становятся его дочерними объектами.
+
+| Объект | Состав |
+| --- | --- |
+| StockTransfer | id: StockTransferIdVO, source_warehouse_id, destination_warehouse_id, owner_id, status: StockTransferStatus, tuple строк, created_at, updated_at, version |
+| TransferLine | id: StockTransferLineIdVO, inventory_item_id, base_uom, planned_qty: QuantityVO, conversion: QuantityConversionSnapshotVO |
+
+Направление и владелец задаются при создании и не меняются публичными методами.
+Оба ID складов типизированы и различаются, включая восстановленную историю.
+Строка не имеет отдельного репозитория. ID строк уникальны внутри агрегата;
+несколько строк одного товара допустимы и автоматически не объединяются.
+
+TransferLine.create() принимает InventoryItemStockSnapshot, ID и исходные quantity/uom.
+Товар и базовая единица выводятся из снимка, planned_qty вычисляется точно.
+В conversion сохраняются исходный ввод и коэффициент: 50000 G × 0.001 = 50 KG.
+План строго положительный, результат кратен текущему шагу товара.
+StockTransferLinePolicy проверяет тип снимка, идентичность товара, прежнюю базовую
+единицу, текущий системный коэффициент и QuantityValidationPolicy. Масса, жидкость,
+объём, длина, площадь и количество используют общий справочник единиц.
+SERIAL/LOT_AND_SERIAL допускают план нескольких целых PCS с шагом 1; конкретные
+экземпляры, партии, даты и локации пока не выбираются. LOT/REQUIRED не требует
+фактических дат на стадии этого плана.
+
+StockTransferConfirmationPolicy требует два снимка тех же активных складов,
+непустой tuple строк и ровно участвующие уникальные InventoryItemStockSnapshot,
+без пропусков и лишних значений. Текущие настройки каждой строки проверяются
+повторно. Основные локации и физические позиции не обязательны: подтверждение
+не проверяет наличие и не создаёт резерв. Редактирование черновика не требует
+снимков складов; деактивация одной из сторон блокирует подтверждение.
+
+```text
+DRAFT → CONFIRMED
+DRAFT → CANCELLED
+```
+
+create() создаёт пустой DRAFT версии 0. add_line(), change_line_quantity(),
+remove_line(), confirm() и cancel() требуют expected_version и явное updated_at.
+Текущая/ожидаемая версии — строгие целые неотрицательные без bool, проверяются
+до собственной исторической арифметики. Ввод aware-времени нормализуется в UTC;
+изменение не раньше прошлого изменения, равные моменты допустимы. Каждое реальное
+изменение возвращает новый экземпляр версии +1; исходный не меняется.
+
+Только DRAFT редактируется, подтверждается или отменяется. Подтверждение фиксирует
+план, простой отмены CONFIRMED в этом срезе нет. cancel() сохраняет строки;
+пустой черновик можно отменить, пустой план нельзя подтвердить.
+change_line_quantity() сохраняет ID, товар и базовую единицу, заново пересчитывает
+новый ввод и проверяет его по текущему шагу. Старый некратный черновик можно
+исправить или удалить без актуального товарного снимка. Равный числовой ввод
+в той же исходной единице после проверок возвращает прежний объект без изменения
+версии/времени. Иная исходная единица меняет conversion даже при равном базовом итоге.
+
+restore() принимает полный собственный состав без актуальных складов, товаров
+или коэффициентов. Проверяет типы, статус, разные склады, UTC-хронологию, строгую
+версию, уникальность ID строк, положительный план и равенство сохранённому пересчёту.
+Исторический коэффициент сохраняется; при новом использовании черновика
+проверяется текущий. Aggregate/Entity не используют __post_init__.
+
+Пример: item — InventoryItem с base_uom=KG и step=0.05; source_warehouse и
+destination_warehouse — активные WarehouseSnapshot разных складов, в том числе
+без основных локаций; owner_id — StockOwnerIdVO, now — явное aware-время:
+
+```python
+from decimal import Decimal
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_transfer.aggregate import StockTransfer
+from src.modules.inventory.domain.stock_transfer.entity.transfer_line import TransferLine
+from src.modules.inventory.domain.stock_transfer.value_object.identifier import StockTransferIdVO
+from src.modules.inventory.domain.stock_transfer.value_object.line_id import StockTransferLineIdVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+
+transfer = StockTransfer.create(
+    identifier=StockTransferIdVO(uuid4()), source_warehouse=source_warehouse,
+    destination_warehouse=destination_warehouse, owner_id=owner_id, created_at=now,
+)
+line = TransferLine.create(
+    identifier=StockTransferLineIdVO(uuid4()), inventory_item=item.stock_snapshot(),
+    quantity=QuantityVO(Decimal(50000)), uom=UomCodeVO("G"),
+)
+transfer = transfer.add_line(
+    line, expected_version=0, inventory_item=item.stock_snapshot(), updated_at=now,
+)
+confirmed = transfer.confirm(
+    expected_version=1, source_warehouse=source_warehouse,
+    destination_warehouse=destination_warehouse, inventory_items=(item.stock_snapshot(),),
+    updated_at=now,
+)
+# CONFIRMED, version=2; planned_qty=50 KG, исходный ввод=50000 G.
+# Остатки складов, доступность и резервы не изменились.
+```
+
+Ошибки перемещения: InvalidStockTransferValueError, InvalidStockTransferLineError,
+InvalidStockTransferContextError, StockTransferSameWarehouseError,
+StockTransferStatusError, StockTransferVersionConflictError, StockTransferTimeError,
+StockTransferLineConflictError/StockTransferLineNotFoundError,
+StockTransferItemMismatchError/StockTransferUomMismatchError и EmptyStockTransferError.
+Некорректные снимки складов/товаров и ошибки количества, размерностей, пересчёта
+и шага используют существующие Domain-контракты Inventory.
+
+StockTransfer не создаёт StockDocument/StockExecution/StockPosting и не меняет
+StockPosition, StockReservation или AvailabilityPool. INTERNAL_MOVE по-прежнему
+действует внутри одного склада. TRANSFER_OUT/TRANSFER_IN в целевом плане — названия
+этапов процесса, новые значения StockOperationType не добавлены.
+Для физического исполнения нужно отдельно определить учёт товара в пути;
+будущий инвариант: 0 <= received_qty <= dispatched_qty <= planned_qty.
+Счётчиков отправки/приёмки и статуса транзита пока нет. SQL/API, актуальность снимков,
+конкурентность, UoW/Outbox и глобальная дедупликация остаются будущим срезам.
+
 ## Изменения, восстановление и проверки
 
 Агрегаты и Entity имеют явные фабрики `create/restore`.
@@ -2533,6 +2647,7 @@ Policy возвращает прежний ShipmentExecutionRegistrationSnapshot
 `test/test_inventory_stock_execution_domain.py`, `test/test_inventory_execution_posting_domain.py`,
 `test/test_inventory_posting_application_domain.py`, `test/test_inventory_availability_domain.py`,
 `test/test_inventory_availability_pool_domain.py`, `test/test_inventory_stock_reservation_domain.py`,
-`test/test_inventory_execution_reservation_domain.py`, `test/test_inventory_shipment_domain.py`
-и `test/test_inventory_shipment_execution_domain.py`.
+`test/test_inventory_execution_reservation_domain.py`, `test/test_inventory_shipment_domain.py`,
+`test/test_inventory_shipment_execution_domain.py`, `test/test_inventory_shipment_document_domain.py`,
+`test/test_inventory_shipment_document_execution_domain.py` и `test/test_inventory_stock_transfer_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.
