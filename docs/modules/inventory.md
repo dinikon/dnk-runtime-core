@@ -2533,7 +2533,6 @@ Policy возвращает прежний ShipmentExecutionRegistrationSnapshot
 `test/test_inventory_stock_execution_domain.py`, `test/test_inventory_execution_posting_domain.py`,
 `test/test_inventory_posting_application_domain.py`, `test/test_inventory_availability_domain.py`,
 `test/test_inventory_availability_pool_domain.py`, `test/test_inventory_stock_reservation_domain.py`,
-`test/test_inventory_execution_reservation_domain.py`, `test/test_inventory_shipment_domain.py`,
-`test/test_inventory_shipment_execution_domain.py`, `test/test_inventory_shipment_document_domain.py`
-и `test/test_inventory_shipment_document_execution_domain.py`.
+`test/test_inventory_execution_reservation_domain.py`, `test/test_inventory_shipment_domain.py`
+и `test/test_inventory_shipment_execution_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.
