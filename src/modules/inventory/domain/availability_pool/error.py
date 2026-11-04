@@ -47,3 +47,11 @@ class ExcessiveReservationReleaseError(AvailabilityPoolError):
 
 class ExcessiveReservationConsumptionError(AvailabilityPoolError):
     """Запрещает погашать количество сверх общего действующего резерва."""
+
+
+class InvalidPoolReservationConsumptionsError(AvailabilityPoolError):
+    """Запрещает пустой, повторный или смешивающий исполнения набор погашений пула."""
+
+
+class AvailabilityPoolConsumptionMismatchError(AvailabilityPoolError):
+    """Запрещает погашения, предназначенные другому пулу или области учёта."""

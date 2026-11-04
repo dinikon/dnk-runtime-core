@@ -3,6 +3,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.stock_reservation.consumption_snapshot import (
+    StockReservationConsumptionSnapshot,
+)
+from src.modules.inventory.domain.stock_reservation.error import (
+    InvalidStockReservationConsumptionSnapshotError,
+)
 from src.modules.inventory.domain.availability_pool.error import (
     AvailabilityAssessmentDateError,
     AvailabilityPoolContextMismatchError,
@@ -13,6 +19,8 @@ from src.modules.inventory.domain.availability_pool.error import (
     InsufficientAvailableStockError,
     InvalidAvailabilityPoolValueError,
     InvalidReservationQuantityError,
+    InvalidPoolReservationConsumptionsError,
+    AvailabilityPoolConsumptionMismatchError,
 )
 from src.modules.inventory.domain.availability_pool.reservation_snapshot import (
     AvailabilityPoolReservationSnapshot,
@@ -263,6 +271,73 @@ class AvailabilityPool:
             eligible_qty=eligible,
             reserved_qty=QuantityArithmeticPolicy.subtract(self.reserved_qty, quantity),
             assessed_on=as_of,
+        )
+
+    def consume_reservations(
+        self,
+        consumptions: tuple[StockReservationConsumptionSnapshot, ...],
+        *,
+        expected_version: int,
+        inventory_item: InventoryItemAvailabilitySnapshot,
+        warehouse: WarehouseSnapshot,
+        as_of: date,
+        positions: tuple[StockPositionAvailabilitySnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+    ) -> Self:
+        """Применяет уникальные погашения одного исполнения к своему пулу одной следующей версией."""
+        self._ensure_version(expected_version)
+        if not isinstance(consumptions, tuple) or not consumptions:
+            raise InvalidPoolReservationConsumptionsError(
+                "Нужен непустой tuple погашений одного исполнения."
+            )
+        reservation_ids = set()
+        line_ids = set()
+        execution = None
+        for consumption in consumptions:
+            if not isinstance(consumption, StockReservationConsumptionSnapshot):
+                raise InvalidStockReservationConsumptionSnapshotError(
+                    "Нужны снимки погашения по фактическим строкам."
+                )
+            consumption.ensure_valid()
+            if consumption.pool_id != self.id or consumption.key != self.key:
+                raise AvailabilityPoolConsumptionMismatchError(
+                    "Погашение относится к другому пулу или области учёта."
+                )
+            if consumption.base_uom != self.base_uom:
+                raise AvailabilityPoolUomMismatchError(
+                    "Единица погашения не совпадает с пулом."
+                )
+            identity = (consumption.execution_id, consumption.consumed_at)
+            if execution is not None and identity != execution:
+                raise InvalidPoolReservationConsumptionsError(
+                    "Набор должен относиться одному исполнению и времени факта."
+                )
+            execution = identity
+            if consumption.reservation_id in reservation_ids or line_ids.intersection(
+                consumption.execution_line_ids
+            ):
+                raise InvalidPoolReservationConsumptionsError(
+                    "Резервы и фактические строки не должны повторяться в наборе."
+                )
+            reservation_ids.add(consumption.reservation_id)
+            line_ids.update(consumption.execution_line_ids)
+        quantity = QuantityVO(Decimal(0))
+        for consumption in sorted(
+            consumptions, key=lambda value: value.reservation_id.uuid.int
+        ):
+            quantity = QuantityArithmeticPolicy.add(quantity, consumption.quantity)
+        return self.consume_reserved(
+            quantity,
+            expected_version=expected_version,
+            inventory_item=inventory_item,
+            warehouse=warehouse,
+            as_of=as_of,
+            positions=positions,
+            locations=locations,
+            lots=lots,
+            serials=serials,
         )
 
     def _assess(

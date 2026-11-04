@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Self
 
+from src.modules.inventory.domain.stock_execution.reservation_snapshot import (
+    StockExecutionReservationLineSnapshot,
+    StockExecutionReservationSnapshot,
+)
 from src.modules.inventory.domain.inventory_item.execution_snapshot import (
     InventoryItemExecutionSnapshot,
 )
@@ -153,6 +157,23 @@ class StockExecution:
         )
         execution._validate()
         return execution
+
+    def reservation_snapshot(self) -> StockExecutionReservationSnapshot:
+        """Возвращает проверенные базовые строки, область и время без передачи Entity погашению резервов."""
+        self._validate()
+        return StockExecutionReservationSnapshot(
+            self.id,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionReservationLineSnapshot(
+                    line.id, line.inventory_item_id, line.base_uom, line.quantity
+                )
+                for line in self.lines
+            ),
+        )
 
     def posting_snapshot(self) -> StockExecutionPostingSnapshot:
         """Возвращает проверенные физические маршруты и исходные пересчёты без группировки по плану."""

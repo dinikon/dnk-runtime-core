@@ -929,8 +929,55 @@ ReservationAllocation остаётся целевой Entity будущего ж
   защита остаются Application/хранению. Domain-версии не блокируют две ветви
   исходного состояния, а актуальная версия сама по себе не дедуплицирует команду.
   Количественное погашение реализовано, но соответствие расходу оно не подтверждает.
-  Сопоставление строк StockExecution(ISSUE) с резервами, выбор правильного pool_id
-  и жёсткие allocation — следующие срезы, не скрытые проверки по совпавшему SKU.
+  Сопоставление строк StockExecution(ISSUE) с резервами и проверка pool_id
+  реализованы отдельным Domain-срезом ниже. Жёсткие allocation остаются будущим срезам.
+
+Реализован Domain-срез погашения по явно выбранным фактическим строкам:
+
+- Новых AR/Entity нет. ReservationExecutionBindingVO связывает типизированные
+  execution_line_id и reservation_id. Строка целиком назначается максимум одному
+  резерву, несколько строк — одному резерву. Частичное назначение внутри строки
+  не вводится: для 6 из 10 KG формируются две фактические строки 6 и 4 KG.
+- StockExecution.reservation_snapshot() проверяет полный факт, включая сохранённый
+  пересчёт/маршруты, и возвращает StockExecutionReservationSnapshot с ID, операцией,
+  складом, владельцем, executed_at и строками StockExecutionReservationLineSnapshot:
+  ID, товар, единица, положительное базовое количество без Entity и маршрута.
+  StockReservation.execution_snapshot() возвращает StockReservationExecutionSnapshot:
+  ID, pool_id, key, base_uom, version без чужих обязанностей и количественных лимитов.
+- Чистая StockExecutionReservationPolicy.build_consumptions(execution, bindings,
+  reservations) принимает только специализированные immutable-снимки и tuple.
+  Разрешён только ISSUE. Проверяются известные ID, однократность назначения строки,
+  точный набор уникальных резервов, соответствие товара/склада/владельца/единицы
+  и согласованность ключа одного pool_id. Автопоиска по SKU нет. Непривязанные
+  строки допустимы; пустые bindings/reservations дают пустой результат расхода.
+- На каждый резерв формируется StockReservationConsumptionSnapshot: execution_id,
+  tuple уникальных execution_line_ids, reservation_id/reservation_version,
+  pool_id, key, base_uom, quantity и consumed_at. Количество суммируется из целых
+  строк, время берётся из executed_at. Строки и результаты упорядочены по UUID,
+  арифметика точная через QuantityArithmeticPolicy без внешнего Decimal context.
+- Все геттеры валидируют исходные корни, потребители повторно вызывают ensure_valid().
+  Снимки frozen без __post_init__; ID/версия типизированы, версия без bool,
+  количество положительно, время UTC, ID строк непустые и уникальны.
+- StockReservation.consume_execution(consumption, expected_version, inventory_item,
+  updated_at) проверяет ID резерва, pool_id/key, единицу и обе версии, делегирует
+  consume(). Лимиты/статус/шаг/срок/время остаются обязанностью корня.
+  Несколько назначенных строк дают один переход версии, не серию отдельных списаний.
+- AvailabilityPool.consume_reservations(consumptions, expected_version, ...post_context)
+  требует непустой tuple своего пула/ключа/единицы, одно исполнение/время факта,
+  уникальные резервы и отсутствие повторных строк во всём наборе. Суммирует величины
+  в порядке UUID резервов и вызывает consume_reserved() один раз: одна следующая
+  версия и пересчёт пригодности по позициям после всего физического расхода.
+  Несколько пулов получают отдельные группы во внешнем сценарии; дефицит допустим.
+- Пример: ISSUE 2+3+1+4 KG, первые две строки относятся A, третья B, четвёртая
+  без резерва. Погашение A=5/B=1 при физическом расходе 10. Из исходных 20 KG и
+  общего резерва 12 получаются eligible=10/reserved=6/available=4. Источники неизменны.
+- Снимки не подтверждают сохранение Ledger или согласованность чтения. Глобальная
+  дедупликация фактической строки, права, SQL, компенсации и атомарное сохранение
+  всех корней/Outbox требуют будущего Application/UoW. История всех погашений не
+  встраивается в резерв/пул; новая версия сама не дедуплицирует повтор факта.
+  Shipment проверяет принадлежность плановых строк заказу по отдельному снимку.
+  Связь подтверждённого плана со StockExecution появится в следующем срезе:
+  текущий факт такой ссылки не хранит. Низкоуровневые количественные методы сохранены.
 
 #### Aggregate: AvailabilityPool
 
@@ -1006,7 +1053,7 @@ ReservationAllocation остаётся целевой Entity будущего ж
   остаются будущему Application/хранению. StockReservation поддерживает явное
   истечение и количественное погашение. Пример: физически 10, резерв 7; после
   расхода 4 пул получает eligible=6/reserved=3/available=3, обязательство —
-  reserved=3/consumed=4. Реальность/состав расхода, планировщик и жёсткие привязки
+  reserved=3/consumed=4. Сохранение расхода/журнала, планировщик и жёсткие привязки
   остаются следующим срезам. Пул сам не изменяет позиции или Ledger.
 
 ### Область 6. Stock Transfer
@@ -1156,7 +1203,7 @@ SupplierFulfillmentOrder. Последнее известное наличие �
 
 #### Aggregate: Shipment
 
-`Shipment` управляет:
+Целевой `Shipment` управляет:
 
 - Ссылкой на исходный заказ.
 - Складом исполнения.
@@ -1178,6 +1225,58 @@ SalesOrder остается агрегатом контекста заказов
 а не дополнительный сохраняемый Aggregate Root.
 
 Позднее можно добавить упаковочные места, Picking, Packing, перевозчиков, ТТН и многоэтапные маршруты, не превращая Shipment в дочернюю Entity заказа.
+
+Реализовано в первом Domain-срезе — план собственной отгрузки:
+
+- Immutable корень `Shipment`: `id: ShipmentIdVO`, `order_ref: ShipmentOrderRefVO`,
+  `warehouse_id`, `owner_id`, `status`, `tuple[ShipmentLine, ...]`, UTC-время
+  `created_at/updated_at`, строгая целая неотрицательная `version` без bool.
+  Ссылка заказа, склад и владелец неизменны. `ShipmentOrderRefVO(system, reference)`
+  нормализует крайние пробелы, запрещает пустые и управляющие значения, сохраняет регистр.
+- Дочерняя `ShipmentLine`: `id: ShipmentLineIdVO`, `source_ref: ReservationSourceVO`
+  строки заказа, `reservation_id`, `inventory_item_id`, `base_uom`, положительное
+  `planned_qty` и `QuantityConversionSnapshotVO`. Привязки выводятся из резерва.
+  Один резерв включается в отправление только один раз; у одной строки заказа
+  могут быть несколько строк Shipment с разными резервами.
+- `StockReservation.shipment_snapshot()` отдаёт отдельный immutable
+  `StockReservationShipmentSnapshot`: `id`, `pool_id`, `key`, `source_ref`, `base_uom`,
+  `reserved_qty`, `status`, `expires_at`, `updated_at`, `version`. Используется текущее
+  удержание, а не первоначальная потребность или погашенное количество.
+  Существующий снимок для погашения по StockExecution не изменяется.
+- `ShipmentOrderSnapshot(order_ref, is_fulfillable, lines)` и
+  `ShipmentOrderLineSnapshot(source_ref, inventory_item_id, base_uom, remaining_to_ship_qty)`
+  — специализированные внешние контракты. Модуль заказов и адаптеры пока не реализуются.
+  Дополнительные строки заказа допустимы; ссылки строк в снимке уникальны.
+- `ShipmentLinePolicy` сверяет товар, базовую единицу, текущий коэффициент пересчёта
+  и шаг; резерв, его основание, товар и единицу; положительное открытое удержание
+  и `planned_qty <= reserved_qty`. При добавлении, изменении и подтверждении
+  проверяются склад/владелец, время операции не раньше `reservation.updated_at`
+  и строго раньше `expires_at`. Время передаётся явно, часы не читаются.
+- `ShipmentConfirmationPolicy` требует непустой план, тот же активный склад,
+  тот же доступный к исполнению заказ, принадлежность каждой строки заказу,
+  совпадение товара/единицы. Сумма планов по одной строке заказа не превышает
+  `remaining_to_ship_qty`, даже при нескольких резервах. Нужны ровно участвующие
+  уникальные текущие снимки товаров и резервов, без пропусков/лишних значений.
+- `create()` создаёт пустой `DRAFT` версии 0 для активного склада.
+  `add_line/change_line_quantity/remove_line/confirm/cancel` требуют
+  `expected_version` и явное монотонное UTC-время изменения; реальное изменение
+  увеличивает версию на 1. Равное числовое количество в той же исходной единице
+  возвращает исходный объект только после текущих проверок.
+- Переходы: `DRAFT → CONFIRMED` и `DRAFT → CANCELLED`. Только черновик редактируется
+  и отменяется. Отмена подтверждённого отправления требует будущей модели прогресса.
+  Изменение количества сохраняет ID строки, основание, резерв, товар и базовую единицу;
+  ввод заново пересчитывается. Удаление строки не требует текущих снимков.
+- `restore()` проверяет полный собственный исторический состав, уникальность ID
+  строк/резервов, время, статус и равенство сохранённого пересчёта. Актуальные
+  коэффициенты, шаг, заказ, склад и удержания для восстановления не нужны.
+  Для SERIAL допустим план нескольких целых PCS; выбор конкретных серий будет при исполнении.
+- Подтверждение и отмена не изменяют StockReservation, AvailabilityPool, физические
+  остатки или Ledger и не создают StockDocument/StockExecution. Связь подтверждённого
+  плана с фактическим расходом и погашением резервов — следующий отдельный срез.
+  Глобальные лимиты назначений одного резерва/строки заказа между разными Shipment,
+  актуальность снимков, конкурентность и атомарность относятся к будущему Application/хранению.
+
+Тесты первого среза: `test/test_inventory_shipment_domain.py`.
 
 ### Область 9. Inventory Valuation
 
@@ -1619,11 +1718,13 @@ src/modules/inventory/
 ```
 
 В Domain уже существуют InventoryItem, PackagingType, StockLot, StockSerial, Warehouse,
-StockLocation, StockPosition, StockPosting, StockDocument и StockExecution.
+StockLocation, StockPosition, StockPosting, StockDocument, StockExecution,
+AvailabilityPool, StockReservation и Shipment.
 Их код находится в `domain/inventory_item/`, `domain/packaging_type/`,
 `domain/stock_lot/`, `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`,
 `domain/stock_position/`, `domain/stock_posting/`, `domain/stock_document/`
-и `domain/stock_execution/`; общие VO —
+и `domain/stock_execution/`, `domain/availability_pool/`, `domain/stock_reservation/`,
+`domain/shipment/`; общие VO —
 в `domain/value_object/`. Остальные агрегаты добавляются по мере реализации.
 
 Supplier Sourcing с тремя корнями использует структуру
@@ -1687,7 +1788,7 @@ src/modules/inventory/
             └── response/<scenario>.py
 ```
 
-Для двенадцати текущих Aggregate Roots применяется группировка по агрегатам.
+Для тринадцати текущих Aggregate Roots применяется группировка по агрегатам.
 InventoryItem находится в `src/modules/inventory/domain/inventory_item/aggregate.py`,
 PackagingType — в `src/modules/inventory/domain/packaging_type/aggregate.py`.
 StockLot — в `src/modules/inventory/domain/stock_lot/aggregate.py`.
@@ -1700,6 +1801,7 @@ StockDocument — в `src/modules/inventory/domain/stock_document/aggregate.py`.
 StockExecution — в `src/modules/inventory/domain/stock_execution/aggregate.py`.
 AvailabilityPool — в `src/modules/inventory/domain/availability_pool/aggregate.py`.
 StockReservation — в `src/modules/inventory/domain/stock_reservation/aggregate.py`.
+Shipment — в `src/modules/inventory/domain/shipment/aggregate.py`.
 Для будущего модуля с одним корнем дополнительный каталог агрегата не нужен,
 согласно общим правилам backend.
 

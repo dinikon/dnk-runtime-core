@@ -3,6 +3,12 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.stock_reservation.consumption_snapshot import (
+    StockReservationConsumptionSnapshot,
+)
+from src.modules.inventory.domain.stock_reservation.execution_snapshot import (
+    StockReservationExecutionSnapshot,
+)
 from src.modules.inventory.domain.availability_pool.error import (
     InvalidAvailabilityPoolReservationSnapshotError,
 )
@@ -31,6 +37,8 @@ from src.modules.inventory.domain.stock_reservation.error import (
     InvalidStockReservationQuantityError,
     InvalidStockReservationValueError,
     StockReservationConsumptionExceededError,
+    InvalidStockReservationConsumptionSnapshotError,
+    StockReservationConsumptionMismatchError,
     StockReservationExpirationError,
     StockReservationExpiredError,
     StockReservationItemMismatchError,
@@ -40,6 +48,9 @@ from src.modules.inventory.domain.stock_reservation.error import (
     StockReservationTimeError,
     StockReservationUomMismatchError,
     StockReservationVersionConflictError,
+)
+from src.modules.inventory.domain.stock_reservation.shipment_snapshot import (
+    StockReservationShipmentSnapshot,
 )
 from src.modules.inventory.domain.stock_reservation.value_object.identifier import (
     StockReservationIdVO,
@@ -147,6 +158,29 @@ class StockReservation:
         reservation._validate()
         return reservation
 
+    def shipment_snapshot(self) -> StockReservationShipmentSnapshot:
+        """Возвращает проверенные основание, область и текущее удержание для плана отгрузки."""
+        self._validate()
+        return StockReservationShipmentSnapshot(
+            self.id,
+            self.pool_id,
+            self.key,
+            self.source_ref,
+            self.base_uom,
+            self.reserved_qty,
+            self.status,
+            self.expires_at,
+            self.updated_at,
+            self.version,
+        )
+
+    def execution_snapshot(self) -> StockReservationExecutionSnapshot:
+        """Возвращает проверенные идентичность, привязку и версию для явного назначения фактических строк."""
+        self._validate()
+        return StockReservationExecutionSnapshot(
+            self.id, self.pool_id, self.key, self.base_uom, self.version
+        )
+
     def add_reserved(
         self,
         quantity: QuantityVO,
@@ -233,6 +267,45 @@ class StockReservation:
             consumed_qty=consumed,
             status=self._active_status(reserved, consumed),
             updated_at=normalized,
+        )
+
+    def consume_execution(
+        self,
+        consumption: StockReservationConsumptionSnapshot,
+        *,
+        expected_version: int,
+        inventory_item: InventoryItemStockSnapshot,
+        updated_at: datetime,
+    ) -> Self:
+        """Проверяет цель и версию погашения и применяет существующий количественный переход один раз."""
+        self._prepare_transition(expected_version, updated_at)
+        if not isinstance(consumption, StockReservationConsumptionSnapshot):
+            raise InvalidStockReservationConsumptionSnapshotError(
+                "Нужен снимок погашения по фактическим строкам."
+            )
+        consumption.ensure_valid()
+        if consumption.reservation_version != self.version:
+            raise StockReservationVersionConflictError(
+                "Погашение построено по другой версии обязательства."
+            )
+        if (
+            consumption.reservation_id != self.id
+            or consumption.pool_id != self.pool_id
+            or consumption.key != self.key
+        ):
+            raise StockReservationConsumptionMismatchError(
+                "Погашение относится к другому резерву, пулу или области."
+            )
+        if consumption.base_uom != self.base_uom:
+            raise StockReservationUomMismatchError(
+                "Единица погашения не совпадает с обязательством."
+            )
+        return self.consume(
+            consumption.quantity,
+            expected_version=expected_version,
+            inventory_item=inventory_item,
+            consumed_at=consumption.consumed_at,
+            updated_at=updated_at,
         )
 
     def release_all(self, *, expected_version: int, updated_at: datetime) -> Self:

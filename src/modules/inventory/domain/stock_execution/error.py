@@ -39,3 +39,7 @@ class StockExecutionTimeError(StockExecutionError):
 
 class InvalidStockExecutionPostingSnapshotError(StockExecutionError):
     """Сообщает о некорректном снимке фактических маршрутов для построения Ledger."""
+
+
+class InvalidStockExecutionReservationSnapshotError(StockExecutionError):
+    """Сообщает о некорректном снимке фактических строк для погашения резервов."""

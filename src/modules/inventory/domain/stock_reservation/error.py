@@ -55,3 +55,27 @@ class StockReservationItemMismatchError(StockReservationError):
 
 class StockReservationUomMismatchError(StockReservationError):
     """Запрещает переинтерпретацию запрошенного и удерживаемого количества в другой единице."""
+
+
+class InvalidReservationExecutionBindingError(StockReservationError):
+    """Сообщает о нетипизированном соответствии фактической строки и резерва."""
+
+
+class InvalidStockReservationExecutionSnapshotError(StockReservationError):
+    """Сообщает о некорректном снимке идентичности и версии резерва для исполнения."""
+
+
+class InvalidStockReservationConsumptionSnapshotError(StockReservationError):
+    """Сообщает о некорректном снимке погашения по выбранным фактическим строкам."""
+
+
+class InvalidReservationConsumptionContextError(StockReservationError):
+    """Запрещает неподходящее исполнение, повторы и несовпадение области явного сопоставления."""
+
+
+class StockReservationConsumptionMismatchError(StockReservationError):
+    """Запрещает применять погашение другого резерва, пула или области учёта."""
+
+
+class InvalidStockReservationShipmentSnapshotError(StockReservationError):
+    """Сообщает о некорректном снимке текущего удержания для планирования отгрузки."""
