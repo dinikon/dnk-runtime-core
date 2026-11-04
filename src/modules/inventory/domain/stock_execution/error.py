@@ -35,3 +35,7 @@ class InvalidStockExecutionDocumentSnapshotError(StockExecutionError):
 
 class StockExecutionTimeError(StockExecutionError):
     """Отклоняет время без часового пояса или нарушение хронологии исполнения."""
+
+
+class InvalidStockExecutionPostingSnapshotError(StockExecutionError):
+    """Сообщает о некорректном снимке фактических маршрутов для построения Ledger."""

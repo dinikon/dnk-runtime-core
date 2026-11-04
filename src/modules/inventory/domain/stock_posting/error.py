@@ -43,3 +43,15 @@ class InvalidStockReversalError(StockPostingError):
 
 class InvalidStockPostingSnapshotError(StockPostingError):
     """Сообщает о некорректном снимке исходного проведения."""
+
+
+class InvalidStockPostingEntryBindingError(InvalidPostingContextError):
+    """Сообщает о некорректном соответствии позиции и идентификатора записи Ledger."""
+
+
+class OpposingStockPositionMovementsError(StockPostingError):
+    """Запрещает скрыто сальдировать приход и расход одной позиции внутри проведения."""
+
+
+class StockPostingExecutionTimeError(InvalidStockPostingValueError):
+    """Запрещает проведение раньше фактического исполнения."""

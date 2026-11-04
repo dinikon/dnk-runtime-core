@@ -26,6 +26,10 @@ from src.modules.inventory.domain.stock_document.value_object.identifier import 
 from src.modules.inventory.domain.stock_execution.document_snapshot import (
     StockExecutionDocumentSnapshot,
 )
+from src.modules.inventory.domain.stock_execution.posting_snapshot import (
+    StockExecutionPostingSnapshot,
+    StockExecutionPostingLineSnapshot,
+)
 from src.modules.inventory.domain.stock_execution.entity.stock_execution_line import (
     StockExecutionLine,
 )
@@ -149,6 +153,28 @@ class StockExecution:
         )
         execution._validate()
         return execution
+
+    def posting_snapshot(self) -> StockExecutionPostingSnapshot:
+        """Возвращает проверенные физические маршруты и исходные пересчёты без группировки по плану."""
+        self._validate()
+        return StockExecutionPostingSnapshot(
+            self.id,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionPostingLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                    line.conversion,
+                    line.route,
+                )
+                for line in self.lines
+            ),
+        )
 
     def snapshot_for_document(self) -> StockExecutionDocumentSnapshot:
         """Суммирует положительные количества по плановым строкам, считая перемещение один раз."""

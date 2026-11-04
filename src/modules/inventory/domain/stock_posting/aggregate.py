@@ -2,6 +2,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
+from src.modules.inventory.domain.policy.stock_execution_posting import (
+    StockExecutionPostingPolicy,
+)
+from src.modules.inventory.domain.stock_execution.error import (
+    InvalidStockExecutionPostingSnapshotError,
+)
+from src.modules.inventory.domain.stock_execution.posting_snapshot import (
+    StockExecutionPostingSnapshot,
+)
 from src.modules.inventory.domain.policy.stock_movement_balance import (
     StockMovementBalancePolicy,
 )
@@ -15,10 +24,14 @@ from src.modules.inventory.domain.stock_posting.error import (
     InvalidPostingContextError,
     InvalidStockPostingSnapshotError,
     InvalidStockReversalError,
+    StockPostingExecutionTimeError,
 )
 from src.modules.inventory.domain.stock_posting.snapshot import StockPostingSnapshot
 from src.modules.inventory.domain.stock_posting.value_object.identifier import (
     StockPostingIdVO,
+)
+from src.modules.inventory.domain.stock_posting.value_object.entry_binding import (
+    StockPostingEntryBindingVO,
 )
 from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import (
     StockLedgerEntryIdVO,
@@ -68,6 +81,48 @@ class StockPosting:
             entry.ensure_current_conversion()
         posting._ensure_context(positions=positions, locations=locations)
         return posting
+
+    @classmethod
+    def create_from_execution(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        execution: StockExecutionPostingSnapshot,
+        posted_at: datetime,
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        entry_bindings: tuple[StockPostingEntryBindingVO, ...],
+    ) -> Self:
+        """Выводит основание и записи из исполнения, сохраняя один однонаправленный итог на позицию."""
+        if not isinstance(execution, StockExecutionPostingSnapshot):
+            raise InvalidStockExecutionPostingSnapshotError(
+                "Нужен снимок исполнения для построения журнала."
+            )
+        execution.ensure_valid()
+        normalized = StockPostingPolicy.normalize_time(posted_at)
+        if normalized < execution.executed_at:
+            raise StockPostingExecutionTimeError(
+                "Проведение не может быть раньше фактического исполнения."
+            )
+        entries = StockExecutionPostingPolicy.build_entries(
+            execution=execution,
+            positions=positions,
+            locations=locations,
+            entry_bindings=entry_bindings,
+        )
+        return cls.create(
+            identifier=identifier,
+            source=PostingSourceVO(execution.id),
+            operation_type=execution.operation_type,
+            posted_at=normalized,
+            entries=entries,
+            positions=positions,
+            locations=(
+                locations
+                if execution.operation_type is StockOperationType.INTERNAL_MOVE
+                else ()
+            ),
+        )
 
     @classmethod
     def restore(

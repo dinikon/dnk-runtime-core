@@ -1218,11 +1218,9 @@ for index, amount in enumerate(("40", "35", "25")):
 ### Граница проведения
 
 Создание исполнения и регистрация прогресса пока существуют в Domain в памяти.
-Автоматическое построение StockPosting и изменение StockPosition не добавлены.
-Одна запись Ledger допускается на позицию, а несколько фактических строк могут
-использовать одну позицию: потребуется отдельная политика построения/агрегации
-журнала с сохранением исходной детализации в StockExecution. Строки нельзя просто
-скопировать один к одному или скрыто сальдировать.
+StockPosting.create_from_execution() строит журнал по физическим маршрутам
+через StockExecutionPostingPolicy. Фабрика и её ограничения описаны ниже.
+Изменение StockPosition и атомарное сохранение с прогрессом документа пока не добавлены.
 
 Будущий Application обязан сохранить исполнение, прогресс документа, проведение
 и новые физические позиции одной транзакцией с проверкой версий и идемпотентности.
@@ -1230,6 +1228,130 @@ for index, amount in enumerate(("40", "35", "25")):
 откат исполнения и прогресса, частичное закрытие остатка плана, SQL, API и Outbox
 остаются следующими срезами. Нельзя независимо записывать прогресс в production
 как подтверждение физического проведения без этой координации.
+
+## Построение журнала из исполнения
+
+StockExecution.posting_snapshot() проверяет собственное состояние и возвращает
+StockExecutionPostingSnapshot: id, operation_type, warehouse_id, owner_id,
+executed_at в UTC и непустой tuple StockExecutionPostingLineSnapshot.
+Каждый снимок строки содержит её ID, inventory_item_id, base_uom, quantity,
+сохранённый conversion и route. Он не содержит чужих корней или Entity.
+Существующий snapshot_for_document() остаётся отдельным контрактом итогов по плану.
+
+Потребитель проверяет типы снимков, положительность и точность сохранённого
+пересчёта, соответствие маршрута операции и товару/владельцу, уникальность ID
+строк и серий. Исходные количества не пересчитываются заново по текущим
+настройкам товара: это уже зафиксированный состав исполнения. Исторический
+коэффициент остаётся частью его детализации.
+
+StockPosting.create_from_execution() получает явно:
+
+- identifier: StockPostingIdVO и posted_at: aware datetime;
+- execution: StockExecutionPostingSnapshot;
+- positions: tuple[StockPositionSnapshot, ...];
+- locations: tuple[StockLocationSnapshot, ...] для всех трёх операций;
+- entry_bindings: tuple[StockPostingEntryBindingVO, ...].
+
+Основание PostingSourceVO(execution.id), вид операции и обычное проведение
+с reversal_of_id=None выводятся фабрикой. Время нормализуется в UTC и не раньше
+executed_at; нарушение даёт StockPostingExecutionTimeError.
+ID не генерируются внутри Domain.
+
+### Сопоставление и агрегация
+
+StockExecutionPostingPolicy.build_entries() требует ровно участвующие позиции
+по полному StockDimensionsVO и той же базовой единице. ID позиций и сочетания
+измерений уникальны. Ровно участвующие локации должны принадлежать warehouse_id
+исполнения; отсутствие, лишний или повторный снимок отклоняется.
+Признак активности не переопределяет зафиксированный факт: Policy проверяет
+неизменяемую принадлежность склада, а допустимость фактической операции и её
+актуальный контекст остаются проверкам исполнения и будущего проведения.
+
+Фабрика не ищет и не создаёт позицию. Если назначения ещё нет, внешний сценарий
+сначала создаст нулевой StockPosition и передаст его снимок. Снимок без on_hand_qty
+не подтверждает наличие товара для расхода.
+
+StockPostingEntryBindingVO содержит position_id: StockPositionIdVO
+и entry_id: StockLedgerEntryIdVO. Нужна ровно одна связь на итоговую позицию;
+оба идентификатора не повторяются. Неполный или лишний набор даёт
+InvalidStockPostingEntryBindingError, повторы — DuplicateStockLedgerEntryError.
+
+Маршруты преобразуются в направленные движения:
+
+| Маршрут | Записи |
+| --- | --- |
+| ReceiptExecutionRouteVO | +quantity в destination |
+| IssueExecutionRouteVO | −quantity из source |
+| InternalMoveExecutionRouteVO | −quantity из source и +quantity в destination |
+
+Количество одной позиции одного направления суммируется точно через
+QuantityArithmeticPolicy. Например, A→B на 4 KG и A→C на 6 KG дают
+A:-10, B:+4, C:+6. Один серийный экземпляр остаётся отдельной позицией с ±1 PCS.
+Выходные записи упорядочены по числовому UUID позиции; перестановка фактических
+строк, снимков или связей ID не меняет состав и идентичность результата.
+Сохраняются существующие проверки StockPostingPolicy и StockMovementBalancePolicy.
+
+Если одна позиция участвует и в приходе, и в расходе, фабрика даёт
+OpposingStockPositionMovementsError. Например, A→B и B→C требуют отдельных
+исполнений/проведений. Нулевой или остаточный итог для B не скрывает оборот:
+встречное сальдирование в этом срезе не поддерживается. Старый инвариант
+одной записи на позицию внутри проведения сохраняется.
+
+### Исходные единицы и итог Ledger
+
+Для новой фабрики единое правило: conversion каждой итоговой записи выражается
+в её базовой единице с factor_to_base=1, включая случай одного источника.
+
+```text
+StockExecutionLine #1: 2000 G × 0.001 = 2 KG
+StockExecutionLine #2:    3 KG × 1     = 3 KG
+
+StockLedgerEntry: +5 KG
+conversion: quantity=5, uom=KG, factor_to_base=1
+```
+
+Исходные количества и коэффициенты остаются в immutable StockExecution,
+на который ссылается posting.source.execution_id. Усреднённый коэффициент
+или искусственная исходная единица не вычисляются. Старые create/restore
+и компенсация StockPosting сохраняют свои контракты; новый срез не переписывает
+исторические записи. Компенсация агрегированной записи даёт противоположный итог.
+Переполнение/непредставимый точный итог дают StockQuantityArithmeticError без округления.
+
+Пример для execution с двумя строками 2000 G и 3 KG в одну position,
+подготовленных position и StockLocation location:
+
+```python
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from src.modules.inventory.domain.stock_posting.aggregate import StockPosting
+from src.modules.inventory.domain.stock_posting.value_object.entry_binding import StockPostingEntryBindingVO
+from src.modules.inventory.domain.stock_posting.value_object.identifier import StockPostingIdVO
+from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import StockLedgerEntryIdVO
+
+posting = StockPosting.create_from_execution(
+    identifier=StockPostingIdVO(uuid4()),
+    execution=execution.posting_snapshot(),
+    posted_at=datetime(2026, 11, 4, 9, 1, tzinfo=UTC),
+    positions=(position.snapshot(),),
+    locations=(location.snapshot(),),
+    entry_bindings=(
+        StockPostingEntryBindingVO(
+            position_id=position.id,
+            entry_id=StockLedgerEntryIdVO(uuid4()),
+        ),
+    ),
+)
+# Одна запись +5 KG; posting.source.execution_id == execution.id.
+# Исходные 2000 G и 3 KG сохранены в execution.lines.
+# Документ и физическая position этим вызовом не изменяются.
+```
+
+Достаточность количества и текущий шаг проверит StockPosition.apply_delta().
+Регистрация прогресса StockDocument, исполнение, журнал и новые состояния позиций
+должны сохраняться будущим Application-сценарием одним UoW с проверкой версий,
+глобальной дедупликацией и Outbox. SQL, write API прямого остатка, согласованный
+откат исполнения/прогресса и глобальная защита присутствия серии не добавлены.
 
 ## Изменения, восстановление и проверки
 
@@ -1240,7 +1362,8 @@ for index, amount in enumerate(("40", "35", "25")):
 
 Базовая единица, правила количества и режимы прослеживаемости задаются при создании.
 Их изменение и защита использованных упаковок относятся к будущим контролируемым
-сценариям. Ledger уже сохраняет снимок исходного количества и системного пересчёта;
+сценариям. Ledger хранит пересчёт своей записи; при построении из исполнения
+исходные количества и коэффициенты сохраняются в StockExecution, а итог — в базовой единице;
 снимок пользовательской упаковки появится при расширении ввода строк исполнения.
 У дочерних Entity нет самостоятельных write repositories.
 
@@ -1250,6 +1373,6 @@ for index, amount in enumerate(("40", "35", "25")):
 `test/test_inventory_stock_serial_domain.py`, `test/test_inventory_warehouse_domain.py`,
 `test/test_inventory_stock_location_domain.py`, `test/test_inventory_stock_position_domain.py`,
 `test/test_inventory_stock_quantity_domain.py`, `test/test_inventory_ledger_conversion_domain.py`,
-`test/test_inventory_stock_posting_domain.py`, `test/test_inventory_stock_document_domain.py`
-и `test/test_inventory_stock_execution_domain.py`.
+`test/test_inventory_stock_posting_domain.py`, `test/test_inventory_stock_document_domain.py`,
+`test/test_inventory_stock_execution_domain.py` и `test/test_inventory_execution_posting_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.
