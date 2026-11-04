@@ -1,9 +1,14 @@
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Self
+from uuid import UUID
 
 from src.modules.inventory.domain.policy.quantity_arithmetic import (
     QuantityArithmeticPolicy,
+)
+from src.modules.inventory.domain.policy.shipment_document import ShipmentDocumentPolicy
+from src.modules.inventory.domain.shipment.document_snapshot import (
+    ShipmentDocumentSnapshot,
 )
 from src.modules.inventory.domain.policy.stock_document_progress import (
     StockDocumentProgressPolicy,
@@ -34,7 +39,14 @@ from src.modules.inventory.domain.stock_document.error import (
     StockDocumentLineNotFoundError,
     StockDocumentNotDraftError,
     StockDocumentTimeError,
+    StockDocumentShipmentMismatchError,
 )
+from src.modules.inventory.domain.stock_document.shipment_snapshot import (
+    StockDocumentShipmentLineSnapshot,
+    StockDocumentShipmentSnapshot,
+)
+from src.modules.inventory.domain.shipment.value_object.identifier import ShipmentIdVO
+from src.modules.inventory.domain.shipment.value_object.line_id import ShipmentLineIdVO
 from src.modules.inventory.domain.stock_document.value_object.document_source import (
     DocumentSourceVO,
 )
@@ -46,6 +58,9 @@ from src.modules.inventory.domain.stock_document.value_object.line_id import (
 )
 from src.modules.inventory.domain.stock_document.value_object.status import (
     StockDocumentStatus,
+)
+from src.modules.inventory.domain.stock_document.value_object.shipment_line_binding import (
+    ShipmentDocumentLineBindingVO,
 )
 from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
     StockOperationType,
@@ -105,6 +120,43 @@ class StockDocument:
             lines=(),
             created_at=created_at,
             updated_at=created_at,
+            version=0,
+        )
+
+    @classmethod
+    def create_from_shipment(
+        cls,
+        *,
+        identifier: StockDocumentIdVO,
+        shipment: ShipmentDocumentSnapshot,
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        line_bindings: tuple[ShipmentDocumentLineBindingVO, ...],
+        created_at: datetime,
+    ) -> Self:
+        """Создаёт готовый черновик ISSUE версии 0 на все открытые остатки отправления без его изменения."""
+        normalized = cls._normalize_time(created_at)
+        lines = ShipmentDocumentPolicy.build_lines(
+            shipment=shipment,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            line_bindings=line_bindings,
+            as_of=normalized,
+        )
+        return cls.restore(
+            identifier=identifier,
+            operation_type=StockOperationType.ISSUE,
+            warehouse_id=shipment.warehouse_id,
+            owner_id=shipment.owner_id,
+            source=DocumentSourceVO(
+                ShipmentDocumentPolicy.SOURCE_SYSTEM,
+                str(shipment.id.uuid),
+                shipment.version,
+            ),
+            status=StockDocumentStatus.DRAFT,
+            lines=lines,
+            created_at=normalized,
+            updated_at=normalized,
             version=0,
         )
 
@@ -178,6 +230,7 @@ class StockDocument:
             planned_qty=conversion.to_base_quantity(),
             conversion=conversion,
             executed_qty=original.executed_qty,
+            source=original.source,
         )
         changed.ensure_compatible(inventory_item)
         return self._with_changes(
@@ -209,6 +262,7 @@ class StockDocument:
         warehouse: WarehouseSnapshot,
         inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
         updated_at: datetime,
+        shipment: ShipmentDocumentSnapshot | None = None,
     ) -> Self:
         """Фиксирует непустой совместимый план без проведения, резервирования и изменения остатков."""
         self._ensure_draft()
@@ -218,8 +272,18 @@ class StockDocument:
             lines=self.lines,
             inventory_items=inventory_items,
         )
+        normalized = self._normalize_time(updated_at)
+        ShipmentDocumentPolicy.ensure_confirmable(
+            operation_type=self.operation_type,
+            source=self.source,
+            warehouse_id=self.warehouse_id,
+            owner_id=self.owner_id,
+            lines=self.lines,
+            shipment=shipment,
+            as_of=normalized,
+        )
         return self._with_changes(
-            updated_at=updated_at, status=StockDocumentStatus.CONFIRMED
+            updated_at=normalized, status=StockDocumentStatus.CONFIRMED
         )
 
     def cancel(self, *, updated_at: datetime) -> Self:
@@ -234,6 +298,39 @@ class StockDocument:
             )
         return self._with_changes(
             updated_at=updated_at, status=StockDocumentStatus.CANCELLED
+        )
+
+    def shipment_snapshot(self) -> StockDocumentShipmentSnapshot:
+        """Передаёт проверенное происхождение строк и прогресс документа без ручного разбора ссылок вызывающим кодом."""
+        self._validate()
+        if (
+            self.source is None
+            or self.source.system != ShipmentDocumentPolicy.SOURCE_SYSTEM
+        ):
+            raise StockDocumentShipmentMismatchError(
+                "Документ не имеет основания Shipment."
+            )
+        return StockDocumentShipmentSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.updated_at,
+            ShipmentIdVO(UUID(self.source.reference)),
+            self.source.version,
+            tuple(
+                StockDocumentShipmentLineSnapshot(
+                    line.id,
+                    ShipmentLineIdVO(UUID(line.source.reference)),
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.planned_qty,
+                    line.executed_qty,
+                )
+                for line in self.lines
+            ),
         )
 
     def execution_snapshot(self) -> StockDocumentExecutionSnapshot:
@@ -365,6 +462,11 @@ class StockDocument:
                     "ID строк документа должны быть уникальны."
                 )
             line_ids.add(line.id)
+        ShipmentDocumentPolicy.ensure_document_source(
+            operation_type=self.operation_type,
+            source=self.source,
+            lines=self.lines,
+        )
         StockDocumentProgressPolicy.ensure_valid(
             status=self.status,
             quantities=tuple(

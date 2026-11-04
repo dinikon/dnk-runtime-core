@@ -95,3 +95,7 @@ class ShipmentExecutionMismatchError(ShipmentError):
 
 class ShipmentQuantityExceededError(ShipmentError):
     """Запрещает накопленную отгрузку сверх планового количества строки."""
+
+
+class InvalidShipmentDocumentSnapshotError(ShipmentError):
+    """Сообщает о некорректном специализированном снимке остатков для расходного документа."""

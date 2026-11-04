@@ -16,6 +16,10 @@ from src.modules.inventory.domain.policy.shipment_execution import (
     ShipmentExecutionPolicy,
 )
 from src.modules.inventory.domain.shipment.entity.shipment_line import ShipmentLine
+from src.modules.inventory.domain.shipment.document_snapshot import (
+    ShipmentDocumentLineSnapshot,
+    ShipmentDocumentSnapshot,
+)
 from src.modules.inventory.domain.shipment.error import (
     EmptyShipmentError,
     InvalidShipmentLineError,
@@ -234,6 +238,28 @@ class Shipment:
         """Отменяет только черновик, сохраняя строки и не изменяя связанные резервы."""
         normalized = self._prepare_transition(expected_version, updated_at)
         return self._changed(updated_at=normalized, status=ShipmentStatus.CANCELLED)
+
+    def document_snapshot(self) -> ShipmentDocumentSnapshot:
+        """Возвращает проверенную версию и только положительные остатки для расходного документа."""
+        self._validate()
+        lines = []
+        for line in self.lines:
+            remaining = line.remaining_qty()
+            if not remaining.value.is_zero():
+                lines.append(
+                    ShipmentDocumentLineSnapshot(
+                        line.id, line.inventory_item_id, line.base_uom, remaining
+                    )
+                )
+        return ShipmentDocumentSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.warehouse_id,
+            self.owner_id,
+            self.updated_at,
+            tuple(lines),
+        )
 
     def execution_snapshot(self) -> ShipmentExecutionPlanSnapshot:
         """Возвращает проверенные версию, область и прогресс плана для назначения фактических строк."""

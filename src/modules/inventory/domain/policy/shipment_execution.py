@@ -1,6 +1,9 @@
 from src.modules.inventory.domain.policy.quantity_arithmetic import (
     QuantityArithmeticPolicy,
 )
+from src.modules.inventory.domain.policy.stock_execution_document import (
+    StockExecutionDocumentPolicy,
+)
 from src.modules.inventory.domain.shipment.error import (
     InvalidShipmentExecutionBindingError,
     InvalidShipmentExecutionPlanSnapshotError,
@@ -24,9 +27,31 @@ from src.modules.inventory.domain.shipment.value_object.execution_binding import
 from src.modules.inventory.domain.shipment.value_object.status import ShipmentStatus
 from src.modules.inventory.domain.stock_execution.error import (
     InvalidStockExecutionReservationSnapshotError,
+    InvalidStockExecutionShipmentSnapshotError,
+)
+from src.modules.inventory.domain.stock_document.error import (
+    InvalidStockDocumentShipmentSnapshotError,
+    InvalidStockDocumentContextError,
+)
+from src.modules.inventory.domain.stock_document.execution_snapshot import (
+    StockDocumentExecutionSnapshot,
+    StockDocumentLineExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_document.shipment_snapshot import (
+    StockDocumentShipmentSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.document_snapshot import (
+    StockExecutionDocumentSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.shipment_snapshot import (
+    StockExecutionShipmentSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.value_object.document_line_quantity import (
+    ExecutedDocumentLineQuantityVO,
 )
 from src.modules.inventory.domain.stock_execution.reservation_snapshot import (
     StockExecutionReservationSnapshot,
+    StockExecutionReservationLineSnapshot,
 )
 from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
     StockOperationType,
@@ -35,6 +60,139 @@ from src.modules.inventory.domain.stock_posting.value_object.operation_type impo
 
 class ShipmentExecutionPolicy:
     """Назначает фактические строки расхода плану отгрузки без изменения участвующих агрегатов."""
+
+    @staticmethod
+    def build_registration_from_document(
+        *,
+        shipment: ShipmentExecutionPlanSnapshot,
+        document: StockDocumentShipmentSnapshot,
+        execution: StockExecutionShipmentSnapshot,
+    ) -> ShipmentExecutionRegistrationSnapshot:
+        """Выводит назначения всех фактических строк из сохранённых оснований документа, проверяя оба уровня лимитов."""
+        if not isinstance(shipment, ShipmentExecutionPlanSnapshot):
+            raise InvalidShipmentExecutionPlanSnapshotError(
+                "Нужен текущий снимок плана Shipment."
+            )
+        shipment.ensure_valid()
+        if not isinstance(document, StockDocumentShipmentSnapshot):
+            raise InvalidStockDocumentShipmentSnapshotError(
+                "Нужен снимок происхождения и прогресса документа Shipment."
+            )
+        document.ensure_valid()
+        if not isinstance(execution, StockExecutionShipmentSnapshot):
+            raise InvalidStockExecutionShipmentSnapshotError(
+                "Нужен снимок факта с ID/версией документа и связями строк."
+            )
+        execution.ensure_valid()
+        if execution.operation_type is not StockOperationType.ISSUE:
+            raise ShipmentExecutionMismatchError(
+                "Автоматическое назначение отгрузке доступно только для ISSUE."
+            )
+        if document.shipment_id != shipment.id:
+            raise ShipmentExecutionMismatchError(
+                "Документ относится к другому Shipment."
+            )
+        if document.source_shipment_version > shipment.version:
+            raise ShipmentVersionConflictError(
+                "Историческая версия основания документа не может превышать текущую версию Shipment."
+            )
+        shipment_lines = {line.id: line for line in shipment.lines}
+        for line in document.lines:
+            target = shipment_lines.get(line.shipment_line_id)
+            if (
+                target is None
+                or target.inventory_item_id != line.inventory_item_id
+                or target.base_uom != line.base_uom
+            ):
+                raise ShipmentExecutionMismatchError(
+                    "Каждая строка документа должна относиться к строке, товару и единице текущего Shipment."
+                )
+        by_line = {line.document_line_id: line for line in document.lines}
+        quantities, bindings = {}, []
+        for actual in sorted(
+            execution.lines, key=lambda value: value.execution_line_id.uuid.int
+        ):
+            planned = by_line.get(actual.document_line_id)
+            if (
+                planned is None
+                or actual.inventory_item_id != planned.inventory_item_id
+                or actual.base_uom != planned.base_uom
+            ):
+                raise InvalidStockDocumentContextError(
+                    "Каждая фактическая строка должна соответствовать строке документа, товару и единице."
+                )
+            previous = quantities.get(actual.document_line_id)
+            quantities[actual.document_line_id] = (
+                actual.quantity
+                if previous is None
+                else QuantityArithmeticPolicy.add(previous, actual.quantity)
+            )
+            bindings.append(
+                ShipmentExecutionBindingVO(
+                    actual.execution_line_id, planned.shipment_line_id
+                )
+            )
+        StockExecutionDocumentPolicy.ensure_compatible(
+            document=StockDocumentExecutionSnapshot(
+                document.id,
+                document.operation_type,
+                document.warehouse_id,
+                document.owner_id,
+                document.status,
+                document.version,
+                document.updated_at,
+                tuple(
+                    StockDocumentLineExecutionSnapshot(
+                        line.document_line_id,
+                        line.inventory_item_id,
+                        line.base_uom,
+                        line.planned_qty,
+                        line.executed_qty,
+                    )
+                    for line in document.lines
+                ),
+            ),
+            execution=StockExecutionDocumentSnapshot(
+                execution.id,
+                execution.document_id,
+                execution.document_version,
+                execution.operation_type,
+                execution.warehouse_id,
+                execution.owner_id,
+                execution.executed_at,
+                tuple(
+                    ExecutedDocumentLineQuantityVO(
+                        identifier,
+                        by_line[identifier].inventory_item_id,
+                        by_line[identifier].base_uom,
+                        quantities[identifier],
+                    )
+                    for identifier in sorted(
+                        quantities, key=lambda value: value.uuid.int
+                    )
+                ),
+            ),
+        )
+        return ShipmentExecutionPolicy.build_registration(
+            shipment=shipment,
+            execution=StockExecutionReservationSnapshot(
+                execution.id,
+                execution.operation_type,
+                execution.warehouse_id,
+                execution.owner_id,
+                execution.executed_at,
+                tuple(
+                    StockExecutionReservationLineSnapshot(
+                        line.execution_line_id,
+                        line.inventory_item_id,
+                        line.base_uom,
+                        line.quantity,
+                    )
+                    for line in execution.lines
+                ),
+            ),
+            bindings=tuple(bindings),
+        )
 
     @staticmethod
     def build_registration(

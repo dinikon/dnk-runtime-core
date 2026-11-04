@@ -167,6 +167,7 @@ class StockDocumentDomainTests(unittest.TestCase):
                     planned_qty=line.planned_qty,
                     conversion=line.conversion,
                     executed_qty=line.executed_qty,
+                    source=line.source,
                 )
                 | changes
             )
@@ -409,6 +410,7 @@ class StockDocumentDomainTests(unittest.TestCase):
                 "planned_qty",
                 "conversion",
                 "executed_qty",
+                "source",
             },
         )
 

@@ -661,15 +661,17 @@ Stock Operations
   warehouse_id, явным owner_id, необязательным DocumentSourceVO, status,
   tuple строк, created_at/updated_at в UTC и целой неотрицательной version без bool.
 - DocumentSourceVO хранит непустые system/reference без управляющих символов,
-  с trim и сохранением регистра. None означает ручной документ без внешнего основания.
+  с trim и сохранением регистра, а также необязательную целую неотрицательную
+  version без bool. None вместо source означает ручной документ без внешнего основания.
   Ссылка не заменяет проверку существования основания или идемпотентность.
 - create создаёт пустой DRAFT версии 0 по активному WarehouseSnapshot; ID и время
   передаются явно. Склад, владелец и вид операции не меняются методами документа.
   Нумерация и внешние интеграции не входят в этот срез.
 - StockDocumentLine — дочерняя Entity без самостоятельного репозитория:
   id: StockDocumentLineIdVO, inventory_item_id, исторический sku, base_uom,
-  положительный planned_qty, QuantityConversionSnapshotVO и executed_qty от нуля
-  до плана. remaining_qty вычисляется без отдельного поля. Плановое количество всегда
+  положительный planned_qty, QuantityConversionSnapshotVO, executed_qty от нуля
+  до плана и source: DocumentLineSourceVO | None. remaining_qty вычисляется без
+  отдельного поля. Плановое количество всегда
   положительное, в том числе для ISSUE; знаковые дельты сформирует проведение.
 - InventoryItem.document_snapshot() возвращает ID, SKU, базовую единицу, правила
   количества и TrackingMode, не раскрывая коллекции или режим годности.
@@ -1337,10 +1339,130 @@ SalesOrder остается агрегатом контекста заказов
   сборка того же факта по текущему состоянию не является глобальной дедупликацией.
   Однократное назначение фактического ID между отправлениями требует будущего хранения.
   История всех исполнений в Shipment не встраивается; количество AR остаётся 13.
-- Автосоздание StockDocument из Shipment, API/SQL/UoW, возвраты, отмена после
+- Построение StockDocument из Shipment реализовано следующим срезом ниже.
+  API/SQL/UoW, возвраты, отмена после
   подтверждения, компенсации и обновление внешнего заказа — последующие срезы.
 
 Тесты регистрации: `test/test_inventory_shipment_execution_domain.py`.
+
+Реализован Domain-срез построения расходного StockDocument из Shipment:
+
+- Новых AR нет. `Shipment.document_snapshot()` проверяет корень и отдаёт immutable
+  `ShipmentDocumentSnapshot`: id/version/status, warehouse_id/owner_id, updated_at,
+  только положительные остатки строк. `ShipmentDocumentLineSnapshot` содержит
+  shipment_line_id, inventory_item_id, base_uom, remaining_qty. Остаток вычисляется
+  точно, полностью отгруженные строки исключаются. Резервы и исходный пересчёт
+  не передаются. Потребители проверяют типы, UTC, строгую версию без bool,
+  уникальность ID и локальную согласованность статуса с открытыми строками.
+- Универсальный `DocumentSourceVO(system, reference, version=None)` расширен
+  необязательной целой неотрицательной версией без bool. Прежние внешние основания
+  с двумя полями совместимы. Добавлен `DocumentLineSourceVO(system, reference)`
+  с trim и запретом пустых/управляющих значений, сохранением регистра/ведущих нулей.
+  У StockDocumentLine есть `source: DocumentLineSourceVO | None`: create по умолчанию
+  без основания, restore принимает поле явно, change_line сохраняет ссылку.
+- `ShipmentDocumentLineBindingVO(shipment_line_id, document_line_id)` передаёт
+  новые ID извне. Нужны ровно все открытые строки без пропусков/лишних/повторов
+  обоих ID. Domain не генерирует идентичность и не читает системные часы.
+- `StockDocument.create_from_shipment(identifier, shipment, warehouse, inventory_items,
+  line_bindings, created_at)` возвращает готовый ISSUE/DRAFT версии 0, одна строка
+  на каждый остаток. План равен остатку, executed_qty=0, ввод в базовой единице
+  с коэффициентом 1; SKU фиксируется из текущего товара. Одинаковые товары
+  в разных строках не объединяются. Состав упорядочен по UUID строк основания.
+- `ShipmentDocumentPolicy.build_lines()` требует CONFIRMED/PARTIALLY_SHIPPED,
+  тот же активный склад, время решения не раньше Shipment.updated_at,
+  ровно участвующие уникальные InventoryItemDocumentSnapshot, совпадение базовой
+  единицы и текущую кратность шага. SERIAL/LOT_AND_SERIAL планируются целыми PCS,
+  конкретные экземпляры выбираются позже. История Shipment не переинтерпретируется.
+- Фабрика сохраняет в шапке `DocumentSourceVO("inventory.shipment", UUID Shipment,
+  version=Shipment.version)`, в строках — `DocumentLineSourceVO("inventory.shipment_line",
+  UUID ShipmentLine)`. UUID имеют каноническое строковое представление. Корень
+  через Policy проверяет собственную структуру и при restore: ISSUE, явная версия,
+  правильные системы, канонические UUID, отсутствие повторов оснований строк.
+  Зарезервированная ссылка ShipmentLine без шапки Shipment запрещена. В обычных
+  документах внешние универсальные источники и отсутствие source допустимы.
+- Обычный `StockDocument.confirm(..., shipment=current_snapshot)` обязательно
+  повторно проверяет основание для зарезервированной системы Shipment. Пропуск
+  снимка или полный корень вместо него не обходят проверку. Сверяются ID и версия,
+  допустимый статус, склад/владелец, время, принадлежность строк, товар/единица
+  и planned_qty <= remaining_qty. Общее подтверждение также проверяет текущие
+  правила товаров и активность склада. Устаревшая версия отклоняется через
+  StaleShipmentDocumentSourceError без автоматического обновления основания.
+- В черновике можно уменьшать количества, менять исходную единицу и удалять
+  часть строк с сохранением ID/исторического SKU/оснований. Подтверждать подмножество
+  допустимо, пустой документ — нет. Превышение остатка и посторонняя строка
+  отклоняются при подтверждении; неправильная система, отсутствие и повтор
+  основания строки нарушают собственную структуру документа уже при редактировании.
+  Обычные документы подтверждаются без Shipment; лишний снимок отклоняется.
+- Restore сохраняет полный собственный исторический состав без текущего Shipment,
+  товаров и коэффициентов. Он не доказывает существование основания/текущие остатки.
+  Пример: Shipment v4, план 3+2 KG, shipped=2+1 KG → документ ISSUE/DRAFT v0
+  с планом 1+1 KG и source.version=4; повторная проверка даёт CONFIRMED v1.
+  Создание и подтверждение не изменяют Shipment, резервы, пулы, позиции или Ledger.
+- Документ исполняется прежним StockExecution; источник плановой строки сохраняет
+  соответствие ShipmentLine. Автопостроение фактических ShipmentExecutionBindingVO
+  реализовано следующим срезом ниже. Чтение свежих снимков, общая назначенная величина между
+  несколькими документами, конкурентность, SQL/API/UoW/Outbox, возвраты и компенсации
+  остаются будущему Application/хранению. Версия основания не является глобальным
+  распределением количества: два документа по одному остатку локально допустимы.
+
+Тесты построения и повторного подтверждения: `test/test_inventory_shipment_document_domain.py`.
+
+Реализован Domain-срез автоматической регистрации отгрузки по основаниям документа:
+
+- Новых AR, Entity и хранимых полей нет. `StockDocument.shipment_snapshot()`
+  валидирует полный корень, требует основание Shipment и разбирает канонические
+  UUID в типизированные ID. Возвращает immutable `StockDocumentShipmentSnapshot`:
+  id/version/status/operation_type, warehouse_id/owner_id, updated_at, shipment_id,
+  source_shipment_version и строки `StockDocumentShipmentLineSnapshot`:
+  document_line_id, shipment_line_id, inventory_item_id, base_uom, planned_qty,
+  executed_qty. Текущая версия документа и историческая версия основания раздельны.
+- `StockExecution.shipment_snapshot()` валидирует полный факт, включая маршруты,
+  и возвращает immutable `StockExecutionShipmentSnapshot`: id, document_id/version,
+  operation_type, warehouse_id/owner_id, executed_at, непустые строки
+  `StockExecutionShipmentLineSnapshot` с execution_line_id, document_line_id,
+  inventory_item_id, base_uom, quantity. Физические маршруты не передаются.
+  Прежние снимки резервов/проведения не изменены.
+- Потребители повторно проверяют типы, UTC и строгие версии без bool. Документный
+  снимок проверяет ISSUE, уникальность обоих ID строк и согласованный собственный
+  прогресс через StockDocumentProgressPolicy. Фактический снимок запрещает повтор
+  execution_line_id, но допускает несколько фактов одной строки документа.
+- `ShipmentExecutionPolicy.build_registration_from_document(shipment, document,
+  execution)` принимает только эти два снимка и текущий ShipmentExecutionPlanSnapshot.
+  Автоматически восстанавливает `execution_line → document_line → shipment_line`.
+  Все фактические строки должны быть назначены, молчаливого пропуска/подмножества нет.
+  Все строки документа, включая неисполняемые данным фактом, должны ссылаться на
+  известные строки текущего Shipment с теми же товаром и базовой единицей.
+- Требуются ISSUE, одна область склада/владельца, ID Shipment из основания,
+  CONFIRMED/PARTIALLY_EXECUTED документ и CONFIRMED/PARTIALLY_SHIPPED Shipment.
+  Сверяются ID и точная версия документа, по которым создан факт. Факт не раньше
+  updated_at обоих текущих состояний. Входные геттеры и Policy не читают часы.
+- Историческая source_shipment_version может быть меньше текущей Shipment.version,
+  но не больше неё. Она не обновляется при прогрессе. Результат регистрации
+  фиксирует текущую версию Shipment. Это позволяет несколько частичных исполнений
+  одного документа без ложного отклонения из-за старой версии основания.
+- Количества всех фактов одной строки документа точно суммируются через
+  QuantityArithmeticPolicy. StockExecutionDocumentPolicy проверяет документный
+  остаток planned_qty − executed_qty. Существующий build_registration() затем
+  проверяет отгрузочный остаток planned_qty − shipped_qty и выводит резерв из
+  ShipmentLine. Товар/единица сверяются для каждой фактической строки до группировки,
+  чтобы несовместимое значение не скрылось в общей сумме. Пересчёта ввода повторно нет.
+- Результат — прежний ShipmentExecutionRegistrationSnapshot; последующие
+  register_execution(), reservation_bindings(), build_consumptions(),
+  consume_execution()/consume_reservations() не меняются. Ручная ветка
+  build_registration(..., bindings=...) сохранена для прежних сценариев.
+- Нужно передавать состояние документа до регистрации этого факта. После
+  document.register_execution() его версия уже другая. Пример: Shipment v4,
+  остаток 1+1 KG, документ CONFIRMED v1, source.version=4. Факт 0.5 KG по A
+  даёт Shipment PARTIALLY_SHIPPED v5 / документ PARTIALLY_EXECUTED v2. Факт 0.5+1
+  по A/B из новых состояний даёт SHIPPED v6 / COMPLETED v3. source.version остаётся 4.
+  При согласованном исходном удержании A=2/B=2 после прежнего расхода 2+1 KG
+  получаются A=1/B=1; физический остаток и eligible из 7 становятся 5, reserved=2.
+- Снимки/Policy не доказывают сохранение Ledger и не изменяют исходные корни.
+  Атомарность всех кандидатов, чтение актуальных версий, распределение количества
+  между документами и глобальная дедупликация фактических ID остаются будущему
+  Application/хранению. SQL/API/UoW/Outbox, возвраты и компенсации сюда не входят.
+
+Тесты автоматической регистрации: `test/test_inventory_shipment_document_execution_domain.py`.
 
 ### Область 9. Inventory Valuation
 
