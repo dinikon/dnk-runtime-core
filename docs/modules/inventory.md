@@ -2,11 +2,11 @@
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
 `PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`,
-`StockPosting`, `StockDocument`, `StockExecution` и `AvailabilityPool`
+`StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool` и `StockReservation`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
 `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`,
-`domain/stock_posting/`, `domain/stock_document/`, `domain/stock_execution/`
-и `domain/availability_pool/`.
+`domain/stock_posting/`, `domain/stock_document/`, `domain/stock_execution/`,
+`domain/availability_pool/` и `domain/stock_reservation/`.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -1531,8 +1531,9 @@ eligible_qty = StockAvailabilityPolicy.calculate_eligible_quantity(
 
 Полноту выборки и согласованный момент чтения должен обеспечить будущий Application
 и слой хранения. Policy сама не ведёт резерв: общий счётчик реализован отдельным
-AvailabilityPool ниже. StockReservation, защита от двойной продажи в хранении,
-SQL, блокировки, идемпотентность и Outbox этим расчётом не реализуются.
+AvailabilityPool ниже. Обязательство реализовано в отдельном StockReservation.
+Защита от двойной продажи в хранении, SQL, блокировки, идемпотентность и Outbox
+этим расчётом не реализуются.
 Изменение пригодности по календарной дате при REQUIRED не создаёт движения Ledger.
 
 ## Общий пул доступности и мягких резервов
@@ -1540,7 +1541,7 @@ SQL, блокировки, идемпотентность и Outbox этим р�
 AvailabilityPool — самостоятельный immutable Aggregate Root без дочерних Entity,
 коллекций позиций, партий, серий и резервов. Он хранит общий резерв для одного
 товара, склада и владельца. Принадлежность конкретного обязательства заказу
-и его жизненный цикл появятся в отдельном StockReservation.
+и его жизненный цикл реализованы отдельно в StockReservation.
 
 | Поле | Тип и назначение |
 | --- | --- |
@@ -1665,8 +1666,166 @@ expected_version — проверка переданного Domain-состоя
 не хранит историю команд и не гарантирует идемпотентность повторного reserve/release.
 Полнота и согласованность физической выборки тоже остаются обязанностью внешнего
 сценария. В будущем пул и конкретный StockReservation изменяются одним UoW.
-Погашение при отгрузке, SQL, Outbox, жёсткие привязки к позициям и автоматическое
-истечение резервов в текущий срез не входят. StockPosition и Ledger не изменяются.
+Погашение при отгрузке, SQL, Outbox, жёсткие привязки к позициям и планировщик
+истечения резервов в текущий срез не входят. StockReservation поддерживает явное
+истечение, описанное ниже. StockPosition и Ledger не изменяются.
+
+## Мягкий резерв под конкретное обязательство
+
+StockReservation — самостоятельный immutable Aggregate Root, относящийся к одной
+строке внешнего обязательства. Он не владеет пулом, физическими позициями или
+дочерними ReservationAllocation. Привязка к конкретным партиям, сериям и адресам
+остаётся будущим жёстким резервированием; пустой коллекции под него сейчас нет.
+
+| Поле | Тип и назначение |
+| --- | --- |
+| id | StockReservationIdVO |
+| source_ref | Обязательный ReservationSourceVO(system, reference) строки обязательства |
+| pool_id | AvailabilityPoolIdVO |
+| key | AvailabilityPoolKeyVO товара, склада и владельца |
+| base_uom | Неизменяемый известный UomCodeVO |
+| requested_qty | Положительный QuantityVO, неизменяемый лимит текущего удержания |
+| reserved_qty | QuantityVO текущего удерживаемого количества |
+| status | StockReservationStatus |
+| expires_at | Необязательный aware datetime срока действия резерва |
+| created_at, updated_at | aware datetime в UTC |
+| version | Целое неотрицательное число без bool |
+
+ReservationSourceVO обрезает края строк, сохраняет регистр/ведущие нули и запрещает
+пустые или нетекстовые значения и управляющие символы Cc/Cf. Ошибка —
+InvalidReservationSourceError. Ссылка не подтверждает существование заказа,
+его лимит или глобальную идемпотентность; несколько объектов с одной ссылкой
+не обнаруживаются локальным агрегатом.
+
+AvailabilityPool.reservation_snapshot() проверяет исходный пул и возвращает
+AvailabilityPoolReservationSnapshot(id, key, base_uom). Потребитель повторно
+проверяет снимок. В нём нет доступного количества, версии и разрешения на резерв;
+типовые ошибки дают InvalidAvailabilityPoolReservationSnapshotError.
+
+create получает явный ID, этот снимок пула, InventoryItemStockSnapshot, основание,
+requested_qty, created_at и необязательный expires_at. Выводит pool_id/key/единицу
+из снимка, сверяет товар и единицу, проверяет шаг запроса, создаёт PENDING с нулём
+удержания и версией 0. created_at=updated_at; срок, если задан, строго позже создания.
+Создание не проверяет вместимость пула и не меняет его счётчик.
+
+restore получает полный собственный состав без текущих снимков и системных часов.
+Сохраняет исторические количества и ссылки, нормализует aware-время в UTC,
+проверяет 0 <= reserved_qty <= requested_qty, положительность запроса, версию,
+хронологию и соответствие статуса количеству. Исторический коэффициент пересчёта
+не требуется: оба количества уже выражены в фиксированной базовой единице.
+
+| Статус | Собственный инвариант |
+| --- | --- |
+| PENDING | reserved_qty=0, удержание ещё не получено |
+| PARTIALLY_RESERVED | 0 < reserved_qty < requested_qty |
+| RESERVED | reserved_qty=requested_qty |
+| RELEASED | Терминальный статус, reserved_qty=0 |
+| EXPIRED | Терминальный статус, reserved_qty=0, срок задан и updated_at >= expires_at |
+
+- add_reserved(quantity, expected_version=..., inventory_item=..., updated_at=...)
+  регистрирует положительное увеличение, кратное текущему шагу. Тот же товар,
+  прежняя единица, текущая кратность запроса и удержания обязательны.
+  Предел requested_qty не превышается. Получается PARTIALLY_RESERVED или RESERVED.
+  При updated_at >= expires_at увеличение запрещено с StockReservationExpiredError.
+- release(quantity, ...) проверяет текущий учётный снимок и положительное кратное
+  количество не больше собственного reserved_qty. Уменьшает удержание; при нуле
+  закрывает в RELEASED, иначе получает PARTIALLY_RESERVED. Разрешено и после срока.
+  Открытое частично освобождённое обязательство можно пополнить до прежнего запроса.
+- release_all(expected_version=..., updated_at=...) закрывает всё в RELEASED,
+  включая PENDING без удержания. Текущие снимки товара/пула не требуются.
+- expire(expected_version=..., updated_at=...) закрывает всё в EXPIRED только
+  при заданном сроке и времени операции не раньше него. На точной границе закрытие
+  разрешено. Без срока или раньше него — StockReservationExpirationError.
+  Операция также доступна для PENDING с нулевым удержанием.
+
+Все переходы повторно валидируют собственное состояние, требуют строгого совпадения
+expected_version и открытого статуса. Закрытые состояния не меняются и повторно
+не закрываются. Время изменения передаётся явно, нормализуется в UTC и не убывает;
+равные моменты допустимы. Каждое изменение возвращает новый объект версии +1,
+сохраняя ID, основание, привязку, единицу, запрос, срок и момент создания.
+Полное закрытие/истечение проверяют собственное историческое состояние без
+повторного применения текущих правил товара. При успехе и отказе источники неизменны.
+
+Типовые ошибки: InvalidStockReservationValueError для типов и версии,
+StockReservationVersionConflictError для конфликта версии, StockReservationStatusError
+для матрицы/терминального статуса, StockReservationTimeError для времени,
+InvalidStockReservationQuantityError для нуля запроса/изменения,
+StockReservationLimitExceededError для превышения запроса,
+StockReservationReleaseExceededError для превышения удержания,
+StockReservationItemMismatchError и StockReservationUomMismatchError для контекста.
+Сырые количества и нарушение шага отклоняются существующими ошибками количества.
+Арифметика выполняется QuantityArithmeticPolicy с прежним пределом точности,
+без внешнего Decimal context, округления и assert. SERIAL допускает резерв многих
+экземпляров в PCS/шаге 1, не требуя выбора каждого serial_id для мягкого удержания.
+
+expires_at — срок обязательства, независимый от годности товара; допустим даже
+при ExpirationMode.NONE. Течение времени или чтение статуса не обнуляет удержание.
+После срока активный исторический статус может сохраняться до явного expire/release;
+новое удержание по такому объекту уже запрещено.
+
+Общий запас проверяет только AvailabilityPool.reserve(). add_reserved() проверяет
+собственный лимит и не вызывает пул. Будущий Application должен подготовить оба
+новых состояния и сохранить их одним UoW с проверкой версий. При освобождении,
+release_all или expire в пул возвращается именно уменьшение собственного удержания.
+Если прежнее удержание нулевое, pool.release(0) вызывать не нужно.
+
+Пример подготовки согласованных состояний в памяти. pool — пул версии 0 с 10 KG,
+item — товар KG/шага 0.05, context — его текущий физический контекст из примера выше,
+reservation_id — явный StockReservationIdVO. Каждое действие ниже в будущем
+требует атомарного сохранения пары состояний; сейчас сохранения нет:
+
+```python
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
+from src.modules.inventory.domain.stock_reservation.aggregate import StockReservation
+from src.modules.inventory.domain.stock_reservation.value_object.source import ReservationSourceVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+
+created_at = datetime(2026, 11, 4, 10, tzinfo=UTC)
+deadline = created_at + timedelta(hours=1)
+reservation = StockReservation.create(
+    identifier=reservation_id,
+    pool=pool.reservation_snapshot(),
+    inventory_item=item.stock_snapshot(),
+    source_ref=ReservationSourceVO("sales_order_line", "ORDER-1/1"),
+    requested_qty=QuantityVO(Decimal("7")),
+    created_at=created_at,
+    expires_at=deadline,
+)
+current, current_pool = reservation, pool
+for amount in ("4", "3"):
+    quantity = QuantityVO(Decimal(amount))
+    current_pool = current_pool.reserve(
+        quantity, expected_version=current_pool.version, **context
+    )
+    current = current.add_reserved(
+        quantity, expected_version=current.version,
+        inventory_item=item.stock_snapshot(), updated_at=created_at,
+    )
+current_pool = current_pool.release(
+    QuantityVO(Decimal("2")), expected_version=current_pool.version,
+    inventory_item=item.stock_snapshot(),
+)
+current = current.release(
+    QuantityVO(Decimal("2")), expected_version=current.version,
+    inventory_item=item.stock_snapshot(), updated_at=created_at,
+)
+to_release = current.reserved_qty  # 5 KG этого обязательства.
+expired = current.expire(expected_version=current.version, updated_at=deadline)
+final_pool = current_pool.release(
+    to_release, expected_version=current_pool.version,
+    inventory_item=item.stock_snapshot(),
+)
+# reserved_qty: 0 → 4 → 7 → 5 → 0; итог EXPIRED/version=4.
+# final_pool.reserved_qty=0; исходные pool/reservation и физические позиции прежние.
+```
+
+Domain-версия не выполняет блокировки и не дедуплицирует команды. Повтор с новой
+актуальной версией может увеличить удержание ещё раз в пределах запроса; две ветви
+одного исходного объекта тоже допустимы в памяти. SQL, глобальная идемпотентность,
+планировщик истечения и Outbox остаются внешним слоям. Погашение при отгрузке,
+связь со StockExecution и жёсткие allocation — следующие Domain-срезы.
 
 ## Изменения, восстановление и проверки
 
@@ -1690,6 +1849,6 @@ expected_version — проверка переданного Domain-состоя
 `test/test_inventory_stock_quantity_domain.py`, `test/test_inventory_ledger_conversion_domain.py`,
 `test/test_inventory_stock_posting_domain.py`, `test/test_inventory_stock_document_domain.py`,
 `test/test_inventory_stock_execution_domain.py`, `test/test_inventory_execution_posting_domain.py`,
-`test/test_inventory_posting_application_domain.py`, `test/test_inventory_availability_domain.py`
-и `test/test_inventory_availability_pool_domain.py`.
+`test/test_inventory_posting_application_domain.py`, `test/test_inventory_availability_domain.py`,
+`test/test_inventory_availability_pool_domain.py` и `test/test_inventory_stock_reservation_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

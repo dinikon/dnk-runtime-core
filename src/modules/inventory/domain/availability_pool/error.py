@@ -13,6 +13,10 @@ class InvalidAvailabilityPoolValueError(AvailabilityPoolError):
     """Сообщает о некорректном собственном составе пула."""
 
 
+class InvalidAvailabilityPoolReservationSnapshotError(AvailabilityPoolError):
+    """Сообщает о некорректном снимке привязки обязательства к пулу."""
+
+
 class AvailabilityPoolContextMismatchError(AvailabilityPoolError):
     """Запрещает использовать снимки другого товара или склада для данного пула."""
 
@@ -39,3 +43,7 @@ class InsufficientAvailableStockError(AvailabilityPoolError):
 
 class ExcessiveReservationReleaseError(AvailabilityPoolError):
     """Запрещает освобождать количество сверх общего действующего резерва."""
+
+
+class ExcessiveReservationConsumptionError(AvailabilityPoolError):
+    """Запрещает погашать количество сверх общего действующего резерва."""

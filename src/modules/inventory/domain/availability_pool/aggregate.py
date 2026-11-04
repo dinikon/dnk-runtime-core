@@ -9,9 +9,13 @@ from src.modules.inventory.domain.availability_pool.error import (
     AvailabilityPoolUomMismatchError,
     AvailabilityPoolVersionConflictError,
     ExcessiveReservationReleaseError,
+    ExcessiveReservationConsumptionError,
     InsufficientAvailableStockError,
     InvalidAvailabilityPoolValueError,
     InvalidReservationQuantityError,
+)
+from src.modules.inventory.domain.availability_pool.reservation_snapshot import (
+    AvailabilityPoolReservationSnapshot,
 )
 from src.modules.inventory.domain.availability_pool.value_object.identifier import (
     AvailabilityPoolIdVO,
@@ -127,6 +131,11 @@ class AvailabilityPool:
         pool._validate()
         return pool
 
+    def reservation_snapshot(self) -> AvailabilityPoolReservationSnapshot:
+        """Возвращает проверенную привязку обязательства к пулу без разрешения резервировать запас."""
+        self._validate()
+        return AvailabilityPoolReservationSnapshot(self.id, self.key, self.base_uom)
+
     @property
     def available_qty(self) -> QuantityVO:
         """Возвращает свободный пригодный запас, ограничивая результат снизу нулём."""
@@ -219,6 +228,41 @@ class AvailabilityPool:
             )
         return self._with_changes(
             reserved_qty=QuantityArithmeticPolicy.subtract(self.reserved_qty, quantity)
+        )
+
+    def consume_reserved(
+        self,
+        quantity: QuantityVO,
+        *,
+        expected_version: int,
+        inventory_item: InventoryItemAvailabilitySnapshot,
+        warehouse: WarehouseSnapshot,
+        as_of: date,
+        positions: tuple[StockPositionAvailabilitySnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+    ) -> Self:
+        """Уменьшает общий резерв и пересчитывает пригодность по физическим снимкам после расхода."""
+        self._ensure_version(expected_version)
+        eligible = self._assess(
+            inventory_item=inventory_item,
+            warehouse=warehouse,
+            as_of=as_of,
+            positions=positions,
+            locations=locations,
+            lots=lots,
+            serials=serials,
+        )
+        self._ensure_positive_quantity(quantity, inventory_item.quantity_rules)
+        if quantity.value > self.reserved_qty.value:
+            raise ExcessiveReservationConsumptionError(
+                "Нельзя погасить больше общего действующего резерва."
+            )
+        return self._with_changes(
+            eligible_qty=eligible,
+            reserved_qty=QuantityArithmeticPolicy.subtract(self.reserved_qty, quantity),
+            assessed_on=as_of,
         )
 
     def _assess(
