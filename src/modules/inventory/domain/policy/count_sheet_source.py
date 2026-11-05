@@ -9,6 +9,10 @@ from src.modules.inventory.domain.count_sheet.error import (
 from src.modules.inventory.domain.count_sheet.value_object.line_binding import (
     CountSheetLineBindingVO,
 )
+from src.modules.inventory.domain.count_sheet.value_object.line_origin import (
+    CountLineOrigin,
+)
+from src.modules.inventory.domain.policy.found_count_line import FoundCountLinePolicy
 from src.modules.inventory.domain.inventory_count.baseline_snapshot import (
     InventoryCountBaselineSnapshot,
 )
@@ -35,6 +39,45 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 
 class CountSheetSourcePolicy:
     """Согласует запущенную инвентаризацию, её основание и выбранные строки без владения чужими корнями."""
+
+    @staticmethod
+    def ensure_parent(
+        *,
+        inventory_count_id: InventoryCountIdVO,
+        warehouse_id: WarehouseIdVO,
+        owner_id: StockOwnerIdVO,
+        baseline_ref: InventoryCountBaselineRefVO,
+        inventory_count: InventoryCountSheetSourceSnapshot,
+    ) -> None:
+        """Проверяет текущего исполняемого родителя для отзыва без требования актуальности физического основания."""
+        if not isinstance(inventory_count, InventoryCountSheetSourceSnapshot):
+            raise InvalidInventoryCountSheetSourceError(
+                "Нужен текущий снимок родителя ведомости."
+            )
+        inventory_count.ensure_valid()
+        if inventory_count.status is not InventoryCountStatus.IN_PROGRESS:
+            raise InventoryCountStatusError(
+                "Изменение ведомости требует IN_PROGRESS родителя."
+            )
+        if (
+            not isinstance(inventory_count_id, InventoryCountIdVO)
+            or not isinstance(warehouse_id, WarehouseIdVO)
+            or not isinstance(owner_id, StockOwnerIdVO)
+            or not isinstance(baseline_ref, InventoryCountBaselineRefVO)
+        ):
+            raise InvalidCountSheetValueError(
+                "Нужны типизированные сохранённые ссылки ведомости."
+            )
+        baseline_ref.ensure_valid()
+        if (
+            inventory_count.id != inventory_count_id
+            or inventory_count.warehouse_id != warehouse_id
+            or inventory_count.owner_id != owner_id
+            or inventory_count.baseline != baseline_ref
+        ):
+            raise CountSheetSourceMismatchError(
+                "Снимок родителя не соответствует ведомости."
+            )
 
     @staticmethod
     def ensure_compatible(
@@ -148,23 +191,28 @@ class CountSheetSourcePolicy:
                 "Ведомость относится к другой инвентаризации или основанию."
             )
         positions = {row.id: row for row in baseline.positions}
-        ids, selected, dimensions = set(), set(), set()
+        ids, selected, dimensions, found = set(), set(), set(), []
         for line in lines:
             if not isinstance(line, CountLine):
                 raise InvalidCountLineError("Нужны дочерние строки ведомости.")
             line.ensure_valid()
             if (
                 line.id in ids
-                or line.position_id in selected
+                or (line.position_id is not None and line.position_id in selected)
                 or line.dimensions in dimensions
             ):
                 raise CountSheetLineConflictError(
                     "Строки, позиции и измерения ведомости должны быть уникальны."
                 )
             ids.add(line.id)
-            selected.add(line.position_id)
+            if line.position_id is not None:
+                selected.add(line.position_id)
             dimensions.add(line.dimensions)
-            if positions.get(line.position_id) != line.baseline_position_snapshot():
+            if line.origin is CountLineOrigin.FOUND:
+                found.append(line)
+            elif positions.get(line.position_id) != line.baseline_position_snapshot():
                 raise CountSheetSourceMismatchError(
                     "Учётные поля строки не соответствуют позиции основания."
                 )
+        if found:
+            FoundCountLinePolicy.ensure_sources(lines=tuple(found), baseline=baseline)

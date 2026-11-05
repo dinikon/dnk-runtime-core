@@ -2,6 +2,10 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Self
 
+from src.modules.inventory.domain.count_sheet.reconciliation_snapshot import (
+    CountSheetReconciliationSnapshot,
+    CountLineReconciliationSnapshot,
+)
 from src.modules.inventory.domain.count_sheet.entity.count_line import CountLine
 from src.modules.inventory.domain.count_sheet.error import (
     InvalidCountLineError,
@@ -21,6 +25,13 @@ from src.modules.inventory.domain.count_sheet.value_object.line_binding import (
     CountSheetLineBindingVO,
 )
 from src.modules.inventory.domain.count_sheet.value_object.line_id import CountLineIdVO
+from src.modules.inventory.domain.policy.found_count_line import FoundCountLinePolicy
+from src.modules.inventory.domain.stock_position.value_object.dimensions import (
+    StockDimensionsVO,
+)
+from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
+from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
 from src.modules.inventory.domain.count_sheet.value_object.status import (
     CountSheetStatus,
 )
@@ -57,7 +68,7 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 
 @dataclass(frozen=True, slots=True)
 class CountSheet:
-    """Самостоятельная ведомость с фиксированными строками основания без изменения физического запаса."""
+    """Самостоятельная ведомость с неизменными учётными строками и наблюдениями найденного запаса без изменения остатков."""
 
     id: CountSheetIdVO
     inventory_count_id: InventoryCountIdVO
@@ -97,6 +108,54 @@ class CountSheet:
             owner_id=inventory_count.owner_id,
             status=CountSheetStatus.DRAFT,
             lines=lines,
+            created_at=created,
+            updated_at=created,
+            version=0,
+        )
+
+    @classmethod
+    def create_with_found_line(
+        cls,
+        *,
+        identifier: CountSheetIdVO,
+        line_id: CountLineIdVO,
+        inventory_count: InventoryCountSheetSourceSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        dimensions: StockDimensionsVO,
+        inventory_item: InventoryItemStockSnapshot,
+        warehouse: WarehouseSnapshot,
+        location: StockLocationSnapshot,
+        created_at: datetime,
+        lot: StockLotSnapshot | None = None,
+        serial: StockSerialSnapshot | None = None,
+    ) -> Self:
+        """Создаёт непустой черновик версии 0 с первой FOUND-строкой, в том числе при пустом наборе позиций основания."""
+        CountSheetSourcePolicy.ensure_compatible(
+            inventory_count=inventory_count, baseline=baseline
+        )
+        line = FoundCountLinePolicy.build_line(
+            identifier=line_id,
+            dimensions=dimensions,
+            baseline=baseline,
+            inventory_item=inventory_item,
+            warehouse=warehouse,
+            location=location,
+            lot=lot,
+            serial=serial,
+        )
+        created = normalize_count_sheet_time(created_at)
+        if created < inventory_count.updated_at:
+            raise CountSheetTimeError(
+                "Ведомость не может быть создана раньше текущего состояния родителя."
+            )
+        return cls.restore(
+            identifier=identifier,
+            inventory_count_id=inventory_count.id,
+            baseline=InventoryCountBaselineRefVO(baseline.id, baseline.snapshot_at),
+            warehouse_id=inventory_count.warehouse_id,
+            owner_id=inventory_count.owner_id,
+            status=CountSheetStatus.DRAFT,
+            lines=(line,),
             created_at=created,
             updated_at=created,
             version=0,
@@ -164,6 +223,51 @@ class CountSheet:
             ),
         )
 
+    def add_found_line(
+        self,
+        identifier: CountLineIdVO,
+        *,
+        inventory_count: InventoryCountSheetSourceSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        dimensions: StockDimensionsVO,
+        inventory_item: InventoryItemStockSnapshot,
+        warehouse: WarehouseSnapshot,
+        location: StockLocationSnapshot,
+        expected_version: int,
+        updated_at: datetime,
+        lot: StockLotSnapshot | None = None,
+        serial: StockSerialSnapshot | None = None,
+    ) -> Self:
+        """Дополняет только черновик новыми непосчитанными измерениями после повторной проверки родителя и основания."""
+        updated = self._prepare_transition(expected_version, updated_at)
+        CountSheetSourcePolicy.ensure_sheet_source(
+            inventory_count_id=self.inventory_count_id,
+            warehouse_id=self.warehouse_id,
+            owner_id=self.owner_id,
+            baseline_ref=self.baseline,
+            lines=self.lines,
+            inventory_count=inventory_count,
+            baseline=baseline,
+        )
+        if updated < inventory_count.updated_at:
+            raise CountSheetTimeError(
+                "Добавление строки не может предшествовать текущему состоянию родителя."
+            )
+        line = FoundCountLinePolicy.build_line(
+            identifier=identifier,
+            dimensions=dimensions,
+            baseline=baseline,
+            inventory_item=inventory_item,
+            warehouse=warehouse,
+            location=location,
+            lot=lot,
+            serial=serial,
+        )
+        return self._changed(
+            updated_at=updated,
+            lines=tuple(sorted((*self.lines, line), key=lambda row: row.id.uuid.int)),
+        )
+
     def submit(
         self,
         *,
@@ -174,6 +278,9 @@ class CountSheet:
         inventory_items: tuple[InventoryItemStockSnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         positions: tuple[StockPositionCountingSnapshot, ...],
+        warehouse: WarehouseSnapshot | None = None,
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> Self:
         """Передаёт полностью посчитанную ведомость после проверки родителя, строк, товаров и всего актуального основания."""
         updated = self._prepare_transition(expected_version, updated_at)
@@ -189,6 +296,9 @@ class CountSheet:
             locations=locations,
             positions=positions,
             submitted_at=updated,
+            warehouse=warehouse,
+            lots=lots,
+            serials=serials,
         )
         return self._changed(updated_at=updated, status=CountSheetStatus.SUBMITTED)
 
@@ -196,6 +306,59 @@ class CountSheet:
         """Отменяет только черновик, сохраняя строки и результаты без текущих внешних снимков."""
         updated = self._prepare_transition(expected_version, updated_at)
         return self._changed(updated_at=updated, status=CountSheetStatus.CANCELLED)
+
+    def withdraw(
+        self,
+        *,
+        inventory_count: InventoryCountSheetSourceSnapshot,
+        expected_version: int,
+        updated_at: datetime,
+    ) -> Self:
+        """Отзывает только переданную ведомость до фиксации общего результата, сохраняя все наблюдения."""
+        updated = self._prepare_transition(
+            expected_version, updated_at, required_status=CountSheetStatus.SUBMITTED
+        )
+        CountSheetSourcePolicy.ensure_parent(
+            inventory_count_id=self.inventory_count_id,
+            warehouse_id=self.warehouse_id,
+            owner_id=self.owner_id,
+            baseline_ref=self.baseline,
+            inventory_count=inventory_count,
+        )
+        if updated < inventory_count.updated_at:
+            raise CountSheetTimeError(
+                "Отзыв не может предшествовать текущему состоянию родителя."
+            )
+        return self._changed(updated_at=updated, status=CountSheetStatus.WITHDRAWN)
+
+    def reconciliation_snapshot(self) -> CountSheetReconciliationSnapshot:
+        """Возвращает проверенный снимок ведомости и значений строк для сводного результата."""
+        self._validate()
+        return CountSheetReconciliationSnapshot(
+            self.id,
+            self.inventory_count_id,
+            self.baseline,
+            self.warehouse_id,
+            self.owner_id,
+            self.status,
+            tuple(
+                CountLineReconciliationSnapshot(
+                    line.id,
+                    line.origin,
+                    line.position_id,
+                    line.dimensions,
+                    line.base_uom,
+                    line.expected_qty,
+                    line.position_version,
+                    line.counted_qty,
+                    line.counted_at,
+                )
+                for line in self.lines
+            ),
+            self.created_at,
+            self.updated_at,
+            self.version,
+        )
 
     def get_line(self, identifier: CountLineIdVO) -> CountLine:
         """Находит дочернюю строку только в данной ведомости по типизированному ID."""
@@ -207,9 +370,13 @@ class CountSheet:
         raise CountSheetLineNotFoundError("Строка отсутствует в ведомости.")
 
     def _prepare_transition(
-        self, expected_version: int, updated_at: datetime
+        self,
+        expected_version: int,
+        updated_at: datetime,
+        *,
+        required_status: CountSheetStatus = CountSheetStatus.DRAFT,
     ) -> datetime:
-        """Проверяет версии до арифметики, собственные инварианты, черновик и неубывающее время регистрации."""
+        """Проверяет версии до арифметики, собственные инварианты, допустимый статус и неубывающее время регистрации."""
         if (
             type(self.version) is not int
             or self.version < 0
@@ -222,10 +389,8 @@ class CountSheet:
         if self.version != expected_version:
             raise CountSheetVersionConflictError("Ожидаемая версия ведомости устарела.")
         self._validate()
-        if self.status is not CountSheetStatus.DRAFT:
-            raise CountSheetStatusError(
-                "Изменения доступны только черновику ведомости."
-            )
+        if self.status is not required_status:
+            raise CountSheetStatusError("Статус ведомости не допускает эту операцию.")
         updated = normalize_count_sheet_time(updated_at)
         if updated < self.updated_at:
             raise CountSheetTimeError("Время регистрации изменений не может убывать.")
@@ -275,14 +440,15 @@ class CountSheet:
             line.ensure_valid()
             if (
                 line.id in ids
-                or line.position_id in positions
+                or (line.position_id is not None and line.position_id in positions)
                 or line.dimensions in dimensions
             ):
                 raise CountSheetLineConflictError(
                     "ID строк, позиции и измерения должны быть уникальны."
                 )
             ids.add(line.id)
-            positions.add(line.position_id)
+            if line.position_id is not None:
+                positions.add(line.position_id)
             dimensions.add(line.dimensions)
             if line.dimensions.owner_id != self.owner_id:
                 raise InvalidCountSheetValueError(
@@ -295,7 +461,10 @@ class CountSheet:
                 raise CountSheetTimeError(
                     "Момент пересчёта строки вне хронологии ведомости."
                 )
-            if self.status is CountSheetStatus.SUBMITTED and line.counted_qty is None:
+            if (
+                self.status in (CountSheetStatus.SUBMITTED, CountSheetStatus.WITHDRAWN)
+                and line.counted_qty is None
+            ):
                 raise UncountedCountSheetError(
                     "Переданная ведомость должна содержать только посчитанные строки."
                 )

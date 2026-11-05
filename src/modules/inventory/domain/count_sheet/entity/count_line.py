@@ -9,6 +9,10 @@ from src.modules.inventory.domain.count_sheet.error import (
 )
 from src.modules.inventory.domain.count_sheet.time import normalize_count_sheet_time
 from src.modules.inventory.domain.count_sheet.value_object.line_id import CountLineIdVO
+from src.modules.inventory.domain.count_sheet.value_object.line_origin import (
+    CountLineOrigin,
+)
+from src.modules.inventory.domain.uom_catalog import get_uom
 from src.modules.inventory.domain.policy.quantity_arithmetic import (
     QuantityArithmeticPolicy,
 )
@@ -31,11 +35,12 @@ class CountLine:
     """Дочерняя строка с неизменными учётными данными и опциональным фактом пересчёта в базовой единице."""
 
     id: CountLineIdVO
-    position_id: StockPositionIdVO
+    origin: CountLineOrigin
+    position_id: StockPositionIdVO | None
     dimensions: StockDimensionsVO
     base_uom: UomCodeVO
     expected_qty: QuantityVO
-    position_version: int
+    position_version: int | None
     counted_qty: QuantityVO | None
     counted_at: datetime | None
 
@@ -49,6 +54,7 @@ class CountLine:
         position.ensure_valid()
         return cls.restore(
             identifier=identifier,
+            origin=CountLineOrigin.BASELINE,
             position_id=position.id,
             dimensions=position.dimensions,
             base_uom=position.base_uom,
@@ -59,21 +65,44 @@ class CountLine:
         )
 
     @classmethod
+    def create_found(
+        cls,
+        *,
+        identifier: CountLineIdVO,
+        dimensions: StockDimensionsVO,
+        base_uom: UomCodeVO,
+    ) -> Self:
+        """Создаёт непосчитанную найденную строку с нулевым учётом без фиктивного ID или версии позиции."""
+        return cls.restore(
+            identifier=identifier,
+            origin=CountLineOrigin.FOUND,
+            position_id=None,
+            position_version=None,
+            dimensions=dimensions,
+            base_uom=base_uom,
+            expected_qty=QuantityVO(Decimal(0)),
+            counted_qty=None,
+            counted_at=None,
+        )
+
+    @classmethod
     def restore(
         cls,
         *,
         identifier: CountLineIdVO,
-        position_id: StockPositionIdVO,
+        origin: CountLineOrigin,
+        position_id: StockPositionIdVO | None,
         dimensions: StockDimensionsVO,
         base_uom: UomCodeVO,
         expected_qty: QuantityVO,
-        position_version: int,
+        position_version: int | None,
         counted_qty: QuantityVO | None,
         counted_at: datetime | None,
     ) -> Self:
         """Восстанавливает собственную историю строки без текущих правил товара или полного основания."""
         line = cls(
             identifier,
+            origin,
             position_id,
             dimensions,
             base_uom,
@@ -85,8 +114,10 @@ class CountLine:
         line.ensure_valid()
         return line
 
-    def baseline_position_snapshot(self) -> StockPositionCountingSnapshot:
-        """Возвращает исходные учётные поля для точного сравнения с позицией основания."""
+    def baseline_position_snapshot(self) -> StockPositionCountingSnapshot | None:
+        """Возвращает исходную учётную позицию либо None для найденных измерений без позиции."""
+        if self.origin is CountLineOrigin.FOUND:
+            return None
         return StockPositionCountingSnapshot(
             self.position_id,
             self.dimensions,
@@ -97,9 +128,37 @@ class CountLine:
 
     def ensure_valid(self) -> None:
         """Проверяет собственные поля, согласованность пары факта/момента и поштучность SERIAL."""
-        if not isinstance(self.id, CountLineIdVO):
-            raise InvalidCountLineError("Нужен ID строки CountLineIdVO.")
-        self.baseline_position_snapshot().ensure_valid()
+        if not isinstance(self.id, CountLineIdVO) or not isinstance(
+            self.origin, CountLineOrigin
+        ):
+            raise InvalidCountLineError(
+                "Нужны CountLineIdVO и типизированный источник строки."
+            )
+        if self.origin is CountLineOrigin.BASELINE:
+            StockPositionCountingSnapshot(
+                self.position_id,
+                self.dimensions,
+                self.base_uom,
+                self.expected_qty,
+                self.position_version,
+            ).ensure_valid()
+        else:
+            if (
+                self.position_id is not None
+                or self.position_version is not None
+                or not isinstance(self.dimensions, StockDimensionsVO)
+                or not isinstance(self.base_uom, UomCodeVO)
+                or not isinstance(self.expected_qty, QuantityVO)
+                or not self.expected_qty.value.is_zero()
+            ):
+                raise InvalidCountLineError(
+                    "FOUND требует измерения, единицу, нулевой учёт и отсутствие ID/версии позиции."
+                )
+            get_uom(self.base_uom)
+            if self.dimensions.serial_id is not None and self.base_uom != UomCodeVO(
+                "PCS"
+            ):
+                raise InvalidCountLineError("Конкретный найденный SERIAL требует PCS.")
         if (self.counted_qty is None) != (self.counted_at is None):
             raise InvalidCountLineError(
                 "Количество и момент пересчёта заполняются вместе."

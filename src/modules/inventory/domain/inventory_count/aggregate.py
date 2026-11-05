@@ -2,6 +2,26 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Self
 
+from src.modules.inventory.domain.inventory_count.result_snapshot import (
+    InventoryCountResultSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.value_object.result_ref import (
+    InventoryCountResultRefVO,
+)
+from src.modules.inventory.domain.policy.inventory_count_result import (
+    InventoryCountResultPolicy,
+)
+from src.modules.inventory.domain.count_sheet.reconciliation_snapshot import (
+    CountSheetReconciliationSnapshot,
+)
+from src.modules.inventory.domain.inventory_item.stock_snapshot import (
+    InventoryItemStockSnapshot,
+)
+from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
+from src.modules.inventory.domain.stock_position.counting_snapshot import (
+    StockPositionCountingSnapshot,
+)
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
 from src.modules.inventory.domain.inventory_count.sheet_source_snapshot import (
     InventoryCountSheetSourceSnapshot,
 )
@@ -45,7 +65,7 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 
 @dataclass(frozen=True, slots=True)
 class InventoryCount:
-    """План и запуск инвентаризации со ссылкой на основание без ведомостей и блокировки движений."""
+    """План, запуск и фиксация сводного результата без коллекции ведомостей, проведения или блокировки движений."""
 
     id: InventoryCountIdVO
     warehouse_id: WarehouseIdVO
@@ -53,6 +73,7 @@ class InventoryCount:
     scope: CountScopeVO
     status: InventoryCountStatus
     baseline: InventoryCountBaselineRefVO | None
+    result: InventoryCountResultRefVO | None
     created_at: datetime
     updated_at: datetime
     version: int
@@ -80,6 +101,7 @@ class InventoryCount:
             scope=scope,
             status=InventoryCountStatus.DRAFT,
             baseline=None,
+            result=None,
             created_at=created_at,
             updated_at=created_at,
             version=0,
@@ -95,6 +117,7 @@ class InventoryCount:
         scope: CountScopeVO,
         status: InventoryCountStatus,
         baseline: InventoryCountBaselineRefVO | None,
+        result: InventoryCountResultRefVO | None,
         created_at: datetime,
         updated_at: datetime,
         version: int,
@@ -107,6 +130,7 @@ class InventoryCount:
             scope,
             status,
             baseline,
+            result,
             normalize_inventory_count_time(created_at),
             normalize_inventory_count_time(updated_at),
             version,
@@ -209,6 +233,49 @@ class InventoryCount:
             updated_at=normalized,
         )
 
+    def register_result(
+        self,
+        result: InventoryCountResultSnapshot,
+        *,
+        expected_version: int,
+        updated_at: datetime,
+        baseline: InventoryCountBaselineSnapshot,
+        sheets: tuple[CountSheetReconciliationSnapshot, ...],
+        inventory_items: tuple[InventoryItemStockSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        positions: tuple[StockPositionCountingSnapshot, ...],
+        warehouse: WarehouseSnapshot | None = None,
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+    ) -> Self:
+        """Фиксирует только ссылку на заново проверенный сводный результат без проведения расхождений."""
+        updated = self._prepare_transition(
+            expected_version,
+            updated_at,
+            required_status=InventoryCountStatus.IN_PROGRESS,
+        )
+        InventoryCountResultPolicy.ensure_compatible(
+            result=result,
+            inventory_count=self.sheet_source_snapshot(),
+            baseline=baseline,
+            sheets=sheets,
+            inventory_items=inventory_items,
+            locations=locations,
+            positions=positions,
+            warehouse=warehouse,
+            lots=lots,
+            serials=serials,
+        )
+        if result.prepared_at > updated:
+            raise InventoryCountTimeError(
+                "Регистрация не может предшествовать подготовке результата."
+            )
+        return self._changed(
+            status=InventoryCountStatus.COUNTED,
+            result=InventoryCountResultRefVO(result.id, result.prepared_at),
+            updated_at=updated,
+        )
+
     def _prepare_transition(
         self,
         expected_version: int,
@@ -260,6 +327,10 @@ class InventoryCount:
                 self.baseline is not None
                 and not isinstance(self.baseline, InventoryCountBaselineRefVO)
             )
+            or (
+                self.result is not None
+                and not isinstance(self.result, InventoryCountResultRefVO)
+            )
             or type(self.version) is not int
             or self.version < 0
         ):
@@ -277,15 +348,29 @@ class InventoryCount:
             raise InventoryCountTimeError(
                 "Нужно UTC-время изменения не раньше создания."
             )
-        if (self.status is InventoryCountStatus.IN_PROGRESS) != (
-            self.baseline is not None
-        ):
+        if (
+            self.status
+            in (InventoryCountStatus.IN_PROGRESS, InventoryCountStatus.COUNTED)
+        ) != (self.baseline is not None):
             raise InvalidInventoryCountValueError(
-                "Основание обязательно только для IN_PROGRESS."
+                "Основание обязательно для IN_PROGRESS и COUNTED."
             )
         if self.baseline is not None:
             self.baseline.ensure_valid()
             if not created <= self.baseline.snapshot_at <= updated:
                 raise InventoryCountTimeError(
                     "Момент основания должен находиться между созданием и изменением инвентаризации."
+                )
+        if (self.status is InventoryCountStatus.COUNTED) != (self.result is not None):
+            raise InvalidInventoryCountValueError(
+                "Ссылка на результат обязательна только для COUNTED."
+            )
+        if self.result is not None:
+            self.result.ensure_valid()
+            if (
+                self.baseline is None
+                or not self.baseline.snapshot_at <= self.result.prepared_at <= updated
+            ):
+                raise InventoryCountTimeError(
+                    "Подготовка результата должна находиться между основанием и текущим состоянием."
                 )

@@ -3490,8 +3490,9 @@ Entity или коллекции ведомостей; их реализация
 | warehouse_id | WarehouseIdVO, фиксирован при создании |
 | owner_id | StockOwnerIdVO, фиксирован при создании |
 | scope | CountScopeVO |
-| status | InventoryCountStatus: DRAFT / CONFIRMED / IN_PROGRESS / CANCELLED |
-| baseline | InventoryCountBaselineRefVO для IN_PROGRESS, иначе None |
+| status | InventoryCountStatus: DRAFT / CONFIRMED / IN_PROGRESS / COUNTED / CANCELLED |
+| baseline | InventoryCountBaselineRefVO для IN_PROGRESS/COUNTED, иначе None |
+| result | InventoryCountResultRefVO для COUNTED, иначе None |
 | created_at / updated_at | Явный datetime с часовым поясом, хранение в UTC |
 | version | Целое неотрицательное число, bool запрещён |
 
@@ -3629,7 +3630,7 @@ updated_at. Входные aware-моменты фабрики и VO норма�
 CONFIRMED → IN_PROGRESS возвращает новый корень версии +1 со ссылкой на основание.
 Повторный запуск запрещён; изменение области, подтверждение или отмена начатой
 инвентаризации также запрещены. restore() принимает baseline явно, требует ссылку
-только для IN_PROGRESS и проверяет created_at <= baseline.snapshot_at <= updated_at.
+для IN_PROGRESS/COUNTED и проверяет created_at <= baseline.snapshot_at <= updated_at.
 Полный набор позиций и актуальные справочники для восстановления не требуются.
 Запуск не меняет позиции, Ledger, доступность и резервы, не блокирует движения.
 
@@ -3722,15 +3723,16 @@ CountSheet — самостоятельный immutable Aggregate Root с доч
 | inventory_count_id | InventoryCountIdVO |
 | baseline | InventoryCountBaselineRefVO: ID и snapshot_at |
 | warehouse_id / owner_id | Фиксированные WarehouseIdVO / StockOwnerIdVO |
-| status | CountSheetStatus: DRAFT / SUBMITTED / CANCELLED |
-| lines | Непустой tuple CountLine с фиксированным составом |
+| status | CountSheetStatus: DRAFT / SUBMITTED / WITHDRAWN / CANCELLED |
+| lines | Непустой tuple CountLine: BASELINE фиксированы, FOUND можно добавлять в DRAFT |
 | created_at / updated_at | Явные datetime, хранение в UTC |
 | version | Целое неотрицательное число, bool запрещён |
 
-CountLine содержит id: CountLineIdVO, position_id, dimensions, base_uom,
+CountLine содержит id: CountLineIdVO, origin: CountLineOrigin, position_id, dimensions, base_uom,
 expected_qty, position_version, counted_qty: QuantityVO | None и
-counted_at: datetime | None. Учётные поля копируются из позиции основания и не
-изменяются при вводе наблюдений. None означает «не считали»; явно введённый ноль
+counted_at: datetime | None. Для BASELINE учётные поля копируются из позиции
+основания и не изменяются при вводе наблюдений. Для FOUND нет position_id/версии,
+учёт равен нулю; расширение описано ниже. None означает «не считали»; явно введённый ноль
 означает «проверили, товара нет». Количество и момент факта заполняются вместе.
 Строка не имеет самостоятельного репозитория. Исторические количества сохраняются,
 даже если текущий шаг товара уже другой.
@@ -3747,7 +3749,7 @@ created_at и непустой tuple CountSheetLineBindingVO(line_id, position_i
 Выбранные позиции существуют в основании, ID строк/позиций не повторяются.
 Создаётся DRAFT v0 с непосчитанными строками в порядке UUID ID строк. Ведомость
 может покрывать часть основания; строки разных LOT/SERIAL/состояний не объединяются.
-Состав фиксирован, методов добавления/удаления строк пока нет.
+Строки BASELINE фиксированы; FOUND можно добавлять, как описано ниже. Удаления строк нет.
 
 record_count() принимает ID строки, counted_qty, counted_at, текущий
 InventoryItemStockSnapshot, expected_version и updated_at. Ввод в первом срезе
@@ -3781,6 +3783,7 @@ submit() требует DRAFT, expected_version, updated_at, текущего р
 Переходы: DRAFT → SUBMITTED или DRAFT → CANCELLED. Отмена сохраняет строки и факты
 без текущих внешних снимков. После выхода из DRAFT ввод, передача и отмена запрещены.
 SUBMITTED фиксирует ведомость, а не проводит корректировку и не завершает родителя.
+Отзыв SUBMITTED через WITHDRAWN описан в разделе сводного результата ниже.
 Перед будущим проведением проверка актуальности обязательна повторно. Создание,
 ввод, передача и отмена не меняют StockPosition, Ledger, резервы или доступность.
 
@@ -3825,8 +3828,8 @@ restore() принимает полный собственный состав и
 наблюдений и заполненность SUBMITTED. Текущие родитель, товары и большое основание
 не загружаются. Их совместимость снова проверяется при передаче черновика.
 
-Первый срез выбирает только существующие позиции основания, включая нулевые;
-найденная новая комбинация измерений — следующий срез. Назначение позиции одной
+Первый срез выбирает существующие позиции основания, включая нулевые;
+найденные новые комбинации измерений реализованы ниже. Назначение позиции одной
 активной ведомости между несколькими AR, полнота покрытия инвентаризации и её
 завершение пока не обеспечиваются. Будущий Application/хранение должны исключить
 двойное назначение и молчаливое суммирование результатов разных ведомостей.
@@ -3839,6 +3842,249 @@ InvalidCountSheetLineBindingError, CountSheetSourceMismatchError,
 CountSheetLineConflictError, CountSheetLineNotFoundError, CountSheetStatusError,
 CountSheetVersionConflictError, CountSheetTimeError, UncountedCountSheetError,
 InvalidInventoryCountSheetSourceError и прежние ошибки товаров, количества и основания.
+
+## Найденный запас в CountSheet
+
+CountLineOrigin разделяет строки BASELINE и FOUND. Найденное измерение фиксируется
+как наблюдение, не создаёт физическую позицию и не изменяет исходное основание.
+Новых AR нет: реализовано 16 самостоятельных корней из 23 целевых.
+
+| Поле строки | BASELINE | FOUND |
+| --- | --- | --- |
+| position_id | StockPositionIdVO из основания | None |
+| position_version | Строгая версия позиции из основания | None |
+| expected_qty | Историческое QuantityVO | Ровно 0 |
+| dimensions / base_uom | Из основания | Проверенные измерения и базовая единица товара |
+| counted_qty / counted_at | None до пересчёта | None до пересчёта |
+
+Известная нулевая позиция остаётся BASELINE. Строку с теми же измерениями нельзя
+добавить как FOUND, даже если позиция не выбрана в текущую ведомость. Проверяется
+всё основание, включая нули. Отсутствие учётной позиции нельзя заменять случайным
+UUID или version=0. baseline_position_snapshot() возвращает None для FOUND.
+restore() теперь явно принимает origin и проверяет матрицу источника и прежнюю
+парность количества/момента. Учётные поля найденной строки после создания не меняются.
+
+FoundCountLinePolicy.build_line() создаёт непосчитанную найденную строку по полному
+основанию и текущим InventoryItemStockSnapshot, WarehouseSnapshot, StockLocationSnapshot,
+а для LOT/SERIAL — StockLotSnapshot/StockSerialSnapshot. Пакетная ensure_sources()
+проверяет владельца, зафиксированные адреса и отсутствие измерений в основании.
+ensure_context() использует StockDimensionsPolicy: идентичность товара, единицы,
+склада/адреса и принадлежность партии/экземпляра. Неизвестные карточки или голые
+номера партий/серий не создаются автоматически. Даты не являются фильтром физического
+пересчёта, неактивные адреса полной области и несбываемые состояния не исключаются.
+
+add_found_line() требует DRAFT, новый CountLineIdVO, измерения, текущий снимок
+родителя, прежнее основание, снимки контекста, expected_version и updated_at.
+Проверяются сохранённые ссылки и все существующие строки. Время не раньше текущего
+состояния ведомости и родителя. Возвращается новый корень версии +1 с отсортированным
+по ID составом, источники неизменны. ID и измерения уникальны; None не считается
+идентификатором позиции и не мешает нескольким разным FOUND-строкам.
+Строки BASELINE нельзя удалить или превратить в FOUND. Удаления найденных строк
+также нет: ошибочный результат исправляется прежним record_count(), включая ноль.
+
+create_with_found_line() создаёт DRAFT v0 с первой непосчитанной FOUND-строкой,
+в том числе при пустом positions основания. Адрес при этом обязан входить в
+locations основания. Новая локация после снимка не расширяет FULL автоматически.
+create_from_baseline() сохраняет прежнее требование непустых назначений.
+
+record_count() работает прежним образом: факт в базовой единице, текущий шаг,
+проверка времени и версии, отсутствие округления. Конкретный SERIAL только 0/1 PCS.
+После ввода 5 для FOUND с учётом 0 discrepancy=+5. Ноль — наблюдение с дельтой 0,
+а None означает непосчитанную строку и запрещает submit(). Повтор равного факта
+с тем же моментом после проверок остаётся no-op.
+
+submit() повторно проверяет все BASELINE/FOUND-источники, факты и всё исходное
+основание. Для FOUND дополнительно обязателен текущий warehouse: WarehouseSnapshot.
+lots и serials — tuple ровно необходимых найденным строкам снимков без пропусков,
+повторов и лишних карточек. Одну общую партию передают один раз. inventory_items
+содержит ровно товары всех строк ведомости, locations/positions — полную текущую
+область основания. После проверки этой области текущие LOT/SERIAL проверяются
+через StockDimensionsPolicy. Ведомости только с BASELINE поддерживают прежний
+submit(); необязательный warehouse, если передан, должен относиться к их складу.
+
+Пример продолжает started/baseline/warehouse/storage/position/item из предыдущих
+разделов. В основании есть SELLABLE, но нет DAMAGED того же товара в storage.
+
+```python
+from dataclasses import replace
+from datetime import timedelta
+from decimal import Decimal
+from uuid import UUID
+
+from src.modules.inventory.domain.count_sheet.aggregate import CountSheet
+from src.modules.inventory.domain.count_sheet.value_object.identifier import CountSheetIdVO
+from src.modules.inventory.domain.count_sheet.value_object.line_id import CountLineIdVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.stock_status import StockStatus
+
+found_line_id = CountLineIdVO(UUID(int=301))
+found_dimensions = replace(position.dimensions, stock_status=StockStatus.DAMAGED)
+found_sheet = CountSheet.create_with_found_line(
+    identifier=CountSheetIdVO(UUID(int=300)), line_id=found_line_id,
+    inventory_count=started.sheet_source_snapshot(), baseline=baseline,
+    dimensions=found_dimensions, inventory_item=item.stock_snapshot(),
+    warehouse=warehouse, location=storage, created_at=now,
+)
+found_at = now + timedelta(minutes=20)
+counted_found_sheet = found_sheet.record_count(
+    found_line_id, counted_qty=QuantityVO(Decimal(5)), counted_at=found_at,
+    inventory_item=item.stock_snapshot(), expected_version=found_sheet.version,
+    updated_at=found_at,
+)
+submitted_found_sheet = counted_found_sheet.submit(
+    expected_version=counted_found_sheet.version, updated_at=found_at,
+    inventory_count=started.sheet_source_snapshot(), baseline=baseline,
+    inventory_items=(item.stock_snapshot(),), warehouse=warehouse,
+    locations=locations, positions=(position.counting_snapshot(),),
+)
+# DRAFT v0 -> DRAFT v1 -> SUBMITTED v2; discrepancy=+5.
+# origin=FOUND, position_id=None, position_version=None, expected_qty=0.
+# В основании по-прежнему одна прежняя позиция, новый StockPosition не создан.
+```
+
+Если независимый приход после снимка создал позицию для этих измерений, даже
+нулевую, InventoryCountBaselinePolicy отклоняет передачу. FOUND не перепривязывается
+к новому ID и не дописывает фиктивную нулевую позицию в основание. Исходные наблюдения
+при отказе остаются в DRAFT. SUBMITTED не проводит излишек, не меняет Ledger,
+резервы, доступность и физические остатки, не завершает InventoryCount.
+
+Контекст подтверждает согласованность переданных снимков, а не их подлинность,
+полноту чтения или сохранение в БД. Дубли найденных измерений между разными
+ведомостями и согласованность SERIAL-наблюдений в области проверяются в сводном
+результате ниже. Следующие срезы: ADJUSTMENT и применение с атомарной проверкой
+актуальности. Создание карточек,
+StockPosition, SQL/API/UoW и Outbox не входят в этот Domain-срез.
+
+Ошибки используются существующие: InvalidCountLineError, CountSheetSourceMismatchError,
+CountSheetLineConflictError, CountSheetStatusError, CountSheetTimeError,
+CountSheetVersionConflictError и ошибки типов снимков, LOT/SERIAL, количества и основания.
+
+## Сводный результат InventoryCount
+
+InventoryCountResultPolicy собирает снимки ведомостей в один immutable результат,
+проверяя точное покрытие исходного основания, межведомостные дубли и фактическую
+согласованность SERIAL в области. Новых AR нет: по-прежнему 16 из 23 целевых.
+Большой набор хранится вне InventoryCount, в корне только ссылки на основание и результат.
+
+CountSheet.reconciliation_snapshot() возвращает CountSheetReconciliationSnapshot
+с ID, ссылками, статусом, версией, датами и tuple CountLineReconciliationSnapshot.
+В строке — собственные учётные значения BASELINE/FOUND и опциональные наблюдения.
+Проверяются типы, уникальность, UTC, хронология и заполненность SUBMITTED/WITHDRAWN.
+as_line() валидирует локальные значения прежней фабрикой неизменяемой дочерней
+строки; корень ведомости не восстанавливается. Общие правила количества и текущего
+FOUND-контекста вынесены в CountSheetSubmissionPolicy.ensure_observations() и
+используются передачей и сборкой. Сами агрегаты в ResultPolicy не передаются.
+
+build_result() принимает текущий InventoryCountSheetSourceSnapshot, полное основание,
+tuple полных текущих снимков всех ведомостей этой инвентаризации, новый
+InventoryCountResultIdVO, prepared_at и текущие товары, полные адреса/позиции,
+warehouse/lots/serials для FOUND. Внешний код не должен предварительно фильтровать
+только SUBMITTED: любой DRAFT запрещает результат. CANCELLED/WITHDRAWN не дают
+наблюдений, но их ревизии сохраняются. Все источники, включая исключённые, должны
+относиться к той же сессии, ссылке на основание, складу и владельцу. Один ID ведомости
+дважды запрещён даже при разных версиях; автоматического выбора последней версии нет.
+
+Каждая позиция основания, включая нулевую, покрывается ровно одной BASELINE-строкой
+из SUBMITTED. Все исходные значения сверяются точно. FOUND отсутствуют в основании.
+Позиции и измерения между участвующими ведомостями не повторяются независимо от
+равенства количеств; данные не суммируются молча. Идентификатор наблюдения — пара
+sheet_id/line_id. Текущие правила факта проверяются снова, исторические expected_qty
+не переоцениваются. Всё физическое основание проверяется InventoryCountBaselinePolicy.
+
+Для одного serial_id в результирующем фактическом наборе требуются тот же товар,
+LOT и единица, а положительное наблюдение 1 PCS возможно только в одном адресе/состоянии.
+Нулевые наблюдения также участвуют в проверке идентичности. Допустимо учесть
+BASELINE SERIAL-X в A: 1→0 и FOUND в B: 0→1. Дельты −1/+1 остаются раздельными.
+Два факта 1 запрещены даже при дельте 0 у одного. Наличие экземпляра вне области
+инвентаризации эта проверка не доказывает; оно потребуется при проведении.
+
+Для разрешения конфликтов добавлен CountSheet.withdraw(): SUBMITTED → WITHDRAWN.
+Нужны expected_version, явное updated_at и текущий IN_PROGRESS родителя с теми же
+ссылками. Время не раньше ведомости и родителя, версия +1, все строки/факты прежние.
+Актуальное физическое основание для отзыва не требуется. Повторный отзыв, редактирование
+или передача WITHDRAWN запрещены; restore() требует заполненные наблюдения.
+cancel() остаётся отменой только DRAFT. Для исправления отозванной ведомости создают
+новую и выполняют пересчёт. После COUNTED отзыв по текущему родителю запрещён.
+
+| Поле InventoryCountResultSnapshot | Значение |
+| --- | --- |
+| id | InventoryCountResultIdVO |
+| inventory_count_id / inventory_count_version | Родитель и точная версия до регистрации |
+| baseline | InventoryCountBaselineRefVO |
+| warehouse_id / owner_id / scope | Область учётного результата |
+| prepared_at | Явный UTC-момент не раньше текущего родителя и всех ревизий |
+| sheet_revisions | tuple CountSheetRevisionVO: ID, версия, статус, updated_at всех источников |
+| lines | tuple InventoryCountResultLineSnapshot: sheet_id, sheet_version, observation |
+
+observation — CountLineReconciliationSnapshot с заполненными фактом и моментом.
+discrepancy вычисляется точно прежним правилом, не дублируется в состоянии.
+Нулевые расхождения сохраняются для покрытия. Порядок чтения не влияет на результат:
+ревизии сортируются по ID ведомостей, строки — по sheet_id/line_id. Пустое основание
+допускает явный пустой результат без фиктивных ведомостей/позиций; FOUND-only набор
+также допустим. Сам результат проверяет номинальные типы, строгие версии без bool,
+UTC, происхождение, уникальность и SERIAL; готовые снимки не нормализуют скрыто даты.
+
+register_result() принимает результат, expected_version, updated_at и повторно
+полный текущий набор ведомостей, основание и актуальный контекст. ensure_compatible()
+строит ожидаемый результат с тем же ID/моментом и сравнивает его полностью.
+Новая ревизия, отзыв или изменение состава после подготовки запрещают регистрацию,
+даже если версия родителя не изменилась. Снова проверяются физическое основание и
+правила фактов. Это необходимо: withdraw() меняет ведомость, но не версию InventoryCount.
+
+IN_PROGRESS → COUNTED сохраняет InventoryCountResultRefVO(id, prepared_at), прежний
+baseline, время регистрации и версию +1. updated_at не раньше prepared_at;
+повторная регистрация запрещена. Для COUNTED обязательны обе ссылки, для IN_PROGRESS
+только baseline, для DRAFT/CONFIRMED/CANCELLED обе отсутствуют. restore() явно
+принимает result и проверяет baseline.snapshot_at <= result.prepared_at <= updated_at
+без загрузки больших наборов. Снимок родителя COUNTED корректен как данные, но
+политики создания/дополнения/передачи/отзыва ведомостей требуют IN_PROGRESS.
+
+Пример продолжает неизменённое основание и две переданные ведомости из предыдущих
+разделов: submitted_sheet содержит 100→77, submitted_found_sheet содержит FOUND 0→5.
+
+```python
+from uuid import UUID
+
+from src.modules.inventory.domain.inventory_count.value_object.result_id import InventoryCountResultIdVO
+from src.modules.inventory.domain.policy.inventory_count_result import InventoryCountResultPolicy
+
+sheet_snapshots = (
+    submitted_sheet.reconciliation_snapshot(),
+    submitted_found_sheet.reconciliation_snapshot(),
+)
+result = InventoryCountResultPolicy.build_result(
+    identifier=InventoryCountResultIdVO(UUID(int=400)),
+    inventory_count=started.sheet_source_snapshot(), baseline=baseline,
+    sheets=sheet_snapshots, prepared_at=found_at,
+    inventory_items=(item.stock_snapshot(),), warehouse=warehouse,
+    locations=locations, positions=(position.counting_snapshot(),),
+)
+counted_inventory = started.register_result(
+    result, expected_version=started.version, updated_at=found_at,
+    baseline=baseline, sheets=sheet_snapshots,
+    inventory_items=(item.stock_snapshot(),), warehouse=warehouse,
+    locations=locations, positions=(position.counting_snapshot(),),
+)
+# IN_PROGRESS v3 -> COUNTED v4. В результате две строки: -23 и +5.
+# Корень хранит только result ref, физический запас по-прежнему 100 PCS/v7.
+```
+
+COUNTED означает зафиксированные наблюдения, не применённые корректировки.
+StockDocument/StockExecution/StockPosting не создаются; позиции, Ledger, резервы
+и доступность не меняются. ADJUSTMENT, применение и окончательное завершение,
+перезапуск с новым основанием, SQL/API/Outbox — следующие срезы.
+
+Снимки и версии не доказывают полноту/подлинность чтения или commit. Будущий
+Application/UoW должен атомарно читать и фиксировать полный состав источников и
+результат, защитить от отзыва, новых ведомостей и вставок позиций. Проверка старого
+набора ID не обеспечивает полноту. Перед проведением актуальность проверяется снова;
+сохранение одного корня COUNTED само по себе не гарантирует согласованность хранения.
+
+Ошибки среза: InvalidCountSheetReconciliationSnapshotError,
+InvalidInventoryCountResultError, InventoryCountResultMismatchError,
+InventoryCountCoverageError, InventoryCountResultConflictError,
+InventoryCountSerialConflictError, InventoryCountSheetsNotReadyError и прежние
+ошибки состояний, времени, версий, количества и актуальности основания.
 
 ## Изменения, восстановление и проверки
 
@@ -3874,5 +4120,7 @@ InvalidInventoryCountSheetSourceError и прежние ошибки товар�
 `test/test_inventory_stock_transfer_receipt_document_execution_domain.py`
 `test/test_inventory_count_domain.py`
 `test/test_inventory_count_start_domain.py`
-и `test/test_inventory_count_sheet_domain.py`.
+`test/test_inventory_count_sheet_domain.py`
+`test/test_inventory_count_found_stock_domain.py`
+и `test/test_inventory_count_result_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

@@ -58,11 +58,12 @@ class InventoryCountSheetSourceSnapshot:
             raise InvalidInventoryCountSheetSourceError(
                 "Момент снимка должен храниться в UTC."
             )
-        if (self.status is InventoryCountStatus.IN_PROGRESS) != (
-            self.baseline is not None
-        ):
+        if (
+            self.status
+            in (InventoryCountStatus.IN_PROGRESS, InventoryCountStatus.COUNTED)
+        ) != (self.baseline is not None):
             raise InvalidInventoryCountSheetSourceError(
-                "Ссылка на основание обязательна только для IN_PROGRESS."
+                "Ссылка на основание обязательна для IN_PROGRESS и COUNTED."
             )
         if self.baseline is not None:
             self.baseline.ensure_valid()

@@ -43,3 +43,7 @@ class CountSheetTimeError(InvalidCountSheetValueError):
 
 class UncountedCountSheetError(CountSheetError):
     """Запрещает передачу ведомости с непосчитанными строками."""
+
+
+class InvalidCountSheetReconciliationSnapshotError(CountSheetError):
+    """Отклоняет неверный снимок ведомости для сводного результата инвентаризации."""

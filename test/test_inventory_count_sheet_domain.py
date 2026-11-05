@@ -769,6 +769,7 @@ class InventoryCountSheetDomainTests(unittest.TestCase):
             replace(line, position_version=True).ensure_valid()
         restored = CountLine.restore(
             identifier=line.id,
+            origin=line.origin,
             position_id=line.position_id,
             dimensions=line.dimensions,
             base_uom=line.base_uom,

@@ -195,6 +195,7 @@ class InventoryCountStartDomainTests(unittest.TestCase):
                     scope=reference.scope,
                     status=reference.status,
                     baseline=reference.baseline,
+                    result=reference.result,
                     created_at=reference.created_at,
                     updated_at=reference.updated_at,
                     version=reference.version,
