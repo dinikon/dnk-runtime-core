@@ -7,3 +7,4 @@ class StockOperationType(StrEnum):
     RECEIPT = "RECEIPT"
     ISSUE = "ISSUE"
     INTERNAL_MOVE = "INTERNAL_MOVE"
+    ADJUSTMENT = "ADJUSTMENT"

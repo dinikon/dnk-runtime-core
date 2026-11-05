@@ -397,7 +397,11 @@ class StockExecutionDomainTests(unittest.TestCase):
 
     def test_receipt_issue_and_move_preserve_positive_quantity_and_route(self) -> None:
         """Все операции исполняют положительный план; перемещение считается один раз."""
-        for kind in StockOperationType:
+        for kind in (
+            StockOperationType.RECEIPT,
+            StockOperationType.ISSUE,
+            StockOperationType.INTERNAL_MOVE,
+        ):
             self.prepare(kind=kind)
             execution = self.create()
             snapshot = execution.snapshot_for_document()
@@ -857,7 +861,11 @@ class StockExecutionDomainTests(unittest.TestCase):
         self,
     ) -> None:
         """Один маршрут перемещения использует один экземпляр с обеих сторон, повтор другой строкой запрещён."""
-        for kind in StockOperationType:
+        for kind in (
+            StockOperationType.RECEIPT,
+            StockOperationType.ISSUE,
+            StockOperationType.INTERNAL_MOVE,
+        ):
             self.prepare(mode=TrackingMode.SERIAL, kind=kind)
             self.assertIsInstance(self.create(), StockExecution)
             for amount in ("2", "0.5"):

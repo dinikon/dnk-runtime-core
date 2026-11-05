@@ -2,6 +2,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.error import StockAdjustmentError
+from src.modules.inventory.domain.stock_execution.value_object.adjustment_route import (
+    StockAdjustmentExecutionRouteVO,
+)
+
 from src.modules.inventory.domain.error import (
     IncompatibleUomError,
     QuantityConversionMismatchError,
@@ -57,7 +62,10 @@ class StockExecutionLine:
     quantity: QuantityVO
     conversion: QuantityConversionSnapshotVO
     route: (
-        ReceiptExecutionRouteVO | IssueExecutionRouteVO | InternalMoveExecutionRouteVO
+        ReceiptExecutionRouteVO
+        | IssueExecutionRouteVO
+        | InternalMoveExecutionRouteVO
+        | StockAdjustmentExecutionRouteVO
     )
 
     @classmethod
@@ -73,6 +81,7 @@ class StockExecutionLine:
             ReceiptExecutionRouteVO
             | IssueExecutionRouteVO
             | InternalMoveExecutionRouteVO
+            | StockAdjustmentExecutionRouteVO
         ),
     ) -> Self:
         """Фиксирует исходный пересчёт и вычисляет базовое количество по правилам товара."""
@@ -110,6 +119,7 @@ class StockExecutionLine:
             ReceiptExecutionRouteVO
             | IssueExecutionRouteVO
             | InternalMoveExecutionRouteVO
+            | StockAdjustmentExecutionRouteVO
         ),
     ) -> Self:
         """Восстанавливает полный собственный состав и исторический пересчёт без текущих настроек."""
@@ -141,6 +151,7 @@ class StockExecutionLine:
                     ReceiptExecutionRouteVO,
                     IssueExecutionRouteVO,
                     InternalMoveExecutionRouteVO,
+                    StockAdjustmentExecutionRouteVO,
                 ),
             )
         ):
@@ -158,6 +169,14 @@ class StockExecutionLine:
             raise QuantityConversionMismatchError(
                 "Фактическое количество не равно сохранённому пересчёту."
             )
+        if isinstance(self.route, StockAdjustmentExecutionRouteVO) and (
+            self.quantity.value != self.route.adjustment.quantity_delta.value.copy_abs()
+            or self.conversion.uom != self.base_uom
+            or self.conversion.factor_to_base != Decimal(1)
+        ):
+            raise StockAdjustmentError(
+                "Фактическая корректировка требует точный модуль дельты и пересчёт 1:1 в базовой единице."
+            )
         for dimensions in self.route.dimensions:
             if dimensions.inventory_item_id != self.inventory_item_id:
                 raise InvalidStockExecutionLineError(
@@ -173,6 +192,10 @@ class StockExecutionLine:
     def ensure_compatible(self, inventory_item: InventoryItemExecutionSnapshot) -> None:
         """Повторно проверяет текущие единицу, коэффициент пересчёта и шаг количества."""
         self.ensure_valid()
+        if isinstance(self.route, StockAdjustmentExecutionRouteVO):
+            raise StockAdjustmentError(
+                "Корректировку создаёт специализированная фабрика по полному плану и основанию."
+            )
         if not isinstance(inventory_item, InventoryItemExecutionSnapshot):
             raise InvalidInventoryItemExecutionSnapshotError(
                 "Нужен снимок правил исполнения товара."

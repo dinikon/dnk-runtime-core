@@ -168,6 +168,7 @@ class StockDocumentDomainTests(unittest.TestCase):
                     conversion=line.conversion,
                     executed_qty=line.executed_qty,
                     source=line.source,
+                    adjustment=line.adjustment,
                 )
                 | changes
             )
@@ -234,7 +235,11 @@ class StockDocumentDomainTests(unittest.TestCase):
         self,
     ) -> None:
         """Создаёт самостоятельный план с обязательными реквизитами без номеров и физического остатка."""
-        for kind in StockOperationType:
+        for kind in (
+            StockOperationType.RECEIPT,
+            StockOperationType.ISSUE,
+            StockOperationType.INTERNAL_MOVE,
+        ):
             document = self.create(operation_type=kind)
             self.assertEqual(document.status, StockDocumentStatus.DRAFT)
             self.assertEqual(document.lines, ())
@@ -305,7 +310,11 @@ class StockDocumentDomainTests(unittest.TestCase):
         self.assertEqual(self.line.conversion.uom, UomCodeVO("G"))
         self.assertEqual(self.line.conversion.factor_to_base, Decimal("0.001"))
         self.assertEqual(self.line.sku, SkuVO("GRAIN"))
-        for kind in StockOperationType:
+        for kind in (
+            StockOperationType.RECEIPT,
+            StockOperationType.ISSUE,
+            StockOperationType.INTERNAL_MOVE,
+        ):
             document = self.create(operation_type=kind).add_line(
                 self.line,
                 inventory_item=self.item.document_snapshot(),
@@ -411,8 +420,10 @@ class StockDocumentDomainTests(unittest.TestCase):
                 "conversion",
                 "executed_qty",
                 "source",
+                "adjustment",
             },
         )
+        self.assertIsNone(confirmed.lines[0].adjustment)
 
     def test_add_change_remove_preserve_identity_and_increment_versions(self) -> None:
         """Изменения состава возвращают новые документы и не переписывают исходные объекты."""

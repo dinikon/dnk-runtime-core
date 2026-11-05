@@ -2,6 +2,14 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.error import StockAdjustmentError
+from src.modules.inventory.domain.policy.stock_adjustment_quantity import (
+    StockAdjustmentQuantityPolicy,
+)
+from src.modules.inventory.domain.stock_posting.adjustment_entry_snapshot import (
+    StockAdjustmentEntrySnapshot,
+)
+
 from src.modules.inventory.domain.stock_position.availability_snapshot import (
     StockPositionAvailabilitySnapshot,
 )
@@ -159,6 +167,69 @@ class StockPosition:
             lot=lot,
             serial=serial,
         )
+
+    def apply_adjustment_entry(
+        self,
+        snapshot: StockAdjustmentEntrySnapshot,
+        *,
+        expected_version: int,
+        inventory_item: InventoryItemStockSnapshot,
+        location: StockLocationSnapshot,
+        warehouse: WarehouseSnapshot,
+        lot: StockLotSnapshot | None = None,
+        serial: StockSerialSnapshot | None = None,
+    ) -> Self:
+        """Применяет адресную запись корректировки по точному исходному состоянию и текущим правилам цели."""
+        self._validate()
+        if not isinstance(snapshot, StockAdjustmentEntrySnapshot):
+            raise StockAdjustmentError(
+                "Нужен связанный с фактом и Ledger снимок поправки."
+            )
+        snapshot.ensure_valid()
+        route = snapshot.route
+        if type(expected_version) is not int or expected_version < 0:
+            raise InvalidStockPositionValueError(
+                "Ожидаемая версия — целая неотрицательная без bool."
+            )
+        if (
+            expected_version != self.version
+            or route.expected_position_version != self.version
+        ):
+            raise StockPositionVersionConflictError(
+                "Позиция изменилась относительно основания корректировки."
+            )
+        if (
+            snapshot.entry.position_id != self.id
+            or route.adjustment.dimensions != self.dimensions
+        ):
+            raise StockPostingPositionMismatchError(
+                "Поправка предназначена другой позиции или физическим измерениям."
+            )
+        StockDimensionsPolicy.ensure_compatible(
+            dimensions=self.dimensions,
+            inventory_item=inventory_item,
+            location=location,
+            warehouse=warehouse,
+            lot=lot,
+            serial=serial,
+        )
+        if (
+            snapshot.entry.base_uom != self.base_uom
+            or inventory_item.base_uom != self.base_uom
+        ):
+            raise StockPositionUomMismatchError(
+                "Единица позиции, записи и текущего товара должна совпадать."
+            )
+        changed = StockAdjustmentQuantityPolicy.apply(
+            quantity=self.on_hand_qty,
+            expected_qty=route.adjustment.expected_qty,
+            target_qty=route.adjustment.target_qty,
+            delta=snapshot.entry.quantity_delta,
+            rules=inventory_item.quantity_rules,
+        )
+        position = replace(self, on_hand_qty=changed, version=self.version + 1)
+        position._validate()
+        return position
 
     def apply_delta(
         self,

@@ -54,6 +54,10 @@ class StockPostingPolicy:
             not isinstance(identifier, StockPostingIdVO)
             or not isinstance(source, PostingSourceVO)
             or not isinstance(operation_type, StockOperationType)
+            or (
+                operation_type is StockOperationType.ADJUSTMENT
+                and reversal_of_id is not None
+            )
             or not isinstance(entries, tuple)
             or not entries
             or (

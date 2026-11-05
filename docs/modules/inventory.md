@@ -929,12 +929,13 @@ Domain-фабрика не выполняет эти изменения, не о
 
 StockDocument — самостоятельный Aggregate Root намерения выполнить операцию.
 Он владеет неизменяемыми StockDocumentLine, связан с Warehouse и владельцем по ID
-и не содержит физических позиций, партий, серий или записей журнала.
+и не содержит агрегатов физических позиций, партий, серий или записей журнала.
+Для ADJUSTMENT строка фиксирует их идентификаторы и измерения результата пересчёта.
 
 | Поле StockDocument | Тип и назначение |
 | --- | --- |
 | id | StockDocumentIdVO |
-| operation_type | Существующий StockOperationType: RECEIPT, ISSUE, INTERNAL_MOVE |
+| operation_type | StockOperationType: RECEIPT, ISSUE, INTERNAL_MOVE; ADJUSTMENT пока только как план |
 | warehouse_id | WarehouseIdVO одного склада документа |
 | owner_id | Явный StockOwnerIdVO |
 | source | DocumentSourceVO или None для ручного документа |
@@ -955,7 +956,9 @@ DocumentSourceVO содержит непустые system и reference без у
 StockDocumentLine содержит id: StockDocumentLineIdVO, inventory_item_id,
 исторический sku: SkuVO, base_uom: UomCodeVO, planned_qty: QuantityVO,
 conversion: QuantityConversionSnapshotVO, executed_qty: QuantityVO
-и source: DocumentLineSourceVO | None.
+и source: DocumentLineSourceVO | None. Поле adjustment: StockAdjustmentLineVO | None
+обязательно для ADJUSTMENT и запрещено для обычных операций; правила приведены ниже.
+restore() принимает adjustment явно, включая None для обычной строки.
 DocumentLineSourceVO(system, reference) — универсальная ссылка основания строки:
 непустые строки с trim, без управляющих символов, регистр/ведущие нули сохраняются.
 create() по умолчанию использует source=None; restore() требует поле явно,
@@ -963,7 +966,8 @@ create() по умолчанию использует source=None; restore() т�
 План строго положительный; накопленное исполнение находится от нуля до плана.
 remaining_qty вычисляется как planned_qty − executed_qty без отдельного поля.
 Плановое количество строго положительное
-для всех видов операций; направление будущих дельт определит тип операции.
+для всех видов операций; для ADJUSTMENT направление хранится в точной разнице
+target_qty − expected_qty, для обычных операций его определяет вид операции.
 
 StockDocumentLine.create() получает ID строки, InventoryItemDocumentSnapshot,
 исходные quantity и uom. Базовая единица и SKU выводятся из снимка товара,
@@ -3576,10 +3580,10 @@ CONFIRMED означает зафиксированный план, а не на
 Момент учётного снимка фиксируется при фактическом старте в ссылке baseline;
 большие наборы позиций и адресов хранятся в отдельном основании, описанном ниже.
 
-CountSheet/CountLine реализованы ниже. Следующие срезы: применение расхождений,
-StockDocument(ADJUSTMENT) и применение через StockExecution/StockPosting/StockPosition.
-Сейчас поддержаны только RECEIPT/ISSUE/INTERNAL_MOVE; инвентаризация не проводит
-корректировки напрямую. При старте и применении нужно обеспечить сохранение движений
+CountSheet/CountLine и план StockDocument(ADJUSTMENT) реализованы ниже.
+Следующий срез — применение расхождений через StockExecution/StockPosting/StockPosition.
+Физическое исполнение пока поддерживает только RECEIPT/ISSUE/INTERNAL_MOVE;
+инвентаризация не проводит корректировки напрямую. При старте и применении нужно обеспечить сохранение движений
 после учётного снимка. Domain-проверки переданных снимков не доказывают полноту
 и достоверность чтения, версии не заменяют блокировки/CAS в хранилище. Проверка
 пересекающихся инвентаризаций, Application/UoW, SQL/API и Outbox — будущие срезы.
@@ -3951,8 +3955,8 @@ submitted_found_sheet = counted_found_sheet.submit(
 Контекст подтверждает согласованность переданных снимков, а не их подлинность,
 полноту чтения или сохранение в БД. Дубли найденных измерений между разными
 ведомостями и согласованность SERIAL-наблюдений в области проверяются в сводном
-результате ниже. Следующие срезы: ADJUSTMENT и применение с атомарной проверкой
-актуальности. Создание карточек,
+результате ниже. План ADJUSTMENT реализован ниже; физическое применение
+с атомарной проверкой актуальности — следующий срез. Создание карточек,
 StockPosition, SQL/API/UoW и Outbox не входят в этот Domain-срез.
 
 Ошибки используются существующие: InvalidCountLineError, CountSheetSourceMismatchError,
@@ -4070,9 +4074,10 @@ counted_inventory = started.register_result(
 ```
 
 COUNTED означает зафиксированные наблюдения, не применённые корректировки.
-StockDocument/StockExecution/StockPosting не создаются; позиции, Ledger, резервы
-и доступность не меняются. ADJUSTMENT, применение и окончательное завершение,
-перезапуск с новым основанием, SQL/API/Outbox — следующие срезы.
+Сам register_result() не создаёт StockDocument/StockExecution/StockPosting;
+позиции, Ledger, резервы и доступность не меняются. План ADJUSTMENT описан ниже.
+Физическое применение и окончательное завершение, перезапуск с новым основанием,
+SQL/API/Outbox — следующие срезы.
 
 Снимки и версии не доказывают полноту/подлинность чтения или commit. Будущий
 Application/UoW должен атомарно читать и фиксировать полный состав источников и
@@ -4085,6 +4090,116 @@ InvalidInventoryCountResultError, InventoryCountResultMismatchError,
 InventoryCountCoverageError, InventoryCountResultConflictError,
 InventoryCountSerialConflictError, InventoryCountSheetsNotReadyError и прежние
 ошибки состояний, времени, версий, количества и актуальности основания.
+
+## План корректировки ADJUSTMENT из результата инвентаризации
+
+Первый срез превращает зарегистрированные расхождения в план StockDocument,
+сохраняя 16 самостоятельных корней из 23 целевых. Физического движения пока нет.
+InventoryCount остаётся COUNTED. StockAdjustmentLineVO — часть StockDocumentLine,
+не самостоятельная Entity или агрегат.
+
+| Поле StockAdjustmentLineVO | Назначение |
+| --- | --- |
+| dimensions | Точные товар, локация, владелец, LOT/SERIAL и состояние из наблюдения |
+| position_id / position_version | Исходная позиция и строгая неотрицательная версия; оба None для FOUND |
+| expected_qty | Исторический неотрицательный остаток; для FOUND равен 0 |
+| target_qty | Посчитанный неотрицательный целевой остаток |
+| quantity_delta | Вычисляемая точная разница target − expected, обязательно ненулевая |
+
+У известной нулевой позиции остаются ID и версия. SERIAL требует expected/target
+0 или 1 и PCS. planned_qty строки всегда положителен и равен abs(delta),
+executed_qty=0, QuantityConversionSnapshotVO фиксирует базовую единицу и коэффициент 1.
+StockAdjustmentLinePolicy проверяет текущий шаг только для target_qty.
+Например, при исторических 100.1 KG и новом step=0.2 цель 100.2 допустима:
+дельта +0.1 сохраняется точно, хотя сама не кратна новому шагу. Обычные строки
+и StockQuantityPolicy сохраняют прежние строгие проверки количества.
+
+InventoryCount.adjustment_source_snapshot() передаёт обе ссылки, область,
+текущий статус, версию и updated_at. InventoryCountAdjustmentDocumentPolicy
+требует COUNTED и точное совпадение result ref и baseline ref. Версия родителя
+в результате историческая: baseline.inventory_count_version <
+result.inventory_count_version < current_inventory_count.version.
+Immutable результат не имеет своей версии: DocumentSourceVO хранит
+system="inventory_count_result", reference=str(result.id.uuid), version=None.
+Источник строки — DocumentLineSourceVO("inventory_count_result_line",
+"sheet UUID:line UUID"). Одинаковый ID наблюдения в двух ведомостях допустим;
+составные источники различны. Формат UUID канонический.
+
+create_from_inventory_count_result() требует InventoryCountDocumentLineBindingVO
+(document_line_id, sheet_id, count_line_id) ровно для всех ненулевых строк.
+Пропуски, нулевые/лишние строки, повтор источника или нового ID запрещены.
+Разницы разных адресов, партий, экземпляров и состояний не сальдируются.
+Если все наблюдения совпали, фабрика проверяет полное основание и возвращает None;
+bindings, inventory_items, lots и serials тогда пустые. Пустой документ не создаётся.
+
+Передаются ровно товары ненулевых строк (InventoryItemDocumentSnapshot),
+активный WarehouseSnapshot и необходимые LOT/SERIAL-снимки без дублей.
+StockDimensionsPolicy повторно проверяет принадлежность всех физических измерений.
+Неактивные физические адреса не отбрасываются. Для всех строк результата, включая
+нулевые, сверяются исторические поля и полное покрытие основания; FOUND должен
+отсутствовать во всём основании. Создание StockPosition для FOUND не выполняется.
+Полные текущие locations/positions проверяются InventoryCountBaselinePolicy:
+движение, изменение версии, исчезновение или появление позиции, новый адрес полной
+области запрещают построение или подтверждение документа по старому основанию.
+
+Строки производного документа нельзя добавить, изменить или удалить даже в DRAFT.
+confirm_inventory_count_adjustment() принимает обязательные текущие снимки и
+повторно строит ожидаемый состав по зарегистрированному результату. Цель, знак,
+количество, измерения, позиция/версия и источники должны совпасть; прежний SKU
+документа сохраняется. Общий confirm() корректировку отклоняет, поэтому подтверждение
+без актуальной проверки основания невозможно. Пока доступны только DRAFT,
+CONFIRMED и CANCELLED с executed_qty=0. restore() принимает собственную историю
+без свежего контекста и проверяет её локальные инварианты. Зарезервированные источники
+пересчёта и adjustment недопустимы в обычных документах.
+
+Пример продолжает result/counted_inventory и физическое основание из предыдущего раздела:
+
+```python
+from src.modules.inventory.domain.stock_document.aggregate import StockDocument
+from src.modules.inventory.domain.stock_document.value_object.identifier import StockDocumentIdVO
+from src.modules.inventory.domain.stock_document.value_object.line_id import StockDocumentLineIdVO
+from src.modules.inventory.domain.stock_document.value_object.inventory_count_line_binding import InventoryCountDocumentLineBindingVO
+
+bindings = tuple(
+    InventoryCountDocumentLineBindingVO(
+        StockDocumentLineIdVO(UUID(int=410 + index)), row.sheet_id, row.observation.id,
+    )
+    for index, row in enumerate(result.lines)
+    if not row.discrepancy.value.is_zero()
+)
+adjustment = StockDocument.create_from_inventory_count_result(
+    identifier=StockDocumentIdVO(UUID(int=409)),
+    inventory_count=counted_inventory.adjustment_source_snapshot(),
+    result=result, baseline=baseline, warehouse=warehouse,
+    inventory_items=(item.document_snapshot(),), line_bindings=bindings,
+    locations=locations, positions=(position.counting_snapshot(),), created_at=found_at,
+)
+if adjustment is not None:
+    confirmed_adjustment = adjustment.confirm_inventory_count_adjustment(
+        inventory_count=counted_inventory.adjustment_source_snapshot(),
+        result=result, baseline=baseline, warehouse=warehouse,
+        inventory_items=(item.document_snapshot(),),
+        locations=locations, positions=(position.counting_snapshot(),), updated_at=found_at,
+    )
+    # CONFIRMED v1: недостача -23 (100 -> 77) и FOUND +5 (0 -> 5).
+    # У FOUND по-прежнему нет position_id/position_version; физический запас 100 PCS/v7.
+```
+
+execution_snapshot(), регистрация исполнения, StockExecution и StockPosting
+ADJUSTMENT запрещены до следующего среза. Расширение enum не включает обычные
+маршруты или восстановление фактов этого вида. Следующий срез должен реализовать
+переход к target с проверкой исходных версий, создание FOUND-позиций, присутствие
+SERIAL и согласованное исполнение/проведение. Завершение InventoryCount пока не добавлено.
+
+Domain не гарантирует подлинность загруженного результата, полноту SQL-чтения,
+атомарный commit или глобальную дедупликацию документов. Будущий Application/UoW
+должен читать результат по зарегистрированной ссылке из авторитетного хранилища,
+защитить всю область от конкурентных изменений и связать проверку с сохранением.
+Один и тот же результат нельзя будет применять повторно через другой документ.
+
+Ошибки среза: InvalidStockAdjustmentLineError, InventoryCountAdjustmentMismatchError,
+StockAdjustmentDocumentImmutableError и прежние ошибки количества, контекста,
+состояний, времени и актуальности основания.
 
 ## Изменения, восстановление и проверки
 
@@ -4122,5 +4237,6 @@ InventoryCountSerialConflictError, InventoryCountSheetsNotReadyError и преж
 `test/test_inventory_count_start_domain.py`
 `test/test_inventory_count_sheet_domain.py`
 `test/test_inventory_count_found_stock_domain.py`
-и `test/test_inventory_count_result_domain.py`.
+`test/test_inventory_count_result_domain.py`
+и `test/test_inventory_count_adjustment_document_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

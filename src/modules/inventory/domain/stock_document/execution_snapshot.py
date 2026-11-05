@@ -83,6 +83,7 @@ class StockDocumentExecutionSnapshot:
         if (
             not isinstance(self.id, StockDocumentIdVO)
             or not isinstance(self.operation_type, StockOperationType)
+            or self.operation_type is StockOperationType.ADJUSTMENT
             or not isinstance(self.warehouse_id, WarehouseIdVO)
             or not isinstance(self.owner_id, StockOwnerIdVO)
             or not isinstance(self.status, StockDocumentStatus)

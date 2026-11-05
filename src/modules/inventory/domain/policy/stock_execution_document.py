@@ -18,6 +18,9 @@ from src.modules.inventory.domain.stock_execution.error import (
     InvalidStockExecutionDocumentSnapshotError,
     StockExecutionTimeError,
 )
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
+    StockOperationType,
+)
 
 
 class StockExecutionDocumentPolicy:
@@ -37,6 +40,10 @@ class StockExecutionDocumentPolicy:
         if not isinstance(execution, StockExecutionDocumentSnapshot):
             raise InvalidStockExecutionDocumentSnapshotError(
                 "Нужен снимок фактического исполнения."
+            )
+        if document.operation_type is StockOperationType.ADJUSTMENT:
+            raise StockDocumentExecutionNotAllowedError(
+                "Для ADJUSTMENT нужны специализированные снимки и регистрация полного исполнения."
             )
         document.ensure_valid()
         execution.ensure_valid()

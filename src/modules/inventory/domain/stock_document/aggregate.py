@@ -3,6 +3,40 @@ from datetime import UTC, datetime, timedelta
 from typing import Self
 from uuid import UUID
 
+from src.modules.inventory.domain.error import StockAdjustmentError
+from src.modules.inventory.domain.policy.stock_adjustment_execution import (
+    StockAdjustmentExecutionPolicy,
+)
+from src.modules.inventory.domain.stock_document.adjustment_execution_snapshot import (
+    StockDocumentAdjustmentExecutionSnapshot,
+    StockDocumentAdjustmentLineSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.adjustment_snapshot import (
+    StockAdjustmentExecutionSnapshot,
+)
+
+from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
+    InventoryCountAdjustmentSourceSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.baseline_snapshot import (
+    InventoryCountBaselineSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.result_snapshot import (
+    InventoryCountResultSnapshot,
+)
+from src.modules.inventory.domain.policy.inventory_count_adjustment_document import (
+    InventoryCountAdjustmentDocumentPolicy,
+)
+from src.modules.inventory.domain.stock_document.value_object.inventory_count_line_binding import (
+    InventoryCountDocumentLineBindingVO,
+)
+from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
+from src.modules.inventory.domain.stock_position.counting_snapshot import (
+    StockPositionCountingSnapshot,
+)
+from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
+
 from src.modules.inventory.domain.policy.stock_transfer_document_source import (
     StockTransferDocumentSourcePolicy,
 )
@@ -72,6 +106,9 @@ from src.modules.inventory.domain.stock_document.entity.stock_document_line impo
     StockDocumentLine,
 )
 from src.modules.inventory.domain.stock_document.error import (
+    InventoryCountAdjustmentMismatchError,
+    StockAdjustmentDocumentImmutableError,
+    StockDocumentExecutionNotAllowedError,
     InvalidStockDocumentLineError,
     InvalidStockDocumentValueError,
     StockDocumentLineConflictError,
@@ -161,6 +198,58 @@ class StockDocument:
             lines=(),
             created_at=created_at,
             updated_at=created_at,
+            version=0,
+        )
+
+    @classmethod
+    def create_from_inventory_count_result(
+        cls,
+        *,
+        identifier: StockDocumentIdVO,
+        inventory_count: InventoryCountAdjustmentSourceSnapshot,
+        result: InventoryCountResultSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        line_bindings: tuple[InventoryCountDocumentLineBindingVO, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        positions: tuple[StockPositionCountingSnapshot, ...],
+        created_at: datetime,
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+    ) -> Self | None:
+        """Создаёт неизменяемый план всех ненулевых расхождений; при полном совпадении возвращает None после проверки основания."""
+        if not isinstance(identifier, StockDocumentIdVO):
+            raise InvalidStockDocumentValueError("Нужен ID документа корректировки.")
+        normalized = cls._normalize_time(created_at)
+        lines = InventoryCountAdjustmentDocumentPolicy.build_lines(
+            inventory_count=inventory_count,
+            result=result,
+            baseline=baseline,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            line_bindings=line_bindings,
+            locations=locations,
+            positions=positions,
+            as_of=normalized,
+            lots=lots,
+            serials=serials,
+        )
+        if not lines:
+            return None
+        return cls.restore(
+            identifier=identifier,
+            operation_type=StockOperationType.ADJUSTMENT,
+            warehouse_id=result.warehouse_id,
+            owner_id=result.owner_id,
+            source=DocumentSourceVO(
+                InventoryCountAdjustmentDocumentPolicy.SOURCE_SYSTEM,
+                str(result.id.uuid),
+            ),
+            status=StockDocumentStatus.DRAFT,
+            lines=lines,
+            created_at=normalized,
+            updated_at=normalized,
             version=0,
         )
 
@@ -335,6 +424,7 @@ class StockDocument:
     ) -> Self:
         """Добавляет проверенную плановую строку только в черновик без скрытого объединения товаров."""
         self._ensure_draft()
+        self._ensure_editable_lines()
         if not isinstance(line, StockDocumentLine):
             raise InvalidStockDocumentLineError(
                 "Добавлять можно только StockDocumentLine."
@@ -353,6 +443,7 @@ class StockDocument:
     ) -> Self:
         """Меняет количество строки черновика, сохраняя её ID, товар, исторический SKU и базовую единицу."""
         self._ensure_draft()
+        self._ensure_editable_lines()
         original = self._find_line(identifier)
         conversion = QuantityConversionSnapshotVO.create(
             quantity=quantity, uom=uom, base_uom=original.base_uom
@@ -366,6 +457,7 @@ class StockDocument:
             conversion=conversion,
             executed_qty=original.executed_qty,
             source=original.source,
+            adjustment=original.adjustment,
         )
         changed.ensure_compatible(inventory_item)
         return self._with_changes(
@@ -380,6 +472,7 @@ class StockDocument:
     ) -> Self:
         """Удаляет существующую строку черновика, допуская снова пустой план."""
         self._ensure_draft()
+        self._ensure_editable_lines()
         self._find_line(identifier)
         return self._with_changes(
             updated_at=updated_at,
@@ -408,6 +501,10 @@ class StockDocument:
     ) -> Self:
         """Фиксирует непустой совместимый план без проведения, резервирования и изменения остатков."""
         self._ensure_draft()
+        if self.operation_type is StockOperationType.ADJUSTMENT:
+            raise InventoryCountAdjustmentMismatchError(
+                "Корректировку подтверждает confirm_inventory_count_adjustment с полным актуальным основанием."
+            )
         StockDocumentConfirmationPolicy.ensure_confirmable(
             warehouse_id=self.warehouse_id,
             warehouse=warehouse,
@@ -446,6 +543,51 @@ class StockDocument:
             balance=receipt_balance,
             warehouses=receipt_warehouses,
             as_of=normalized,
+        )
+        return self._with_changes(
+            updated_at=normalized, status=StockDocumentStatus.CONFIRMED
+        )
+
+    def confirm_inventory_count_adjustment(
+        self,
+        *,
+        inventory_count: InventoryCountAdjustmentSourceSnapshot,
+        result: InventoryCountResultSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        positions: tuple[StockPositionCountingSnapshot, ...],
+        updated_at: datetime,
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+    ) -> Self:
+        """Подтверждает производную корректировку только после повторной проверки зарегистрированного результата и всего основания."""
+        self._ensure_draft()
+        if self.operation_type is not StockOperationType.ADJUSTMENT:
+            raise InventoryCountAdjustmentMismatchError("Нужен документ ADJUSTMENT.")
+        StockDocumentConfirmationPolicy.ensure_confirmable(
+            warehouse_id=self.warehouse_id,
+            warehouse=warehouse,
+            lines=self.lines,
+            inventory_items=inventory_items,
+        )
+        normalized = self._normalize_time(updated_at)
+        InventoryCountAdjustmentDocumentPolicy.ensure_confirmable(
+            source=self.source,
+            warehouse_id=self.warehouse_id,
+            owner_id=self.owner_id,
+            lines=self.lines,
+            inventory_count=inventory_count,
+            result=result,
+            baseline=baseline,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            locations=locations,
+            positions=positions,
+            as_of=normalized,
+            lots=lots,
+            serials=serials,
         )
         return self._with_changes(
             updated_at=normalized, status=StockDocumentStatus.CONFIRMED
@@ -564,9 +706,56 @@ class StockDocument:
             ),
         )
 
+    def adjustment_execution_snapshot(self) -> StockDocumentAdjustmentExecutionSnapshot:
+        """Передаёт только подтверждённую неисполненную корректировку без потери измерений и источников."""
+        self._validate()
+        if self.operation_type is not StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError("Нужен документ ADJUSTMENT.")
+        snapshot = StockDocumentAdjustmentExecutionSnapshot(
+            self.id,
+            self.version,
+            self.warehouse_id,
+            self.owner_id,
+            self.status,
+            self.updated_at,
+            self.source,
+            tuple(
+                StockDocumentAdjustmentLineSnapshot(
+                    line.id, line.sku, line.base_uom, line.adjustment, line.source
+                )
+                for line in self.lines
+            ),
+        )
+        snapshot.ensure_valid()
+        return snapshot
+
+    def register_adjustment_execution(
+        self, execution: StockAdjustmentExecutionSnapshot, *, updated_at: datetime
+    ) -> Self:
+        """Регистрирует полное совпадающее исполнение и завершает документ без изменения других агрегатов."""
+        StockAdjustmentExecutionPolicy.ensure_document(
+            execution=execution, document=self.adjustment_execution_snapshot()
+        )
+        normalized = self._normalize_time(updated_at)
+        if normalized < execution.executed_at:
+            raise StockAdjustmentError(
+                "Регистрация не может предшествовать исполнению корректировки."
+            )
+        return self._with_changes(
+            updated_at=normalized,
+            status=StockDocumentStatus.COMPLETED,
+            lines=tuple(
+                replace(line, executed_qty=line.planned_qty) for line in self.lines
+            ),
+        )
+
     def execution_snapshot(self) -> StockDocumentExecutionSnapshot:
         """Возвращает текущую версию и остатки каждой плановой строки без коллекции исполнений."""
         self._validate()
+        if self.operation_type is StockOperationType.ADJUSTMENT:
+            raise StockDocumentExecutionNotAllowedError(
+                "Для ADJUSTMENT нужен специализированный adjustment_execution_snapshot."
+            )
         return StockDocumentExecutionSnapshot(
             self.id,
             self.operation_type,
@@ -643,6 +832,13 @@ class StockDocument:
                 "Редактирование строк и подтверждение доступны только черновику."
             )
 
+    def _ensure_editable_lines(self) -> None:
+        """Запрещает изменять состав производной корректировки даже в черновике."""
+        if self.operation_type is StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentDocumentImmutableError(
+                "Строки ADJUSTMENT определяются результатом инвентаризации."
+            )
+
     def _find_line(self, identifier: StockDocumentLineIdVO) -> StockDocumentLine:
         """Находит строку данного документа без доступа к отдельному хранилищу Entity."""
         if not isinstance(identifier, StockDocumentLineIdVO):
@@ -701,6 +897,13 @@ class StockDocument:
         StockTransferDocumentSourcePolicy.ensure_document_source(
             operation_type=self.operation_type,
             source=self.source,
+            lines=self.lines,
+        )
+        InventoryCountAdjustmentDocumentPolicy.ensure_document_source(
+            operation_type=self.operation_type,
+            source=self.source,
+            owner_id=self.owner_id,
+            status=self.status,
             lines=self.lines,
         )
         StockDocumentProgressPolicy.ensure_valid(

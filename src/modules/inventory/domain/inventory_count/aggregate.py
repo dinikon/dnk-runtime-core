@@ -2,6 +2,9 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Self
 
+from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
+    InventoryCountAdjustmentSourceSnapshot,
+)
 from src.modules.inventory.domain.inventory_count.result_snapshot import (
     InventoryCountResultSnapshot,
 )
@@ -203,6 +206,23 @@ class InventoryCount:
             self.updated_at,
             self.version,
         )
+
+    def adjustment_source_snapshot(self) -> InventoryCountAdjustmentSourceSnapshot:
+        """Передаёт зарегистрированное основание и результат для производного документа корректировки."""
+        self._validate()
+        snapshot = InventoryCountAdjustmentSourceSnapshot(
+            self.id,
+            self.warehouse_id,
+            self.owner_id,
+            self.scope,
+            self.status,
+            self.baseline,
+            self.result,
+            self.updated_at,
+            self.version,
+        )
+        snapshot.ensure_valid()
+        return snapshot
 
     def start(
         self,

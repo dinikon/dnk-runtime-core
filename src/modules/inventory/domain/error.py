@@ -5,6 +5,10 @@ class InventoryError(DomainError):
     """Базовая ошибка складского контекста."""
 
 
+class StockAdjustmentError(InventoryError):
+    """Отклоняет некорректное основание, исполнение или применение физической корректировки."""
+
+
 class InvalidUomCodeError(InventoryError):
     """Сообщает о недопустимом коде единицы учёта."""
 

@@ -5,6 +5,18 @@ class StockDocumentError(InventoryError):
     """Базовая ошибка планового складского документа."""
 
 
+class InvalidStockAdjustmentLineError(StockDocumentError):
+    """Отклоняет неверные измерения, основание или нулевую дельту корректировки."""
+
+
+class InventoryCountAdjustmentMismatchError(StockDocumentError):
+    """Отклоняет несоответствие документа зарегистрированному результату инвентаризации."""
+
+
+class StockAdjustmentDocumentImmutableError(StockDocumentError):
+    """Запрещает ручное редактирование строк документа, производного от результата пересчёта."""
+
+
 class InvalidStockDocumentValueError(StockDocumentError):
     """Сообщает о некорректном собственном составе документа."""
 

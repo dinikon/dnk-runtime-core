@@ -2,6 +2,44 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
+from src.modules.inventory.domain.error import StockAdjustmentError
+from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
+    InventoryCountAdjustmentSourceSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.baseline_snapshot import (
+    InventoryCountBaselineSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.result_snapshot import (
+    InventoryCountResultSnapshot,
+)
+from src.modules.inventory.domain.inventory_item.document_snapshot import (
+    InventoryItemDocumentSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_execution import (
+    StockAdjustmentExecutionPolicy,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_posting import (
+    StockAdjustmentPostingPolicy,
+)
+from src.modules.inventory.domain.stock_document.adjustment_execution_snapshot import (
+    StockDocumentAdjustmentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.adjustment_snapshot import (
+    StockAdjustmentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_position.counting_snapshot import (
+    StockPositionCountingSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.adjustment_entry_snapshot import (
+    StockAdjustmentEntrySnapshot,
+)
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
+from src.modules.inventory.domain.stock_serial.presence_snapshot import (
+    StockSerialPresenceSnapshot,
+)
+from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
+from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
+
 from src.modules.inventory.domain.policy.stock_execution_posting import (
     StockExecutionPostingPolicy,
 )
@@ -69,6 +107,10 @@ class StockPosting:
         locations: tuple[StockLocationSnapshot, ...] = (),
     ) -> Self:
         """Создаёт завершённое обычное проведение по снимкам позиций и системному пересчёту."""
+        if operation_type is StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError(
+                "Корректировка проводится только из полного факта с повторной проверкой основания."
+            )
         posting = cls.restore(
             identifier=identifier,
             source=source,
@@ -125,6 +167,59 @@ class StockPosting:
         )
 
     @classmethod
+    def create_from_adjustment_execution(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        execution: StockAdjustmentExecutionSnapshot,
+        document: StockDocumentAdjustmentExecutionSnapshot,
+        posted_at: datetime,
+        inventory_count: InventoryCountAdjustmentSourceSnapshot,
+        result: InventoryCountResultSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        positions: tuple[StockPositionCountingSnapshot, ...],
+        found_positions: tuple[StockPositionCountingSnapshot, ...],
+        entry_bindings: tuple[StockPostingEntryBindingVO, ...],
+        presence: tuple[StockSerialPresenceSnapshot, ...],
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+    ) -> Self:
+        """Строит полный Ledger корректировки по заново проверенному исходному запасу и новым нулевым FOUND-позициям."""
+        normalized = StockPostingPolicy.normalize_time(posted_at)
+        StockAdjustmentExecutionPolicy.ensure_current(
+            execution=execution,
+            document=document,
+            inventory_count=inventory_count,
+            result=result,
+            baseline=baseline,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            locations=locations,
+            positions=positions,
+            as_of=normalized,
+            presence=presence,
+            lots=lots,
+            serials=serials,
+        )
+        entries = StockAdjustmentPostingPolicy.build_entries(
+            execution=execution,
+            positions=positions,
+            found_positions=found_positions,
+            entry_bindings=entry_bindings,
+        )
+        return cls.restore(
+            identifier=identifier,
+            source=PostingSourceVO(execution.id),
+            operation_type=StockOperationType.ADJUSTMENT,
+            posted_at=normalized,
+            entries=entries,
+            reversal_of_id=None,
+        )
+
+    @classmethod
     def restore(
         cls,
         *,
@@ -163,6 +258,10 @@ class StockPosting:
         if not isinstance(original, StockPostingSnapshot):
             raise InvalidStockPostingSnapshotError("Нужен снимок исходного проведения.")
         original.ensure_valid()
+        if original.operation_type is StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError(
+                "Сторно корректировки требует отдельного сценария с новым основанием."
+            )
         normalized = StockPostingPolicy.normalize_time(posted_at)
         if (
             not isinstance(identifier, StockPostingIdVO)
@@ -207,6 +306,14 @@ class StockPosting:
         )
         posting._ensure_context(positions=positions, locations=locations)
         return posting
+
+    def adjustment_entries(
+        self, execution: StockAdjustmentExecutionSnapshot
+    ) -> tuple[StockAdjustmentEntrySnapshot, ...]:
+        """Выдаёт адресные снимки для физических позиций после полного сопоставления Ledger с фактом."""
+        return StockAdjustmentPostingPolicy.application_snapshots(
+            posting=self.snapshot(), execution=execution
+        )
 
     def snapshot(self) -> StockPostingSnapshot:
         """Возвращает проверенный состав для будущей компенсации без чужих агрегатов."""

@@ -1,6 +1,46 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Self
+
+from src.modules.inventory.domain.error import StockAdjustmentError
+from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
+    InventoryCountAdjustmentSourceSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.baseline_snapshot import (
+    InventoryCountBaselineSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.result_snapshot import (
+    InventoryCountResultSnapshot,
+)
+from src.modules.inventory.domain.inventory_item.document_snapshot import (
+    InventoryItemDocumentSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_execution import (
+    StockAdjustmentExecutionPolicy,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_routes import (
+    StockAdjustmentRoutesPolicy,
+)
+from src.modules.inventory.domain.stock_document.adjustment_execution_snapshot import (
+    StockDocumentAdjustmentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.adjustment_snapshot import (
+    StockAdjustmentExecutionSnapshot,
+    StockAdjustmentExecutionLineSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.value_object.adjustment_line_binding import (
+    StockAdjustmentExecutionLineBindingVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.adjustment_route import (
+    StockAdjustmentExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_position.counting_snapshot import (
+    StockPositionCountingSnapshot,
+)
+from src.modules.inventory.domain.stock_serial.presence_snapshot import (
+    StockSerialPresenceSnapshot,
+)
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
 from src.modules.inventory.domain.stock_execution.transfer_document_snapshot import (
     StockExecutionTransferDocumentSnapshot,
     StockExecutionTransferDocumentLineSnapshot,
@@ -146,6 +186,59 @@ class StockExecution:
         return execution
 
     @classmethod
+    def create_from_inventory_count_adjustment(
+        cls,
+        *,
+        identifier: StockExecutionIdVO,
+        document: StockDocumentAdjustmentExecutionSnapshot,
+        bindings: tuple[StockAdjustmentExecutionLineBindingVO, ...],
+        executed_at: datetime,
+        inventory_count: InventoryCountAdjustmentSourceSnapshot,
+        result: InventoryCountResultSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        positions: tuple[StockPositionCountingSnapshot, ...],
+        presence: tuple[StockSerialPresenceSnapshot, ...],
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+    ) -> Self:
+        """Фиксирует все поправки целиком после проверки зарегистрированного результата, полного основания и SERIAL."""
+        normalized = cls._normalize_time(executed_at)
+        snapshot = StockAdjustmentExecutionPolicy.build_snapshot(
+            identifier=identifier,
+            document=document,
+            bindings=bindings,
+            executed_at=normalized,
+        )
+        StockAdjustmentExecutionPolicy.ensure_current(
+            execution=snapshot,
+            document=document,
+            inventory_count=inventory_count,
+            result=result,
+            baseline=baseline,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            locations=locations,
+            positions=positions,
+            as_of=normalized,
+            presence=presence,
+            lots=lots,
+            serials=serials,
+        )
+        return cls.restore(
+            identifier=snapshot.id,
+            document_id=snapshot.document_id,
+            document_version=snapshot.document_version,
+            operation_type=StockOperationType.ADJUSTMENT,
+            warehouse_id=snapshot.warehouse_id,
+            owner_id=snapshot.owner_id,
+            executed_at=snapshot.executed_at,
+            lines=tuple(row.as_line() for row in snapshot.lines),
+        )
+
+    @classmethod
     def restore(
         cls,
         *,
@@ -234,6 +327,7 @@ class StockExecution:
     def shipment_snapshot(self) -> StockExecutionShipmentSnapshot:
         """Передаёт проверенные фактические строки с ID/версией документа для автоматического назначения Shipment."""
         self._validate()
+        self._ensure_ordinary_projection()
         return StockExecutionShipmentSnapshot(
             self.id,
             self.document_id,
@@ -257,6 +351,7 @@ class StockExecution:
     def reservation_snapshot(self) -> StockExecutionReservationSnapshot:
         """Возвращает проверенные базовые строки, область и время без передачи Entity погашению резервов."""
         self._validate()
+        self._ensure_ordinary_projection()
         return StockExecutionReservationSnapshot(
             self.id,
             self.operation_type,
@@ -274,6 +369,7 @@ class StockExecution:
     def posting_snapshot(self) -> StockExecutionPostingSnapshot:
         """Возвращает проверенные физические маршруты и исходные пересчёты без группировки по плану."""
         self._validate()
+        self._ensure_ordinary_projection()
         return StockExecutionPostingSnapshot(
             self.id,
             self.operation_type,
@@ -296,6 +392,7 @@ class StockExecution:
     def snapshot_for_document(self) -> StockExecutionDocumentSnapshot:
         """Суммирует положительные количества по плановым строкам, считая перемещение один раз."""
         self._validate()
+        self._ensure_ordinary_projection()
         grouped = {}
         for line in self.lines:
             previous = grouped.get(line.document_line_id)
@@ -317,6 +414,35 @@ class StockExecution:
             self.executed_at,
             tuple(grouped.values()),
         )
+
+    def adjustment_snapshot(self) -> StockAdjustmentExecutionSnapshot:
+        """Передаёт полный проверенный факт корректировки с целями и позициями для Ledger и документа."""
+        self._validate()
+        if self.operation_type is not StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError("Нужен факт ADJUSTMENT.")
+        snapshot = StockAdjustmentExecutionSnapshot(
+            self.id,
+            self.document_id,
+            self.document_version,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockAdjustmentExecutionLineSnapshot(
+                    line.id, line.document_line_id, line.base_uom, line.route
+                )
+                for line in self.lines
+            ),
+        )
+        snapshot.ensure_valid()
+        return snapshot
+
+    def _ensure_ordinary_projection(self) -> None:
+        """Закрывает упрощённые снимки, теряющие знаки корректировки, и погашение резервов этим видом операции."""
+        if self.operation_type is StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError(
+                "Для ADJUSTMENT нужен adjustment_snapshot; обычные проекции не поддерживаются."
+            )
 
     def _validate(self) -> None:
         """Проверяет собственный состав, вид маршрута, владельца и уникальность фактических экземпляров."""
@@ -343,6 +469,7 @@ class StockExecution:
             StockOperationType.RECEIPT: ReceiptExecutionRouteVO,
             StockOperationType.ISSUE: IssueExecutionRouteVO,
             StockOperationType.INTERNAL_MOVE: InternalMoveExecutionRouteVO,
+            StockOperationType.ADJUSTMENT: StockAdjustmentExecutionRouteVO,
         }.get(self.operation_type)
         ids, serials = set(), set()
         planned_items = {}
@@ -362,9 +489,9 @@ class StockExecution:
                     "Маршрут не соответствует виду операции."
                 )
             identity = (line.inventory_item_id, line.base_uom)
-            if (
-                line.document_line_id in planned_items
-                and planned_items[line.document_line_id] != identity
+            if line.document_line_id in planned_items and (
+                self.operation_type is StockOperationType.ADJUSTMENT
+                or planned_items[line.document_line_id] != identity
             ):
                 raise InvalidStockExecutionContextError(
                     "Одна плановая строка не может исполняться разными товарами или базовыми единицами."
@@ -378,11 +505,18 @@ class StockExecution:
                     )
                 if dimensions.serial_id is not None:
                     line_serials.add(dimensions.serial_id)
-            if serials.intersection(line_serials):
+            if (
+                self.operation_type is not StockOperationType.ADJUSTMENT
+                and serials.intersection(line_serials)
+            ):
                 raise DuplicateStockExecutionSerialError(
                     "Один серийный экземпляр нельзя повторять в разных фактических строках."
                 )
             serials.update(line_serials)
+        if self.operation_type is StockOperationType.ADJUSTMENT:
+            StockAdjustmentRoutesPolicy.ensure_valid(
+                tuple(line.route for line in self.lines)
+            )
 
     @staticmethod
     def _normalize_time(value: datetime) -> datetime:

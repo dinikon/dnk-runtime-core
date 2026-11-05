@@ -2,6 +2,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.policy.stock_adjustment_line import (
+    StockAdjustmentLinePolicy,
+)
+from src.modules.inventory.domain.stock_document.value_object.adjustment_line import (
+    StockAdjustmentLineVO,
+)
+
 from src.modules.inventory.domain.error import (
     IncompatibleUomError,
     QuantityConversionMismatchError,
@@ -41,7 +48,7 @@ from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 
 @dataclass(frozen=True, slots=True)
 class StockDocumentLine:
-    """Неизменяемая плановая строка, принадлежащая документу без физических измерений и дельт."""
+    """Неизменяемая плановая строка с отдельным физическим основанием только для корректировки."""
 
     id: StockDocumentLineIdVO
     inventory_item_id: InventoryItemIdVO
@@ -51,6 +58,41 @@ class StockDocumentLine:
     conversion: QuantityConversionSnapshotVO
     executed_qty: QuantityVO
     source: DocumentLineSourceVO | None
+    adjustment: StockAdjustmentLineVO | None
+
+    @classmethod
+    def create_adjustment(
+        cls,
+        *,
+        identifier: StockDocumentLineIdVO,
+        inventory_item: InventoryItemDocumentSnapshot,
+        adjustment: StockAdjustmentLineVO,
+        source: DocumentLineSourceVO,
+    ) -> Self:
+        """Фиксирует модуль точной дельты в базовой единице, проверяя шаг только целевого остатка."""
+        if not isinstance(
+            inventory_item, InventoryItemDocumentSnapshot
+        ) or not isinstance(adjustment, StockAdjustmentLineVO):
+            raise InvalidStockDocumentLineError(
+                "Нужны снимок товара и основание корректировки."
+            )
+        inventory_item.ensure_valid()
+        quantity = QuantityVO(adjustment.quantity_delta.value.copy_abs())
+        line = cls.restore(
+            identifier=identifier,
+            inventory_item_id=inventory_item.inventory_item_id,
+            sku=inventory_item.sku,
+            base_uom=inventory_item.base_uom,
+            planned_qty=quantity,
+            conversion=QuantityConversionSnapshotVO(
+                quantity, inventory_item.base_uom, Decimal(1)
+            ),
+            executed_qty=QuantityVO(Decimal(0)),
+            source=source,
+            adjustment=adjustment,
+        )
+        line.ensure_compatible(inventory_item)
+        return line
 
     @classmethod
     def create(
@@ -80,6 +122,7 @@ class StockDocumentLine:
             conversion=conversion,
             executed_qty=QuantityVO(Decimal(0)),
             source=source,
+            adjustment=None,
         )
         line.ensure_compatible(inventory_item)
         return line
@@ -96,6 +139,7 @@ class StockDocumentLine:
         conversion: QuantityConversionSnapshotVO,
         executed_qty: QuantityVO,
         source: DocumentLineSourceVO | None,
+        adjustment: StockAdjustmentLineVO | None,
     ) -> Self:
         """Восстанавливает собственный исторический состав без текущих правил или смены SKU."""
         line = cls(
@@ -107,6 +151,7 @@ class StockDocumentLine:
             conversion,
             executed_qty,
             source,
+            adjustment,
         )
         line.ensure_valid()
         return line
@@ -142,6 +187,24 @@ class StockDocumentLine:
             raise QuantityConversionMismatchError(
                 "Плановое количество не равно сохранённому пересчёту."
             )
+        if self.adjustment is not None:
+            if (
+                not isinstance(self.adjustment, StockAdjustmentLineVO)
+                or self.inventory_item_id
+                != self.adjustment.dimensions.inventory_item_id
+                or self.planned_qty.value
+                != self.adjustment.quantity_delta.value.copy_abs()
+                or self.conversion.uom != self.base_uom
+                or self.conversion.factor_to_base != Decimal(1)
+                or self.executed_qty.value not in (Decimal(0), self.planned_qty.value)
+                or (
+                    self.adjustment.dimensions.serial_id is not None
+                    and self.base_uom != UomCodeVO("PCS")
+                )
+            ):
+                raise InvalidStockDocumentLineError(
+                    "Корректировка требует точную дельту в базовой единице, нулевое или полное исполнение и PCS для SERIAL."
+                )
 
     @property
     def remaining_qty(self) -> QuantityVO:
@@ -152,6 +215,14 @@ class StockDocumentLine:
     def ensure_compatible(self, inventory_item: InventoryItemDocumentSnapshot) -> None:
         """Проверяет собственный состав и актуальную совместимость с настройками товара."""
         self.ensure_valid()
+        if self.adjustment is not None:
+            StockAdjustmentLinePolicy.ensure_compatible(
+                inventory_item_id=self.inventory_item_id,
+                base_uom=self.base_uom,
+                adjustment=self.adjustment,
+                inventory_item=inventory_item,
+            )
+            return
         StockDocumentLinePolicy.ensure_compatible(
             inventory_item_id=self.inventory_item_id,
             base_uom=self.base_uom,
