@@ -17,6 +17,10 @@ class InvalidStockPositionAvailabilitySnapshotError(StockPositionError):
     """Сообщает о некорректном снимке физического количества для расчёта доступности."""
 
 
+class InvalidStockPositionCountingSnapshotError(StockPositionError):
+    """Отклоняет неверный снимок физического количества и версии для инвентаризации."""
+
+
 class InvalidStockDimensionsError(StockPositionError):
     """Сообщает о неверных типах учётных измерений."""
 

@@ -1,3 +1,19 @@
+from src.modules.inventory.domain.policy.stock_transfer_document_execution import (
+    StockTransferDocumentExecutionPolicy,
+)
+from src.modules.inventory.domain.stock_document.error import (
+    InvalidStockDocumentTransferReceiptSnapshotError,
+    StockDocumentExecutionNotAllowedError,
+)
+from src.modules.inventory.domain.stock_document.transfer_receipt_snapshot import (
+    StockDocumentTransferReceiptSnapshot,
+)
+from src.modules.inventory.domain.stock_document.value_object.status import (
+    StockDocumentStatus,
+)
+from src.modules.inventory.domain.stock_execution.transfer_document_snapshot import (
+    StockExecutionTransferDocumentSnapshot,
+)
 from src.modules.inventory.domain.policy.stock_transfer_execution_grouping import (
     StockTransferExecutionGroupingPolicy,
 )
@@ -60,6 +76,125 @@ from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
 
 class StockTransferReceiptPolicy:
     """Согласует расход из транзита и приход на конечный склад без изменения запасов или других корней."""
+
+    @staticmethod
+    def build_receipt_from_documents(
+        *,
+        transfer: StockTransferReceiptPlanSnapshot,
+        balance: StockTransferTransitBalanceSnapshot,
+        issue_document: StockDocumentTransferReceiptSnapshot,
+        receipt_document: StockDocumentTransferReceiptSnapshot,
+        issue: StockExecutionTransferDocumentSnapshot,
+        receipt: StockExecutionTransferDocumentSnapshot,
+        transit_warehouse: WarehouseSnapshot,
+        destination_warehouse: WarehouseSnapshot,
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> StockTransferReceiptSnapshot:
+        """Выводит все назначения T → B из оснований документов и проверяет документные лимиты и актуальный состав транзита."""
+        if not isinstance(transfer, StockTransferReceiptPlanSnapshot):
+            raise InvalidStockTransferReceiptPlanSnapshotError(
+                "Нужен полный текущий снимок плана приёмки StockTransfer."
+            )
+        transfer.ensure_valid()
+        if transfer.status is not StockTransferStatus.IN_PROGRESS:
+            raise StockTransferStatusError(
+                "Автоматическая приёмка доступна только исполняемому перемещению."
+            )
+        StockTransferTransitBalancePolicy.ensure_compatible(
+            transfer=transfer, balance=balance
+        )
+        plan = {line.id: line for line in transfer.lines}
+        for document in (issue_document, receipt_document):
+            if not isinstance(document, StockDocumentTransferReceiptSnapshot):
+                raise InvalidStockDocumentTransferReceiptSnapshotError(
+                    "Нужны снимки оснований обоих документов приёмки."
+                )
+            document.ensure_valid()
+            if document.status not in (
+                StockDocumentStatus.CONFIRMED,
+                StockDocumentStatus.PARTIALLY_EXECUTED,
+            ):
+                raise StockDocumentExecutionNotAllowedError(
+                    "Приёмка требует подтверждённые или частично исполненные документы."
+                )
+            if (
+                document.transfer_id != transfer.id
+                or document.owner_id != transfer.owner_id
+            ):
+                raise StockTransferReceiptMismatchError(
+                    "Основание и владелец каждого документа должны соответствовать перемещению."
+                )
+            for row in document.lines:
+                target = plan.get(row.transfer_line_id)
+                if (
+                    target is None
+                    or target.inventory_item_id != row.inventory_item_id
+                    or target.base_uom != row.base_uom
+                ):
+                    raise StockTransferReceiptMismatchError(
+                        "Все строки документа должны соответствовать строкам, товарам и единицам текущего перемещения."
+                    )
+        if (
+            issue_document.id == receipt_document.id
+            or issue_document.operation_type is not StockOperationType.ISSUE
+            or receipt_document.operation_type is not StockOperationType.RECEIPT
+        ):
+            raise StockTransferReceiptMismatchError(
+                "Нужны разные документы расхода T и прихода B в соответствующих ролях."
+            )
+        if (
+            issue_document.source_transfer_version
+            != receipt_document.source_transfer_version
+            or issue_document.source_transfer_version > transfer.version
+        ):
+            raise StockTransferVersionConflictError(
+                "Исторические версии основания обеих сторон должны совпадать и не превышать текущую версию StockTransfer."
+            )
+        if {line.document_line_id for line in issue_document.lines}.intersection(
+            line.document_line_id for line in receipt_document.lines
+        ):
+            raise StockTransferReceiptMismatchError(
+                "Плановые ID строк обеих сторон должны различаться."
+            )
+        outgoing = {
+            row.transfer_line_id: (
+                row.inventory_item_id,
+                row.base_uom,
+                row.planned_qty,
+                row.executed_qty,
+            )
+            for row in issue_document.lines
+        }
+        incoming = {
+            row.transfer_line_id: (
+                row.inventory_item_id,
+                row.base_uom,
+                row.planned_qty,
+                row.executed_qty,
+            )
+            for row in receipt_document.lines
+        }
+        if outgoing != incoming:
+            raise StockTransferReceiptMismatchError(
+                "Планы и накопленное исполнение пары должны совпадать по каждой строке перемещения."
+            )
+        issue_bindings = StockTransferDocumentExecutionPolicy.build_bindings(
+            document=issue_document, execution=issue
+        )
+        receipt_bindings = StockTransferDocumentExecutionPolicy.build_bindings(
+            document=receipt_document, execution=receipt
+        )
+        return StockTransferReceiptPolicy.build_receipt(
+            transfer=transfer,
+            balance=balance,
+            issue=issue.transfer_snapshot(),
+            receipt=receipt.transfer_snapshot(),
+            destination_warehouse=destination_warehouse,
+            transit_warehouse=transit_warehouse,
+            locations=locations,
+            issue_bindings=issue_bindings,
+            receipt_bindings=receipt_bindings,
+        )
 
     @staticmethod
     def build_receipt(

@@ -5,6 +5,9 @@ from typing import Self
 from src.modules.inventory.domain.stock_position.availability_snapshot import (
     StockPositionAvailabilitySnapshot,
 )
+from src.modules.inventory.domain.stock_position.counting_snapshot import (
+    StockPositionCountingSnapshot,
+)
 
 from src.modules.inventory.domain.inventory_item.stock_snapshot import (
     InventoryItemStockSnapshot,
@@ -106,6 +109,13 @@ class StockPosition:
         """Возвращает проверенные неизменяемые атрибуты без остатка и версии."""
         self._validate()
         return StockPositionSnapshot(self.id, self.dimensions, self.base_uom)
+
+    def counting_snapshot(self) -> StockPositionCountingSnapshot:
+        """Возвращает проверенные физическое количество и версию для учётного основания инвентаризации."""
+        self._validate()
+        return StockPositionCountingSnapshot(
+            self.id, self.dimensions, self.base_uom, self.on_hand_qty, self.version
+        )
 
     def apply_posting_entry(
         self,

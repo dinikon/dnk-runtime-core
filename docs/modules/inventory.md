@@ -2,11 +2,12 @@
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
 `PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`,
-`StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool`, `StockReservation`, `Shipment` и `StockTransfer`
+`StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool`, `StockReservation`, `Shipment`, `StockTransfer`, `InventoryCount` и `CountSheet`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
 `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`,
 `domain/stock_posting/`, `domain/stock_document/`, `domain/stock_execution/`,
-`domain/availability_pool/`, `domain/stock_reservation/`, `domain/shipment/` и `domain/stock_transfer/`.
+`domain/availability_pool/`, `domain/stock_reservation/`, `domain/shipment/`, `domain/stock_transfer/`
+`domain/inventory_count/` и `domain/count_sheet/`. Текущий состав — 16 самостоятельных корней из 23 целевых.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -3354,14 +3355,490 @@ StockTransfer. Проведения сторон имеют общий posted_at
 не доказывают сохранение истории или наличие нужной конкретной партии; физический
 остаток проверяет StockPosition. Будущий Application/UoW атомарно сохраняет обе
 стороны, прогресс документов/перемещения, Ledger, позиции, доступность и Outbox.
-Автоматическая регистрация приёмки по основаниям, SQL/API и глобальная идемпотентность
-остаются следующим срезам. Реализованных AR — 14, целевой состав — 23.
+Автоматическая регистрация приёмки по основаниям реализована ниже; SQL/API и глобальная
+идемпотентность остаются следующим срезам. Реализованных AR — 14, целевой состав — 23.
 
 Ошибки среза: InvalidStockTransferReceiptDocumentLineBindingError,
 InvalidStockDocumentTransferReceiptSnapshotError, StockDocumentTransferReceiptMismatchError,
 StockDocumentTransferReceiptQuantityExceededError, UnbalancedStockTransferReceiptDocumentsError.
 Свежесть основания использует StaleStockTransferDocumentSourceError; баланс, время,
 статусы, единицы и текущие правила количества — прежние ошибки соответствующих контекстов.
+
+## Автоматическая регистрация приёмки по документам T → B
+
+StockTransferReceiptPolicy.build_receipt_from_documents() строит прежний
+StockTransferReceiptSnapshot без ручных issue_bindings/receipt_bindings. Применяется
+через существующий register_receipt(). Новых агрегатов, Entity, VO, хранимых полей
+или снимков нет: используются уже существующие контракты документов и фактов.
+
+Входы: полный текущий StockTransferReceiptPlanSnapshot, актуальный
+StockTransferTransitBalanceSnapshot, два StockDocumentTransferReceiptSnapshot,
+два StockExecutionTransferDocumentSnapshot, WarehouseSnapshot T/B и ровно участвующие
+StockLocationSnapshot. Исходный A не передаётся и может быть неактивным.
+
+Требуются IN_PROGRESS и согласованный баланс той же текущей версии перемещения.
+Документы — разные ISSUE T / RECEIPT B этапа приёмки, CONFIRMED/PARTIALLY_EXECUTED,
+того же StockTransfer и владельца. Планы и накопленное исполнение совпадают
+по каждой TransferLine. Плановые ID строк обеих сторон различаются. Все строки,
+включая неисполняемые данным фактом, проверяются относительно полного текущего
+плана перемещения: принадлежность TransferLine, товар и единица. Уже принятые
+строки остаются известными при продолжении других строк того же документа.
+
+Общая StockTransferDocumentExecutionPolicy.build_bindings() обслуживает отправку
+и приёмку. Она принимает только специализированный снимок документа соответствующего
+семейства и StockExecutionTransferDocumentSnapshot, явно валидирует типы и значения,
+находит document_line по каждому факту и выводит transfer_line из основания.
+Пропуски фактических строк запрещены. Несколько фактов одной документной строки
+допустимы, точно суммируются и проверяются StockExecutionDocumentPolicy относительно
+ID/текущей версии документа, операции, склада, владельца, времени и остатка
+planned_qty − executed_qty. Физические правила этапов остаются в отдельных политиках.
+
+Версии имеют разные роли:
+
+```text
+execution.document_version == текущая версия своего документа
+issue_document.source_transfer_version == receipt_document.source_transfer_version
+source_transfer_version <= текущая transfer.version
+balance.transfer_version == текущая transfer.version
+```
+
+Историческое основание документов не обновляется после прогресса. Собственные
+версии двух документов могут различаться. Дополнительная отправка также меняет
+версию/баланс перемещения, но не расширяет остаток ранее подтверждённого документа.
+При исполнении полный план старого документа не сравнивается с уменьшившимся
+транзитом: текущие лимиты ограничивают новые фактические количества. Это отдельный
+контракт от confirm() черновиков с обязательной свежей версией основания.
+
+После получения всех назначений метод вызывает прежний build_receipt(). Он проверяет
+активные T/B, фиксированную TRANSIT-локацию, фактические адреса, равное executed_at,
+время не раньше текущего перемещения, сохранение владельца, LOT/SERIAL, состояния,
+товара и единицы. Приёмка ограничена и документами, и dispatched_qty − received_qty,
+и остатком конкретного состава в балансе. LOT A=8/B=12 не разрешает принять 10 A;
+остаток другой серии не покрывает отсутствующий экземпляр. Исторические execution_id
+и фактические ID из переданной принятой истории нельзя использовать повторно.
+
+Пример продолжает confirmed_transit_issue/confirmed_destination_receipt из предыдущего
+раздела: оба CONFIRMED v1 на 20 KG с source.version=3. transfer — IN_PROGRESS v3,
+dispatched=20/received=0, current_balance построен по его полной принятой истории.
+transit_issue_execution — новый ISSUE 10, destination_receipt_execution — RECEIPT 4+6;
+ссылки фактов ведут на реальные строки своих документов, executed_at совпадает.
+now — общий явный момент регистрации не раньше обоих фактов:
+
+```python
+from src.modules.inventory.domain.policy.stock_transfer_receipt import StockTransferReceiptPolicy
+
+receipt_result = StockTransferReceiptPolicy.build_receipt_from_documents(
+    transfer=transfer.receipt_snapshot(), balance=current_balance,
+    issue_document=confirmed_transit_issue.transfer_receipt_snapshot(),
+    receipt_document=confirmed_destination_receipt.transfer_receipt_snapshot(),
+    issue=transit_issue_execution.transfer_document_snapshot(),
+    receipt=destination_receipt_execution.transfer_document_snapshot(),
+    transit_warehouse=transit_warehouse, destination_warehouse=destination_warehouse,
+    locations=(transit_location, destination_location),
+)
+received_transfer = transfer.register_receipt(
+    receipt_result, expected_version=transfer.version, updated_at=now,
+)
+transit_issue_after = confirmed_transit_issue.register_execution(
+    transit_issue_execution.snapshot_for_document(), updated_at=now,
+)
+destination_receipt_after = confirmed_destination_receipt.register_execution(
+    destination_receipt_execution.snapshot_for_document(), updated_at=now,
+)
+# StockTransfer v4, received=10; два PARTIALLY_EXECUTED v2, source.version остаётся 3.
+# Входные корни и физические остатки этими вызовами не изменились.
+```
+
+Политике передаются оба состояния документов ДО регистрации фактов. После получения
+кандидатов сохранение должно быть согласованным; передача обновлённых документов
+с прежним фактом отклоняется по версии или состоянию/прогрессу.
+
+| Шаг для плана 50, отправки 20 | Документы | StockTransfer | T / B |
+| --- | --- | --- | --- |
+| До приёмки | Два CONFIRMED v1 на 20 | v3, received=0 | 20 / 0 |
+| Факты 10 / 4+6 | Два PARTIALLY_EXECUTED v2 | v4, received=10 | 10 / 10 |
+| Факты 10 / 10 | Два COMPLETED v3 | IN_PROGRESS v5, received=20 | 0 / 20 |
+
+Основание остаётся v3. В последней строке перемещение открыто: 30 ещё не отправлено.
+COMPLETED требует received_qty = dispatched_qty = planned_qty во всех строках.
+При отправленных 50 и приёмке 20+30 оба документа и StockTransfer завершаются.
+StockPosting и StockPosition применяются прежним путём, обе стороны каждой пары
+имеют один posted_at, сумма физического запаса владельца сохраняется.
+
+Проверки новых снимков и назначения не доказывают достоверность/полноту прочитанной
+истории или commit. Будущий Application/UoW атомарно сохраняет оба исполнения,
+прогресс документов/перемещения, Ledger, позиции, доступность и Outbox. Локальные
+версии и ID принятой истории не заменяют глобальную дедупликацию в хранилище.
+Новых портов/репозиториев нет; SQL/API, возвраты, недостачи и пересортица остаются
+следующим срезам. Реализованных AR по-прежнему 14, целевой состав — 23.
+
+Ошибки используются существующие: StockDocumentOverExecutionError,
+StaleStockDocumentVersionError, StockTransferVersionConflictError,
+StockTransferReceiptMismatchError, StockTransferTransitStockExceededError и ошибки
+контрактов снимков, маршрута, времени и баланса. Ручной build_receipt() совместим.
+
+## План инвентаризации InventoryCount
+
+InventoryCount — самостоятельный immutable Aggregate Root для подготовки полной
+или частичной проверки одного склада и одного владельца. CountSheet — отдельный
+корень, CountLine — его дочерняя Entity. Сам InventoryCount не содержит дочерних
+Entity или коллекции ведомостей; их реализация описана ниже.
+
+| Поле | Контракт |
+| --- | --- |
+| id | InventoryCountIdVO |
+| warehouse_id | WarehouseIdVO, фиксирован при создании |
+| owner_id | StockOwnerIdVO, фиксирован при создании |
+| scope | CountScopeVO |
+| status | InventoryCountStatus: DRAFT / CONFIRMED / IN_PROGRESS / CANCELLED |
+| baseline | InventoryCountBaselineRefVO для IN_PROGRESS, иначе None |
+| created_at / updated_at | Явный datetime с часовым поясом, хранение в UTC |
+| version | Целое неотрицательное число, bool запрещён |
+
+CountScopeVO содержит count_type: CountType FULL/PARTIAL и
+location_ids: tuple[StockLocationIdVO, ...]. FULL требует пустой tuple: это весь
+склад в рамках owner_id, а не отсутствие области проверки. PARTIAL требует непустой
+набор уникальных конкретных адресов. Порядок нормализуется по UUID, поэтому
+перестановка выбранных адресов не меняет значение/хеш. Дочерние локации автоматически
+не включаются. Фильтры по товарам, партиям и категориям пока отсутствуют.
+
+create() принимает WarehouseSnapshot активного склада, область и владельца,
+создаёт DRAFT v0 без обязательной основной STORAGE-локации. Адреса частичного
+черновика до подтверждения не проверяются по внешним снимкам. change_scope()
+доступен только в DRAFT и сохраняет склад, владельца, ID и created_at.
+
+InventoryCountConfirmationPolicy.ensure_confirmable() при confirm() повторно
+проверяет снимок того же активного склада. Для PARTIAL передаётся ровно выбранный
+tuple StockLocationSnapshot: каждый ID один раз, все адреса активны и относятся
+к этому складу. Пропущенные/лишние/повторные снимки запрещены. Для FULL locations=().
+Проверка не зависит от правил продаж: STORAGE, RECEIVING, SHIPPING, QUARANTINE
+и TRANSIT не отбрасываются по типу. Будущий пересчёт касается физического количества,
+включая зарезервированный запас и несбываемые состояния; reserved_qty не вычитается.
+
+Плановые переходы: DRAFT → CONFIRMED или DRAFT → CANCELLED; запуск CONFIRMED →
+IN_PROGRESS описан ниже. После выхода из DRAFT изменение области, подтверждение
+и отмена запрещены. cancel() сохраняет область и не требует
+текущей активности справочников. Каждое изменение требует expected_version и
+явное updated_at, проверяет собственные инварианты и неубывание времени, возвращает
+новый экземпляр версии +1. Для равной области после всех проверок возвращается
+исходный объект: более позднее время no-op не обновляет дату или версию.
+
+restore() принимает полный собственный состав, нормализует aware-даты в UTC и
+проверяет типы, область, статус, версию и хронологию. Текущие склад и локации не
+загружаются: восстановленная история может ссылаться на уже неактивные справочники.
+Перед подтверждением черновика внешние условия снова проверяются.
+
+Самостоятельный пример подготовки частичной инвентаризации:
+
+```python
+from datetime import UTC, datetime
+from uuid import UUID
+
+from src.modules.inventory.domain.inventory_count.aggregate import InventoryCount
+from src.modules.inventory.domain.inventory_count.value_object.count_type import CountType
+from src.modules.inventory.domain.inventory_count.value_object.identifier import InventoryCountIdVO
+from src.modules.inventory.domain.inventory_count.value_object.scope import CountScopeVO
+from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
+from src.modules.inventory.domain.stock_location.value_object.identifier import StockLocationIdVO
+from src.modules.inventory.domain.stock_location.value_object.location_type import LocationType
+from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
+from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
+from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
+
+now = datetime(2026, 11, 5, 12, tzinfo=UTC)
+warehouse = WarehouseSnapshot(WarehouseIdVO(UUID(int=100)), True, None)
+storage = StockLocationSnapshot(
+    StockLocationIdVO(UUID(int=101)), warehouse.id, LocationType.STORAGE, True,
+)
+quarantine = StockLocationSnapshot(
+    StockLocationIdVO(UUID(int=102)), warehouse.id, LocationType.QUARANTINE, True,
+)
+draft = InventoryCount.create(
+    identifier=InventoryCountIdVO(UUID(int=103)), warehouse=warehouse,
+    owner_id=StockOwnerIdVO(UUID(int=104)),
+    scope=CountScopeVO(CountType.FULL, ()), created_at=now,
+)
+partial = draft.change_scope(
+    CountScopeVO(CountType.PARTIAL, (quarantine.id, storage.id)),
+    expected_version=draft.version, updated_at=now,
+)
+confirmed = partial.confirm(
+    expected_version=partial.version, warehouse=warehouse,
+    locations=(storage, quarantine), updated_at=now,
+)
+# draft: FULL DRAFT v0; partial: PARTIAL DRAFT v1; confirmed: PARTIAL CONFIRMED v2.
+# Склад и владелец прежние; исходные объекты неизменны, запас не изменён.
+```
+
+CONFIRMED означает зафиксированный план, а не начало пересчёта или заморозку
+остатков/операций. FULL пока не превращается в сохранённый список всех адресов.
+Момент учётного снимка фиксируется при фактическом старте в ссылке baseline;
+большие наборы позиций и адресов хранятся в отдельном основании, описанном ниже.
+
+CountSheet/CountLine реализованы ниже. Следующие срезы: применение расхождений,
+StockDocument(ADJUSTMENT) и применение через StockExecution/StockPosting/StockPosition.
+Сейчас поддержаны только RECEIPT/ISSUE/INTERNAL_MOVE; инвентаризация не проводит
+корректировки напрямую. При старте и применении нужно обеспечить сохранение движений
+после учётного снимка. Domain-проверки переданных снимков не доказывают полноту
+и достоверность чтения, версии не заменяют блокировки/CAS в хранилище. Проверка
+пересекающихся инвентаризаций, Application/UoW, SQL/API и Outbox — будущие срезы.
+
+## Запуск InventoryCount и учётное основание
+
+StockPosition.counting_snapshot() возвращает StockPositionCountingSnapshot с полями
+id, dimensions, base_uom, on_hand_qty, version. Версия строго целая неотрицательная
+без bool, количество — прежний неотрицательный QuantityVO, конкретный SERIAL —
+0/1 PCS. Количество физическое: резервы не вычитаются, нулевые позиции сохраняются.
+Снимок не содержит историю и не переоценивает старое количество по текущему шагу.
+Прежние снимки для журнала и доступности сохраняют свои контракты.
+
+InventoryCountStartPolicy.build_baseline() принимает InventoryCountStartPlanSnapshot
+из start_plan_snapshot(), InventoryCountBaselineIdVO, явное snapshot_at,
+WarehouseSnapshot, tuple StockLocationSnapshot и tuple StockPositionCountingSnapshot.
+Результат — отдельный immutable InventoryCountBaselineSnapshot:
+
+| Поле | Назначение |
+| --- | --- |
+| id | InventoryCountBaselineIdVO |
+| inventory_count_id / inventory_count_version | Точный план и его версия до запуска |
+| warehouse_id / owner_id / scope | Склад, владелец и область учётного основания |
+| snapshot_at | Явный момент согласованного учётного снимка в UTC |
+| locations | Зафиксированный набор адресов области |
+| positions | Количества и версии отдельных физических позиций |
+
+Основание не является новым Aggregate Root и не становится коллекцией внутри
+InventoryCount. Корень хранит только InventoryCountBaselineRefVO(id, snapshot_at).
+Полный неизменяемый набор должен сохраняться отдельно и читаться по этому ID.
+Сам срез запуска не добавил Entity; после него было 15 AR из 23 целевых.
+
+Проверяются типы, UTC, строгие версии, уникальность адресов/ID позиций/измерений,
+принадлежность адресов складу, а позиций — владельцу и адресам основания.
+Разные LOT/SERIAL/состояния не объединяются. Пустые позиции допустимы; FULL может
+содержать пустые locations/positions для пустого склада. PARTIAL содержит ровно
+выбранные активные адреса, без включения потомков. FULL включает переданные адреса
+всего склада, в том числе неактивные с остатками: фильтр доступности продаж здесь
+не применяется. Полноту всего склада по одному переданному набору Domain не доказывает.
+
+start() принимает основание, expected_version, явное updated_at и текущие снимки
+склада/локаций. Требуется CONFIRMED и точное совпадение ID/версии/владельца/области
+плана. Повторно проверяется тот же активный склад, тот же набор адресов и активность
+выбранных PARTIAL-адресов. Требуется current_count.updated_at <= snapshot_at <=
+updated_at. Входные aware-моменты фабрики и VO нормализуются в UTC, готовые снимки
+проверяются на хранение UTC. Момент регистрации запуска не заменяет snapshot_at.
+
+CONFIRMED → IN_PROGRESS возвращает новый корень версии +1 со ссылкой на основание.
+Повторный запуск запрещён; изменение области, подтверждение или отмена начатой
+инвентаризации также запрещены. restore() принимает baseline явно, требует ссылку
+только для IN_PROGRESS и проверяет created_at <= baseline.snapshot_at <= updated_at.
+Полный набор позиций и актуальные справочники для восстановления не требуются.
+Запуск не меняет позиции, Ledger, доступность и резервы, не блокирует движения.
+
+InventoryCountBaselinePolicy.ensure_unchanged() сравнивает основание с полными
+текущими снимками той же области: набор ID адресов/позиций, версии, измерения,
+единицы и количества. Порядок чтения не важен. Повторные/некорректные входы не
+сворачиваются в словарь. Новые и исчезнувшие позиции, включая нулевые, запрещают
+использование старого основания. Для FULL даже новый пустой адрес консервативно
+меняет область. Изменение активности/типа прежнего адреса само по себе не меняет
+физические позиции; пригодность адресов для будущего проведения проверяется отдельно.
+
+Пример продолжает confirmed/warehouse/storage/quarantine/now из предыдущего раздела.
+position — существующий StockPosition выбранного владельца и storage: 100 PCS, v7.
+Обычные складские методы могут продолжать изменять эту позицию независимо от запуска:
+
+```python
+from decimal import Decimal
+from uuid import UUID
+
+from src.modules.inventory.domain.inventory_count.value_object.baseline_id import InventoryCountBaselineIdVO
+from src.modules.inventory.domain.policy.inventory_count_baseline import InventoryCountBaselinePolicy
+from src.modules.inventory.domain.policy.inventory_count_start import InventoryCountStartPolicy
+from src.modules.inventory.domain.stock_position.aggregate import StockPosition
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+
+locations = (storage, quarantine)
+baseline = InventoryCountStartPolicy.build_baseline(
+    plan=confirmed.start_plan_snapshot(),
+    identifier=InventoryCountBaselineIdVO(UUID(int=105)), snapshot_at=now,
+    warehouse=warehouse, locations=locations,
+    positions=(position.counting_snapshot(),),
+)
+started = confirmed.start(
+    baseline, expected_version=confirmed.version, warehouse=warehouse,
+    locations=locations, updated_at=now,
+)
+# confirmed v2 -> started IN_PROGRESS v3; baseline.inventory_count_version == 2.
+# Корень содержит только ссылку; baseline отдельно хранит 100 PCS/v7.
+InventoryCountBaselinePolicy.ensure_unchanged(
+    baseline=baseline, locations=locations,
+    positions=(position.counting_snapshot(),),
+)
+
+# Иллюстрация чтения той же позиции после независимо проведённого расхода 20:
+current = StockPosition.restore(
+    identifier=position.id, dimensions=position.dimensions, base_uom=position.base_uom,
+    on_hand_qty=QuantityVO(Decimal(80)), version=8,
+)
+# Следующий вызов выбросит InventoryCountBaselineChangedError:
+InventoryCountBaselinePolicy.ensure_unchanged(
+    baseline=baseline, locations=locations,
+    positions=(current.counting_snapshot(),),
+)
+```
+
+Возврат количества к 100 с версией v9 также отклоняется. Нельзя применять
+расхождение 77 − 100 к текущим 80: нужен повторный пересчёт по новому основанию.
+Автоматического воспроизведения Ledger, повторного старта или замены основания нет.
+Проверка актуальности возвращает None либо предметную ошибку и не является
+долгоживущим разрешением на применение результатов.
+
+snapshot_at не задаёт commit-order и не заменяет согласованный снимок БД. Проверки
+не доказывают подлинность, полноту чтения, сохранение основания или commit запуска.
+Будущий Application/UoW атомарно сохраняет отдельное основание и корень, читает
+полную область одного согласованного состояния и при применении атомарно связывает
+проверку актуальности с проведением, защищая также от конкурентных вставок позиций.
+Частичный список старых ID не обеспечивает эту защиту. Изменённое основание требует
+нового пересчёта в будущем сценарии. CountSheet/CountLine реализованы ниже;
+завершение, ADJUSTMENT, SQL/API и Outbox в срез запуска не входят.
+
+Ошибки среза: InvalidStockPositionCountingSnapshotError,
+InvalidInventoryCountStartPlanError, InvalidInventoryCountBaselineError,
+InventoryCountBaselineChangedError и прежние ошибки контекста, статуса, версии,
+времени и активности складских адресов.
+
+Ошибки: InvalidInventoryCountValueError, InvalidCountScopeError,
+InventoryCountContextMismatchError, InventoryCountStatusError,
+InventoryCountVersionConflictError, InventoryCountTimeError; также существующие
+ошибки некорректных снимков, неактивного склада/локации и принадлежности локации складу.
+
+## Ведомость пересчёта CountSheet
+
+CountSheet — самостоятельный immutable Aggregate Root с дочерними CountLine,
+связанный с InventoryCount по ID и с неизменяемым основанием по ссылке. Ведомости
+не загружаются внутрь родителя. Реализованы 16 самостоятельных AR из 23 целевых.
+
+| Поле CountSheet | Контракт |
+| --- | --- |
+| id | CountSheetIdVO |
+| inventory_count_id | InventoryCountIdVO |
+| baseline | InventoryCountBaselineRefVO: ID и snapshot_at |
+| warehouse_id / owner_id | Фиксированные WarehouseIdVO / StockOwnerIdVO |
+| status | CountSheetStatus: DRAFT / SUBMITTED / CANCELLED |
+| lines | Непустой tuple CountLine с фиксированным составом |
+| created_at / updated_at | Явные datetime, хранение в UTC |
+| version | Целое неотрицательное число, bool запрещён |
+
+CountLine содержит id: CountLineIdVO, position_id, dimensions, base_uom,
+expected_qty, position_version, counted_qty: QuantityVO | None и
+counted_at: datetime | None. Учётные поля копируются из позиции основания и не
+изменяются при вводе наблюдений. None означает «не считали»; явно введённый ноль
+означает «проверили, товара нет». Количество и момент факта заполняются вместе.
+Строка не имеет самостоятельного репозитория. Исторические количества сохраняются,
+даже если текущий шаг товара уже другой.
+
+InventoryCount.sheet_source_snapshot() выдаёт InventoryCountSheetSourceSnapshot:
+текущие id, warehouse_id, owner_id, scope, status, baseline, updated_at и version.
+CountSheetSourcePolicy требует IN_PROGRESS и то же основание по ID, snapshot_at,
+владельцу и области. Версия родителя должна быть больше исторической версии плана
+в основании, но может увеличиваться без изменения основания. Точное равенство
+текущей версии родителя с версией основания не требуется.
+
+create_from_baseline() принимает снимок родителя, полное основание, новый ID,
+created_at и непустой tuple CountSheetLineBindingVO(line_id, position_id).
+Выбранные позиции существуют в основании, ID строк/позиций не повторяются.
+Создаётся DRAFT v0 с непосчитанными строками в порядке UUID ID строк. Ведомость
+может покрывать часть основания; строки разных LOT/SERIAL/состояний не объединяются.
+Состав фиксирован, методов добавления/удаления строк пока нет.
+
+record_count() принимает ID строки, counted_qty, counted_at, текущий
+InventoryItemStockSnapshot, expected_version и updated_at. Ввод в первом срезе
+в базовой единице строки, без округления и пересчёта упаковок. CountSheetLinePolicy
+проверяет идентичность товара, базовую единицу, LOT/SERIAL и шаг фактического
+количества через QuantityValidationPolicy. Для конкретного SERIAL факт только 0/1 PCS.
+Старое expected_qty не переоценивается по текущему шагу. QuantityConversionSnapshotVO
+с положительным исходным количеством здесь не применяется к нулевому наблюдению.
+
+Время пересчёта строки находится между созданием ведомости и регистрацией ввода.
+При исправлении момент пересчёта этой строки не убывает. Наблюдение другой строки
+может быть внесено с задержкой, но updated_at всей ведомости не убывает. Равные
+моменты допустимы, входное aware-время нормализуется в UTC. Равные количество и
+момент после всех проверок — no-op без изменения времени/версии. Новый момент
+пересчёта при прежнем количестве повышает версию.
+
+CountLine.discrepancy вычисляется, не хранится: None для непосчитанной строки,
+иначе StockDeltaVO(counted_qty − expected_qty). Для expected=100 факты 77, 100, 105
+дают −23, 0, +5. Разность точная при ограниченном внешнем Decimal context:
+используются QuantityArithmeticPolicy и точная смена знака без округления.
+
+submit() требует DRAFT, expected_version, updated_at, текущего родителя, прежнее
+полное основание, ровно участвующие текущие InventoryItemStockSnapshot и полные
+текущие locations/positions всего основания. CountSheetSubmissionPolicy повторно
+проверяет ссылки ведомости, исходные поля каждой строки, заполненность и текущие
+правила количества. InventoryCountBaselinePolicy проверяет весь текущий запас,
+включая позиции вне этой ведомости и нулевые позиции. Пропуск старой позиции,
+новая позиция, изменение версии или движение с возвратом к прежнему количеству
+отклоняют передачу. Ошибка не стирает наблюдения из исходного DRAFT.
+
+Переходы: DRAFT → SUBMITTED или DRAFT → CANCELLED. Отмена сохраняет строки и факты
+без текущих внешних снимков. После выхода из DRAFT ввод, передача и отмена запрещены.
+SUBMITTED фиксирует ведомость, а не проводит корректировку и не завершает родителя.
+Перед будущим проведением проверка актуальности обязательна повторно. Создание,
+ввод, передача и отмена не меняют StockPosition, Ledger, резервы или доступность.
+
+Пример продолжает started/baseline/locations/position из раздела запуска. Основание
+содержит 100 PCS/v7 и остаётся актуальным; item — текущий InventoryItem этого товара.
+
+```python
+from datetime import timedelta
+from decimal import Decimal
+from uuid import UUID
+
+from src.modules.inventory.domain.count_sheet.aggregate import CountSheet
+from src.modules.inventory.domain.count_sheet.value_object.identifier import CountSheetIdVO
+from src.modules.inventory.domain.count_sheet.value_object.line_binding import CountSheetLineBindingVO
+from src.modules.inventory.domain.count_sheet.value_object.line_id import CountLineIdVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+
+sheet_line_id = CountLineIdVO(UUID(int=201))
+draft_sheet = CountSheet.create_from_baseline(
+    identifier=CountSheetIdVO(UUID(int=200)),
+    inventory_count=started.sheet_source_snapshot(), baseline=baseline,
+    bindings=(CountSheetLineBindingVO(sheet_line_id, position.id),), created_at=now,
+)
+count_time = now + timedelta(minutes=10)
+counted_sheet = draft_sheet.record_count(
+    sheet_line_id, counted_qty=QuantityVO(Decimal(77)), counted_at=count_time,
+    inventory_item=item.stock_snapshot(), expected_version=draft_sheet.version,
+    updated_at=count_time,
+)
+submitted_sheet = counted_sheet.submit(
+    expected_version=counted_sheet.version, updated_at=count_time,
+    inventory_count=started.sheet_source_snapshot(), baseline=baseline,
+    inventory_items=(item.stock_snapshot(),), locations=locations,
+    positions=(position.counting_snapshot(),),
+)
+# DRAFT v0 -> DRAFT v1, discrepancy=-23 -> SUBMITTED v2.
+# Физический остаток по-прежнему 100 PCS/v7, родитель остаётся IN_PROGRESS.
+```
+
+restore() принимает полный собственный состав и проверяет типы, непустоту,
+уникальность ID/позиций/измерений, владельца строк, UTC-хронологию, парность
+наблюдений и заполненность SUBMITTED. Текущие родитель, товары и большое основание
+не загружаются. Их совместимость снова проверяется при передаче черновика.
+
+Первый срез выбирает только существующие позиции основания, включая нулевые;
+найденная новая комбинация измерений — следующий срез. Назначение позиции одной
+активной ведомости между несколькими AR, полнота покрытия инвентаризации и её
+завершение пока не обеспечиваются. Будущий Application/хранение должны исключить
+двойное назначение и молчаливое суммирование результатов разных ведомостей.
+Полноту/подлинность переданных снимков Domain не доказывает. Применение результатов
+потребует атомарной проверки актуальности с проведением и защитой от новых вставок.
+ADJUSTMENT, повторный пересчёт с новым основанием, SQL/API/UoW и Outbox — будущие срезы.
+
+Ошибки: InvalidCountSheetValueError, InvalidCountLineError,
+InvalidCountSheetLineBindingError, CountSheetSourceMismatchError,
+CountSheetLineConflictError, CountSheetLineNotFoundError, CountSheetStatusError,
+CountSheetVersionConflictError, CountSheetTimeError, UncountedCountSheetError,
+InvalidInventoryCountSheetSourceError и прежние ошибки товаров, количества и основания.
 
 ## Изменения, восстановление и проверки
 
@@ -3393,5 +3870,9 @@ StockDocumentTransferReceiptQuantityExceededError, UnbalancedStockTransferReceip
 `test/test_inventory_stock_transfer_dispatch_domain.py`, `test/test_inventory_stock_transfer_receipt_domain.py`
 `test/test_inventory_stock_transfer_document_domain.py`
 `test/test_inventory_stock_transfer_document_execution_domain.py`
-и `test/test_inventory_stock_transfer_receipt_document_domain.py`.
+`test/test_inventory_stock_transfer_receipt_document_domain.py`
+`test/test_inventory_stock_transfer_receipt_document_execution_domain.py`
+`test/test_inventory_count_domain.py`
+`test/test_inventory_count_start_domain.py`
+и `test/test_inventory_count_sheet_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.
