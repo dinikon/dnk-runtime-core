@@ -5,6 +5,14 @@ class StockPostingError(InventoryError):
     """Базовая ошибка проведения физического движения."""
 
 
+class StockReceiptValuationSourceError(StockPostingError):
+    """Отклоняет неподходящий приход или несовпадающий контекст записи для фиксации стоимости."""
+
+
+class InvalidStockReceiptValuationSnapshotError(StockPostingError):
+    """Требует типизированное положительное основание стоимости с историческим временем UTC."""
+
+
 class InvalidStockPostingValueError(StockPostingError):
     """Сообщает о некорректном собственном составе проведения или времени."""
 

@@ -60,10 +60,14 @@ class InventoryCountSheetSourceSnapshot:
             )
         if (
             self.status
-            in (InventoryCountStatus.IN_PROGRESS, InventoryCountStatus.COUNTED)
+            in (
+                InventoryCountStatus.IN_PROGRESS,
+                InventoryCountStatus.COUNTED,
+                InventoryCountStatus.COMPLETED,
+            )
         ) != (self.baseline is not None):
             raise InvalidInventoryCountSheetSourceError(
-                "Ссылка на основание обязательна для IN_PROGRESS и COUNTED."
+                "Ссылка на основание обязательна для IN_PROGRESS, COUNTED и COMPLETED."
             )
         if self.baseline is not None:
             self.baseline.ensure_valid()

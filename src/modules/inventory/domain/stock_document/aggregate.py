@@ -3,6 +3,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Self
 from uuid import UUID
 
+from src.modules.inventory.domain.stock_document.adjustment_completion_snapshot import (
+    StockDocumentAdjustmentCompletionSnapshot,
+    StockDocumentAdjustmentCompletionLineSnapshot,
+)
+
 from src.modules.inventory.domain.error import StockAdjustmentError
 from src.modules.inventory.domain.policy.stock_adjustment_execution import (
     StockAdjustmentExecutionPolicy,
@@ -705,6 +710,35 @@ class StockDocument:
                 for line in self.lines
             ),
         )
+
+    def adjustment_completion_snapshot(
+        self,
+    ) -> StockDocumentAdjustmentCompletionSnapshot:
+        """Передаёт проверенные источник и полное исполнение завершённой корректировки для закрытия инвентаризации."""
+        self._validate()
+        if self.operation_type is not StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError("Нужен документ ADJUSTMENT.")
+        snapshot = StockDocumentAdjustmentCompletionSnapshot(
+            self.id,
+            self.version,
+            self.warehouse_id,
+            self.owner_id,
+            self.status,
+            self.updated_at,
+            self.source,
+            tuple(
+                StockDocumentAdjustmentCompletionLineSnapshot(
+                    StockDocumentAdjustmentLineSnapshot(
+                        line.id, line.sku, line.base_uom, line.adjustment, line.source
+                    ),
+                    line.planned_qty,
+                    line.executed_qty,
+                )
+                for line in self.lines
+            ),
+        )
+        snapshot.ensure_valid()
+        return snapshot
 
     def adjustment_execution_snapshot(self) -> StockDocumentAdjustmentExecutionSnapshot:
         """Передаёт только подтверждённую неисполненную корректировку без потери измерений и источников."""

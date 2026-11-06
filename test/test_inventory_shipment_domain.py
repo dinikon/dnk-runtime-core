@@ -211,6 +211,7 @@ class ShipmentDomainTests(unittest.TestCase):
                     created_at=self.time,
                     updated_at=self.time,
                     version=0,
+                    fulfillment_source=None,
                 )
                 | changes
             )
@@ -409,6 +410,7 @@ class ShipmentDomainTests(unittest.TestCase):
     ) -> None:
         """Восстановление хранит старый коэффициент и не проверяет актуальные удержания."""
         historical = ShipmentLine.restore(
+            fulfillment_allocation_id=None,
             identifier=self.line_a.id,
             source_ref=self.line_ref,
             reservation_id=self.a.id,

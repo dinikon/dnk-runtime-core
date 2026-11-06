@@ -5,6 +5,34 @@ class ShipmentError(InventoryError):
     """Базовая ошибка плана собственной отгрузки."""
 
 
+class InvalidShipmentAssignmentSnapshotError(ShipmentError):
+    """Отклоняет некорректный снимок назначения или отмены производного черновика."""
+
+
+class InvalidShipmentFulfillmentSnapshotError(ShipmentError):
+    """Отклоняет некорректный полный снимок фактического прогресса для FulfillmentPlan."""
+
+
+class InvalidShipmentFulfillmentSourceError(ShipmentError):
+    """Требует типизированное основание плана и строгую неотрицательную версию."""
+
+
+class InvalidFulfillmentShipmentLineBindingError(ShipmentError):
+    """Отклоняет некорректное назначение распределения новой строке отгрузки."""
+
+
+class ShipmentFulfillmentMismatchError(ShipmentError):
+    """Отклоняет несовпадение отгрузки с распределениями или полными удержаниями плана."""
+
+
+class StaleShipmentFulfillmentSourceError(ShipmentError):
+    """Требует прежнюю версию того же плана без скрытого обновления основания."""
+
+
+class ShipmentFulfillmentSourceRequiredError(ShipmentError):
+    """Запрещает обычное подтверждение без повторной проверки основания FulfillmentPlan."""
+
+
 class InvalidShipmentValueError(ShipmentError):
     """Сообщает о некорректных собственных значениях или версии плана."""
 

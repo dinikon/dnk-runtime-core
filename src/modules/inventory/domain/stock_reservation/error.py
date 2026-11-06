@@ -5,6 +5,10 @@ class StockReservationError(InventoryError):
     """Базовая ошибка мягкого резерва под конкретное обязательство."""
 
 
+class InvalidStockReservationFulfillmentSnapshotError(StockReservationError):
+    """Отклоняет некорректный снимок запроса, удержания и погашения для подтверждения распределения."""
+
+
 class InvalidStockReservationValueError(StockReservationError):
     """Сообщает о некорректном собственном составе или версии резерва."""
 

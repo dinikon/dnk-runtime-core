@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.fulfillment_plan.value_object.allocation_id import (
+    FulfillmentAllocationIdVO,
+)
+
 from src.modules.inventory.domain.error import (
     IncompatibleUomError,
     QuantityConversionMismatchError,
@@ -56,6 +60,7 @@ class ShipmentLine:
     planned_qty: QuantityVO
     conversion: QuantityConversionSnapshotVO
     shipped_qty: QuantityVO
+    fulfillment_allocation_id: FulfillmentAllocationIdVO | None
 
     @classmethod
     def create(
@@ -66,6 +71,7 @@ class ShipmentLine:
         reservation: StockReservationShipmentSnapshot,
         quantity: QuantityVO,
         uom: UomCodeVO,
+        fulfillment_allocation_id: FulfillmentAllocationIdVO | None = None,
     ) -> Self:
         """Выводит привязку из снимка резерва и точно пересчитывает ввод в его базовую единицу."""
         if not isinstance(inventory_item, InventoryItemStockSnapshot):
@@ -90,6 +96,7 @@ class ShipmentLine:
             planned_qty=conversion.to_base_quantity(),
             conversion=conversion,
             shipped_qty=QuantityVO(Decimal(0)),
+            fulfillment_allocation_id=fulfillment_allocation_id,
         )
         line.ensure_compatible(inventory_item=inventory_item, reservation=reservation)
         return line
@@ -106,6 +113,7 @@ class ShipmentLine:
         planned_qty: QuantityVO,
         conversion: QuantityConversionSnapshotVO,
         shipped_qty: QuantityVO,
+        fulfillment_allocation_id: FulfillmentAllocationIdVO | None,
     ) -> Self:
         """Восстанавливает исторический план и исходный коэффициент без текущих снимков."""
         line = cls(
@@ -117,6 +125,7 @@ class ShipmentLine:
             planned_qty,
             conversion,
             shipped_qty,
+            fulfillment_allocation_id,
         )
         line.ensure_valid()
         return line
@@ -133,6 +142,12 @@ class ShipmentLine:
             or self.planned_qty.value.is_zero()
             or not isinstance(self.conversion, QuantityConversionSnapshotVO)
             or not isinstance(self.shipped_qty, QuantityVO)
+            or (
+                self.fulfillment_allocation_id is not None
+                and not isinstance(
+                    self.fulfillment_allocation_id, FulfillmentAllocationIdVO
+                )
+            )
         ):
             raise InvalidShipmentLineError(
                 "Нужна типизированная строка с положительным плановым количеством."

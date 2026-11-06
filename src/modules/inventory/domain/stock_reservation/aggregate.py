@@ -3,6 +3,10 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.stock_reservation.fulfillment_snapshot import (
+    StockReservationFulfillmentSnapshot,
+)
+
 from src.modules.inventory.domain.stock_reservation.consumption_snapshot import (
     StockReservationConsumptionSnapshot,
 )
@@ -157,6 +161,26 @@ class StockReservation:
         )
         reservation._validate()
         return reservation
+
+    def fulfillment_snapshot(self) -> StockReservationFulfillmentSnapshot:
+        """Передаёт проверенные собственные счётчики и привязку для подтверждения распределения."""
+        self._validate()
+        snapshot = StockReservationFulfillmentSnapshot(
+            self.id,
+            self.pool_id,
+            self.key,
+            self.source_ref,
+            self.base_uom,
+            self.requested_qty,
+            self.reserved_qty,
+            self.consumed_qty,
+            self.status,
+            self.expires_at,
+            self.updated_at,
+            self.version,
+        )
+        snapshot.ensure_valid()
+        return snapshot
 
     def shipment_snapshot(self) -> StockReservationShipmentSnapshot:
         """Возвращает проверенные основание, область и текущее удержание для плана отгрузки."""

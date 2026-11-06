@@ -2,6 +2,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
+from src.modules.inventory.domain.policy.stock_receipt_valuation import (
+    StockReceiptValuationPolicy,
+)
+from src.modules.inventory.domain.stock_posting.receipt_valuation_snapshot import (
+    StockReceiptValuationSnapshot,
+)
+
 from src.modules.inventory.domain.error import StockAdjustmentError
 from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
     InventoryCountAdjustmentSourceSnapshot,
@@ -313,6 +320,21 @@ class StockPosting:
         """Выдаёт адресные снимки для физических позиций после полного сопоставления Ledger с фактом."""
         return StockAdjustmentPostingPolicy.application_snapshots(
             posting=self.snapshot(), execution=execution
+        )
+
+    def receipt_valuation_snapshot(
+        self,
+        *,
+        ledger_entry_id: StockLedgerEntryIdVO,
+        position: StockPositionSnapshot,
+        location: StockLocationSnapshot,
+    ) -> StockReceiptValuationSnapshot:
+        """Выделяет историческое основание стоимости одной записи прихода без цены, новых движений или изменения позиции."""
+        return StockReceiptValuationPolicy.build_snapshot(
+            posting=self.snapshot(),
+            ledger_entry_id=ledger_entry_id,
+            position=position,
+            location=location,
         )
 
     def snapshot(self) -> StockPostingSnapshot:

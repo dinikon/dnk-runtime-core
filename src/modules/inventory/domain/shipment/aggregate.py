@@ -2,6 +2,32 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Self
 
+from src.modules.inventory.domain.shipment.assignment_snapshot import (
+    ShipmentAssignmentSnapshot,
+    ShipmentAssignmentLineSnapshot,
+)
+
+from src.modules.inventory.domain.shipment.fulfillment_snapshot import (
+    ShipmentFulfillmentLineSnapshot,
+    ShipmentFulfillmentSnapshot,
+)
+
+from src.modules.inventory.domain.fulfillment_plan.shipment_snapshot import (
+    FulfillmentPlanShipmentSnapshot,
+)
+from src.modules.inventory.domain.policy.fulfillment_shipment import (
+    FulfillmentShipmentPolicy,
+)
+from src.modules.inventory.domain.shipment.value_object.fulfillment_line_binding import (
+    FulfillmentShipmentLineBindingVO,
+)
+from src.modules.inventory.domain.shipment.value_object.fulfillment_source import (
+    ShipmentFulfillmentSourceVO,
+)
+from src.modules.inventory.domain.stock_reservation.fulfillment_snapshot import (
+    StockReservationFulfillmentSnapshot,
+)
+
 from src.modules.inventory.domain.inventory_item.stock_snapshot import (
     InventoryItemStockSnapshot,
 )
@@ -29,6 +55,8 @@ from src.modules.inventory.domain.shipment.error import (
     ShipmentStatusError,
     ShipmentTimeError,
     ShipmentVersionConflictError,
+    ShipmentFulfillmentMismatchError,
+    ShipmentFulfillmentSourceRequiredError,
 )
 from src.modules.inventory.domain.shipment.order_snapshot import ShipmentOrderSnapshot
 from src.modules.inventory.domain.shipment.execution_snapshot import (
@@ -71,6 +99,7 @@ class Shipment:
     created_at: datetime
     updated_at: datetime
     version: int
+    fulfillment_source: ShipmentFulfillmentSourceVO | None
 
     @classmethod
     def create(
@@ -98,6 +127,48 @@ class Shipment:
             created_at=created_at,
             updated_at=created_at,
             version=0,
+            fulfillment_source=None,
+        )
+
+    @classmethod
+    def create_from_fulfillment_plan(
+        cls,
+        *,
+        identifier: ShipmentIdVO,
+        fulfillment_plan: FulfillmentPlanShipmentSnapshot,
+        warehouse: WarehouseSnapshot,
+        order: ShipmentOrderSnapshot,
+        inventory_items: tuple[InventoryItemStockSnapshot, ...],
+        reservations: tuple[StockReservationFulfillmentSnapshot, ...],
+        line_bindings: tuple[FulfillmentShipmentLineBindingVO, ...],
+        created_at: datetime,
+    ) -> Self:
+        """Создаёт DRAFT v0 на все распределения одного склада подтверждённого плана."""
+        normalized = cls._normalize_time(created_at)
+        lines = FulfillmentShipmentPolicy.build_lines(
+            fulfillment_plan=fulfillment_plan,
+            warehouse=warehouse,
+            order=order,
+            inventory_items=inventory_items,
+            reservations=reservations,
+            line_bindings=line_bindings,
+            as_of=normalized,
+        )
+        return cls.restore(
+            identifier=identifier,
+            order_ref=ShipmentOrderRefVO(
+                fulfillment_plan.order_ref.system, fulfillment_plan.order_ref.reference
+            ),
+            warehouse_id=warehouse.id,
+            owner_id=fulfillment_plan.owner_id,
+            status=ShipmentStatus.DRAFT,
+            lines=lines,
+            created_at=normalized,
+            updated_at=normalized,
+            version=0,
+            fulfillment_source=ShipmentFulfillmentSourceVO(
+                fulfillment_plan.id, fulfillment_plan.version
+            ),
         )
 
     @classmethod
@@ -113,6 +184,7 @@ class Shipment:
         created_at: datetime,
         updated_at: datetime,
         version: int,
+        fulfillment_source: ShipmentFulfillmentSourceVO | None,
     ) -> Self:
         """Восстанавливает полный собственный исторический состав без текущего заказа или удержаний."""
         shipment = cls(
@@ -125,6 +197,7 @@ class Shipment:
             cls._normalize_time(created_at),
             cls._normalize_time(updated_at),
             version,
+            fulfillment_source,
         )
         shipment._validate()
         return shipment
@@ -140,6 +213,7 @@ class Shipment:
     ) -> Self:
         """Добавляет проверенную строку только в черновик без увеличения удержания резерва."""
         normalized = self._prepare_transition(expected_version, updated_at)
+        self._ensure_manual()
         if not isinstance(line, ShipmentLine):
             raise InvalidShipmentLineError("Нужна дочерняя строка плана ShipmentLine.")
         line.ensure_compatible(inventory_item=inventory_item, reservation=reservation)
@@ -164,6 +238,7 @@ class Shipment:
     ) -> Self:
         """Меняет ввод количества, сохраняя идентичность, основание, товар, резерв и базовую единицу строки."""
         normalized = self._prepare_transition(expected_version, updated_at)
+        self._ensure_manual()
         previous = self._find_line(identifier)
         conversion = QuantityConversionSnapshotVO.create(
             quantity=quantity, uom=uom, base_uom=previous.base_uom
@@ -177,6 +252,7 @@ class Shipment:
             planned_qty=conversion.to_base_quantity(),
             conversion=conversion,
             shipped_qty=previous.shipped_qty,
+            fulfillment_allocation_id=previous.fulfillment_allocation_id,
         )
         changed.ensure_compatible(
             inventory_item=inventory_item, reservation=reservation
@@ -203,6 +279,7 @@ class Shipment:
     ) -> Self:
         """Удаляет строку черновика без текущих снимков, освобождения резерва и потери внешней истории."""
         normalized = self._prepare_transition(expected_version, updated_at)
+        self._ensure_manual()
         self._find_line(identifier)
         return self._changed(
             updated_at=normalized,
@@ -221,6 +298,7 @@ class Shipment:
     ) -> Self:
         """Фиксирует план после проверки заказа и текущих удержаний без создания складского исполнения."""
         normalized = self._prepare_transition(expected_version, updated_at)
+        self._ensure_manual()
         ShipmentConfirmationPolicy.ensure_confirmable(
             order_ref=self.order_ref,
             warehouse_id=self.warehouse_id,
@@ -234,10 +312,116 @@ class Shipment:
         )
         return self._changed(updated_at=normalized, status=ShipmentStatus.CONFIRMED)
 
+    def confirm_from_fulfillment_plan(
+        self,
+        *,
+        expected_version: int,
+        fulfillment_plan: FulfillmentPlanShipmentSnapshot,
+        warehouse: WarehouseSnapshot,
+        order: ShipmentOrderSnapshot,
+        inventory_items: tuple[InventoryItemStockSnapshot, ...],
+        reservations: tuple[StockReservationFulfillmentSnapshot, ...],
+        updated_at: datetime,
+    ) -> Self:
+        """Повторно проверяет прежнее основание и текущие полные удержания перед DRAFT → CONFIRMED."""
+        normalized = self._prepare_transition(expected_version, updated_at)
+        if self.fulfillment_source is None:
+            raise ShipmentFulfillmentMismatchError(
+                "У ручной отгрузки нет основания FulfillmentPlan."
+            )
+        FulfillmentShipmentPolicy.ensure_confirmable(
+            shipment_id=self.id,
+            shipment_version=self.version,
+            source=self.fulfillment_source,
+            order_ref=self.order_ref,
+            warehouse_id=self.warehouse_id,
+            owner_id=self.owner_id,
+            lines=self.lines,
+            fulfillment_plan=fulfillment_plan,
+            warehouse=warehouse,
+            order=order,
+            inventory_items=inventory_items,
+            reservations=reservations,
+            as_of=normalized,
+        )
+        return self._changed(updated_at=normalized, status=ShipmentStatus.CONFIRMED)
+
     def cancel(self, *, expected_version: int, updated_at: datetime) -> Self:
         """Отменяет только черновик, сохраняя строки и не изменяя связанные резервы."""
         normalized = self._prepare_transition(expected_version, updated_at)
         return self._changed(updated_at=normalized, status=ShipmentStatus.CANCELLED)
+
+    def assignment_snapshot(self) -> ShipmentAssignmentSnapshot:
+        """Передаёт полный производный DRAFT/CANCELLED с нулевым исполнением для назначения или снятия."""
+        self._validate()
+        if self.fulfillment_source is None or self.status not in (
+            ShipmentStatus.DRAFT,
+            ShipmentStatus.CANCELLED,
+        ):
+            raise ShipmentFulfillmentMismatchError(
+                "Снимок назначения требует производный черновик либо его отмену."
+            )
+        snapshot = ShipmentAssignmentSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.fulfillment_source,
+            self.order_ref,
+            self.warehouse_id,
+            self.owner_id,
+            self.updated_at,
+            tuple(
+                ShipmentAssignmentLineSnapshot(
+                    row.id,
+                    row.fulfillment_allocation_id,
+                    row.source_ref,
+                    row.reservation_id,
+                    row.inventory_item_id,
+                    row.base_uom,
+                    row.planned_qty,
+                    row.shipped_qty,
+                )
+                for row in self.lines
+            ),
+        )
+        snapshot.ensure_valid()
+        return snapshot
+
+    def fulfillment_snapshot(self) -> ShipmentFulfillmentSnapshot:
+        """Передаёт весь зарегистрированный прогресс производной отгрузки без чтения текущих резервов или плана."""
+        self._validate()
+        if self.fulfillment_source is None or self.status not in (
+            ShipmentStatus.PARTIALLY_SHIPPED,
+            ShipmentStatus.SHIPPED,
+        ):
+            raise ShipmentFulfillmentMismatchError(
+                "Прогресс плана требует производный частично или полностью отгруженный Shipment."
+            )
+        snapshot = ShipmentFulfillmentSnapshot(
+            self.id,
+            self.version,
+            self.status,
+            self.fulfillment_source,
+            self.order_ref,
+            self.warehouse_id,
+            self.owner_id,
+            self.updated_at,
+            tuple(
+                ShipmentFulfillmentLineSnapshot(
+                    line.id,
+                    line.fulfillment_allocation_id,
+                    line.source_ref,
+                    line.reservation_id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.planned_qty,
+                    line.shipped_qty,
+                )
+                for line in self.lines
+            ),
+        )
+        snapshot.ensure_valid()
+        return snapshot
 
     def document_snapshot(self) -> ShipmentDocumentSnapshot:
         """Возвращает проверенную версию и только положительные остатки для расходного документа."""
@@ -362,6 +546,13 @@ class Shipment:
                 return line
         raise ShipmentLineNotFoundError("Строка отсутствует в данном плане отгрузки.")
 
+    def _ensure_manual(self) -> None:
+        """Запрещает ручную пересборку и обычное подтверждение отгрузки с основанием плана."""
+        if self.fulfillment_source is not None:
+            raise ShipmentFulfillmentSourceRequiredError(
+                "Состав выведен из FulfillmentPlan: ручные изменения запрещены, подтверждение требует свежего основания."
+            )
+
     def _changed(self, *, updated_at: datetime, **changes: object) -> Self:
         """Возвращает новый проверенный экземпляр версии +1 или исходный объект при равном содержимом."""
         candidate = replace(self, **changes)
@@ -383,6 +574,10 @@ class Shipment:
             or not isinstance(self.lines, tuple)
             or type(self.version) is not int
             or self.version < 0
+            or (
+                self.fulfillment_source is not None
+                and not isinstance(self.fulfillment_source, ShipmentFulfillmentSourceVO)
+            )
         ):
             raise InvalidShipmentValueError(
                 "Нужны типизированные значения, tuple строк и целая неотрицательная версия отгрузки."
@@ -397,19 +592,39 @@ class Shipment:
             raise ShipmentTimeError(
                 "Сохранённое время должно быть в UTC; изменение не раньше создания."
             )
-        ids, reservations = set(), set()
+        ids, reservations, allocations = set(), set(), set()
         for line in self.lines:
             if not isinstance(line, ShipmentLine):
                 raise InvalidShipmentLineError(
                     "Состав отгрузки содержит только ShipmentLine."
                 )
             line.ensure_valid()
+            if (self.fulfillment_source is not None) != (
+                line.fulfillment_allocation_id is not None
+            ):
+                raise ShipmentFulfillmentMismatchError(
+                    "Основание в шапке и ссылки распределений строк должны присутствовать вместе."
+                )
+            if line.fulfillment_allocation_id is not None:
+                if (
+                    line.fulfillment_allocation_id in allocations
+                    or line.conversion.uom != line.base_uom
+                    or line.conversion.factor_to_base != 1
+                ):
+                    raise ShipmentFulfillmentMismatchError(
+                        "Распределение уникально, количество производной строки хранится в базовой единице с коэффициентом 1."
+                    )
+                allocations.add(line.fulfillment_allocation_id)
             if line.id in ids or line.reservation_id in reservations:
                 raise ShipmentLineConflictError(
                     "ID строки и резерв не должны повторяться в отгрузке."
                 )
             ids.add(line.id)
             reservations.add(line.reservation_id)
+        if self.fulfillment_source is not None and not self.lines:
+            raise EmptyShipmentError(
+                "Производная отгрузка всегда содержит распределения выбранного склада."
+            )
         if (
             self.status not in (ShipmentStatus.DRAFT, ShipmentStatus.CANCELLED)
             and not self.lines

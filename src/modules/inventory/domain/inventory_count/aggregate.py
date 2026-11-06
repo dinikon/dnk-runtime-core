@@ -2,6 +2,23 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Self
 
+from src.modules.inventory.domain.inventory_count.value_object.completion import (
+    InventoryCountCompletionVO,
+)
+from src.modules.inventory.domain.policy.inventory_count_completion import (
+    InventoryCountCompletionPolicy,
+)
+from src.modules.inventory.domain.stock_document.adjustment_completion_snapshot import (
+    StockDocumentAdjustmentCompletionSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.adjustment_snapshot import (
+    StockAdjustmentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.adjustment_application_snapshot import (
+    StockAdjustmentApplicationSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.snapshot import StockPostingSnapshot
+
 from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
     InventoryCountAdjustmentSourceSnapshot,
 )
@@ -68,7 +85,7 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 
 @dataclass(frozen=True, slots=True)
 class InventoryCount:
-    """План, запуск и фиксация сводного результата без коллекции ведомостей, проведения или блокировки движений."""
+    """План, пересчёт и завершение по историческим фактам без коллекции ведомостей, проведения или блокировки движений."""
 
     id: InventoryCountIdVO
     warehouse_id: WarehouseIdVO
@@ -77,6 +94,7 @@ class InventoryCount:
     status: InventoryCountStatus
     baseline: InventoryCountBaselineRefVO | None
     result: InventoryCountResultRefVO | None
+    completion: InventoryCountCompletionVO | None
     created_at: datetime
     updated_at: datetime
     version: int
@@ -105,6 +123,7 @@ class InventoryCount:
             status=InventoryCountStatus.DRAFT,
             baseline=None,
             result=None,
+            completion=None,
             created_at=created_at,
             updated_at=created_at,
             version=0,
@@ -121,6 +140,7 @@ class InventoryCount:
         status: InventoryCountStatus,
         baseline: InventoryCountBaselineRefVO | None,
         result: InventoryCountResultRefVO | None,
+        completion: InventoryCountCompletionVO | None,
         created_at: datetime,
         updated_at: datetime,
         version: int,
@@ -134,6 +154,7 @@ class InventoryCount:
             status,
             baseline,
             result,
+            completion,
             normalize_inventory_count_time(created_at),
             normalize_inventory_count_time(updated_at),
             version,
@@ -296,6 +317,58 @@ class InventoryCount:
             updated_at=updated,
         )
 
+    def complete_with_adjustment(
+        self,
+        *,
+        result: InventoryCountResultSnapshot,
+        document: StockDocumentAdjustmentCompletionSnapshot,
+        execution: StockAdjustmentExecutionSnapshot,
+        posting: StockPostingSnapshot,
+        application: StockAdjustmentApplicationSnapshot,
+        expected_version: int,
+        updated_at: datetime,
+    ) -> Self:
+        """Завершает COUNTED по полной исторической цепочке применения без чтения живых остатков."""
+        normalized = self._prepare_transition(
+            expected_version, updated_at, required_status=InventoryCountStatus.COUNTED
+        )
+        completion = InventoryCountCompletionPolicy.with_adjustment(
+            inventory_count=self.adjustment_source_snapshot(),
+            result=result,
+            document=document,
+            execution=execution,
+            posting=posting,
+            application=application,
+            completed_at=normalized,
+        )
+        return self._changed(
+            status=InventoryCountStatus.COMPLETED,
+            completion=completion,
+            updated_at=normalized,
+        )
+
+    def complete_without_adjustment(
+        self,
+        *,
+        result: InventoryCountResultSnapshot,
+        expected_version: int,
+        updated_at: datetime,
+    ) -> Self:
+        """Закрывает полностью совпавший зарегистрированный результат без фиктивных документов, позиций или Ledger."""
+        normalized = self._prepare_transition(
+            expected_version, updated_at, required_status=InventoryCountStatus.COUNTED
+        )
+        completion = InventoryCountCompletionPolicy.without_adjustment(
+            inventory_count=self.adjustment_source_snapshot(),
+            result=result,
+            completed_at=normalized,
+        )
+        return self._changed(
+            status=InventoryCountStatus.COMPLETED,
+            completion=completion,
+            updated_at=normalized,
+        )
+
     def _prepare_transition(
         self,
         expected_version: int,
@@ -351,6 +424,10 @@ class InventoryCount:
                 self.result is not None
                 and not isinstance(self.result, InventoryCountResultRefVO)
             )
+            or (
+                self.completion is not None
+                and not isinstance(self.completion, InventoryCountCompletionVO)
+            )
             or type(self.version) is not int
             or self.version < 0
         ):
@@ -370,10 +447,14 @@ class InventoryCount:
             )
         if (
             self.status
-            in (InventoryCountStatus.IN_PROGRESS, InventoryCountStatus.COUNTED)
+            in (
+                InventoryCountStatus.IN_PROGRESS,
+                InventoryCountStatus.COUNTED,
+                InventoryCountStatus.COMPLETED,
+            )
         ) != (self.baseline is not None):
             raise InvalidInventoryCountValueError(
-                "Основание обязательно для IN_PROGRESS и COUNTED."
+                "Основание обязательно для IN_PROGRESS, COUNTED и COMPLETED."
             )
         if self.baseline is not None:
             self.baseline.ensure_valid()
@@ -381,9 +462,12 @@ class InventoryCount:
                 raise InventoryCountTimeError(
                     "Момент основания должен находиться между созданием и изменением инвентаризации."
                 )
-        if (self.status is InventoryCountStatus.COUNTED) != (self.result is not None):
+        if (
+            self.status
+            in (InventoryCountStatus.COUNTED, InventoryCountStatus.COMPLETED)
+        ) != (self.result is not None):
             raise InvalidInventoryCountValueError(
-                "Ссылка на результат обязательна только для COUNTED."
+                "Ссылка на результат обязательна для COUNTED и COMPLETED."
             )
         if self.result is not None:
             self.result.ensure_valid()
@@ -393,4 +477,16 @@ class InventoryCount:
             ):
                 raise InventoryCountTimeError(
                     "Подготовка результата должна находиться между основанием и текущим состоянием."
+                )
+        if (self.status is InventoryCountStatus.COMPLETED) != (
+            self.completion is not None
+        ):
+            raise InvalidInventoryCountValueError(
+                "Сведения о завершении обязательны только для COMPLETED."
+            )
+        if self.completion is not None:
+            self.completion.ensure_valid()
+            if not self.result.prepared_at <= self.completion.completed_at <= updated:
+                raise InventoryCountTimeError(
+                    "Завершение должно находиться между результатом и последним изменением корня."
                 )

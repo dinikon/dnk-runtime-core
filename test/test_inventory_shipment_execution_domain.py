@@ -211,6 +211,7 @@ class ShipmentExecutionDomainTests(unittest.TestCase):
                     created_at=shipment.created_at,
                     updated_at=shipment.updated_at,
                     version=shipment.version,
+                    fulfillment_source=shipment.fulfillment_source,
                 )
                 | changes
             )
@@ -234,6 +235,7 @@ class ShipmentExecutionDomainTests(unittest.TestCase):
                 "planned_qty",
                 "conversion",
                 "shipped_qty",
+                "fulfillment_allocation_id",
             },
         )
         for value in (None, Decimal(0), 0):

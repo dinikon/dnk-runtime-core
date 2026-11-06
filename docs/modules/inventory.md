@@ -1,13 +1,15 @@
-# Inventory: Domain-модель товара, складов, плановых документов и физического журнала
+# Inventory: Domain-модель товара, складов, физического журнала и первоначальной стоимости
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
 `PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`,
-`StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool`, `StockReservation`, `Shipment`, `StockTransfer`, `InventoryCount` и `CountSheet`
+`StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool`, `StockReservation`,
+`Shipment`, `StockTransfer`, `InventoryCount`, `CountSheet`, `FulfillmentPlan` и `ValuationLayer`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
 `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`,
 `domain/stock_posting/`, `domain/stock_document/`, `domain/stock_execution/`,
 `domain/availability_pool/`, `domain/stock_reservation/`, `domain/shipment/`, `domain/stock_transfer/`
-`domain/inventory_count/` и `domain/count_sheet/`. Текущий состав — 16 самостоятельных корней из 23 целевых.
+`domain/inventory_count/`, `domain/count_sheet/`, `domain/fulfillment_plan/` и
+`domain/valuation_layer/`. Текущий состав — 18 самостоятельных корней из 23 целевых.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -818,8 +820,9 @@ QuantityConversionSnapshotVO содержит положительное исх�
 | RECEIPT | Каждая дельта положительная |
 | ISSUE | Каждая дельта отрицательная |
 | INTERNAL_MOVE | Точный баланс расхода и прихода между локациями одного склада |
+| ADJUSTMENT | Точные знаковые поправки из полного проверенного исполнения инвентаризации |
 
-StockPostingPolicy проверяет состав, знаки и ссылки на позиции. Для каждой записи
+StockPostingPolicy проверяет состав и знаки. Для обычных операций для каждой записи
 требуется ровно один StockPositionSnapshot с id, dimensions и base_uom, полученный
 через StockPosition.snapshot(). Лишние, повторные или отсутствующие снимки,
 различающиеся единицы и два ID позиции с одинаковыми измерениями отклоняются.
@@ -834,14 +837,15 @@ StockLocation и требует один склад. Приход и расхо�
 
 Для конкретного серийного экземпляра дельта равна +1 или -1 PCS. В одном
 проведении допускается не больше одного прихода и одного расхода serial_id.
-Положительное присутствие серии в других позициях tenant проверит будущий
-сценарий с блокировками и ограничениями БД.
+Для ADJUSTMENT положительное присутствие серии во всём tenant проверяется по полным
+снимкам, как описано ниже. Блокировки и ограничения БД остаются будущему хранению.
 
 Журнал описывает физические факты и сам не разрешает проведение в неактивной
 локации, продажу BLOCKED или поступление без обязательной даты. Проверки
 активности, допустимости операции и сроков годности добавятся при её исполнении.
-ADJUSTMENT, WRITE_OFF, STATUS_CHANGE, RETURN и межскладские этапы пока не поддержаны
-StockOperationType; они остаются в целевом плане документов и расширений правил.
+ADJUSTMENT реализован отдельным сценарием полного исполнения ниже. WRITE_OFF,
+STATUS_CHANGE и RETURN остаются расширениями; этапы StockTransfer используют
+существующие ISSUE/RECEIPT.
 
 ### Создание, восстановление и компенсация
 
@@ -935,7 +939,7 @@ StockDocument — самостоятельный Aggregate Root намерени
 | Поле StockDocument | Тип и назначение |
 | --- | --- |
 | id | StockDocumentIdVO |
-| operation_type | StockOperationType: RECEIPT, ISSUE, INTERNAL_MOVE; ADJUSTMENT пока только как план |
+| operation_type | StockOperationType: RECEIPT, ISSUE, INTERNAL_MOVE; ADJUSTMENT через отдельный полный цикл |
 | warehouse_id | WarehouseIdVO одного склада документа |
 | owner_id | Явный StockOwnerIdVO |
 | source | DocumentSourceVO или None для ручного документа |
@@ -2023,6 +2027,1754 @@ pool_after = pool.consume_reservations(
 Глобальная дедупликация фактической строки, права доступа, SQL и компенсации
 погашений остаются будущим срезам. Низкоуровневые количественные методы сохранены.
 
+## Ручной план исполнения FulfillmentPlan
+
+FulfillmentPlan — самостоятельный Aggregate Root выбора собственных складов
+для потребности одного заказа и владельца. Он владеет tuple FulfillmentAllocation,
+ссылается на другие объекты по ID/непрозрачным ссылкам и не изменяет их состояние.
+Текущий состав модуля — 18 корней из 23 целевых; первоначальная стоимость ValuationLayer описана ниже.
+
+| Поле FulfillmentPlan | Назначение |
+| --- | --- |
+| id | FulfillmentPlanIdVO |
+| order_ref | FulfillmentOrderRefVO(system, reference), неизменна |
+| owner_id | Явный StockOwnerIdVO, общий для распределений и неизменный |
+| status | DRAFT / PLANNED / PARTIALLY_CONFIRMED / CONFIRMED / PARTIALLY_FULFILLED / FULFILLED / CANCELLED |
+| allocations | tuple дочерних FulfillmentAllocation |
+| created_at / updated_at | Явное aware-время, хранение в UTC |
+| version | Строгая неотрицательная целая версия без bool |
+
+FulfillmentAllocation хранит id, source_ref: ReservationSourceVO строки заказа,
+inventory_item_id, base_uom, source: FulfillmentSourceRefVO и положительное
+quantity в базовой единице. Срезы ниже добавляют status, reservation,
+fulfilled_qty, shipment_progress и shipment_assignment.
+Источник принимает только enum OWN_WAREHOUSE и
+warehouse_id: WarehouseIdVO. Полей поставщика, цен, резерва и исполненного
+количества в первом срезе нет. Entity имеет create/restore и локальную проверку;
+самостоятельного write repository или жизненного цикла у неё нет.
+
+Ссылки заказа и строк непрозрачны: trim краёв, без пустых/управляющих значений,
+с сохранением регистра и ведущих нулей. FulfillmentOrderRefVO не зависит от Shipment;
+его существующий ShipmentOrderRefVO не меняется. Orders пока не реализован.
+Будущий адаптер должен явно согласовать ссылки и передать авторитетную потребность.
+
+FulfillmentDemandSnapshot передаёт order_ref, bool is_fulfillable и tuple строк.
+FulfillmentDemandLineSnapshot содержит source_ref, inventory_item_id, base_uom,
+remaining_qty и bool allow_source_split. Снимки проверяют типы, tuple, настоящие
+bool и уникальность строк; remaining_qty может быть нулём. Принадлежность строки
+заказу задаётся её членством в снимке, не форматом reference. Разные строки могут
+ссылаться на одну карточку товара, оставаясь разными обязательствами.
+
+create() создаёт пустой DRAFT v0 по явным ID/ссылке/владельцу/времени и не доказывает
+существование заказа. Только DRAFT допускает add_allocation(),
+change_allocation_quantity() и remove_allocation(). Допланирование действующего
+плана отдельным allocate_remaining_demand() описано ниже. При добавлении и изменении
+передаются актуальные demand, InventoryItemStockSnapshot и WarehouseSnapshot.
+FulfillmentAllocationPolicy требует тот же товар, прежнюю единицу, количество
+по текущему шагу и выбранный активный склад. SERIAL/LOT_AND_SERIAL — PCS/step=1;
+план на несколько экземпляров допустим без выбора их SERIAL ID.
+
+FulfillmentPlanPolicy проверяет весь кандидат по текущему доступному заказу:
+все строки входят в снимок, товар/единица совпадают, точная сумма неисполненных
+остатков по строке не превышает remaining_qty. До начала исполнения остаток равен
+quantity. Корень запрещает повтор ID, пары строка/источник и
+разные товар/единицу для одной строки. Несколько источников допустимы только при
+allow_source_split=True. Этот флаг управляет разделением источников; правила
+частичной отгрузки будут проверяться при исполнении. Частичное покрытие потребности
+допустимо: 3 из 7 с одного склада оставляют 4 нераспределёнными и при запрете разделения.
+
+mark_planned() фиксирует непустой DRAFT после повторной проверки всей потребности
+и ровно участвующих уникальных текущих снимков товаров/складов. Изменившийся шаг,
+уменьшение потребности, удаление строки, запрет разделения, смена единицы/товара
+или неактивность склада отклоняют старый черновик. PLANNED означает проверенное
+намерение: резервы и Shipment не создаются, физическая доступность не оценивается.
+Данных о локациях, позициях, LOT/SERIAL и сроках для такого намерения не требуется.
+
+remaining_to_allocate(source_ref, demand) вычисляет точный остаток без отдельного
+поля после проверки всего активного плана по текущей потребности. Устаревшее
+превышение отклоняется вместо отрицательного QuantityVO. В CANCELLED активный
+остаток не рассчитывается; распределения доступны через get_allocation().
+
+cancel() переводит DRAFT или PLANNED в CANCELLED, сохраняя состав без внешнего
+контекста: обязательства ещё не создаются. Редактирование PLANNED и повторная
+отмена запрещены. Каждое изменение требует expected_version и неубывающее время,
+возвращает новый экземпляр версии +1. Равное количество после актуальных проверок
+возвращает прежний объект без обновления времени/версии. restore() принимает
+всю собственную историю, проверяет типы, UTC, уникальность и непустой PLANNED,
+но не актуальные потребность, шаг или активность склада.
+
+Самостоятельный пример: 7 PCS распределяются как 3 с A и 4 с B.
+
+```python
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import UUID
+
+from src.modules.inventory.domain.fulfillment_plan.aggregate import FulfillmentPlan
+from src.modules.inventory.domain.fulfillment_plan.demand_snapshot import FulfillmentDemandSnapshot, FulfillmentDemandLineSnapshot
+from src.modules.inventory.domain.fulfillment_plan.entity.fulfillment_allocation import FulfillmentAllocation
+from src.modules.inventory.domain.fulfillment_plan.value_object.identifier import FulfillmentPlanIdVO
+from src.modules.inventory.domain.fulfillment_plan.value_object.allocation_id import FulfillmentAllocationIdVO
+from src.modules.inventory.domain.fulfillment_plan.value_object.order_ref import FulfillmentOrderRefVO
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_kind import FulfillmentSourceKind
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import FulfillmentSourceRefVO
+from src.modules.inventory.domain.inventory_item.stock_snapshot import InventoryItemStockSnapshot
+from src.modules.inventory.domain.inventory_item.value_object.identifier import InventoryItemIdVO
+from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import TrackingMode
+from src.modules.inventory.domain.stock_reservation.value_object.source import ReservationSourceVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
+from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
+from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
+from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
+
+at = datetime(2026, 11, 6, 12, tzinfo=UTC)
+order_ref = FulfillmentOrderRefVO("orders", "000042")
+row_ref = ReservationSourceVO("order_line", "opaque-line-A")
+item = InventoryItemStockSnapshot(
+    InventoryItemIdVO(UUID(int=601)), UomCodeVO("PCS"),
+    QuantityRulesVO(Decimal(1)), TrackingMode.NONE,
+)
+warehouse_a = WarehouseSnapshot(WarehouseIdVO(UUID(int=602)), True, None)
+warehouse_b = WarehouseSnapshot(WarehouseIdVO(UUID(int=603)), True, None)
+demand = FulfillmentDemandSnapshot(order_ref, True, (
+    FulfillmentDemandLineSnapshot(row_ref, item.inventory_item_id, item.base_uom, QuantityVO(Decimal(7)), True),
+))
+draft = FulfillmentPlan.create(
+    identifier=FulfillmentPlanIdVO(UUID(int=604)), order_ref=order_ref,
+    owner_id=StockOwnerIdVO(UUID(int=605)), created_at=at,
+)
+first = FulfillmentAllocation.create(
+    identifier=FulfillmentAllocationIdVO(UUID(int=606)), source_ref=row_ref,
+    inventory_item=item, quantity=QuantityVO(Decimal(3)),
+    source=FulfillmentSourceRefVO(FulfillmentSourceKind.OWN_WAREHOUSE, warehouse_a.id),
+)
+second = FulfillmentAllocation.create(
+    identifier=FulfillmentAllocationIdVO(UUID(int=607)), source_ref=row_ref,
+    inventory_item=item, quantity=QuantityVO(Decimal(4)),
+    source=FulfillmentSourceRefVO(FulfillmentSourceKind.OWN_WAREHOUSE, warehouse_b.id),
+)
+one = draft.add_allocation(
+    first, demand=demand, inventory_item=item, warehouse=warehouse_a,
+    expected_version=draft.version, updated_at=at,
+)
+two = one.add_allocation(
+    second, demand=demand, inventory_item=item, warehouse=warehouse_b,
+    expected_version=one.version, updated_at=at,
+)
+planned = two.mark_planned(
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a, warehouse_b),
+    expected_version=two.version, updated_at=at,
+)
+remaining = planned.remaining_to_allocate(row_ref, demand=demand)
+# planned: PLANNED v3, remaining.value == 0. Исходный draft пустой DRAFT v0.
+# Попытка 3+5 вместо 3+4 даст FulfillmentDemandExceededError.
+```
+
+Подтверждение текущими StockReservation и построение Shipment из подтверждённого
+плана реализованы ниже.
+Перепланирование после внешних обязательств должно сохранять исполненное и не
+создавать повторные удержания. Дропшиппинг, автоматический выбор источников, цены,
+Application/SQL/API/UoW/Outbox пока не добавлены. Будущее хранение должно обеспечить
+один активный план на заказ в tenant независимо от владельца и согласовать
+актуальную потребность при сохранении. Domain-снимки и локальная версия сами
+не доказывают свежесть/полноту чтения, глобальную уникальность, резерв или commit.
+
+## Подтверждение распределений FulfillmentPlan резервами
+
+Новых корней нет: 17 из 23 целевых. План закрепляет существующие полные удержания
+за своими Allocation и сохраняет только исторические ссылки. Ни Reservation,
+ни AvailabilityPool, позиции или Ledger этот метод не изменяет.
+
+| Объект | Добавленные данные |
+| --- | --- |
+| FulfillmentAllocation | status: PLANNED/CONFIRMED; reservation: FulfillmentReservationRefVO либо None |
+| FulfillmentReservationRefVO | reservation_id, version и confirmed_at в UTC |
+| FulfillmentReservationBindingVO | allocation_id, reservation_id, reservation_version |
+| StockReservationFulfillmentSnapshot | ID/версия/область/строка/единица, requested_qty, reserved_qty, consumed_qty, статус и сроки |
+
+Allocation.create() создаёт PLANNED/None. restore() принимает status/reservation
+явно и проверяет их матрицу. Ссылка обязательна в CONFIRMED/PARTIALLY_FULFILLED/FULFILLED; она содержит
+строгую неотрицательную версию без bool и нормализованный момент подтверждения.
+Entity.confirm_reservation() фиксирует проверенную корнем ссылку ровно один раз,
+сохраняя исходные количество, строку заказа, товар, единицу и источник.
+
+StockReservation.fulfillment_snapshot() выдаёт специализированный frozen/slots
+контракт: id, pool_id, key, source_ref, base_uom, requested_qty, reserved_qty,
+consumed_qty, status, expires_at, updated_at, version. Он проверяет номинальные
+типы, UTC, строгую версию, положительный запрос и допустимые счётчики/статусы.
+Прежний снимок Shipment не расширен; одного текущего удержания для новой проверки
+недостаточно. Снимок может представлять закрытый/частичный резерв как исторические
+данные, а пригодность подтверждения проверяется отдельно.
+
+FulfillmentPlan.confirm_reservations() принимает непустые новые bindings,
+reservations, текущую demand, inventory_items/warehouses ещё не начатых распределений,
+expected_version и updated_at. Допустимы PLANNED, PARTIALLY_CONFIRMED и PARTIALLY_FULFILLED.
+Повторно проверяются весь оставшийся спрос заказа, его лимиты/разделение, текущие
+правила количества и активные склады ещё не начатых распределений, включая ещё
+не подтверждаемые. Нужны ровно участвующие уникальные снимки
+товаров и складов. Затем FulfillmentReservationPolicy проверяет назначения.
+
+Набор reservations — ровно объединение новых назначений и ранее закреплённых
+резервов без зарегистрированного Shipment. Снимки начатых распределений исключены:
+их прогресс и подтверждение сохраняются исторически. Пропуски, лишние/повторные
+снимки запрещены. Можно подтвердить часть
+распределений, но каждое только целиком. У резерва должны совпадать строка
+обязательства, товар, базовая единица, склад источника и владелец плана, а также:
+
+```text
+status        = RESERVED
+requested_qty = allocation.quantity
+reserved_qty  = allocation.quantity
+consumed_qty  = 0
+```
+
+Полное удержание большего запроса не делится скрыто между распределениями;
+меньшее/частичное удержание оставляет Allocation неподтверждённой. PENDING,
+RELEASED, EXPIRED, PARTIALLY_CONSUMED и CONSUMED не подходят. Момент проверки
+должен быть не раньше текущего состояния резерва и прежних подтверждений.
+expires_at=None допустим; при updated_at>=expires_at удержание уже непригодно.
+
+Новые назначения сравниваются с выбранной reservation_version. Ещё не начатые старые
+ссылки требуют точную сохранённую версию и полное открытое удержание. Автоматической
+перепривязки к новой версии нет даже при одинаковом количестве. Повтор подтверждения
+или повтор одного резервного ID внутри плана запрещён.
+
+Матрица состояния:
+
+- DRAFT/PLANNED/CANCELLED — все Allocation PLANNED, ссылок нет;
+- PARTIALLY_CONFIRMED — хотя бы одно подтверждено, хотя бы одно ещё PLANNED;
+- CONFIRMED — подтверждены все, состав непустой;
+- PARTIALLY_FULFILLED — исполнение началось; часть распределений ещё может быть PLANNED;
+- FULFILLED — все распределения исполнены полностью.
+
+Операция возвращает один новый корень версии +1. В каждом распределении сохраняется
+его первый confirmed_at; при следующем подтверждении он не переписывается.
+Пакет всех строк сразу даёт CONFIRMED. Отказ сохраняет все исходные объекты.
+restore() проверяет собственную матрицу, уникальность резервов и
+created_at <= allocation.reservation.confirmed_at <= updated_at, без загрузки
+или переоценки текущих удержаний. Прямое редактирование зафиксированного состава
+запрещено; перепланирование не начатых строк описано ниже. После снятия всех подтверждений план в PLANNED можно отменить.
+
+Пример продолжает PLANNED v3 на 3 PCS с A и 4 PCS с B из предыдущего раздела:
+
+```python
+from datetime import timedelta
+
+from src.modules.inventory.domain.availability_pool.reservation_snapshot import AvailabilityPoolReservationSnapshot
+from src.modules.inventory.domain.availability_pool.value_object.identifier import AvailabilityPoolIdVO
+from src.modules.inventory.domain.availability_pool.value_object.key import AvailabilityPoolKeyVO
+from src.modules.inventory.domain.fulfillment_plan.value_object.reservation_binding import FulfillmentReservationBindingVO
+from src.modules.inventory.domain.stock_reservation.aggregate import StockReservation
+from src.modules.inventory.domain.stock_reservation.value_object.identifier import StockReservationIdVO
+
+confirmed_at = at + timedelta(minutes=1)
+reservations = []
+for index, allocation in enumerate(planned.allocations):
+    pool_ref = AvailabilityPoolReservationSnapshot(
+        AvailabilityPoolIdVO(UUID(int=700 + index)),
+        AvailabilityPoolKeyVO(allocation.inventory_item_id, allocation.source.warehouse_id, planned.owner_id),
+        allocation.base_uom,
+    )
+    pending = StockReservation.create(
+        identifier=StockReservationIdVO(UUID(int=710 + index)), pool=pool_ref,
+        inventory_item=item, source_ref=allocation.source_ref,
+        requested_qty=allocation.quantity, created_at=at,
+        expires_at=at + timedelta(hours=1),
+    )
+    reservations.append(pending.add_reserved(
+        allocation.quantity, expected_version=pending.version,
+        inventory_item=item, updated_at=confirmed_at,
+    ))
+reserve_a, reserve_b = reservations
+partially_confirmed = planned.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(first.id, reserve_a.id, reserve_a.version),),
+    reservations=(reserve_a.fulfillment_snapshot(),),
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a, warehouse_b),
+    expected_version=planned.version, updated_at=confirmed_at,
+)
+confirmed = partially_confirmed.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(second.id, reserve_b.id, reserve_b.version),),
+    reservations=(reserve_a.fulfillment_snapshot(), reserve_b.fulfillment_snapshot()),
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a, warehouse_b),
+    expected_version=partially_confirmed.version, updated_at=confirmed_at + timedelta(minutes=1),
+)
+# PLANNED v3 -> PARTIALLY_CONFIRMED v4 -> CONFIRMED v5.
+# Первый confirmed_at сохранён, количества 3/4 и исходный planned не изменены.
+```
+
+В примере подготавливаются Domain-кандидаты по снимкам идентичности пулов.
+StockReservation.add_reserved() проверяет только собственный лимит; согласование
+счётчиков AvailabilityPool с резервами и планом должен атомарно обеспечить будущий
+Application/UoW. Текущий статус/ссылка не доказывают глобальную занятость резерва,
+полноту чтения или commit. Глобальное назначение одного резерва одному активному
+распределению и один активный план на заказ потребуют ограничений хранения.
+
+CONFIRMED — исторический результат проверки на момент подтверждения. Независимое
+истечение, освобождение или расход резерва не переписывают план автоматически.
+Построение Shipment ниже повторно проверяет свежие удержания. Регистрация прогресса
+в плане, снятие резервных подтверждений и перепланирование не начатых строк
+также реализованы ниже. Поставщики, SQL/API/Outbox и глобальная идемпотентность
+остаются следующими срезами.
+
+## Построение Shipment из подтверждённого FulfillmentPlan
+
+Срез связывает подтверждённые распределения с самостоятельной отгрузкой одного
+склада. Новых Aggregate Roots нет: 17 из 23 целевых. План, резервы, пулы и остатки
+при построении и подтверждении Shipment не изменяются.
+
+| Контракт | Данные |
+| --- | --- |
+| FulfillmentPlanShipmentSnapshot | id, version, status, order_ref, owner_id, updated_at, tuple распределений |
+| FulfillmentAllocationShipmentSnapshot | id, source_ref, inventory_item_id, base_uom, source, quantity, reservation: FulfillmentReservationRefVO либо None, status, fulfilled_qty, shipment_progress, shipment_assignment |
+| ShipmentFulfillmentSourceVO | plan_id, plan_version: строгая целая неотрицательная версия без bool |
+| FulfillmentShipmentLineBindingVO | allocation_id, shipment_line_id: типизированные ID новых строк |
+| Shipment.fulfillment_source | Сохранённое основание плана либо None для ручной отгрузки |
+| ShipmentLine.fulfillment_allocation_id | Распределение-основание либо None для ручной строки |
+
+FulfillmentPlan.shipment_snapshot() проверяет полный корень и требует
+PARTIALLY_CONFIRMED, CONFIRMED или PARTIALLY_FULFILLED. В выбранном складе все
+распределения подтверждены, ещё не связаны с зарегистрированным Shipment и имеют fulfilled_qty=0.
+Снимок immutable/frozen/slots, содержит все распределения плана, проверяет UTC,
+строгую версию, непустой состав и его уникальность. Текущие удержания он не читает:
+CONFIRMED остаётся историческим результатом проверки.
+
+Частично подтверждённый план теперь допускает отгрузку готового склада A при
+ожидающем резерв складе B. После регистрации A его историческое удержание не
+проверяется заново при подтверждении B. Сценарий описан ниже; уже погашенный резерв
+A не запрашивается при построении B. Выбранный склад отгружается полным составом.
+
+Shipment.create_from_fulfillment_plan() принимает:
+
+- identifier, created_at — явные ID и aware-время новой отгрузки;
+- fulfillment_plan — проверенное специализированное основание;
+- warehouse — текущий снимок выбранного активного склада;
+- order — текущий ShipmentOrderSnapshot;
+- inventory_items, reservations — ровно товары и полные снимки резервов выбранного склада;
+- line_bindings — ровно одно назначение нового ShipmentLineIdVO каждому распределению склада.
+
+FulfillmentShipmentPolicy.build_lines() выбирает все распределения одного склада,
+каждое целиком, без объединения или дробления. Неизвестный склад, пустая выборка,
+пропуски/лишние назначения, повтор распределения или ID строки запрещены.
+Заказ и владелец выводятся из плана; FulfillmentOrderRefVO явно переводится в
+ShipmentOrderRefVO по system/reference с сохранением регистра и ведущих нулей.
+Одна Allocation становится одной ShipmentLine: прежние товар, строка заказа,
+резерв и количество, ввод в базовой единице с коэффициентом 1, shipped_qty=0.
+Порядок строк стабилен по ID распределений. Результат — непустой DRAFT версии 0.
+
+Используется существующий StockReservationFulfillmentSnapshot, а не прежний
+shipment_snapshot(): для этой проверки нужны requested_qty и consumed_qty.
+Каждый резерв должен иметь ту же версию, что сохранена в Allocation, и:
+
+```text
+status        = RESERVED
+requested_qty = allocation.quantity
+reserved_qty  = allocation.quantity
+consumed_qty  = 0
+```
+
+Совпадают source_ref, товар, базовая единица, склад источника и владелец.
+Частичные, большие полные, погашенные, освобождённые и истёкшие удержания запрещены.
+Момент решения не раньше updated_at плана и резервов; при as_of>=expires_at резерв
+непригоден, expires_at=None допустим. Системные часы не используются.
+
+Проверенные полные снимки проецируются в прежний специализированный контракт
+ShipmentConfirmationPolicy. Клиент передаёт один набор резервов. Повторно
+проверяются текущие шаг/единица товара, принадлежность строк заказу, доступность
+заказа, сумма planned_qty по source_ref не больше remaining_to_ship_qty и активность
+склада. Дополнительные строки заказа допустимы; лишние товары/резервы запрещены.
+
+Для подтверждения нужен Shipment.confirm_from_fulfillment_plan() с текущими
+снимками того же плана, заказа, склада, товаров и полных резервов. Требуются:
+
+- Предварительное assign_shipment() в FulfillmentPlan с назначением именно этому
+  Shipment, строкам, версии черновика и исходной версии основания; см. раздел назначения ниже.
+- DRAFT, точная expected_version, явное неубывающее aware-время;
+- прежний plan_id и plan_version не больше текущей версии плана. Историческое
+  основание допустимо при полном соответствии ещё не начатых подтверждённых
+  распределений выбранного склада, включая после подтверждения другого склада.
+  Будущая версия или несовместимое основание отклоняются без перепривязки;
+- прежние заказ/владелец/склад и точное соответствие всего состава распределениям;
+- повтор всех проверок фабрики по свежим данным, включая сроки и версии удержаний.
+
+Успех — CONFIRMED, версия +1. Основание автоматически не обновляется. Ошибка
+оставляет исходные объекты без изменений. Обычный confirm() запрещён для
+производного Shipment; add_line/change_line_quantity/remove_line также запрещены,
+включая численный no-op. Можно отменить DRAFT с сохранением связей и создать новый
+кандидат; отмена сама не освобождает резерв.
+
+Обычные ручные create/add/change/remove/confirm сохраняют прежнее поведение и
+имеют fulfillment_source=None, fulfillment_allocation_id=None. В restore() обоих
+объектов новые поля передаются явно. Корень требует совместное присутствие шапки
+и ссылок строк, уникальные распределения, непустую производную отгрузку и базовый
+ввод с коэффициентом 1. Restore не переоценивает текущие удержания и не требует
+план. Связи сохраняются при CANCELLED, PARTIALLY_SHIPPED и SHIPPED.
+
+Пример продолжает CONFIRMED v5 на 3 PCS с A и 4 PCS с B из предыдущего раздела:
+
+```python
+from src.modules.inventory.domain.shipment.aggregate import Shipment
+from src.modules.inventory.domain.shipment.order_snapshot import ShipmentOrderLineSnapshot, ShipmentOrderSnapshot
+from src.modules.inventory.domain.shipment.value_object.fulfillment_line_binding import FulfillmentShipmentLineBindingVO
+from src.modules.inventory.domain.shipment.value_object.identifier import ShipmentIdVO
+from src.modules.inventory.domain.shipment.value_object.line_id import ShipmentLineIdVO
+from src.modules.inventory.domain.shipment.value_object.order_ref import ShipmentOrderRefVO
+
+shipment_at = confirmed.updated_at + timedelta(minutes=1)
+shipment_order = ShipmentOrderSnapshot(
+    ShipmentOrderRefVO(confirmed.order_ref.system, confirmed.order_ref.reference),
+    True,
+    tuple(ShipmentOrderLineSnapshot(
+        row.source_ref, row.inventory_item_id, row.base_uom, row.remaining_qty,
+    ) for row in demand.lines),
+)
+draft_shipments = []
+confirmed_shipments = []
+shipment_plan = confirmed
+for index, (allocation, warehouse, reservation) in enumerate((
+    (first, warehouse_a, reserve_a),
+    (second, warehouse_b, reserve_b),
+)):
+    draft_shipment = Shipment.create_from_fulfillment_plan(
+        identifier=ShipmentIdVO(UUID(int=800 + index)),
+        fulfillment_plan=shipment_plan.shipment_snapshot(), warehouse=warehouse,
+        order=shipment_order, inventory_items=(item,),
+        reservations=(reservation.fulfillment_snapshot(),),
+        line_bindings=(FulfillmentShipmentLineBindingVO(
+            allocation.id, ShipmentLineIdVO(UUID(int=810 + index)),
+        ),),
+        created_at=shipment_at,
+    )
+    draft_shipments.append(draft_shipment)
+    shipment_plan = shipment_plan.assign_shipment(
+        draft_shipment.assignment_snapshot(), expected_version=shipment_plan.version, updated_at=shipment_at,
+    )
+    confirmed_shipments.append(draft_shipment.confirm_from_fulfillment_plan(
+        expected_version=draft_shipment.version,
+        fulfillment_plan=shipment_plan.shipment_snapshot(), warehouse=warehouse,
+        order=shipment_order, inventory_items=(item,),
+        reservations=(reservation.fulfillment_snapshot(),), updated_at=shipment_at,
+    ))
+shipment_a, shipment_b = confirmed_shipments
+# Два DRAFT v0 -> два CONFIRMED v1: A=3 PCS, B=4 PCS, shipped_qty=0.
+# shipment_plan v7 хранит назначения A/B; основания отправлений — v5/v6.
+# Исходный confirmed остаётся v5; резервы, пулы, позиции и Ledger не изменены.
+```
+
+Оба Shipment продолжают прежнюю цепочку построения ISSUE StockDocument и регистрации
+частичного/полного исполнения. Регистрация исполнения в FulfillmentPlan описана ниже.
+Отгрузка частично подтверждённого плана и снятие резервных подтверждений
+и перепланирование не начатых строк также реализованы ниже;
+поставщики, SQL/API/Outbox — следующие срезы. Внутри отгрузки ID распределения и
+резерва уникальны; разные вызовы фабрики ещё могут создать кандидаты на одну Allocation.
+Глобальную занятость между Shipment, свежесть чтения, идемпотентность, конкуренцию
+и атомарное сохранение обязан обеспечить будущий Application/UoW и tenant-хранение.
+
+Тесты: test/test_inventory_fulfillment_shipment_domain.py.
+
+## Исполнение FulfillmentPlan по прогрессу Shipment
+
+Срез замыкает обратную связь Shipment → FulfillmentPlan. Новых Aggregate Roots нет:
+17 из 23 целевых. Shipment хранит факт складской отгрузки, а FulfillmentPlan
+регистрирует накопленное исполнение своих распределений. Операция не изменяет
+Shipment, резервы, пулы, позиции или Ledger.
+
+| Объект | Данные и поведение |
+| --- | --- |
+| FulfillmentAllocation.fulfilled_qty | QuantityVO, create() задаёт 0, диапазон 0..quantity |
+| FulfillmentAllocation.shipment_progress | FulfillmentShipmentProgressRefVO либо None |
+| FulfillmentAllocation.remaining_to_fulfill() | Точный quantity - fulfilled_qty без отдельного счётчика |
+| FulfillmentShipmentProgressRefVO | shipment_id, shipment_line_id, shipment_version, shipment_updated_at, source_plan_version |
+| ShipmentFulfillmentSnapshot | id, version, status, fulfillment_source, order_ref, warehouse_id, owner_id, updated_at, tuple строк |
+| ShipmentFulfillmentLineSnapshot | id, fulfillment_allocation_id, source_ref, reservation_id, inventory_item_id, base_uom, planned_qty, shipped_qty |
+
+VO требует номинальные ID, целые неотрицательные версии без bool и нормализует
+aware-время в UTC. Хранится последняя контрольная точка каждой строки Shipment.
+Одна Allocation исполняется одной строкой одного Shipment. Историческая ссылка
+подтверждения резервом сохраняется. Restore Allocation принимает fulfilled_qty
+и shipment_progress явно; оставшееся количество вычисляется точно через существующую
+QuantityArithmeticPolicy.
+
+Shipment.fulfillment_snapshot() валидирует полный корень и требует основание
+FulfillmentPlan и статус PARTIALLY_SHIPPED/SHIPPED. Снимок frozen/slots, содержит
+все строки отгрузки, включая shipped_qty=0, и проверяет номинальные типы, UTC,
+строгую версию, уникальность строк/резервов/распределений и согласованность статуса
+с количествами. Прежние снимки исполнения и документов не расширяются.
+
+FulfillmentPlan.register_shipment(shipment, expected_version, updated_at) принимает
+этот снимок в CONFIRMED/PARTIALLY_FULFILLED/FULFILLED. Сначала проверяются текущая
+строгая версия корня, собственный состав и явное неубывающее время в UTC. Время
+операции не раньше shipment.updated_at. FulfillmentShipmentProgressPolicy требует:
+
+- То же основание плана, заказ и владелец. Будущая версия основания запрещена.
+  Историческая версия допустима при неизменных привязках распределений также
+  после подтверждения другого склада до первого исполнения.
+- Ровно полный состав распределений одного склада, включая нулевые строки.
+- Совпадающие Allocation ID, строку заказа, резерв, товар, базовую единицу и
+  planned_qty=allocation.quantity каждой строки.
+- Сохранение связи Shipment с одним складом; новая отгрузка не перепривязывает
+  уже зарегистрированную Allocation.
+
+Текущие открытые удержания, заказ, активность склада и правила товара не передаются
+в эту операцию. Факт уже принят Shipment; резерв мог быть погашен, а настройки
+после факта могли измениться. Исторический факт проверяется по сохранённым
+идентичности, базовой единице и плановым количествам.
+
+В Allocation регистрируется накопленное shipped_qty: 1 → 3 означает fulfilled_qty=3.
+Количество не уменьшается и не превышает quantity. shipment_id, shipment_line_id
+и исходная source_plan_version фиксируются при предварительном назначении.
+Регистрация требует это назначение, более новую версию Shipment и время факта
+не раньше assigned_at. Последующие
+снимки сохраняют эту связь и не уменьшают версию/время контрольной точки.
+
+- Более старая версия отклоняется даже при том же количестве.
+- Та же версия с другим количеством или временем — конфликт.
+- Точный повтор возвращает прежний план без обновления version/updated_at,
+  в том числе после FULFILLED и после регистрации другого склада.
+- Более новая версия с тем же количеством обновляет контрольную точку одной
+  новой версией корня. Любой пакет строк применяется целиком; ошибка не меняет
+  исходные экземпляры.
+
+Матрица Allocation:
+
+| Статус | Исполнение и ссылки |
+| --- | --- |
+| PLANNED | fulfilled_qty=0, reservation=None, shipment_progress=None |
+| CONFIRMED | fulfilled_qty=0, reservation задан; shipment_progress может быть задан у нулевой строки уже начатого Shipment |
+| PARTIALLY_FULFILLED | 0 < fulfilled_qty < quantity, обе ссылки заданы |
+| FULFILLED | fulfilled_qty=quantity, обе ссылки заданы |
+
+В плане CONFIRMED означает полный подтверждённый состав без контрольных точек,
+PARTIALLY_FULFILLED — положительное, но не полное исполнение с возможными PLANNED-строками, FULFILLED — исполнены
+все распределения. Нулевые строки того же Shipment получают контрольную точку
+одновременно с положительными. У всех строк одного Shipment одинаковые
+его версия/время/исходная версия плана; пары Shipment/ShipmentLine уникальны,
+отправление не смешивает склады. Время точки не раньше подтверждения резервом,
+находится внутри created_at/updated_at плана, source_plan_version < plan.version.
+Restore проверяет эту историю без загрузки текущих агрегатов.
+
+FulfillmentPlan.shipment_snapshot() содержит текущие status, fulfilled_qty и
+shipment_progress распределений и допускает PARTIALLY_CONFIRMED/CONFIRMED/PARTIALLY_FULFILLED.
+Создание и подтверждение нового Shipment требуют ещё не начатые выбранные строки:
+у всех выбранных распределений fulfilled_qty=0 и shipment_progress=None. Новая фабрика
+также требует shipment_assignment=None; подтверждение требует совпадающее назначение.
+Назначенная Allocation повторно не назначается. В FULFILLED основание новых отгрузок не выдаётся.
+
+После регистрации A версия плана меняется. Ранее созданный черновик B можно
+подтвердить с историческим plan_version, если полный состав B сохранился и его
+текущие полные резервы пригодны. Подтверждение других распределений также не
+обесценивает прежний черновик. Будущая версия, изменение состава, количества, товара,
+единицы, владельца или резервов запрещены. Исходное основание B не переписывается.
+Готовый склад может начать отгрузку из PARTIALLY_CONFIRMED; порядок подтверждения
+остальных распределений и исполнения раскрыт в следующем разделе.
+
+remaining_to_allocate() и проверка текущей потребности теперь учитывают только
+неисполненные обязательства quantity-fulfilled_qty. remaining_qty в свежем снимке
+заказа обозначает ещё не исполненное количество. После отгрузки 1 из исходных 7
+новая потребность 6 покрыта остатками A=2/B=4, свободно к распределению 0. Запрос
+по-прежнему требует текущий доступный заказ и согласованные строки потребности.
+
+Пример — отдельная последовательность от исходного confirmed v5 из предыдущих
+разделов. В ней Shipment B остаётся черновиком до регистрации A. Фактические данные
+для примера заданы StockExecutionReservationSnapshot; рабочий процесс получает
+этот контракт от проверенного StockExecution. ShipmentExecutionPolicy проверяет
+назначения фактических строк прежде, чем Shipment примет прогресс.
+
+```python
+from dataclasses import replace
+from datetime import datetime
+from decimal import Decimal
+
+from src.modules.inventory.domain.policy.shipment_execution import ShipmentExecutionPolicy
+from src.modules.inventory.domain.shipment.value_object.execution_binding import ShipmentExecutionBindingVO
+from src.modules.inventory.domain.stock_execution.reservation_snapshot import StockExecutionReservationLineSnapshot, StockExecutionReservationSnapshot
+from src.modules.inventory.domain.stock_execution.value_object.identifier import StockExecutionIdVO
+from src.modules.inventory.domain.stock_execution.value_object.line_id import StockExecutionLineIdVO
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import StockOperationType
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+
+progress_at = confirmed.updated_at + timedelta(minutes=1)
+progress_drafts = []
+for index, (allocation, warehouse, reservation) in enumerate((
+    (first, warehouse_a, reserve_a), (second, warehouse_b, reserve_b),
+)):
+    progress_drafts.append(Shipment.create_from_fulfillment_plan(
+        identifier=ShipmentIdVO(UUID(int=900 + index)),
+        fulfillment_plan=confirmed.shipment_snapshot(), warehouse=warehouse,
+        order=shipment_order, inventory_items=(item,),
+        reservations=(reservation.fulfillment_snapshot(),),
+        line_bindings=(FulfillmentShipmentLineBindingVO(
+            allocation.id, ShipmentLineIdVO(UUID(int=910 + index)),
+        ),), created_at=progress_at,
+    ))
+progress_draft_a, progress_draft_b = progress_drafts
+assigned_a_plan = confirmed.assign_shipment(
+    progress_draft_a.assignment_snapshot(), expected_version=confirmed.version, updated_at=progress_at,
+)
+progress_a = progress_draft_a.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=assigned_a_plan.shipment_snapshot(),
+    warehouse=warehouse_a, order=shipment_order, inventory_items=(item,),
+    reservations=(reserve_a.fulfillment_snapshot(),), updated_at=progress_at,
+)
+
+def accept_execution(shipment: Shipment, amount: str, index: int, occurred_at: datetime) -> Shipment:
+    """Сопоставляет один заданный факт строке отправления и регистрирует его существующим методом Shipment."""
+    line = shipment.lines[0]
+    execution = StockExecutionReservationSnapshot(
+        StockExecutionIdVO(UUID(int=920 + index)), StockOperationType.ISSUE,
+        shipment.warehouse_id, shipment.owner_id, occurred_at,
+        (StockExecutionReservationLineSnapshot(
+            StockExecutionLineIdVO(UUID(int=930 + index)), line.inventory_item_id,
+            line.base_uom, QuantityVO(Decimal(amount)),
+        ),),
+    )
+    registration = ShipmentExecutionPolicy.build_registration(
+        shipment=shipment.execution_snapshot(), execution=execution,
+        bindings=(ShipmentExecutionBindingVO(execution.lines[0].id, line.id),),
+    )
+    return shipment.register_execution(
+        registration, expected_version=shipment.version, updated_at=occurred_at,
+    )
+
+progress_a1 = accept_execution(progress_a, "1", 1, progress_at + timedelta(minutes=1))
+plan_after_a1 = assigned_a_plan.register_shipment(
+    progress_a1.fulfillment_snapshot(), expected_version=assigned_a_plan.version,
+    updated_at=progress_a1.updated_at,
+)
+# План v7: A=1/B=0, PARTIALLY_FULFILLED. B всё ещё DRAFT с основанием v5.
+order_after_a1 = replace(shipment_order, lines=tuple(
+    replace(row, remaining_to_ship_qty=QuantityVO(Decimal(6)))
+    if row.source_ref == first.source_ref else row for row in shipment_order.lines
+))
+assigned_b_plan = plan_after_a1.assign_shipment(
+    progress_draft_b.assignment_snapshot(), expected_version=plan_after_a1.version, updated_at=plan_after_a1.updated_at,
+)
+progress_b = progress_draft_b.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=assigned_b_plan.shipment_snapshot(),
+    warehouse=warehouse_b, order=order_after_a1, inventory_items=(item,),
+    reservations=(reserve_b.fulfillment_snapshot(),), updated_at=plan_after_a1.updated_at,
+)
+# B CONFIRMED v1; его fulfillment_source.plan_version остаётся 5.
+progress_a3 = accept_execution(progress_a1, "2", 2, progress_at + timedelta(minutes=2))
+plan_after_a3 = assigned_b_plan.register_shipment(
+    progress_a3.fulfillment_snapshot(), expected_version=assigned_b_plan.version,
+    updated_at=progress_a3.updated_at,
+)
+# План v9: A=3/B=0, PARTIALLY_FULFILLED.
+progress_b4 = accept_execution(progress_b, "4", 3, progress_at + timedelta(minutes=3))
+completed_plan = plan_after_a3.register_shipment(
+    progress_b4.fulfillment_snapshot(), expected_version=plan_after_a3.version,
+    updated_at=progress_b4.updated_at,
+)
+repeated_plan = completed_plan.register_shipment(
+    progress_b4.fulfillment_snapshot(), expected_version=completed_plan.version,
+    updated_at=completed_plan.updated_at,
+)
+# План v10: A=3/B=4, FULFILLED. repeated_plan is completed_plan.
+# Исходный confirmed остаётся v5; исходные черновики и резервы не изменены.
+```
+
+Глобальная занятость до первой регистрации факта между кандидатами Shipment,
+свежесть чтения, конкурентность и идемпотентность хранения остаются будущему
+Application/UoW и tenant-хранению. Рабочий процесс должен атомарно согласовать
+StockExecution, StockPosting/позиции, StockDocument, Shipment, FulfillmentPlan,
+резервы, пулы и Outbox. Поддержка PARTIALLY_CONFIRMED и перепланирование
+не начатых строк описаны ниже; поставщики, SQL/API/Outbox остаются отдельно.
+
+Тесты: test/test_inventory_fulfillment_progress_domain.py.
+
+## Отгрузка частично подтверждённого плана
+
+Готовый склад A теперь можно отгрузить, пока B ожидает резерв. Новых корней,
+статусов и сохраняемых VO нет: 17 из 23 целевых AR. Область среза — полный состав
+готового склада; отдельные подтверждённые строки внутри недообеспеченного склада
+пока не выбираются для Shipment.
+
+FulfillmentPlan.is_fully_confirmed() возвращает bool без дополнительного поля:
+состав непустой и каждая Allocation имеет историческое подтверждение резервом.
+Истечение или погашение резерва не изменяет этот вычисляемый признак. При создании
+или подтверждении Shipment пригодность текущих удержаний проверяется отдельно.
+
+| Состояние | Прогресс | is_fully_confirmed() |
+| --- | --- | --- |
+| Пустой DRAFT / PLANNED | Нет | False |
+| PARTIALLY_CONFIRMED | Нет, часть Allocation PLANNED | False |
+| CONFIRMED | Нет, все подтверждены | True |
+| PARTIALLY_FULFILLED | Положительный, но не полный; другие Allocation могут быть PLANNED | False либо True |
+| FULFILLED | Все Allocation исполнены полностью | True |
+
+Матрица восстановления обновлена: PARTIALLY_FULFILLED допускает неподтверждённый
+B с reservation=None, fulfilled_qty=0 и shipment_progress=None. Контрольные точки
+начатого A, уникальность связей и хронология проверяются как прежде. Подтверждение
+B не переводит уже начатый план обратно в CONFIRMED и не меняет прогресс A.
+
+FulfillmentPlanShipmentSnapshot теперь допускает PARTIALLY_CONFIRMED и хранит
+все строки. У FulfillmentAllocationShipmentSnapshot reservation может быть None
+только для PLANNED; существующие резервные ID остаются уникальными. Фабрика и
+подтверждение Shipment выбирают один склад, где все распределения CONFIRMED,
+fulfilled_qty=0, shipment_progress=None и свежие полные резервы пригодны. Перед
+подтверждением требуется назначение; для новой фабрики назначение отсутствует.
+PLANNED соседней строки не блокирует готовую выбранную Allocation того же склада.
+Явный поднабор целых строк может отгружаться независимо; регистрация факта требует
+полный назначенный состав конкретного Shipment, включая его нулевые строки.
+
+Confirm_reservations() теперь разрешён также в PARTIALLY_FULFILLED. Проверки
+FulfillmentReservationPolicy разделены по состоянию Allocation:
+
+| Распределение | Требование к текущему резерву при подтверждении новых назначений |
+| --- | --- |
+| Новое назначение PLANNED | Полный RESERVED, точная выбранная версия, срок ещё не наступил |
+| Ранее подтверждённое без shipment_progress | Прежняя версия и полный неистёкший резерв |
+| С зарегистрированным shipment_progress | Текущий снимок не передаётся; сохраняются исторические подтверждение и прогресс |
+
+Нулевая строка уже начатого Shipment тоже относится к последней группе: она получила
+контрольную точку вместе с остальными строками. Набор reservations — ровно новые
+назначения и прежние ещё не начатые удержания. Пропуск, дубликат и лишний снимок
+начатого A отклоняются. Все резервные ID проверяются на занятость во всём плане,
+включая уже погашенные; исключение A из текущего контекста не разрешает повторно
+использовать его ID для B. Новое назначение по-прежнему допускается только PLANNED.
+
+FulfillmentPlanPolicy.ensure_confirmable_reservations() проверяет текущую demand
+по всем положительным remaining_to_fulfill(). Полностью исполненная Allocation
+не требует строки в свежей потребности и не участвует в проверке разделения источников.
+Текущие inventory_items/warehouses требуются ровно для действующих неотменённых
+распределений без shipment_progress, включая пока не выбранные для подтверждения. Товар, базовая
+единица, шаг и активность B проверяются; историческое количество уже начатого A
+не переоценивается по новому шагу и не требует текущего снимка его склада.
+
+Порядки подтверждения независимы:
+
+- A создан/подтверждён → A исполнен и зарегистрирован → B подтверждён;
+- черновик A создан → B подтверждён → прежний A подтверждён и исполнен;
+- A подтверждён → B подтверждён → первый факт A зарегистрирован.
+
+Исторический plan_version допускается при том же плане и неизменном выбранном составе
+подтверждённых Allocation. Будущая версия запрещена. Сохраняются проверки
+заказа, владельца, товара, количества, единицы, резервов и их текущих версий/сроков
+перед подтверждением Shipment. Его fulfillment_source не переписывается.
+Expected_version самого изменяемого корня остаётся точным, время — явным и монотонным.
+Возврат к редактированию или ручной отмене начатого плана не добавлен.
+
+Следующий пример — отдельная последовательность от исходного planned v3 из предыдущих
+разделов. Используются те же снимки товара/складов/заказа, резервы и accept_execution().
+Погашение A показано как отдельный Domain-кандидат; согласование пула и физического
+учёта должен выполнять будущий Application/UoW.
+
+```python
+early_plan = planned.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(first.id, reserve_a.id, reserve_a.version),),
+    reservations=(reserve_a.fulfillment_snapshot(),), demand=demand,
+    inventory_items=(item,), warehouses=(warehouse_a, warehouse_b),
+    expected_version=planned.version, updated_at=confirmed_at,
+)
+early_at = confirmed_at + timedelta(minutes=1)
+early_draft_a = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1000)), fulfillment_plan=early_plan.shipment_snapshot(),
+    warehouse=warehouse_a, order=shipment_order, inventory_items=(item,),
+    reservations=(reserve_a.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(first.id, ShipmentLineIdVO(UUID(int=1010))),),
+    created_at=early_at,
+)
+early_assigned = early_plan.assign_shipment(
+    early_draft_a.assignment_snapshot(), expected_version=early_plan.version, updated_at=early_at,
+)
+early_a = early_draft_a.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=early_assigned.shipment_snapshot(), warehouse=warehouse_a,
+    order=shipment_order, inventory_items=(item,), reservations=(reserve_a.fulfillment_snapshot(),),
+    updated_at=early_at,
+)
+early_a1 = accept_execution(early_a, "1", 10, early_at + timedelta(minutes=1))
+early_progress = early_assigned.register_shipment(
+    early_a1.fulfillment_snapshot(), expected_version=early_assigned.version, updated_at=early_a1.updated_at,
+)
+consumed_early_a = reserve_a.consume(
+    QuantityVO(Decimal(1)), expected_version=reserve_a.version, inventory_item=item,
+    consumed_at=early_a1.updated_at, updated_at=early_a1.updated_at,
+)
+early_demand = replace(demand, lines=tuple(
+    replace(row, remaining_qty=QuantityVO(Decimal(6)))
+    if row.source_ref == first.source_ref else row for row in demand.lines
+))
+covered_early = early_progress.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(second.id, reserve_b.id, reserve_b.version),),
+    reservations=(reserve_b.fulfillment_snapshot(),), demand=early_demand,
+    inventory_items=(item,), warehouses=(warehouse_b,),
+    expected_version=early_progress.version, updated_at=early_progress.updated_at,
+)
+# v4 PARTIALLY_CONFIRMED -> v5 назначение A -> v6 PARTIALLY_FULFILLED (A=1, B PLANNED)
+# -> v7 PARTIALLY_FULFILLED, is_fully_confirmed()=True.
+# Текущий резерв A уже погашен на 1 и не передаётся при подтверждении B.
+early_order = replace(shipment_order, lines=tuple(
+    replace(row, remaining_to_ship_qty=QuantityVO(Decimal(6)))
+    if row.source_ref == first.source_ref else row for row in shipment_order.lines
+))
+early_draft_b = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1001)), fulfillment_plan=covered_early.shipment_snapshot(),
+    warehouse=warehouse_b, order=early_order, inventory_items=(item,),
+    reservations=(reserve_b.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(second.id, ShipmentLineIdVO(UUID(int=1011))),),
+    created_at=covered_early.updated_at,
+)
+early_b_assigned = covered_early.assign_shipment(
+    early_draft_b.assignment_snapshot(), expected_version=covered_early.version, updated_at=covered_early.updated_at,
+)
+early_b = early_draft_b.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=early_b_assigned.shipment_snapshot(), warehouse=warehouse_b,
+    order=early_order, inventory_items=(item,), reservations=(reserve_b.fulfillment_snapshot(),),
+    updated_at=covered_early.updated_at,
+)
+early_a3 = accept_execution(early_a1, "2", 11, early_at + timedelta(minutes=2))
+early_after_a3 = early_b_assigned.register_shipment(
+    early_a3.fulfillment_snapshot(), expected_version=early_b_assigned.version, updated_at=early_a3.updated_at,
+)
+early_b4 = accept_execution(early_b, "4", 12, early_at + timedelta(minutes=3))
+early_completed = early_after_a3.register_shipment(
+    early_b4.fulfillment_snapshot(), expected_version=early_after_a3.version, updated_at=early_b4.updated_at,
+)
+# v9: A=3/B=0 -> v10 FULFILLED: A=3/B=4.
+```
+
+Альтернативная последовательность от early_plan: подтвердить B до исполнения A,
+а затем подтвердить тот же черновик A с сохранением его основания v4:
+
+```python
+covered_before_ship = early_assigned.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(second.id, reserve_b.id, reserve_b.version),),
+    reservations=(reserve_a.fulfillment_snapshot(), reserve_b.fulfillment_snapshot()),
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a, warehouse_b),
+    expected_version=early_assigned.version, updated_at=early_at,
+)
+same_draft_confirmed = early_draft_a.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=covered_before_ship.shipment_snapshot(), warehouse=warehouse_a,
+    order=shipment_order, inventory_items=(item,), reservations=(reserve_a.fulfillment_snapshot(),),
+    updated_at=early_at,
+)
+# План CONFIRMED v6; Shipment A CONFIRMED v1 с прежним plan_version=4.
+```
+
+Глобальная занятость до первого зарегистрированного факта, полнота/свежесть чтения,
+конкурентность, идемпотентность и атомарное сохранение остаются будущему
+Application/UoW и tenant-хранению. Снятие резервных подтверждений описано ниже.
+Перепланирование не начатых строк реализовано ниже. Частичный выбор строк одного
+склада, поставщики и SQL/API/Outbox остаются отдельными срезами.
+
+Тесты: test/test_inventory_partial_fulfillment_domain.py.
+
+## Назначение Shipment до подтверждения
+
+FulfillmentPlan фиксирует конкретные Shipment/ShipmentLine до подтверждения
+отгрузки. shipment_progress отражает только принятое исполнение. Новых корней
+и статусов нет: 17 из 23 целевых AR.
+
+| Объект | Данные |
+| --- | --- |
+| FulfillmentAllocation.shipment_assignment | FulfillmentShipmentAssignmentRefVO либо None |
+| FulfillmentShipmentAssignmentRefVO | shipment_id, shipment_line_id, shipment_version черновика, source_plan_version, assigned_at |
+| ShipmentAssignmentSnapshot | id, version, status, fulfillment_source, order_ref, warehouse_id, owner_id, updated_at, tuple строк |
+| ShipmentAssignmentLineSnapshot | id, fulfillment_allocation_id, source_ref, reservation_id, inventory_item_id, base_uom, planned_qty, shipped_qty=0 |
+
+Create Allocation задаёт None, restore принимает shipment_assignment явно.
+VO требует номинальные ID, целые неотрицательные версии без bool и нормализует
+aware-время в UTC. Назначение не меняет количество, статус исполнения или
+is_fully_confirmed(). Allocation остаётся CONFIRMED до первого факта.
+
+Shipment.assignment_snapshot() проверяет полный производный DRAFT/CANCELLED с
+нулевым прогрессом. Контракт frozen/slots, непустой, с уникальными строками,
+резервами и Allocation. Ручные, подтверждённые и исполненные Shipment этот снимок
+не выдают. Прежние снимки документов и исполнения не расширяются.
+
+FulfillmentPlan.assign_shipment(snapshot, expected_version, updated_at) разрешён
+в PARTIALLY_CONFIRMED/CONFIRMED/PARTIALLY_FULFILLED. Чистая
+FulfillmentShipmentAssignmentPolicy сопоставляет тот же план, заказ, владельца,
+историческую не будущую версию и ровно все CONFIRMED-распределения выбранного
+склада без прогресса. Совпадают Allocation ID, строка заказа, резерв, товар,
+единица и полное количество. Назначение относится к одному Shipment, каждая
+Allocation — одной его строке. Конкурирующий ID/строка/версия отклоняются.
+Успех возвращает план version+1; повтор сохраняет прежний объект и первое assigned_at.
+Текущие удержания здесь не загружаются: они повторно проверяются при подтверждении.
+
+Новый порядок:
+
+```text
+create_from_fulfillment_plan() -> DRAFT
+FulfillmentPlan.assign_shipment() -> назначение выбранной группы
+confirm_from_fulfillment_plan() по свежему снимку плана -> CONFIRMED
+StockDocument / StockExecution -> Shipment.register_execution()
+FulfillmentPlan.register_shipment() -> прогресс распределений
+```
+
+Новая фабрика требует свободный от назначения склад. Подтверждение требует
+назначение именно этому Shipment ID, ShipmentLine ID, версии черновика и исходной
+source_plan_version. Общие проверки заказа/товара/количеств/текущих резервов
+переиспользуются отдельно от проверки свободного назначения. Второй кандидат,
+созданный из старого свободного снимка, не подтверждается по назначению первого.
+Подтверждение B между назначением и подтверждением A сохраняет совместимость A.
+
+Register_shipment требует предварительное назначение. Контрольная точка прогресса
+совпадает с ним по Shipment, строке и source_plan_version, имеет более новую версию
+Shipment и время не раньше assigned_at. Назначение сохраняется при исполнении.
+Одна группа имеет одинаковые Shipment/версию/основание/assigned_at;
+у одного склада могут быть разные группы. Пары Shipment/строка уникальны, отправление не смешивает склады.
+Assigned_at внутри created_at/updated_at плана и не раньше подтверждения резервом,
+source_plan_version < plan.version. Restore и снимок плана проверяют эти правила.
+
+После Shipment.cancel() для DRAFT метод release_shipment_assignment() требует
+свежий CANCELLED-снимок того же полного состава, более новую версию и время не
+раньше назначения, отсутствие прогресса. Снимается группа этого Shipment одной версией плана,
+товарный резерв и количества сохраняются. Повтор при пустом назначении не меняет
+план; старый снимок отмены не снимает новое назначение. Отмена подтверждённого или
+исполненного Shipment остаётся отдельным сценарием.
+
+Пример — отдельная последовательность от исходного confirmed v5 предыдущих разделов:
+
+```python
+assignment_at = confirmed.updated_at + timedelta(minutes=1)
+assignment_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1100)), fulfillment_plan=confirmed.shipment_snapshot(),
+    warehouse=warehouse_a, order=shipment_order, inventory_items=(item,),
+    reservations=(reserve_a.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(first.id, ShipmentLineIdVO(UUID(int=1110))),),
+    created_at=assignment_at,
+)
+assignment_plan = confirmed.assign_shipment(
+    assignment_draft.assignment_snapshot(), expected_version=confirmed.version, updated_at=assignment_at,
+)
+# План v6; Allocation CONFIRMED с fulfilled_qty=0 и назначением DRAFT v0.
+cancelled_assignment_draft = assignment_draft.cancel(
+    expected_version=0, updated_at=assignment_at + timedelta(minutes=1),
+)
+released_assignment_plan = assignment_plan.release_shipment_assignment(
+    cancelled_assignment_draft.assignment_snapshot(), expected_version=assignment_plan.version,
+    updated_at=cancelled_assignment_draft.updated_at,
+)
+# План v7; назначение снято, товарный резерв сохранён.
+replacement_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1101)), fulfillment_plan=released_assignment_plan.shipment_snapshot(),
+    warehouse=warehouse_a, order=shipment_order, inventory_items=(item,),
+    reservations=(reserve_a.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(first.id, ShipmentLineIdVO(UUID(int=1111))),),
+    created_at=released_assignment_plan.updated_at,
+)
+replacement_plan = released_assignment_plan.assign_shipment(
+    replacement_draft.assignment_snapshot(), expected_version=released_assignment_plan.version,
+    updated_at=released_assignment_plan.updated_at,
+)
+replacement_shipment = replacement_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=replacement_plan.shipment_snapshot(), warehouse=warehouse_a,
+    order=shipment_order, inventory_items=(item,), reservations=(reserve_a.fulfillment_snapshot(),),
+    updated_at=replacement_plan.updated_at,
+)
+# План v8; новый Shipment CONFIRMED v1 с исходным основанием v7.
+replacement_fact = accept_execution(replacement_shipment, "1", 20,
+    replacement_plan.updated_at + timedelta(minutes=1))
+replacement_progress = replacement_plan.register_shipment(
+    replacement_fact.fulfillment_snapshot(), expected_version=replacement_plan.version,
+    updated_at=replacement_fact.updated_at,
+)
+# План v9 PARTIALLY_FULFILLED; назначение и прогресс относятся к новому Shipment.
+```
+
+Методы назначения/снятия не меняют StockReservation, AvailabilityPool, позиции
+или Ledger. Будущий Application/UoW должен атомарно сохранять назначение и
+подтверждение Shipment, проверяя свежие версии обоих корней. Domain защищает
+последовательные назначения в одном плане; глобальная конкурентность, полнота
+чтения, SQL compare-and-set и Outbox остаются хранению. Снятие резервных
+подтверждений и перепланирование не начатых строк реализованы ниже.
+
+Тесты: test/test_inventory_shipment_assignment_domain.py.
+
+## Снятие резервных подтверждений FulfillmentPlan
+
+Закрытие StockReservation само по себе не меняет FulfillmentPlan. Метод
+release_reservation_confirmations() явно снимает выбранные подтверждения по
+снимкам уже закрытых резервов. Новых Aggregate Roots нет: 17 из 23 целевых.
+Количество и источник Allocation при снятии сохраняются. Перепланирование
+не начатых строк реализовано ниже; отмена подтверждённого Shipment остаётся отдельно.
+
+| Объект | Данные и ответственность |
+| --- | --- |
+| FulfillmentAllocation.reservation_releases | tuple истории снятий; create() задаёт (), restore() принимает явно |
+| FulfillmentReservationReleaseRefVO.confirmation | Прежний FulfillmentReservationRefVO: ID, версия и время подтверждения |
+| closed_version / closed_status / closed_at | Проверенные версия, RELEASED либо EXPIRED и updated_at закрытого резерва |
+| released_at | Первый момент принятия снятия планом |
+| FulfillmentReservationReleasePolicy | Проверка всего выбранного пакета и построение записей без изменения других агрегатов |
+
+Корень принимает bindings: tuple[FulfillmentReservationBindingVO, ...],
+reservations: tuple[StockReservationFulfillmentSnapshot, ...], expected_version
+и явное updated_at. Binding указывает Allocation, текущий подтверждённый ID
+резерва и точную выбранную версию его закрытия. Нужны непустые уникальные bindings
+и ровно соответствующие снимки без пропусков, дублей и лишних данных.
+
+Для каждого выбранного Allocation обязательны:
+
+- CONFIRMED, fulfilled_qty=0, shipment_progress=None и shipment_assignment=None.
+- Резерв RELEASED либо EXPIRED, reserved_qty=0 и consumed_qty=0. Даже погашение,
+  ещё не зарегистрированное в плане через Shipment, запрещает снятие.
+- Совпадение ID, строки обязательства, товара, склада источника, владельца,
+  базовой единицы и requested_qty со всем количеством Allocation.
+- Точная выбранная версия закрытия, строго больше версии подтверждения.
+  Хронология: confirmed_at <= closed_at <= released_at в UTC, версии без bool.
+
+Наступивший expires_at недостаточен: сначала требуется явный StockReservation.expire().
+Текущие товар, склад и потребность заказа здесь не запрашиваются: это принятие
+факта закрытия, а не повторная проверка пригодности новых удержаний.
+
+Если назначен производный черновик, сначала нужно отменить его и вызвать
+release_shipment_assignment(). Назначенное или начатое исполнение нельзя снять
+закрытием резерва. Отмена подтверждённого Shipment в этот срез не входит.
+
+Успех добавляет запись истории, очищает reservation, переводит Allocation в PLANNED
+и изменяет корень один раз. Статус плана определяется по оставшемуся составу:
+
+| Состав после снятия | Статус |
+| --- | --- |
+| Есть положительное исполнение других строк | PARTIALLY_FULFILLED |
+| Все строки подтверждены | CONFIRMED |
+| Подтверждена часть строк, исполнения нет | PARTIALLY_CONFIRMED |
+| Нет подтверждений и исполнения | PLANNED |
+
+Допустимы PLANNED/PARTIALLY_CONFIRMED/CONFIRMED/PARTIALLY_FULFILLED; PLANNED нужен
+для повторов. Точный исторический повтор без нового активного подтверждения
+возвращает прежний объект с прежними версией и временем. Пакет может совместить
+такой повтор с новым снятием другой строки. После подтверждения R2 старый запрос
+снятия R1 отклоняется и не затрагивает R2.
+
+История сохраняется при повторном подтверждении новым резервом и передаётся
+в FulfillmentAllocationShipmentSnapshot. Снятые ID остаются уникальными во всём
+плане и не могут подтверждать ту же или другую строку повторно. Restore проверяет
+типы, уникальность, порядок циклов, отсутствие пересечения с активными резервами
+и границы времени корня. Новый confirmed_at не предшествует последнему released_at;
+история допустима в PLANNED/CANCELLED, но не в DRAFT.
+
+Пример — отдельная ветка от released_assignment_plan v7 из предыдущего раздела:
+назначение A уже снято, оба резерва ещё подтверждают свои Allocation. Эта ветка
+не продолжает replacement_plan с новым назначением.
+
+```python
+release_at = released_assignment_plan.updated_at + timedelta(minutes=1)
+closed_reserve_a = reserve_a.release_all(
+    expected_version=reserve_a.version, updated_at=release_at,
+)
+release_binding = FulfillmentReservationBindingVO(
+    first.id, closed_reserve_a.id, closed_reserve_a.version,
+)
+released_confirmations = released_assignment_plan.release_reservation_confirmations(
+    bindings=(release_binding,), reservations=(closed_reserve_a.fulfillment_snapshot(),),
+    expected_version=released_assignment_plan.version, updated_at=release_at,
+)
+# v8 PARTIALLY_CONFIRMED: A PLANNED без резерва, B CONFIRMED.
+release_history = released_confirmations.get_allocation(first.id).reservation_releases
+# release_history[0].confirmation.reservation_id == reserve_a.id.
+# release_history[0].closed_version == 2; closed_status == RELEASED.
+replayed_release = released_confirmations.release_reservation_confirmations(
+    bindings=(release_binding,), reservations=(closed_reserve_a.fulfillment_snapshot(),),
+    expected_version=released_confirmations.version, updated_at=release_at + timedelta(seconds=1),
+)
+# replayed_release is released_confirmations; версия и время остаются прежними.
+
+new_pending_a = StockReservation.create(
+    identifier=StockReservationIdVO(UUID(int=1200)),
+    pool=AvailabilityPoolReservationSnapshot(reserve_a.pool_id, reserve_a.key, reserve_a.base_uom),
+    inventory_item=item, source_ref=first.source_ref, requested_qty=first.quantity,
+    created_at=release_at, expires_at=release_at + timedelta(hours=1),
+)
+new_reserve_a = new_pending_a.add_reserved(
+    first.quantity, expected_version=new_pending_a.version,
+    inventory_item=item, updated_at=release_at,
+)
+reconfirmed_plan = released_confirmations.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(first.id, new_reserve_a.id, new_reserve_a.version),),
+    reservations=(new_reserve_a.fulfillment_snapshot(), reserve_b.fulfillment_snapshot()),
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a, warehouse_b),
+    expected_version=released_confirmations.version, updated_at=release_at,
+)
+# v9 CONFIRMED: A с новым R2, история R1 сохранена. Старый draft по R1 не назначится.
+new_reserve_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1201)), fulfillment_plan=reconfirmed_plan.shipment_snapshot(),
+    warehouse=warehouse_a, order=shipment_order, inventory_items=(item,),
+    reservations=(new_reserve_a.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(first.id, ShipmentLineIdVO(UUID(int=1210))),),
+    created_at=release_at,
+)
+new_reserve_plan = reconfirmed_plan.assign_shipment(
+    new_reserve_draft.assignment_snapshot(), expected_version=reconfirmed_plan.version, updated_at=release_at,
+)
+new_reserve_shipment = new_reserve_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=new_reserve_plan.shipment_snapshot(), warehouse=warehouse_a,
+    order=shipment_order, inventory_items=(item,), reservations=(new_reserve_a.fulfillment_snapshot(),),
+    updated_at=release_at,
+)
+# План v10; Shipment CONFIRMED v1, использует только новый R2.
+```
+
+Пример показывает Domain-переходы отдельных неизменяемых корней. Он не сохраняет
+их в БД и не меняет AvailabilityPool. Будущий Application/UoW должен согласованно
+закрыть резерв, освободить удержание пула и снять подтверждение плана с проверкой
+версий. Количество для освобождения пула берётся из снимка до закрытия резерва:
+после release_all()/expire() reserved_qty уже ноль. Новое удержание R2 также требует
+согласованной проверки и обновления пула. Повторы нескольких агрегатов, глобальная
+идемпотентность, SQL compare-and-set и Outbox остаются будущему хранению.
+
+Тесты: test/test_inventory_fulfillment_reservation_release_domain.py.
+
+## Перепланирование не начатых распределений FulfillmentPlan
+
+replan_allocations() заменяет выбранные не начатые намерения новыми Allocation
+внутри того же плана. Прежние строки остаются в allocations как терминальная
+история CANCELLED. Новых корней нет: 17 из 23 целевых AR.
+
+| Объект | Изменение |
+| --- | --- |
+| FulfillmentAllocationStatus | Добавлено CANCELLED для заменённой строки |
+| FulfillmentAllocation.cancelled_at | datetime в UTC только для CANCELLED; для остальных состояний None |
+| FulfillmentAllocation.cancel_unstarted() | Локальный переход PLANNED → CANCELLED без переписывания количества, источника и истории |
+| FulfillmentReplanningPolicy | Проверка пакета замены, ограничений Shipment и актуального контекста итогового состава |
+| FulfillmentAllocationShipmentSnapshot | Передаёт cancelled_at и отменённые строки вместе с историей резервов |
+
+Create задаёт cancelled_at=None; restore принимает поле явно и нормализует aware-время.
+Отменённая строка не содержит активного резерва, назначения или прогресса Shipment,
+имеет fulfilled_qty=0. Её cancelled_at не раньше последнего released_at резервной
+истории и находится между created_at/updated_at корня. Для остальных статусов дата
+отмены запрещена. DRAFT не содержит отменённых Allocation; отмена строки терминальна.
+
+Корень принимает непустые tuple allocation_ids и replacements, текущие demand,
+inventory_items и warehouses, expected_version и updated_at. Доступны PLANNED,
+PARTIALLY_CONFIRMED и PARTIALLY_FULFILLED. Черновик редактируется прежними методами;
+CONFIRMED, FULFILLED и CANCELLED не открываются для перепланирования.
+
+У выбранных строк обязательны PLANNED, reservation=None, fulfilled_qty=0,
+shipment_assignment=None и shipment_progress=None. При подтверждённом резерве
+сначала нужны его закрытие и release_reservation_confirmations(). Назначенный
+черновик сначала отменяется со снятием назначения. Подтверждённый или исполненный
+Shipment и остаток уже начатой Allocation этим методом не переносятся.
+
+Новые строки создаются штатной фабрикой FulfillmentAllocation.create(). Они имеют
+новые ID, положительные количества, PLANNED и пустую историю. Строка заказа входит
+в выбранный набор; её товар и базовая единица сохраняются. Допускаются смена склада,
+изменение количества, разделение и объединение выбранных распределений. Сумма новых
+количеств может быть меньше старой: часть спроса остаётся нераспределённой. Отмена
+выбранного набора без замен реализована отдельной операцией ниже; перепланирование
+по-прежнему требует непустой набор замен.
+
+Policy проверяет весь итоговый оставшийся спрос и allow_source_split. Количество
+суммируется точно, без округления: для частично исполненной A учитывается только
+quantity - fulfilled_qty; текущая remaining_qty заказа уже исключает фактическую
+отгрузку. Повторно вычитать исполнение из remaining_qty не нужно. Текущие снимки
+товаров и активных складов нужны ровно для действующих ещё не начатых строк, включая
+не выбранные для замены. Отменённые и начатые строки не требуют текущих справочников.
+Текущие удержания этим методом не подтверждаются заново: резервы и Shipment
+продолжают использовать собственные проверки.
+
+Свободные Allocation можно добавлять на тот же склад независимо от других групп
+Shipment. Прежние назначения и прогресс сохраняются; уникальность source_ref/source
+и ограничения количества продолжают действовать.
+
+После проверки весь пакет возвращает один новый план version+1. Ошибка не меняет
+исходные объекты. Наличие исполнения сохраняет PARTIALLY_FULFILLED; иначе оставшиеся
+подтверждения дают PARTIALLY_CONFIRMED, отсутствие подтверждений — PLANNED. Новые
+строки подтверждаются обычным confirm_reservations() с новыми резервами.
+
+Все Allocation ID и резервные ID остаются уникальными во всём плане, включая
+отменённую историю. Пара source_ref/source уникальна среди действующих строк;
+новая строка на прежнем складе может совпадать с отменённой по этой паре.
+remaining_to_fulfill() отменённой строки возвращает ноль. Расчёты потребности,
+is_fully_confirmed(), статусы плана, состав Shipment, назначения и прогресс учитывают
+действующие строки. Отменённые остаются доступны через get_allocation() и snapshots;
+после исполнения всех действующих строк план становится FULFILLED.
+
+Старый Shipment по отменённой Allocation не назначается и не подтверждается. Точный
+исторический повтор снятия её резерва сохраняет прежний план и не активирует строку.
+Перепланирование требует текущей версии и новых ID: повтор со старой expected_version,
+повторный выбор CANCELLED или повторное использование ID замен отклоняются.
+Глобальная идемпотентность команд остаётся будущему Application/хранению.
+
+Пример — отдельная ветка от released_confirmations v8 из предыдущего раздела:
+у A снято подтверждение R1, B остаётся подтверждённым. Меняем A=3 на новый C=3,
+сохраняем старый A и доводим действующие C/B до полного исполнения.
+
+```python
+warehouse_c = WarehouseSnapshot(WarehouseIdVO(UUID(int=1300)), True, None)
+replanning_at = released_confirmations.updated_at + timedelta(minutes=1)
+allocation_c = FulfillmentAllocation.create(
+    identifier=FulfillmentAllocationIdVO(UUID(int=1301)), source_ref=first.source_ref,
+    inventory_item=item, source=FulfillmentSourceRefVO(FulfillmentSourceKind.OWN_WAREHOUSE, warehouse_c.id),
+    quantity=QuantityVO(Decimal(3)),
+)
+replanned = released_confirmations.replan_allocations(
+    allocation_ids=(first.id,), replacements=(allocation_c,), demand=demand,
+    inventory_items=(item,), warehouses=(warehouse_b, warehouse_c),
+    expected_version=released_confirmations.version, updated_at=replanning_at,
+)
+# v9 PARTIALLY_CONFIRMED: старый A CANCELLED, B CONFIRMED, новый C PLANNED.
+old_allocation_a = replanned.get_allocation(first.id)
+# old_allocation_a.quantity == 3; fulfilled_qty == 0; remaining_to_fulfill() == 0.
+# История R1 сохранена; cancelled_at == replanning_at.
+
+pending_c = StockReservation.create(
+    identifier=StockReservationIdVO(UUID(int=1302)),
+    pool=AvailabilityPoolReservationSnapshot(
+        AvailabilityPoolIdVO(UUID(int=1303)),
+        AvailabilityPoolKeyVO(item.inventory_item_id, warehouse_c.id, replanned.owner_id), item.base_uom,
+    ),
+    inventory_item=item, source_ref=allocation_c.source_ref, requested_qty=allocation_c.quantity,
+    created_at=replanning_at, expires_at=replanning_at + timedelta(hours=1),
+)
+reserve_c = pending_c.add_reserved(
+    allocation_c.quantity, expected_version=pending_c.version, inventory_item=item, updated_at=replanning_at,
+)
+replanned_confirmed = replanned.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(allocation_c.id, reserve_c.id, reserve_c.version),),
+    reservations=(reserve_b.fulfillment_snapshot(), reserve_c.fulfillment_snapshot()),
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_b, warehouse_c),
+    expected_version=replanned.version, updated_at=replanning_at,
+)
+# v10 CONFIRMED; is_fully_confirmed() == True, отменённый A не требует резерва.
+c_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1310)), fulfillment_plan=replanned_confirmed.shipment_snapshot(),
+    warehouse=warehouse_c, order=shipment_order, inventory_items=(item,),
+    reservations=(reserve_c.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(allocation_c.id, ShipmentLineIdVO(UUID(int=1311))),),
+    created_at=replanning_at,
+)
+c_assigned = replanned_confirmed.assign_shipment(
+    c_draft.assignment_snapshot(), expected_version=replanned_confirmed.version, updated_at=replanning_at,
+)
+c_shipment = c_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=c_assigned.shipment_snapshot(), warehouse=warehouse_c,
+    order=shipment_order, inventory_items=(item,), reservations=(reserve_c.fulfillment_snapshot(),),
+    updated_at=replanning_at,
+)
+c_fact = accept_execution(c_shipment, "3", 30, replanning_at + timedelta(minutes=1))
+after_c = c_assigned.register_shipment(
+    c_fact.fulfillment_snapshot(), expected_version=c_assigned.version, updated_at=c_fact.updated_at,
+)
+# v12 PARTIALLY_FULFILLED: C исполнен, B ожидает, A остаётся CANCELLED.
+b_replanned_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1320)), fulfillment_plan=after_c.shipment_snapshot(),
+    warehouse=warehouse_b, order=shipment_order, inventory_items=(item,),
+    reservations=(reserve_b.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(second.id, ShipmentLineIdVO(UUID(int=1321))),),
+    created_at=after_c.updated_at,
+)
+b_replanned_assigned = after_c.assign_shipment(
+    b_replanned_draft.assignment_snapshot(), expected_version=after_c.version, updated_at=after_c.updated_at,
+)
+b_replanned_shipment = b_replanned_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=b_replanned_assigned.shipment_snapshot(), warehouse=warehouse_b,
+    order=shipment_order, inventory_items=(item,), reservations=(reserve_b.fulfillment_snapshot(),),
+    updated_at=after_c.updated_at,
+)
+b_replanned_fact = accept_execution(b_replanned_shipment, "4", 31, after_c.updated_at + timedelta(minutes=1))
+replanned_completed = b_replanned_assigned.register_shipment(
+    b_replanned_fact.fulfillment_snapshot(), expected_version=b_replanned_assigned.version,
+    updated_at=b_replanned_fact.updated_at,
+)
+# v14 FULFILLED: B=4 и C=3 исполнены; исторический A=3 не увеличивает обязательства.
+```
+
+Операция перепланирования изменяет только FulfillmentPlan. Она не создаёт и не
+освобождает резервы, не меняет AvailabilityPool, Shipment, позиции или Ledger.
+Пример показывает отдельные Domain-переходы; атомарное сохранение, свежие версии
+внешних оснований, общие удержания, глобальная дедупликация и Outbox относятся
+к будущему Application/UoW и tenant-хранению.
+
+Тесты: test/test_inventory_fulfillment_replanning_domain.py.
+
+## Отмена не начатых Allocation без замены
+
+FulfillmentPlan.cancel_allocations() явно отменяет выбранные собственные намерения
+без создания замен. Ненужное количество остаётся в истории и не становится
+фактической отгрузкой. Новых Aggregate Roots, Entity, VO, полей и Policy нет:
+используются существующие CANCELLED, cancelled_at и история снятых резервов.
+
+Локальный метод Entity переименован в cancel_unstarted(). Его используют как
+перепланирование, так и отмена без замены. Проверки выбора и состава находятся
+в корне; допустимость локального перехода — в Entity. Новая ошибка
+FulfillmentAllocationCancellationConflictError описывает неподходящую строку
+или некорректный пакет отмены. Перепланирование по-прежнему требует действующие
+PLANNED и новые replacements: идемпотентная отмена не разрешает выбирать старую
+CANCELLED для очередной замены.
+
+Метод принимает непустой tuple allocation_ids, expected_version и явное updated_at.
+ID типизированы, существуют в этом плане и не повторяются. Для новой отмены нужна
+PLANNED без активного резерва, shipment_assignment, shipment_progress и с fulfilled_qty=0.
+Если резерв подтверждён, сначала закрывают его и снимают подтверждение. Назначенный
+черновик Shipment сначала отменяют со снятием назначения. Подтверждённый Shipment,
+начатые и исполненные Allocation этим методом не отменяются.
+
+Текущие demand, товары, склады и резервы в контракт не входят. Отмена собственного
+намерения не зависит от уменьшившейся потребности, доступности внешнего заказа,
+нового шага или неактивности старого склада. Метод не подтверждает пригодность
+оставшихся резервов: перед исполнением продолжают действовать проверки Shipment.
+
+Успех сохраняет ID, количество, строку заказа, товар, единицу, источник и историю
+резервов. Отменённая строка получает CANCELLED и первый cancelled_at в UTC.
+Для неё remaining_to_fulfill()=0, fulfilled_qty остаётся нулём. Другие строки,
+назначения и контрольные точки сохраняются. Весь пакет изменяет одну версию корня;
+ошибка отклоняет весь пакет без частичного результата.
+
+После отмены статус определяется по действующим Allocation:
+
+| Состав | Статус плана |
+| --- | --- |
+| Действующих строк нет | CANCELLED |
+| Все действующие строки исполнены | FULFILLED |
+| Есть положительное, но не полное исполнение | PARTIALLY_FULFILLED |
+| Все действующие строки подтверждены резервами, исполнения нет | CONFIRMED |
+| Подтверждена часть, исполнения нет | PARTIALLY_CONFIRMED |
+| Нет подтверждений и исполнения | PLANNED |
+
+Новые отмены разрешены в PLANNED/PARTIALLY_CONFIRMED/PARTIALLY_FULFILLED. В CONFIRMED,
+FULFILLED и CANCELLED допустим только повтор уже отменённых строк. CONFIRMED нужен
+для повтора после удаления последнего неподтверждённого намерения. DRAFT не подходит:
+его состав редактируется прежними методами.
+
+Повтор проверяет текущую строгую expected_version и неубывающее aware-время,
+но возвращает прежний объект без изменения версии, updated_at и cancelled_at.
+Смешанный пакет исторических отмен и новых PLANNED применяется одной версией.
+Старый запрос по отменённому ID не затрагивает новое распределение с другим ID.
+Терминальный план не открывается повторно: если прежний cancel() сохранил PLANNED,
+новые отмены таких строк через терминальный корень запрещены, а исторический повтор
+не пересчитывает статус и не активирует план. Локальный cancel_unstarted() также
+сохраняет первую дату при повторе и отклоняет время раньше неё.
+
+Restore проверяет прежние правила истории: cancelled_at после последнего released_at
+и внутри created_at/updated_at, отсутствие исполнения/активных привязок, уникальность
+ID распределений и резервов по всей истории. Снимки Shipment исключают CANCELLED
+из действующего состава. FULFILLED означает завершение действующих распределений
+этого плана; статус не утверждает исполнение всей потребности внешнего заказа.
+
+Пример — отдельная ветка от plan_after_a1 v7 из раздела регистрации прогресса:
+A исполнил 1 из 3, B ещё не назначен Shipment. Закрываем резерв B, снимаем его
+подтверждение, отменяем намерение B и исполняем оставшиеся 2 с A.
+
+```python
+cancellation_at = plan_after_a1.updated_at + timedelta(minutes=1)
+closed_b_for_cancellation = reserve_b.release_all(
+    expected_version=reserve_b.version, updated_at=cancellation_at,
+)
+b_confirmation_released = plan_after_a1.release_reservation_confirmations(
+    bindings=(FulfillmentReservationBindingVO(second.id, closed_b_for_cancellation.id,
+                                              closed_b_for_cancellation.version),),
+    reservations=(closed_b_for_cancellation.fulfillment_snapshot(),),
+    expected_version=plan_after_a1.version, updated_at=cancellation_at,
+)
+# v8 PARTIALLY_FULFILLED: A исполняется, B PLANNED без удержания/назначения.
+b_intention_cancelled = b_confirmation_released.cancel_allocations(
+    allocation_ids=(second.id,), expected_version=b_confirmation_released.version,
+    updated_at=cancellation_at,
+)
+# v9 PARTIALLY_FULFILLED: B CANCELLED, quantity=4, fulfilled_qty=0, история резерва сохранена.
+cancellation_replay = b_intention_cancelled.cancel_allocations(
+    allocation_ids=(second.id,), expected_version=b_intention_cancelled.version,
+    updated_at=cancellation_at + timedelta(seconds=1),
+)
+# cancellation_replay is b_intention_cancelled; версия и первое время не меняются.
+a_final_fact = accept_execution(progress_a1, "2", 40, cancellation_at + timedelta(minutes=1))
+plan_completed_after_cancellation = b_intention_cancelled.register_shipment(
+    a_final_fact.fulfillment_snapshot(), expected_version=b_intention_cancelled.version,
+    updated_at=a_final_fact.updated_at,
+)
+# v10 FULFILLED: A=3 исполнено, исторический B=4 отменён и не исполнен.
+terminal_cancellation_replay = plan_completed_after_cancellation.cancel_allocations(
+    allocation_ids=(second.id,), expected_version=plan_completed_after_cancellation.version,
+    updated_at=plan_completed_after_cancellation.updated_at,
+)
+# terminal_cancellation_replay is plan_completed_after_cancellation.
+
+# Отдельная ветка от исходного PLANNED v3: отмена всех намерений без резервов.
+all_intentions_cancelled = planned.cancel_allocations(
+    allocation_ids=tuple(row.id for row in planned.allocations),
+    expected_version=planned.version, updated_at=cancellation_at,
+)
+# v4 CANCELLED: обе строки сохранены как история, действующих строк нет.
+
+# Отдельная ветка от PARTIALLY_CONFIRMED v4: A подтверждён, B ещё PLANNED.
+confirmed_after_intention_cancel = partially_confirmed.cancel_allocations(
+    allocation_ids=(second.id,), expected_version=partially_confirmed.version,
+    updated_at=cancellation_at,
+)
+# v5 CONFIRMED: единственный действующий A подтверждён; B CANCELLED.
+confirmed_cancellation_replay = confirmed_after_intention_cancel.cancel_allocations(
+    allocation_ids=(second.id,), expected_version=confirmed_after_intention_cancel.version,
+    updated_at=cancellation_at,
+)
+# confirmed_cancellation_replay is confirmed_after_intention_cancel.
+```
+
+Новая операция изменяет только FulfillmentPlan. Она не освобождает резервы,
+не уменьшает удержание пула и не меняет Shipment, StockPosition или Ledger.
+Пример закрытия резерва показывает отдельные Domain-переходы: будущий Application/UoW
+должен атомарно согласовать резерв, освобождение пула и план с проверкой версий.
+Количество освобождения пула берётся до закрытия резерва. SQL, глобальная
+идемпотентность команд и Outbox остаются будущему хранению.
+
+Тесты: test/test_inventory_fulfillment_allocation_cancellation_domain.py.
+
+## Допланирование свободной потребности FulfillmentPlan
+
+allocate_remaining_demand() добавляет новые намерения в действующий план без
+замены прежних Allocation. Это позволяет подтвердить 3 из 7, затем распределить
+оставшиеся 4; также можно допланировать потребность после отмены прежней строки
+или появления новой строки в актуальном снимке заказа.
+
+Новых Aggregate Roots, Entity, VO и полей нет: 17 из 23 целевых AR. Проверки свежих
+строк и актуального итогового состава добавлены в FulfillmentPlanPolicy.ensure_extendable().
+FulfillmentAllocationExtensionConflictError отклоняет несвежие строки, повтор ID
+и некорректные новые строки. Корень сохраняет собственные инварианты
+уникальности и идентичности и управляет переходом состояния.
+
+Метод принимает непустой tuple allocations, текущие demand/inventory_items/warehouses,
+expected_version и явное updated_at. Допустимы PLANNED, PARTIALLY_CONFIRMED,
+CONFIRMED и PARTIALLY_FULFILLED. DRAFT редактируется прежним add_allocation();
+терминальные FULFILLED/CANCELLED не открываются, даже если внешний заказ ещё имеет
+нераспределённую потребность. Заказ и владелец плана не меняются.
+
+Новые строки создаются через FulfillmentAllocation.create(). Нужны свежие уникальные
+ID по всей истории, PLANNED, положительные количества и отсутствие резервов,
+резервной истории, назначения/прогресса Shipment, отмены и исполнения. Source_ref
+принадлежит текущей потребности того же доступного заказа, товар и базовая единица
+совпадают. Новый source_ref может отсутствовать в прежних Allocation, если он
+появился в свежем снимке demand. Пакет может покрывать несколько строк и складов;
+закрывать весь свободный спрос сразу не требуется.
+
+Проверяется весь итоговый состав: сумма оставшихся обязательств по строке не больше
+current remaining_qty, соблюдается allow_source_split. CANCELLED не участвуют;
+у начатых учитывается quantity - fulfilled_qty. Повторно вычитать факт из remaining_qty
+заказа нельзя. Количества суммируются точно без округления, применяются текущие
+правила базовой единицы и шага. ID Allocation и резервов остаются уникальными по
+всей истории; пара source_ref/source уникальна среди действующих строк. Повторять
+такую пару или скрыто увеличивать количество прежней Allocation метод не разрешает.
+
+Снимки товаров и активных складов нужны ровно для всех действующих ещё не начатых
+Allocation итогового плана, включая прежние неподтверждённые/подтверждённые строки.
+Отменённые и начатые строки не требуют свежих справочников. Прежние Entity,
+подтверждения, назначения и исполнение сохраняются. Текущие удержания этим методом
+не подтверждаются заново: пригодность резервов повторно проверяется перед Shipment.
+
+Допланирование того же склада не расширяет прежнюю группу Shipment. Новые
+свободные Allocation не обесценивают явно выбранный состав старого черновика;
+назначенные и начатые строки сохраняются без изменений.
+
+Весь пакет возвращает один новый корень version+1, неуспех сохраняет исходный план.
+
+| Итоговый состав | Статус |
+| --- | --- |
+| Есть исполнение прежних строк | PARTIALLY_FULFILLED |
+| Исполнения нет, есть подтверждения | PARTIALLY_CONFIRMED |
+| Нет исполнения и подтверждений | PLANNED |
+
+Новые строки остаются PLANNED и затем проходят обычные confirm_reservations(),
+Shipment и регистрацию факта. Повтор со старой expected_version или уже занятыми
+новыми ID отклоняется, даже если свежая потребность увеличилась. Глобальная
+идемпотентность команд остаётся хранению.
+
+Пример — независимая ветка для тех же товара, заказа и складов из предыдущих
+разделов. Сначала распределяем и подтверждаем только A=3, строим черновик A,
+затем добавляем B=4. Историческое основание A сохраняется до полного исполнения
+обеих отгрузок. Ветки примеров показывают альтернативные Domain-последовательности,
+а не несколько одновременно сохранённых активных планов одного заказа.
+
+```python
+extension_at = confirmed.updated_at + timedelta(minutes=1)
+extension_draft = FulfillmentPlan.create(
+    identifier=FulfillmentPlanIdVO(UUID(int=1400)), order_ref=order_ref,
+    owner_id=planned.owner_id, created_at=at,
+)
+extension_with_a = extension_draft.add_allocation(
+    first, demand=demand, inventory_item=item, warehouse=warehouse_a,
+    expected_version=extension_draft.version, updated_at=extension_at,
+)
+extension_planned = extension_with_a.mark_planned(
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a,),
+    expected_version=extension_with_a.version, updated_at=extension_at,
+)
+extension_confirmed_a = extension_planned.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(first.id, reserve_a.id, reserve_a.version),),
+    reservations=(reserve_a.fulfillment_snapshot(),), demand=demand,
+    inventory_items=(item,), warehouses=(warehouse_a,),
+    expected_version=extension_planned.version, updated_at=extension_at,
+)
+# v3 CONFIRMED: A=3, remaining_to_allocate(first.source_ref, demand=demand) == 4.
+extension_a_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1401)), fulfillment_plan=extension_confirmed_a.shipment_snapshot(),
+    warehouse=warehouse_a, order=shipment_order, inventory_items=(item,),
+    reservations=(reserve_a.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(first.id, ShipmentLineIdVO(UUID(int=1402))),),
+    created_at=extension_at,
+)
+extension_b = FulfillmentAllocation.create(
+    identifier=FulfillmentAllocationIdVO(UUID(int=1403)), source_ref=first.source_ref,
+    inventory_item=item, source=FulfillmentSourceRefVO(FulfillmentSourceKind.OWN_WAREHOUSE, warehouse_b.id),
+    quantity=QuantityVO(Decimal(4)),
+)
+extended_plan = extension_confirmed_a.allocate_remaining_demand(
+    allocations=(extension_b,), demand=demand, inventory_items=(item,),
+    warehouses=(warehouse_a, warehouse_b), expected_version=extension_confirmed_a.version,
+    updated_at=extension_at,
+)
+# v4 PARTIALLY_CONFIRMED: прежний A с прежним резервом, новый B PLANNED; свободный спрос 0.
+extension_pending_b = StockReservation.create(
+    identifier=StockReservationIdVO(UUID(int=1404)),
+    pool=AvailabilityPoolReservationSnapshot(
+        AvailabilityPoolIdVO(UUID(int=1405)),
+        AvailabilityPoolKeyVO(item.inventory_item_id, warehouse_b.id, extended_plan.owner_id), item.base_uom,
+    ),
+    inventory_item=item, source_ref=extension_b.source_ref, requested_qty=extension_b.quantity,
+    created_at=extension_at, expires_at=extension_at + timedelta(hours=1),
+)
+extension_reserve_b = extension_pending_b.add_reserved(
+    extension_b.quantity, expected_version=extension_pending_b.version,
+    inventory_item=item, updated_at=extension_at,
+)
+extended_confirmed = extended_plan.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(extension_b.id, extension_reserve_b.id, extension_reserve_b.version),),
+    reservations=(reserve_a.fulfillment_snapshot(), extension_reserve_b.fulfillment_snapshot()),
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a, warehouse_b),
+    expected_version=extended_plan.version, updated_at=extension_at,
+)
+# v5 CONFIRMED. Старый черновик A по основанию v3 остаётся пригодным.
+extension_assigned_a = extended_confirmed.assign_shipment(
+    extension_a_draft.assignment_snapshot(), expected_version=extended_confirmed.version, updated_at=extension_at,
+)
+extension_a_shipment = extension_a_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=extension_assigned_a.shipment_snapshot(), warehouse=warehouse_a,
+    order=shipment_order, inventory_items=(item,), reservations=(reserve_a.fulfillment_snapshot(),),
+    updated_at=extension_at,
+)
+# Shipment CONFIRMED v1, fulfillment_source.plan_version остаётся 3.
+extension_a_fact = accept_execution(extension_a_shipment, "3", 50, extension_at + timedelta(minutes=1))
+extension_after_a = extension_assigned_a.register_shipment(
+    extension_a_fact.fulfillment_snapshot(), expected_version=extension_assigned_a.version,
+    updated_at=extension_a_fact.updated_at,
+)
+# v7 PARTIALLY_FULFILLED: A=3 исполнено, B=4 ожидает.
+extension_order_after_a = replace(shipment_order, lines=tuple(
+    replace(row, remaining_to_ship_qty=QuantityVO(Decimal(4)))
+    if row.source_ref == first.source_ref else row for row in shipment_order.lines
+))
+extension_b_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1410)), fulfillment_plan=extension_after_a.shipment_snapshot(),
+    warehouse=warehouse_b, order=extension_order_after_a, inventory_items=(item,),
+    reservations=(extension_reserve_b.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(extension_b.id, ShipmentLineIdVO(UUID(int=1411))),),
+    created_at=extension_after_a.updated_at,
+)
+extension_assigned_b = extension_after_a.assign_shipment(
+    extension_b_draft.assignment_snapshot(), expected_version=extension_after_a.version,
+    updated_at=extension_after_a.updated_at,
+)
+extension_b_shipment = extension_b_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=extension_assigned_b.shipment_snapshot(), warehouse=warehouse_b,
+    order=extension_order_after_a, inventory_items=(item,), reservations=(extension_reserve_b.fulfillment_snapshot(),),
+    updated_at=extension_after_a.updated_at,
+)
+extension_b_fact = accept_execution(extension_b_shipment, "4", 51, extension_after_a.updated_at + timedelta(minutes=1))
+extension_completed = extension_assigned_b.register_shipment(
+    extension_b_fact.fulfillment_snapshot(), expected_version=extension_assigned_b.version,
+    updated_at=extension_b_fact.updated_at,
+)
+# v9 FULFILLED: A=3 и добавленный B=4 исполнены, прежнее основание A не переписано.
+```
+
+Операция допланирования изменяет только FulfillmentPlan. Она не создаёт и не
+освобождает резервы, не меняет AvailabilityPool, Shipment, позиции или Ledger.
+Пример показывает отдельные Domain-переходы: атомарное сохранение, согласование
+общих удержаний, свежие версии внешних оснований, один активный план на заказ,
+глобальная дедупликация и Outbox остаются будущему Application/UoW и tenant-хранению.
+Увеличение количества существующей Allocation, перенос остатка начатой строки,
+автоматический подбор источников в срез не входит; независимые группы одного склада описаны ниже.
+
+Тесты: test/test_inventory_fulfillment_demand_extension_domain.py.
+
+## Выбранные Allocation и независимые Shipment одного склада
+
+Shipment.create_from_fulfillment_plan() принимает непустой явный выбор целых
+Allocation через существующие line_bindings. Один склад одного плана может иметь
+несколько независимых Shipment. Новых Aggregate Roots, Entity, VO и полей нет:
+17 из 23 целевых AR. Группа определяется существующими shipment_id в назначениях
+дочерних строк; отдельного объекта группы и отдельного repository нет.
+
+Каждая выбранная Allocation должна относиться к указанным плану и складу, иметь
+CONFIRMED, fulfilled_qty=0, shipment_progress=None и полный пригодный резерв.
+Для нового черновика выбранные строки также свободны от назначения. Их количество
+передаётся целиком. Остальные строки того же склада могут оставаться PLANNED,
+быть назначены другим Shipment, исполняться или быть исполненными. Текущие снимки
+товаров и резервов нужны ровно для выбранного состава. Пустой/повторный/неизвестный
+выбор, чужой склад, отменённая или начатая выбранная строка отклоняются.
+
+Одна Allocation по-прежнему относится целиком к одному Shipment; дробить её
+между отправлениями нельзя. Сохраняется уникальность действующей пары source_ref/source.
+Несколько строк одного заказа на одном складе могут отгружаться независимо;
+повторную действующую Allocation для той же строки и того же склада не создаём.
+
+FulfillmentShipmentPolicy строит выбранные строки и повторяет их текущие проверки
+перед подтверждением. FulfillmentShipmentAssignmentPolicy сопоставляет явный состав
+черновика с планом. Пока Shipment не назначен, выбранный поднабор допустим; после
+назначения его состав нельзя расширить, сократить или перенести под тот же ID.
+Конкурент не назначит и не подтвердит уже занятую Allocation. Подтверждение требует
+ровно весь состав, сейчас закреплённый за этим Shipment, и точное совпадение
+Shipment/ShipmentLine/версии черновика/исходной версии плана.
+
+Групповые инварианты проверяются по Shipment ID, а не по складу:
+
+- Один Shipment относится к одному складу, плану, заказу и владельцу.
+- Его назначения имеют согласованные версии, основание и первый assigned_at;
+  пары Shipment/ShipmentLine уникальны. Точный повтор назначения не меняет корень.
+- Его контрольные точки согласованы по версии Shipment, времени и основанию.
+  У разных Shipment одного склада версии, даты и source_plan_version могут различаться.
+- Если у группы появился прогресс, он включает все закреплённые за ней строки,
+  в том числе строки с нулевым shipped_qty. Соседние группы не обязаны иметь прогресс.
+
+register_shipment() выбирает ожидаемый состав из назначений плана по shipment.id,
+затем требует точное равенство входных Allocation ID. Одного входного набора
+недостаточно для определения ожидаемой группы: иначе можно было бы скрыть нулевую
+строку. Чужой Shipment ID, пропущенная строка, добавленная строка другой группы,
+изменённые резерв/товар/единица/количество или устаревший факт отклоняются.
+Накопленный прогресс остаётся монотонным; точный повтор не меняет версию плана.
+
+release_shipment_assignment() снимает только полный прежний состав отменённого
+черновика более новой версией. Назначения и прогресс других Shipment того же склада
+сохраняются. Частичный набор не освобождает часть группы. Повтор при уже свободных
+строках не меняет план, а старая отмена не снимает новое назначение. Подтверждённый
+или исполненный Shipment этим методом не отменяется.
+
+Допланирование и перепланирование больше не блокируют весь склад из-за назначения
+или прогресса другой группы. Новые свободные Allocation можно добавлять рядом,
+сохраняя лимиты потребности, текущие правила количества и уникальность source_ref/source.
+Прежние назначенные/исполненные строки и их группы не меняются. Добавление соседей
+не обесценивает явно выбранный состав ранее созданного черновика.
+
+FulfillmentPlan.restore() и FulfillmentPlanShipmentSnapshot проверяют те же
+групповые инварианты по сохранённым назначениям и контрольным точкам, без загрузки
+чужих агрегатов. Несколько групп одного склада допустимы; одна группа разных
+складов, разные метаданные внутри группы и неполный прогресс её назначенных строк
+запрещены. Свободный сосед сам по себе не означает неполноту назначения группы.
+Статус плана определяется исполнением всех действующих Allocation, CANCELLED
+остаются историей. Старые вызовы, явно перечисляющие все строки склада, также работают.
+
+Пример — независимая ветка: две разные строки заказа с тем же товаром и одним
+складом. Обе подтверждены; Shipment S1 выбирает первую, S2 — вторую. S2 создаётся
+и подтверждается уже после первого факта S1.
+
+```python
+from src.modules.inventory.domain.shipment.order_snapshot import ShipmentOrderSnapshot, ShipmentOrderLineSnapshot
+
+group_at = extension_completed.updated_at + timedelta(minutes=1)
+group_ref_b = ReservationSourceVO("order_line", "group-line-B")
+group_demand = FulfillmentDemandSnapshot(order_ref, True, (
+    FulfillmentDemandLineSnapshot(row_ref, item.inventory_item_id, item.base_uom, QuantityVO(Decimal(3)), False),
+    FulfillmentDemandLineSnapshot(group_ref_b, item.inventory_item_id, item.base_uom, QuantityVO(Decimal(4)), False),
+))
+group_order = ShipmentOrderSnapshot(shipment_order.order_ref, True, tuple(
+    ShipmentOrderLineSnapshot(row.source_ref, row.inventory_item_id, row.base_uom, row.remaining_qty)
+    for row in group_demand.lines
+))
+group_rows = tuple(FulfillmentAllocation.create(
+    identifier=FulfillmentAllocationIdVO(UUID(int=1606 + index)), source_ref=row.source_ref,
+    inventory_item=item, quantity=row.remaining_qty,
+    source=FulfillmentSourceRefVO(FulfillmentSourceKind.OWN_WAREHOUSE, warehouse_a.id),
+) for index, row in enumerate(group_demand.lines))
+group_a, group_b = group_rows
+group_plan = FulfillmentPlan.create(
+    identifier=FulfillmentPlanIdVO(UUID(int=1600)), order_ref=order_ref,
+    owner_id=planned.owner_id, created_at=group_at,
+)
+for allocation in group_rows:
+    group_plan = group_plan.add_allocation(
+        allocation, demand=group_demand, inventory_item=item, warehouse=warehouse_a,
+        expected_version=group_plan.version, updated_at=group_at,
+    )
+group_plan = group_plan.mark_planned(
+    demand=group_demand, inventory_items=(item,), warehouses=(warehouse_a,),
+    expected_version=group_plan.version, updated_at=group_at,
+)
+group_pool = AvailabilityPoolReservationSnapshot(
+    AvailabilityPoolIdVO(UUID(int=1602)),
+    AvailabilityPoolKeyVO(item.inventory_item_id, warehouse_a.id, group_plan.owner_id), item.base_uom,
+)
+group_reserves = []
+for index, allocation in enumerate(group_rows):
+    pending = StockReservation.create(
+        identifier=StockReservationIdVO(UUID(int=1603 + index)), pool=group_pool,
+        inventory_item=item, source_ref=allocation.source_ref, requested_qty=allocation.quantity,
+        created_at=group_at, expires_at=group_at + timedelta(hours=1),
+    )
+    group_reserves.append(pending.add_reserved(
+        allocation.quantity, expected_version=pending.version, inventory_item=item, updated_at=group_at,
+    ))
+group_reserve_a, group_reserve_b = group_reserves
+group_confirmed = group_plan.confirm_reservations(
+    bindings=tuple(FulfillmentReservationBindingVO(row.id, reserve.id, reserve.version)
+                   for row, reserve in zip(group_rows, group_reserves)),
+    reservations=tuple(reserve.fulfillment_snapshot() for reserve in group_reserves),
+    demand=group_demand, inventory_items=(item,), warehouses=(warehouse_a,),
+    expected_version=group_plan.version, updated_at=group_at,
+)
+# v4 CONFIRMED: две Allocation одного склада, обе пока свободны от назначения.
+group_s1_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1610)), fulfillment_plan=group_confirmed.shipment_snapshot(),
+    warehouse=warehouse_a, order=group_order, inventory_items=(item,),
+    reservations=(group_reserve_a.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(group_a.id, ShipmentLineIdVO(UUID(int=1611))),),
+    created_at=group_at,
+)
+group_s1_assigned = group_confirmed.assign_shipment(
+    group_s1_draft.assignment_snapshot(), expected_version=group_confirmed.version, updated_at=group_at,
+)
+group_s1 = group_s1_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=group_s1_assigned.shipment_snapshot(), warehouse=warehouse_a,
+    order=group_order, inventory_items=(item,), reservations=(group_reserve_a.fulfillment_snapshot(),), updated_at=group_at,
+)
+group_s1_partial = accept_execution(group_s1, "1", 60, group_at + timedelta(minutes=1))
+group_after_s1 = group_s1_assigned.register_shipment(
+    group_s1_partial.fulfillment_snapshot(), expected_version=group_s1_assigned.version,
+    updated_at=group_s1_partial.updated_at,
+)
+# v6 PARTIALLY_FULFILLED: S1=1 из 3, соседняя Allocation B=4 без назначения/прогресса.
+group_order_after_s1 = replace(group_order, lines=tuple(
+    replace(row, remaining_to_ship_qty=QuantityVO(Decimal(2)))
+    if row.source_ref == group_a.source_ref else row for row in group_order.lines
+))
+group_s2_draft = Shipment.create_from_fulfillment_plan(
+    identifier=ShipmentIdVO(UUID(int=1620)), fulfillment_plan=group_after_s1.shipment_snapshot(),
+    warehouse=warehouse_a, order=group_order_after_s1, inventory_items=(item,),
+    reservations=(group_reserve_b.fulfillment_snapshot(),),
+    line_bindings=(FulfillmentShipmentLineBindingVO(group_b.id, ShipmentLineIdVO(UUID(int=1621))),),
+    created_at=group_after_s1.updated_at,
+)
+group_s2_assigned = group_after_s1.assign_shipment(
+    group_s2_draft.assignment_snapshot(), expected_version=group_after_s1.version,
+    updated_at=group_after_s1.updated_at,
+)
+group_s2 = group_s2_draft.confirm_from_fulfillment_plan(
+    expected_version=0, fulfillment_plan=group_s2_assigned.shipment_snapshot(), warehouse=warehouse_a,
+    order=group_order_after_s1, inventory_items=(item,), reservations=(group_reserve_b.fulfillment_snapshot(),),
+    updated_at=group_after_s1.updated_at,
+)
+group_s2_done = accept_execution(group_s2, "4", 61, group_at + timedelta(minutes=2))
+group_after_s2 = group_s2_assigned.register_shipment(
+    group_s2_done.fulfillment_snapshot(), expected_version=group_s2_assigned.version, updated_at=group_s2_done.updated_at,
+)
+# v8 PARTIALLY_FULFILLED: S1=1, S2=4; версии/время и основания групп независимы.
+group_s1_done = accept_execution(group_s1_partial, "2", 62, group_at + timedelta(minutes=3))
+group_completed = group_after_s2.register_shipment(
+    group_s1_done.fulfillment_snapshot(), expected_version=group_after_s2.version, updated_at=group_s1_done.updated_at,
+)
+# v9 FULFILLED: 3 и 4 исполнены. S1 основан на v4, S2 — на v6 одного плана.
+```
+
+Ни один метод не изменяет чужие агрегаты, резервы, пул или Ledger. Пример выполняет
+отдельные Domain-переходы; наличие удержаний, один активный план заказа, свежесть
+чтения, атомарное сохранение назначений/Shipment/фактов, глобальная идемпотентность
+и Outbox остаются будущему Application/UoW и tenant-хранению. Разделение одной
+Allocation между Shipment, изменение её количества после начала и отмена
+подтверждённой отгрузки в срез не входят.
+
+Тесты: test/test_inventory_fulfillment_shipment_groups_domain.py. Прежние тесты
+полного склада обновлены: полнота обязательна для назначенной группы Shipment.
+
 ## План и прогресс собственной отгрузки Shipment
 
 Shipment — самостоятельный immutable Aggregate Root одного заказа, склада и владельца.
@@ -2031,9 +3783,9 @@ Shipment — самостоятельный immutable Aggregate Root одног�
 
 | Объект | Состав |
 | --- | --- |
-| Shipment | id: ShipmentIdVO, order_ref: ShipmentOrderRefVO, warehouse_id, owner_id, status, tuple строк, created_at, updated_at, version |
+| Shipment | id: ShipmentIdVO, order_ref: ShipmentOrderRefVO, warehouse_id, owner_id, status, tuple строк, created_at, updated_at, version, fulfillment_source |
 | ShipmentOrderRefVO | system, reference; обязательные строки с trim, без управляющих символов, регистр сохраняется |
-| ShipmentLine | id: ShipmentLineIdVO, source_ref: ReservationSourceVO, reservation_id, inventory_item_id, base_uom, planned_qty, conversion: QuantityConversionSnapshotVO, shipped_qty: QuantityVO |
+| ShipmentLine | id: ShipmentLineIdVO, source_ref: ReservationSourceVO, reservation_id, inventory_item_id, base_uom, planned_qty, conversion: QuantityConversionSnapshotVO, shipped_qty: QuantityVO, fulfillment_allocation_id |
 | StockReservationShipmentSnapshot | id, pool_id, key, source_ref, base_uom, reserved_qty, status, expires_at, updated_at, version |
 | ShipmentOrderSnapshot | order_ref, is_fulfillable: bool, tuple[ShipmentOrderLineSnapshot, ...] |
 | ShipmentOrderLineSnapshot | source_ref, inventory_item_id, base_uom, remaining_to_ship_qty |
@@ -2075,10 +3827,11 @@ updated_at, нормализуемое в UTC и не убывающее отн�
 
 | Операция | Поведение |
 | --- | --- |
-| add_line | Добавляет проверенную строку только в DRAFT |
+| add_line | Добавляет проверенную строку только в ручной DRAFT |
 | change_line_quantity | Заново пересчитывает ввод; сохраняет ID, основание, резерв, товар и базовую единицу |
 | remove_line | Удаляет строку DRAFT без текущих снимков и без освобождения резерва |
-| confirm | Повторно проверяет весь контекст и переводит непустой DRAFT в CONFIRMED |
+| confirm | Повторно проверяет весь контекст ручного Shipment и переводит непустой DRAFT в CONFIRMED |
+| create_from_fulfillment_plan / confirm_from_fulfillment_plan | Строит полный состав одного склада CONFIRMED-плана / повторно проверяет основание перед подтверждением |
 | cancel | Переводит только DRAFT в CANCELLED, сохраняя строки |
 
 Реальное изменение даёт новую версию +1. Равный числовой ввод в той же исходной
@@ -3494,9 +5247,10 @@ Entity или коллекции ведомостей; их реализация
 | warehouse_id | WarehouseIdVO, фиксирован при создании |
 | owner_id | StockOwnerIdVO, фиксирован при создании |
 | scope | CountScopeVO |
-| status | InventoryCountStatus: DRAFT / CONFIRMED / IN_PROGRESS / COUNTED / CANCELLED |
-| baseline | InventoryCountBaselineRefVO для IN_PROGRESS/COUNTED, иначе None |
-| result | InventoryCountResultRefVO для COUNTED, иначе None |
+| status | InventoryCountStatus: DRAFT / CONFIRMED / IN_PROGRESS / COUNTED / COMPLETED / CANCELLED |
+| baseline | InventoryCountBaselineRefVO для IN_PROGRESS/COUNTED/COMPLETED, иначе None |
+| result | InventoryCountResultRefVO для COUNTED/COMPLETED, иначе None |
+| completion | InventoryCountCompletionVO только для COMPLETED, иначе None |
 | created_at / updated_at | Явный datetime с часовым поясом, хранение в UTC |
 | version | Целое неотрицательное число, bool запрещён |
 
@@ -3580,10 +5334,9 @@ CONFIRMED означает зафиксированный план, а не на
 Момент учётного снимка фиксируется при фактическом старте в ссылке baseline;
 большие наборы позиций и адресов хранятся в отдельном основании, описанном ниже.
 
-CountSheet/CountLine и план StockDocument(ADJUSTMENT) реализованы ниже.
-Следующий срез — применение расхождений через StockExecution/StockPosting/StockPosition.
-Физическое исполнение пока поддерживает только RECEIPT/ISSUE/INTERNAL_MOVE;
-инвентаризация не проводит корректировки напрямую. При старте и применении нужно обеспечить сохранение движений
+CountSheet/CountLine, план StockDocument(ADJUSTMENT) и полное применение расхождений
+через StockExecution/StockPosting/StockPosition реализованы ниже.
+Инвентаризация не проводит корректировки напрямую. При старте и применении нужно обеспечить сохранение движений
 после учётного снимка. Domain-проверки переданных снимков не доказывают полноту
 и достоверность чтения, версии не заменяют блокировки/CAS в хранилище. Проверка
 пересекающихся инвентаризаций, Application/UoW, SQL/API и Outbox — будущие срезы.
@@ -3634,7 +5387,7 @@ updated_at. Входные aware-моменты фабрики и VO норма�
 CONFIRMED → IN_PROGRESS возвращает новый корень версии +1 со ссылкой на основание.
 Повторный запуск запрещён; изменение области, подтверждение или отмена начатой
 инвентаризации также запрещены. restore() принимает baseline явно, требует ссылку
-для IN_PROGRESS/COUNTED и проверяет created_at <= baseline.snapshot_at <= updated_at.
+для IN_PROGRESS/COUNTED/COMPLETED и проверяет created_at <= baseline.snapshot_at <= updated_at.
 Полный набор позиций и актуальные справочники для восстановления не требуются.
 Запуск не меняет позиции, Ledger, доступность и резервы, не блокирует движения.
 
@@ -3955,8 +5708,8 @@ submitted_found_sheet = counted_found_sheet.submit(
 Контекст подтверждает согласованность переданных снимков, а не их подлинность,
 полноту чтения или сохранение в БД. Дубли найденных измерений между разными
 ведомостями и согласованность SERIAL-наблюдений в области проверяются в сводном
-результате ниже. План ADJUSTMENT реализован ниже; физическое применение
-с атомарной проверкой актуальности — следующий срез. Создание карточек,
+результате ниже. План и физическое применение ADJUSTMENT реализованы ниже;
+атомарное сохранение остаётся будущему UoW. Создание карточек,
 StockPosition, SQL/API/UoW и Outbox не входят в этот Domain-срез.
 
 Ошибки используются существующие: InvalidCountLineError, CountSheetSourceMismatchError,
@@ -4037,10 +5790,10 @@ register_result() принимает результат, expected_version, updat
 
 IN_PROGRESS → COUNTED сохраняет InventoryCountResultRefVO(id, prepared_at), прежний
 baseline, время регистрации и версию +1. updated_at не раньше prepared_at;
-повторная регистрация запрещена. Для COUNTED обязательны обе ссылки, для IN_PROGRESS
+повторная регистрация запрещена. Для COUNTED/COMPLETED обязательны обе ссылки, для IN_PROGRESS
 только baseline, для DRAFT/CONFIRMED/CANCELLED обе отсутствуют. restore() явно
 принимает result и проверяет baseline.snapshot_at <= result.prepared_at <= updated_at
-без загрузки больших наборов. Снимок родителя COUNTED корректен как данные, но
+без загрузки больших наборов. Снимок родителя COUNTED/COMPLETED корректен как данные, но
 политики создания/дополнения/передачи/отзыва ведомостей требуют IN_PROGRESS.
 
 Пример продолжает неизменённое основание и две переданные ведомости из предыдущих
@@ -4076,8 +5829,8 @@ counted_inventory = started.register_result(
 COUNTED означает зафиксированные наблюдения, не применённые корректировки.
 Сам register_result() не создаёт StockDocument/StockExecution/StockPosting;
 позиции, Ledger, резервы и доступность не меняются. План ADJUSTMENT описан ниже.
-Физическое применение и окончательное завершение, перезапуск с новым основанием,
-SQL/API/Outbox — следующие срезы.
+Физическое применение и окончательное завершение описаны ниже. Перезапуск с новым
+основанием, SQL/API/Outbox — следующие срезы.
 
 Снимки и версии не доказывают полноту/подлинность чтения или commit. Будущий
 Application/UoW должен атомарно читать и фиксировать полный состав источников и
@@ -4094,7 +5847,8 @@ InventoryCountSerialConflictError, InventoryCountSheetsNotReadyError и преж
 ## План корректировки ADJUSTMENT из результата инвентаризации
 
 Первый срез превращает зарегистрированные расхождения в план StockDocument,
-сохраняя 16 самостоятельных корней из 23 целевых. Физического движения пока нет.
+сохраняя 16 самостоятельных корней из 23 целевых. Само планирование запас не меняет;
+полное физическое исполнение реализовано следующим срезом ниже.
 InventoryCount остаётся COUNTED. StockAdjustmentLineVO — часть StockDocumentLine,
 не самостоятельная Entity или агрегат.
 
@@ -4147,8 +5901,8 @@ confirm_inventory_count_adjustment() принимает обязательные
 повторно строит ожидаемый состав по зарегистрированному результату. Цель, знак,
 количество, измерения, позиция/версия и источники должны совпасть; прежний SKU
 документа сохраняется. Общий confirm() корректировку отклоняет, поэтому подтверждение
-без актуальной проверки основания невозможно. Пока доступны только DRAFT,
-CONFIRMED и CANCELLED с executed_qty=0. restore() принимает собственную историю
+без актуальной проверки основания невозможно. На этапе плана доступны DRAFT,
+CONFIRMED и CANCELLED с executed_qty=0; полное исполнение добавлено ниже. restore() принимает собственную историю
 без свежего контекста и проверяет её локальные инварианты. Зарезервированные источники
 пересчёта и adjustment недопустимы в обычных документах.
 
@@ -4185,11 +5939,9 @@ if adjustment is not None:
     # У FOUND по-прежнему нет position_id/position_version; физический запас 100 PCS/v7.
 ```
 
-execution_snapshot(), регистрация исполнения, StockExecution и StockPosting
-ADJUSTMENT запрещены до следующего среза. Расширение enum не включает обычные
-маршруты или восстановление фактов этого вида. Следующий срез должен реализовать
-переход к target с проверкой исходных версий, создание FOUND-позиций, присутствие
-SERIAL и согласованное исполнение/проведение. Завершение InventoryCount пока не добавлено.
+Обычные execution_snapshot()/register_execution() остаются закрыты для ADJUSTMENT:
+они не передают знаки/цели. Специализированные исполнение, проведение и применение
+к target описаны ниже. Завершение InventoryCount реализовано отдельным срезом ниже.
 
 Domain не гарантирует подлинность загруженного результата, полноту SQL-чтения,
 атомарный commit или глобальную дедупликацию документов. Будущий Application/UoW
@@ -4200,6 +5952,425 @@ Domain не гарантирует подлинность загруженног
 Ошибки среза: InvalidStockAdjustmentLineError, InventoryCountAdjustmentMismatchError,
 StockAdjustmentDocumentImmutableError и прежние ошибки количества, контекста,
 состояний, времени и актуальности основания.
+
+## Полное физическое исполнение ADJUSTMENT
+
+Цепочка среза: CONFIRMED StockDocument → StockExecution → StockPosting → новые
+состояния StockPosition → COMPLETED StockDocument. Каждый AR возвращает только
+свой immutable экземпляр. Родитель InventoryCount остаётся COUNTED, результат
+и его основание не переписываются. Сам факт и Ledger не изменяют позиции.
+
+В первом срезе исполнения выполняется весь документ целиком: ровно одна фактическая
+строка на каждую плановую. Нет частичных количеств, пропусков или PARTIALLY_EXECUTED.
+После первой частичной поправки исходное основание уже изменилось бы, поэтому для
+такого расширения потребуется отдельный механизм учёта применённых строк.
+
+| Контракт | Состав и назначение |
+| --- | --- |
+| StockDocumentAdjustmentExecutionSnapshot | Только CONFIRMED-план: ID, версия, склад/владелец, время, источник, собственные снимки строк со SKU/единицей/поправкой/источником |
+| StockAdjustmentExecutionLineBindingVO | document_line_id, execution_line_id, position_id; все ID передаются извне |
+| StockAdjustmentExecutionRouteVO | Исходный StockAdjustmentLineVO, реальный position_id, expected_position_version |
+| StockAdjustmentExecutionSnapshot | ID факта, ID/версия документа, склад/владелец, время, полные фактические строки с маршрутами |
+| StockSerialPresenceSnapshot | serial_id и полное положительное присутствие по всем складам/адресам/владельцам tenant; явно пустой tuple либо одна позиция 1 PCS |
+| StockAdjustmentEntrySnapshot | posting_id, execution_id, адресная запись Ledger и маршрут с исходным/целевым состоянием |
+
+StockDocument.adjustment_execution_snapshot() выдаёт специализированный план,
+StockExecution.create_from_inventory_count_adjustment() создаёт полный факт.
+StockAdjustmentExecutionPolicy сверяет версию/область/время документа, знаки,
+цели и весь состав. Повторно проверяются COUNTED, зарегистрированный результат,
+текущие товары/LOT/SERIAL и все исходные позиции/адреса через прежнюю политику
+проверки основания. Включены нулевые и неизменённые позиции; движения, новые
+позиции и расширение полной области делают основание устаревшим.
+
+Для существующей позиции маршрут требует прежние ID и версию. Для FOUND источник
+сохраняет None/None, а маршрут получает отдельный новый ID и ожидаемую версию 0.
+После проверки отсутствия запаса вызывающий код подготавливает нулевой кандидат
+через StockPosition.create(). В проведение передаются полные исходные positions
+и отдельно ровно новые found_positions с qty=0/version=0. Они не включаются
+в историческое основание и не подменяют отсутствующий учётный источник.
+
+StockSerialPresencePolicy перед фактом и повторно перед проведением проверяет
+глобальное присутствие каждого затронутого SERIAL. Его отсутствие передаётся
+явным снимком с positions=(), а не пропуском снимка. Исходная единица должна
+совпадать с фактической позицией и её версией. StockAdjustmentRoutesPolicy
+разрешает один расход и один приход одинакового экземпляра, запрещает повтор
+направления/позиции/измерений и изменение товара или партии. Поэтому SERIAL-X
+1→0 в A и FOUND 0→1 в B дают две записи −1/+1, а положительное присутствие
+в другом месте запрещает второй приход. Проверка не зависит от порядка строк.
+
+StockPosting.create_from_adjustment_execution() заново проверяет весь исходный
+контекст и строит по одной точной знаковой записи на позицию. Новые ID записей
+задаются StockPostingEntryBindingVO, коэффициент 1, единица базовая, нулей и
+сальдирования разных измерений нет. Общие фабрики StockPosting.create() и
+create_from_execution() эту операцию не открывают. restore() допускает полную
+историю ADJUSTMENT без свежего контекста; сторно корректировки пока запрещено.
+
+StockPosting.adjustment_entries() полностью сопоставляет факт и Ledger: основание,
+время, все позиции, знаки, количества, единицы и пересчёт. Затем выдаёт снимки для
+StockPosition.apply_adjustment_entry(). Метод позиции проверяет её ID, измерения,
+единицу, строгую expected_version и сохранённую версию маршрута, текущие справочники
+и исходное количество. StockAdjustmentQuantityPolicy доказывает точное
+current + delta = target и проверяет по текущему шагу только target. Старое
+количество и модуль поправки не обязаны соответствовать изменившемуся шагу:
+100.1 KG/v7 при step=0.2 можно исправить до 100.2/+0.1 или 100.0/−0.1 с версией 8.
+Округления нет, обычный StockQuantityPolicy сохраняет прежние проверки.
+Повторное применение отклоняется по исходной версии, даже если вызывающий код
+передал новую expected_version.
+
+register_adjustment_execution() принимает полный специализированный факт,
+повторно сверяет документ/версию/область/время и каждую поправку, устанавливает
+executed_qty=planned_qty и переводит CONFIRMED → COMPLETED одной следующей версией.
+Повторная регистрация запрещена. restore() проверяет нулевой либо полностью
+исполненный состав, без частичного состояния. Обычные проекции исполнения для
+документа, Shipment и погашения резервов закрыты для ADJUSTMENT.
+
+Склад должен быть активен при исполнении и проведении. Неактивные физические
+адреса, просроченный, BLOCKED/DAMAGED запас не исключаются фильтрами продаж.
+Резервы автоматически не освобождаются: существующий refresh_eligible_quantity()
+может оценить новые позиции, сохранив обязательства. Например, eligible=77 при
+reserved=90 даёт available=0 и deficit=13. Остальные виды операций сохраняют
+прежние правила количества, маршрутов, сроков и запрет повтора SERIAL.
+
+Пример продолжает confirmed_adjustment, counted_inventory, result, baseline,
+position и справочники из предыдущих разделов:
+
+```python
+from src.modules.inventory.domain.stock_execution.aggregate import StockExecution
+from src.modules.inventory.domain.stock_execution.value_object.identifier import StockExecutionIdVO
+from src.modules.inventory.domain.stock_execution.value_object.line_id import StockExecutionLineIdVO
+from src.modules.inventory.domain.stock_execution.value_object.adjustment_line_binding import StockAdjustmentExecutionLineBindingVO
+from src.modules.inventory.domain.stock_position.value_object.identifier import StockPositionIdVO
+from src.modules.inventory.domain.stock_posting.aggregate import StockPosting
+from src.modules.inventory.domain.stock_posting.value_object.identifier import StockPostingIdVO
+from src.modules.inventory.domain.stock_posting.value_object.entry_binding import StockPostingEntryBindingVO
+from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import StockLedgerEntryIdVO
+
+context = dict(
+    inventory_count=counted_inventory.adjustment_source_snapshot(), result=result,
+    baseline=baseline, warehouse=warehouse, inventory_items=(item.document_snapshot(),),
+    locations=locations, positions=(position.counting_snapshot(),), presence=(),
+)
+execution = StockExecution.create_from_inventory_count_adjustment(
+    identifier=StockExecutionIdVO(UUID(int=500)),
+    document=confirmed_adjustment.adjustment_execution_snapshot(), executed_at=found_at,
+    bindings=tuple(
+        StockAdjustmentExecutionLineBindingVO(
+            line.id, StockExecutionLineIdVO(UUID(int=510 + index)),
+            line.adjustment.position_id or StockPositionIdVO(UUID(int=501 + index)),
+        )
+        for index, line in enumerate(confirmed_adjustment.lines)
+    ),
+    **context,
+)
+by_location = {location.id: location for location in locations}
+found_positions = tuple(
+    StockPosition.create(
+        identifier=line.route.position_id, dimensions=line.route.adjustment.dimensions,
+        inventory_item=item.stock_snapshot(), warehouse=warehouse,
+        location=by_location[line.route.adjustment.dimensions.location_id],
+    )
+    for line in execution.lines if line.route.adjustment.position_id is None
+)
+posting = StockPosting.create_from_adjustment_execution(
+    identifier=StockPostingIdVO(UUID(int=520)), execution=execution.adjustment_snapshot(),
+    document=confirmed_adjustment.adjustment_execution_snapshot(), posted_at=found_at,
+    found_positions=tuple(candidate.counting_snapshot() for candidate in found_positions),
+    entry_bindings=tuple(
+        StockPostingEntryBindingVO(line.route.position_id, StockLedgerEntryIdVO(UUID(int=530 + index)))
+        for index, line in enumerate(execution.lines)
+    ),
+    **context,
+)
+by_position = {candidate.id: candidate for candidate in (position, *found_positions)}
+changed_positions = tuple(
+    by_position[snapshot.entry.position_id].apply_adjustment_entry(
+        snapshot, expected_version=by_position[snapshot.entry.position_id].version,
+        inventory_item=item.stock_snapshot(), warehouse=warehouse,
+        location=by_location[snapshot.route.adjustment.dimensions.location_id],
+    )
+    for snapshot in posting.adjustment_entries(execution.adjustment_snapshot())
+)
+completed_adjustment = confirmed_adjustment.register_adjustment_execution(
+    execution.adjustment_snapshot(), updated_at=found_at,
+)
+# Ledger: -23/+5; новые состояния: 77 PCS/v8 и FOUND 5 PCS/v1.
+# Документ COMPLETED; исходный position всё ещё 100 PCS/v7, родитель COUNTED.
+```
+
+Это проверенные Domain-кандидаты, не подтверждение commit или общего атомарного
+изменения. Будущий Application/UoW должен читать авторитетные immutable источники,
+защитить полную область и отсутствие FOUND/SERIAL от конкурентных вставок,
+проверить версии и атомарно сохранить факт, Ledger, позиции, прогресс и доступность.
+FOUND-кандидаты готовятся отдельно до записи. Один результат нельзя проводить
+повторно через другой документ; глобальная защита относится к хранению.
+Завершение InventoryCount описано ниже. Частичное применение, сторно ADJUSTMENT,
+SQL/API/Outbox остаются следующими срезами. Ошибки среза — StockAdjustmentError и прежние
+ошибки версий позиций, единиц, количества, состояния, времени и основания.
+
+## Завершение InventoryCount
+
+COUNTED фиксирует наблюдения. COMPLETED означает, что ненулевые расхождения
+согласованно применены либо результат не требует корректировки. Новых AR и Entity
+нет: 16 корней из 23 целевых. InventoryCount сохраняет прежние baseline/result и
+добавляет только компактный completion: InventoryCountCompletionVO.
+
+| Поле completion | Контракт |
+| --- | --- |
+| completed_at | Явный момент завершения, нормализуется в UTC |
+| document_id / document_version | Завершённый документ и его строгая положительная версия без bool |
+| execution_id / posting_id | Согласованные исполнение и проведение |
+
+Ссылки/версия присутствуют все вместе или все None при отсутствии расхождений.
+VO проверяет только собственные значения. Чужие факты проверяет
+InventoryCountCompletionPolicy, переход и терминальное состояние — сам корень.
+
+StockAdjustmentEntrySnapshot описывает запись для применения, а не успешный
+результат. Поэтому в процессе применения отдельно фиксируется
+StockAdjustmentApplicationSnapshot(posting_id, execution_id, applied_at, lines).
+Каждая StockAdjustmentApplicationLineSnapshot связывает entry_id с историческим
+StockPositionCountingSnapshot результата. StockAdjustmentApplicationPolicy.build_snapshot()
+получает полный Ledger, факт исполнения и ровно затронутые positions_after:
+для каждой записи требуется та же позиция, измерения, единица, количество target_qty
+и версия expected_position_version+1. Для FOUND — новый реальный ID и версия 1,
+без изменения исходных None/None. Старое состояние, пропуск/лишняя позиция,
+неверный результат или дубли запрещены. applied_at не раньше posted_at.
+
+Снимки frozen/slots и содержат значения, не ссылки на AR. Они проверяют номинальные
+типы, tuple, UTC, уникальность записей/позиций/измерений и положительную версию
+результата. ensure_compatible() повторно сопоставляет весь Ledger, факт и результаты,
+в том числе ID записей, независимо от порядка строк. Снимок сохраняется как
+историческое основание закрытия; последующее чтение текущих позиций его не заменяет.
+
+StockDocument.adjustment_completion_snapshot() возвращает отдельный
+StockDocumentAdjustmentCompletionSnapshot только для COMPLETED ADJUSTMENT.
+Он сохраняет собственные ID/версию, склад/владельца, источник, время и реальные
+плановые/исполненные количества строк. Проверяется полный прогресс каждой строки.
+CONFIRMED-снимок не подходит для завершения; статус или историческая версия не подменяются.
+
+Две операции InventoryCount:
+
+- complete_with_adjustment(result, document, execution, posting, application,
+  expected_version, updated_at) сверяет зарегистрированный результат и всю цепочку.
+  Документ относится именно к result UUID без версии immutable результата; все
+  ненулевые наблюдения покрыты ровно один раз по составным sheet_id/count_line_id.
+  Совпадают знак, цель, единица, измерения и исходная позиция/версия. Факт относится
+  к документу, завершённая версия документа равна execution.document_version+1,
+  Ledger ссылается на факт, application — на это проведение и его записи.
+  Время завершения не раньше текущего COUNTED, документа и применения.
+- complete_without_adjustment(result, expected_version, updated_at) требует
+  только зарегистрированный результат со всеми discrepancy=0. Пустой результат
+  и FOUND с фактом 0 допустимы. Никаких документов, исполнений, Ledger или фиктивных
+  позиций не создаётся. completion содержит момент и четыре None вместо ссылок/версии.
+
+Оба пути требуют COUNTED и актуальную строгую версию, выполняют COMPLETED/version+1
+и возвращают новый экземпляр. Повторное завершение, редактирование, старт/отмена,
+новые ведомости и корректировки по текущему закрытому родителю запрещены.
+Закрытие не применяет дельты повторно и не изменяет резервы или доступность.
+
+Завершение проверяет исторические факты, не текущее состояние склада. Если после
+77/v8 произошёл законный приход +10 и позиция стала 87/v9, сохранённый результат
+77/v8 остаётся основанием завершения. Аналогично нулевой результат не требует
+отсутствия последующих движений. Новые правила количества или выключение активности
+склада не переоценивают уже применённую корректировку; этих контекстов нет во входах.
+
+Пример продолжает полный физический цикл из предыдущего раздела:
+
+```python
+from src.modules.inventory.domain.policy.stock_adjustment_application import StockAdjustmentApplicationPolicy
+
+application_result = StockAdjustmentApplicationPolicy.build_snapshot(
+    posting=posting.snapshot(), execution=execution.adjustment_snapshot(),
+    positions_after=tuple(candidate.counting_snapshot() for candidate in changed_positions),
+    applied_at=found_at,
+)
+completed_inventory = counted_inventory.complete_with_adjustment(
+    result=result, document=completed_adjustment.adjustment_completion_snapshot(),
+    execution=execution.adjustment_snapshot(), posting=posting.snapshot(),
+    application=application_result, expected_version=counted_inventory.version,
+    updated_at=found_at,
+)
+# COUNTED v4 -> COMPLETED v5. completion ссылается на документ/версию, факт и Ledger.
+# Исходный counted_inventory остаётся COUNTED, повторного изменения позиций нет.
+```
+
+Для зарегистрированного результата без расхождений достаточно
+`counted_inventory.complete_without_adjustment(result=result,
+expected_version=counted_inventory.version, updated_at=found_at)`.
+
+restore() явно принимает completion и проверяет только собственную историю:
+baseline обязателен для IN_PROGRESS/COUNTED/COMPLETED, result для COUNTED/COMPLETED,
+completion только для COMPLETED. Обязательна хронология result.prepared_at <=
+completion.completed_at <= updated_at. Снимки родителя представляют закрытое
+состояние с сохранёнными ссылками; политики действий продолжают требовать
+IN_PROGRESS для ведомостей и COUNTED для подготовки/проведения корректировки.
+
+Domain-снимок результата применения не доказывает вызов метода позиции, сохранение
+или commit. Будущий Application/UoW обязан авторитетно читать immutable источники,
+сохранять результат применения вместе с Ledger и атомарно фиксировать факт, позиции,
+прогресс, доступность и закрытие, проверяя версии и глобальную однократность результата.
+Application/SQL/API/Outbox, частичное применение, сторно и новый пересчёт по новому
+основанию остаются будущими срезами. Ошибка завершения — InventoryCountCompletionError;
+также используются прежние ошибки количества, состояния, версии, времени и снимков.
+
+## Первоначальная стоимость поступления ValuationLayer
+
+ValuationLayer — самостоятельный Aggregate Root первоначальной стоимости одной
+положительной записи Ledger обычного прихода. Теперь реализовано 18 из 23 целевых
+корней. Слой не меняет физический запас, журнал, резервы или другие агрегаты.
+
+| Поле | Состав и назначение |
+| --- | --- |
+| id | ValuationLayerIdVO |
+| source | ValuationLayerSourceVO(posting_id, ledger_entry_id, position_id) |
+| inventory_item_id / owner_id | Товар и владелец исходной позиции |
+| warehouse_id | Склад исходного поступления, выведенный из локации позиции |
+| base_uom | Сохранённая базовая единица записи Ledger |
+| cost_basis | CostBasisVO(quantity, total_cost: MoneyVO) |
+| received_at | Исторический posted_at исходного StockPosting в UTC |
+| created_at | Момент регистрации стоимости, не раньше received_at |
+
+В первом срезе слой сразу фиксирует стоимость поступления. DRAFT, редактирование,
+потребление, remaining_qty/remaining_cost, статусы исчерпания и версия изменения
+не добавлены. Они появятся вместе с поведением расхода слоя и ValuationPosting;
+история всех расходов не будет коллекцией внутри ValuationLayer.
+
+StockPosting.receipt_valuation_snapshot(ledger_entry_id, position, location)
+строит специализированный frozen/slots StockReceiptValuationSnapshot. Он содержит
+Posting/Entry/Position ID, товар, владельца, склад, базовую единицу, положительное
+количество и received_at. Цена в снимок физического прихода не входит.
+
+Чистая StockReceiptValuationPolicy работает со StockPostingSnapshot и снимками
+позиции/локации, не с чужими Aggregate Roots. Проверяются:
+
+- RECEIPT без reversal_of_id и существующая положительная запись выбранного проведения.
+- Совпадение Position ID и базовой единицы; прежние правила единичности SERIAL.
+- Соответствие location.id измерениям позиции; warehouse_id выводится из этой локации.
+- Сохранённые количество и коэффициент Ledger. Текущий каталог не переписывает
+  исторический пересчёт; новый шаг товара, активность склада/локации и сроки партии
+  для стоимостной фиксации проведённой истории не запрашиваются.
+
+ISSUE, INTERNAL_MOVE, ADJUSTMENT и компенсации не образуют закупочный слой этого
+среза. Положительная сторона перемещения или компенсации расхода также отклоняется:
+одного положительного знака недостаточно для признания нового закупочного поступления.
+Одна запись выбирается явно. Для нескольких записей по партиям/позициям создаются
+разные слои с явно переданными стоимостями; автоматического распределения общей
+стоимости документа по этим записям пока нет. LOT/SERIAL отслеживаются через ссылку
+на исходную позицию и запись, отдельные коллекции партий/серий в слой не копируются.
+
+ValuationLayer.create_from_receipt(identifier, receipt, total_cost, created_at)
+выводит ссылки, товар, владельца, склад, единицу и количество из проверенного
+основания. CostBasisVO требует положительный QuantityVO и конечный неотрицательный
+MoneyVO полной стоимости; бесплатный приход со стоимостью ноль допустим.
+Используются общие MoneyVO и CurrencyVO. MoneyVO хранит четыре знака дробной части
+и проверяет диапазон независимо от внешнего Decimal context; CurrencyVO нормализует
+трёхбуквенный код. Наличие валюты в справочнике и настройки tenant проверит Application.
+Отдельная округлённая цена единицы не сохраняется, пересчёт валют не выполняется.
+
+Create/restore принимают явные aware-даты и нормализуют их в UTC. Restore принимает
+все собственные поля, проверяет номинальные ссылки, CostBasisVO, известную единицу
+и received_at <= created_at, без чтения StockPosting, текущих цен или справочников.
+Готовый StockReceiptValuationSnapshot уже должен хранить UTC. Aggregate и snapshots
+не используют __post_init__; локальная валидация VO находится в их __post_init__.
+
+Пример независим от предыдущих последовательностей и создаёт реальные Domain-
+StockPosition и StockPosting, затем основание и стоимость. Учётные снимки товара,
+склада и локации выступают входными данными уже существующих справочников.
+
+```python
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from uuid import UUID
+
+from src.modules.inventory.domain.inventory_item.stock_snapshot import InventoryItemStockSnapshot
+from src.modules.inventory.domain.inventory_item.value_object.identifier import InventoryItemIdVO
+from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import TrackingMode
+from src.modules.inventory.domain.stock_execution.value_object.identifier import StockExecutionIdVO
+from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
+from src.modules.inventory.domain.stock_location.value_object.identifier import StockLocationIdVO
+from src.modules.inventory.domain.stock_location.value_object.location_type import LocationType
+from src.modules.inventory.domain.stock_position.aggregate import StockPosition
+from src.modules.inventory.domain.stock_position.value_object.dimensions import StockDimensionsVO
+from src.modules.inventory.domain.stock_position.value_object.identifier import StockPositionIdVO
+from src.modules.inventory.domain.stock_posting.aggregate import StockPosting
+from src.modules.inventory.domain.stock_posting.entity.stock_ledger_entry import StockLedgerEntry
+from src.modules.inventory.domain.stock_posting.value_object.identifier import StockPostingIdVO
+from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import StockLedgerEntryIdVO
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import StockOperationType
+from src.modules.inventory.domain.stock_posting.value_object.posting_source import PostingSourceVO
+from src.modules.inventory.domain.valuation_layer.aggregate import ValuationLayer
+from src.modules.inventory.domain.valuation_layer.value_object.identifier import ValuationLayerIdVO
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.quantity_conversion_snapshot import QuantityConversionSnapshotVO
+from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
+from src.modules.inventory.domain.value_object.stock_delta import StockDeltaVO
+from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
+from src.modules.inventory.domain.value_object.stock_status import StockStatus
+from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
+from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
+from src.modules.shared.domain.value_object.currency import CurrencyVO
+from src.modules.shared.domain.value_object.money import MoneyVO
+
+
+def receipt_with_cost(unit: str, quantity: str, amount: str, currency: str,
+                      index: int) -> tuple[StockPosition, StockPosting, ValuationLayer]:
+    """Создаёт одну запись прихода и фиксирует полную стоимость её базового количества."""
+    received_at = datetime(2026, 11, 7, 12, tzinfo=UTC)
+    item = InventoryItemStockSnapshot(
+        InventoryItemIdVO(UUID(int=index)), UomCodeVO(unit),
+        QuantityRulesVO(Decimal(1) if unit == "PCS" else Decimal("0.001")), TrackingMode.NONE,
+    )
+    warehouse = WarehouseSnapshot(WarehouseIdVO(UUID(int=index + 1)), True, None)
+    location = StockLocationSnapshot(StockLocationIdVO(UUID(int=index + 2)), warehouse.id,
+                                     LocationType.STORAGE, True)
+    position = StockPosition.create(
+        identifier=StockPositionIdVO(UUID(int=index + 4)),
+        dimensions=StockDimensionsVO(item.inventory_item_id, location.id,
+                                    StockOwnerIdVO(UUID(int=index + 3)), None, None, StockStatus.SELLABLE),
+        inventory_item=item, warehouse=warehouse, location=location,
+    )
+    received_qty = QuantityVO(Decimal(quantity))
+    entry = StockLedgerEntry.create(
+        identifier=StockLedgerEntryIdVO(UUID(int=index + 5)), position_id=position.id,
+        quantity_delta=StockDeltaVO(received_qty.value), base_uom=item.base_uom,
+        conversion=QuantityConversionSnapshotVO.create(quantity=received_qty,
+                                                       uom=item.base_uom, base_uom=item.base_uom),
+    )
+    posting = StockPosting.create(
+        identifier=StockPostingIdVO(UUID(int=index + 6)),
+        source=PostingSourceVO(StockExecutionIdVO(UUID(int=index + 7))),
+        operation_type=StockOperationType.RECEIPT, posted_at=received_at,
+        entries=(entry,), positions=(position.snapshot(),),
+    )
+    receipt = posting.receipt_valuation_snapshot(
+        ledger_entry_id=entry.id, position=position.snapshot(), location=location,
+    )
+    layer = ValuationLayer.create_from_receipt(
+        identifier=ValuationLayerIdVO(UUID(int=index + 8)), receipt=receipt,
+        total_cost=MoneyVO(Decimal(amount), CurrencyVO(currency)),
+        created_at=received_at + timedelta(hours=1),
+    )
+    return position, posting, layer
+
+
+pcs_position, pcs_posting, pcs_layer = receipt_with_cost("PCS", "12", "60", "USD", 2000)
+kg_position, kg_posting, kg_layer = receipt_with_cost("KG", "100", "5000", "UAH", 2020)
+fraction_position, fraction_posting, fraction_layer = receipt_with_cost("KG", "0.125", "6.25", "UAH", 2040)
+liquid_position, liquid_posting, liquid_layer = receipt_with_cost("L", "2.375", "120", "EUR", 2060)
+# cost_basis: 12 PCS / 60.0000 USD; 100 KG / 5000.0000 UAH;
+#             0.125 KG / 6.2500 UAH; 2.375 L / 120.0000 EUR.
+# Каждый source содержит конкретные Posting / Ledger Entry / Position ID.
+# Позиции остаются нулевыми: ни создание Ledger, ни слой сами не применяют движение.
+```
+
+Пример фиксирует Domain-факты и не доказывает их сохранение или физическое применение.
+Будущий Application/UoW должен согласовать StockPosting, StockPosition и слой стоимости.
+Уникальность слоя по (stock_posting_id, ledger_entry_id) в tenant-схеме, глобальная
+идемпотентность, распределение общей стоимости прихода, актуальность прочитанных
+оснований, SQL и Outbox остаются хранению и следующим срезам. FIFO, списание
+стоимости, ValuationPosting, переоценка и валютная конверсия пока не реализованы.
+
+Тесты: test/test_inventory_valuation_layer_domain.py.
 
 ## Изменения, восстановление и проверки
 
@@ -4238,5 +6409,19 @@ StockAdjustmentDocumentImmutableError и прежние ошибки колич�
 `test/test_inventory_count_sheet_domain.py`
 `test/test_inventory_count_found_stock_domain.py`
 `test/test_inventory_count_result_domain.py`
-и `test/test_inventory_count_adjustment_document_domain.py`.
+`test/test_inventory_count_adjustment_document_domain.py`
+`test/test_inventory_adjustment_application_domain.py`
+`test/test_inventory_count_completion_domain.py`
+`test/test_inventory_fulfillment_plan_domain.py`
+`test/test_inventory_fulfillment_reservation_domain.py`
+`test/test_inventory_fulfillment_shipment_domain.py`
+`test/test_inventory_fulfillment_progress_domain.py`
+`test/test_inventory_partial_fulfillment_domain.py`
+`test/test_inventory_shipment_assignment_domain.py`
+`test/test_inventory_fulfillment_reservation_release_domain.py`
+`test/test_inventory_fulfillment_replanning_domain.py`
+`test/test_inventory_fulfillment_allocation_cancellation_domain.py`
+`test/test_inventory_fulfillment_demand_extension_domain.py`
+`test/test_inventory_fulfillment_shipment_groups_domain.py`
+и `test/test_inventory_valuation_layer_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

@@ -50,14 +50,15 @@ class InventoryCountAdjustmentSourceSnapshot:
             self.updated_at,
             self.version,
         ).ensure_valid()
-        if (self.status is InventoryCountStatus.COUNTED) != (
-            self.result is not None
-        ) or (
+        if (
+            self.status
+            in (InventoryCountStatus.COUNTED, InventoryCountStatus.COMPLETED)
+        ) != (self.result is not None) or (
             self.result is not None
             and not isinstance(self.result, InventoryCountResultRefVO)
         ):
             raise InvalidInventoryCountResultError(
-                "Ссылка на результат обязательна только в COUNTED."
+                "Ссылка на результат обязательна в COUNTED и COMPLETED."
             )
         if self.result is not None:
             self.result.ensure_valid()

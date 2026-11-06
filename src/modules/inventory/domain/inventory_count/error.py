@@ -5,6 +5,10 @@ class InventoryCountError(InventoryError):
     """Базовая ошибка плана инвентаризации."""
 
 
+class InventoryCountCompletionError(InventoryCountError):
+    """Отклоняет несогласованные сведения или факты завершения инвентаризации."""
+
+
 class InvalidInventoryCountValueError(InventoryCountError):
     """Сообщает о некорректном собственном составе или версии плана."""
 
