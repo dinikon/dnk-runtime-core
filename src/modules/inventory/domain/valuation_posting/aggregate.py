@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Self
 
@@ -26,6 +26,9 @@ from src.modules.inventory.domain.stock_posting.snapshot import StockPostingSnap
 from src.modules.inventory.domain.stock_posting.value_object.identifier import (
     StockPostingIdVO,
 )
+from src.modules.inventory.domain.stock_posting.value_object.movement_entry_pair import (
+    StockMovementEntryPairVO,
+)
 from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
     StockOperationType,
 )
@@ -45,6 +48,9 @@ from src.modules.inventory.domain.valuation_posting.error import (
     DuplicateValuationEntryError,
     InvalidValuationPostingValueError,
     ValuationPostingTimeError,
+)
+from src.modules.inventory.domain.valuation_posting.movement_pair_snapshot import (
+    ValuationMovementPairSnapshot,
 )
 from src.modules.inventory.domain.valuation_posting.time import (
     normalize_valuation_posting_time,
@@ -67,6 +73,7 @@ class ValuationPosting:
     stock_posted_at: datetime
     posted_at: datetime
     entries: tuple[ValuationEntry, ...]
+    movement_pairs: tuple[StockMovementEntryPairVO, ...] = ()
 
     @classmethod
     def create_from_receipt(
@@ -142,10 +149,32 @@ class ValuationPosting:
         posted_at: datetime,
     ) -> Self:
         """Регистрирует выбытие и поступление стоимости по одной полной паре INTERNAL_MOVE."""
+        return cls.create_from_movement_pairs(
+            identifier=identifier,
+            posting=posting,
+            pairs=(ValuationMovementPairSnapshot(consumption, destination),),
+            entry_bindings=entry_bindings,
+            positions=positions,
+            locations=locations,
+            posted_at=posted_at,
+        )
+
+    @classmethod
+    def create_from_movement_pairs(
+        cls,
+        *,
+        identifier: ValuationPostingIdVO,
+        posting: StockPostingSnapshot,
+        pairs: tuple[ValuationMovementPairSnapshot, ...],
+        entry_bindings: tuple[ValuationEntryBindingVO, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        posted_at: datetime,
+    ) -> Self:
+        """Регистрирует полное INTERNAL_MOVE и сохраняет явные связи записей его пар."""
         entries = StockMovementValuationPostingPolicy.build_entries(
             posting=posting,
-            consumption=consumption,
-            destination=destination,
+            pairs=pairs,
             entry_bindings=entry_bindings,
             positions=positions,
             locations=locations,
@@ -158,6 +187,7 @@ class ValuationPosting:
             stock_posted_at=posting.posted_at,
             posted_at=posted_at,
             entries=entries,
+            movement_pairs=tuple(pair.consumption.movement.pair for pair in pairs),
         )
 
     @classmethod
@@ -197,6 +227,7 @@ class ValuationPosting:
         stock_posted_at: datetime,
         posted_at: datetime,
         entries: tuple[ValuationEntry, ...],
+        movement_pairs: tuple[StockMovementEntryPairVO, ...] | None = None,
     ) -> Self:
         """Восстанавливает весь собственный исторический состав без повторной загрузки внешних оснований."""
         posting = cls(
@@ -206,11 +237,26 @@ class ValuationPosting:
             normalize_valuation_posting_time(stock_posted_at),
             normalize_valuation_posting_time(posted_at),
             entries,
+            () if movement_pairs is None else movement_pairs,
         )
-        posting._validate()
+        posting._validate_structure()
+        if operation_type is StockOperationType.INTERNAL_MOVE:
+            if movement_pairs is None and len(entries) == 2:
+                outgoing, incoming = entries
+                if outgoing.quantity_delta.value > 0:
+                    outgoing, incoming = incoming, outgoing
+                posting = replace(
+                    posting,
+                    movement_pairs=(
+                        StockMovementEntryPairVO(
+                            outgoing.ledger_entry_id, incoming.ledger_entry_id
+                        ),
+                    ),
+                )
+            posting._ensure_movement_balanced()
         return posting
 
-    def _validate(self) -> None:
+    def _validate_structure(self) -> None:
         """Проверяет собственные типы, непустой состав, уникальность ссылок и UTC-хронологию факта."""
         if (
             not isinstance(self.id, ValuationPostingIdVO)
@@ -222,9 +268,14 @@ class ValuationPosting:
             )
             or not isinstance(self.entries, tuple)
             or not self.entries
+            or not isinstance(self.movement_pairs, tuple)
+            or (
+                self.operation_type is not StockOperationType.INTERNAL_MOVE
+                and self.movement_pairs
+            )
         ):
             raise InvalidValuationPostingValueError(
-                "Нужны номинальные ID, операция RECEIPT, ISSUE или INTERNAL_MOVE и непустой tuple записей стоимости."
+                "Нужны номинальные ID, допустимая операция, записи стоимости и связи пар только для INTERNAL_MOVE."
             )
         normalize_valuation_posting_time(self.stock_posted_at)
         normalize_valuation_posting_time(self.posted_at)
@@ -291,32 +342,57 @@ class ValuationPosting:
             ledger_contexts[entry.ledger_entry_id] = context
             layer_ids.add(entry.layer_id)
             position_ledgers[entry.position_id] = entry.ledger_entry_id
-        if self.operation_type is StockOperationType.INTERNAL_MOVE:
-            self._ensure_movement_balanced()
 
     def _ensure_movement_balanced(self) -> None:
-        """Требует две встречные записи с равными количествами и стоимостью в одном контексте."""
-        if len(self.entries) != 2:
+        """Проверяет единый склад, полное покрытие связями и баланс каждой сохранённой пары."""
+        if len({entry.warehouse_id for entry in self.entries}) != 1:
             raise InvalidValuationPostingValueError(
-                "Стоимость INTERNAL_MOVE требует ровно две записи одной полной пары."
+                "Все пары стоимости INTERNAL_MOVE должны относиться к одному складу."
             )
-        first, second = self.entries
-        if (
-            first.inventory_item_id,
-            first.owner_id,
-            first.warehouse_id,
-            first.base_uom,
-            first.cost_delta.currency,
-            first.quantity_delta.value.copy_negate(),
-            first.cost_delta.amount.copy_negate(),
+        entries = {entry.ledger_entry_id: entry for entry in self.entries}
+        covered = set()
+        for pair in self.movement_pairs:
+            if not isinstance(pair, StockMovementEntryPairVO):
+                raise InvalidValuationPostingValueError(
+                    "Связи INTERNAL_MOVE должны быть номинальными парами записей Ledger."
+                )
+            pair.ensure_valid()
+            outgoing = entries.get(pair.outgoing_entry_id)
+            incoming = entries.get(pair.incoming_entry_id)
+            if outgoing is None or incoming is None:
+                raise InvalidValuationPostingValueError(
+                    "Пара INTERNAL_MOVE ссылается на отсутствующую запись Ledger."
+                )
+            if pair.outgoing_entry_id in covered or pair.incoming_entry_id in covered:
+                raise DuplicateValuationEntryError(
+                    "Запись Ledger не должна повторяться в парах стоимости."
+                )
+            self._ensure_movement_pair_balanced(outgoing, incoming)
+            covered.update((pair.outgoing_entry_id, pair.incoming_entry_id))
+        if covered != set(entries):
+            raise InvalidValuationPostingValueError(
+                "Связи INTERNAL_MOVE должны покрывать все записи стоимости."
+            )
+
+    @staticmethod
+    def _ensure_movement_pair_balanced(
+        outgoing: ValuationEntry, incoming: ValuationEntry
+    ) -> None:
+        """Требует точного погашения количества и стоимости в контексте одной пары."""
+        if outgoing.quantity_delta.value >= 0 or (
+            outgoing.inventory_item_id,
+            outgoing.owner_id,
+            outgoing.base_uom,
+            outgoing.cost_delta.currency,
+            outgoing.quantity_delta.value.copy_negate(),
+            outgoing.cost_delta.amount.copy_negate(),
         ) != (
-            second.inventory_item_id,
-            second.owner_id,
-            second.warehouse_id,
-            second.base_uom,
-            second.cost_delta.currency,
-            second.quantity_delta.value,
-            second.cost_delta.amount,
+            incoming.inventory_item_id,
+            incoming.owner_id,
+            incoming.base_uom,
+            incoming.cost_delta.currency,
+            incoming.quantity_delta.value,
+            incoming.cost_delta.amount,
         ):
             raise InvalidValuationPostingValueError(
                 "Дельты INTERNAL_MOVE должны точно погашаться для одного товара, владельца, склада, единицы и валюты."

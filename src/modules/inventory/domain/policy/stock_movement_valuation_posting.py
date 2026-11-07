@@ -6,13 +6,6 @@ from src.modules.inventory.domain.policy.stock_movement_valuation import (
 from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
 from src.modules.inventory.domain.stock_position.snapshot import StockPositionSnapshot
 from src.modules.inventory.domain.stock_posting.snapshot import StockPostingSnapshot
-from src.modules.inventory.domain.valuation_layer.basis_snapshot import (
-    ValuationLayerBasisSnapshot,
-)
-from src.modules.inventory.domain.valuation_layer.error import ValuationLayerTimeError
-from src.modules.inventory.domain.valuation_layer.movement_consumption_snapshot import (
-    ValuationLayerMovementConsumptionSnapshot,
-)
 from src.modules.inventory.domain.valuation_posting.entity.valuation_entry import (
     ValuationEntry,
 )
@@ -20,6 +13,9 @@ from src.modules.inventory.domain.valuation_posting.error import (
     DuplicateValuationEntryError,
     ValuationPostingSourceError,
     ValuationPostingTimeError,
+)
+from src.modules.inventory.domain.valuation_posting.movement_pair_snapshot import (
+    ValuationMovementPairSnapshot,
 )
 from src.modules.inventory.domain.valuation_posting.time import (
     normalize_valuation_posting_time,
@@ -31,62 +27,75 @@ from src.modules.shared.domain.value_object.money import MoneyVO
 
 
 class StockMovementValuationPostingPolicy:
-    """Регистрирует стоимость полной пары INTERNAL_MOVE по исходному и производному основаниям."""
+    """Выводит записи стоимости для всех полных пар одного INTERNAL_MOVE."""
 
     @staticmethod
     def build_entries(
         *,
         posting: StockPostingSnapshot,
-        consumption: ValuationLayerMovementConsumptionSnapshot,
-        destination: ValuationLayerBasisSnapshot,
+        pairs: tuple[ValuationMovementPairSnapshot, ...],
         entry_bindings: tuple[ValuationEntryBindingVO, ...],
         positions: tuple[StockPositionSnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         posted_at: datetime,
-    ) -> tuple[ValuationEntry, ValuationEntry]:
-        """Сверяет полное покрытие Ledger и формирует сначала выбытие, затем поступление стоимости."""
+    ) -> tuple[ValuationEntry, ...]:
+        """Требует полного покрытия Ledger и формирует выбытие и поступление каждой пары."""
         if (
-            not isinstance(consumption, ValuationLayerMovementConsumptionSnapshot)
-            or not isinstance(destination, ValuationLayerBasisSnapshot)
+            not isinstance(pairs, tuple)
+            or not pairs
+            or any(
+                not isinstance(pair, ValuationMovementPairSnapshot) for pair in pairs
+            )
             or not isinstance(entry_bindings, tuple)
         ):
             raise ValuationPostingSourceError(
-                "Нужны снимки потребления и слоя назначения и tuple привязок."
+                "Нужны непустой tuple снимков пар и tuple привязок."
             )
-        destination.ensure_valid()
-        if destination.transfer_origin is None:
-            raise ValuationPostingSourceError(
-                "Для поступления стоимости нужен слой, образованный переносом."
-            )
-        try:
-            expected_destination = consumption.destination_basis(
-                identifier=destination.id, created_at=destination.created_at
-            )
-        except ValuationLayerTimeError as exc:
-            raise ValuationPostingTimeError(
-                "Нужна согласованная хронология потребления и создания слоя назначения."
-            ) from exc
-        movement = StockMovementValuationPolicy.build_snapshot(
+        at = normalize_valuation_posting_time(posted_at)
+        for pair in pairs:
+            pair.ensure_valid()
+            if at < pair.destination.created_at:
+                raise ValuationPostingTimeError(
+                    "Журнал стоимости нельзя зарегистрировать раньше создания слоя назначения."
+                )
+        movements = tuple(pair.consumption.movement for pair in pairs)
+        physical_movements = StockMovementValuationPolicy.build_snapshots(
             posting=posting,
-            pair=consumption.movement.pair,
+            pairs=tuple(movement.pair for movement in movements),
             positions=positions,
             locations=locations,
         )
-        if len(posting.entries) != 2 or movement != consumption.movement:
+        if physical_movements != movements:
             raise ValuationPostingSourceError(
-                "Результат потребления должен покрывать единственную полную пару этого проведения."
+                "Результаты потребления должны соответствовать физическим парам проведения."
             )
-        if destination != expected_destination:
+        ledger = {entry.id: entry for entry in posting.entries}
+        covered = tuple(
+            entry_id
+            for movement in movements
+            for entry_id in (
+                movement.pair.outgoing_entry_id,
+                movement.pair.incoming_entry_id,
+            )
+        )
+        if len(set(covered)) != len(covered):
+            raise DuplicateValuationEntryError(
+                "Каждая запись физического Ledger участвует только в одной паре."
+            )
+        if set(covered) != set(ledger):
             raise ValuationPostingSourceError(
-                "Исходная оценка и происхождение слоя назначения должны соответствовать переносу."
+                "Пары должны покрывать все записи физического Ledger."
             )
-        at = normalize_valuation_posting_time(posted_at)
-        if at < destination.created_at:
-            raise ValuationPostingTimeError(
-                "Журнал стоимости нельзя зарегистрировать раньше создания слоя назначения."
+        layer_ids = tuple(
+            layer_id
+            for pair in pairs
+            for layer_id in (pair.consumption.layer.id, pair.destination.id)
+        )
+        if len(set(layer_ids)) != len(layer_ids):
+            raise DuplicateValuationEntryError(
+                "Слой участвует только в одной записи стоимости перемещения."
             )
 
-        source = consumption.layer
         bindings_by_layer = {}
         entry_ids = set()
         for binding in entry_bindings:
@@ -101,33 +110,36 @@ class StockMovementValuationPostingPolicy:
                 )
             bindings_by_layer[binding.layer_id] = binding.entry_id
             entry_ids.add(binding.entry_id)
-        if set(bindings_by_layer) != {source.id, destination.id}:
+        if set(bindings_by_layer) != set(layer_ids):
             raise ValuationPostingSourceError(
-                "Перенос требует ровно по одной привязке для каждого из двух слоёв."
+                "Перенос требует ровно по одной привязке для каждого использованного слоя."
             )
 
-        ledger = {entry.id: entry for entry in posting.entries}
-        cost = destination.cost_basis.total_cost
-        outgoing, incoming = (
-            ValuationEntry.create(
-                identifier=bindings_by_layer[layer.id],
-                ledger_entry_id=entry_id,
-                position_id=ledger[entry_id].position_id,
-                layer_id=layer.id,
-                inventory_item_id=layer.inventory_item_id,
-                owner_id=layer.owner_id,
-                warehouse_id=layer.warehouse_id,
-                base_uom=layer.base_uom,
-                quantity_delta=ledger[entry_id].quantity_delta,
-                cost_delta=delta,
-            )
+        entries = []
+        for pair in pairs:
+            movement = pair.consumption.movement
+            cost = pair.destination.cost_basis.total_cost
             for layer, entry_id, delta in (
                 (
-                    source,
+                    pair.consumption.layer,
                     movement.pair.outgoing_entry_id,
                     MoneyVO(cost.amount.copy_negate(), cost.currency),
                 ),
-                (destination, movement.pair.incoming_entry_id, cost),
-            )
-        )
-        return outgoing, incoming
+                (pair.destination, movement.pair.incoming_entry_id, cost),
+            ):
+                physical = ledger[entry_id]
+                entries.append(
+                    ValuationEntry.create(
+                        identifier=bindings_by_layer[layer.id],
+                        ledger_entry_id=entry_id,
+                        position_id=physical.position_id,
+                        layer_id=layer.id,
+                        inventory_item_id=layer.inventory_item_id,
+                        owner_id=layer.owner_id,
+                        warehouse_id=layer.warehouse_id,
+                        base_uom=layer.base_uom,
+                        quantity_delta=physical.quantity_delta,
+                        cost_delta=delta,
+                    )
+                )
+        return tuple(entries)

@@ -10,6 +10,9 @@ from test import test_inventory_layer_movement_domain as movement_fixture
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
     InventoryItemIdVO,
 )
+from src.modules.inventory.domain.stock_location.value_object.identifier import (
+    StockLocationIdVO,
+)
 from src.modules.inventory.domain.stock_position.aggregate import StockPosition
 from src.modules.inventory.domain.stock_position.value_object.identifier import (
     StockPositionIdVO,
@@ -43,6 +46,9 @@ from src.modules.inventory.domain.valuation_posting.error import (
     InvalidValuationPostingValueError,
     ValuationPostingSourceError,
     ValuationPostingTimeError,
+)
+from src.modules.inventory.domain.valuation_posting.movement_pair_snapshot import (
+    ValuationMovementPairSnapshot,
 )
 from src.modules.inventory.domain.valuation_posting.value_object.entry_binding import (
     ValuationEntryBindingVO,
@@ -133,6 +139,7 @@ class MovementValuationPostingDomainTests(unittest.TestCase):
                     stock_posted_at=journal.stock_posted_at,
                     posted_at=journal.posted_at,
                     entries=journal.entries,
+                    movement_pairs=journal.movement_pairs,
                 )
                 | changes
             )
@@ -413,3 +420,238 @@ class MovementValuationPostingDomainTests(unittest.TestCase):
                         replace(incoming, **{name: getattr(outgoing, name)}),
                     ),
                 )
+
+
+class MultipleMovementValuationPairsDomainTests(unittest.TestCase):
+    """Проверяет многопарную регистрацию и восстановление явных связей Ledger."""
+
+    def setUp(self) -> None:
+        """Готовит две пары одного товара по 7 KG с разной стоимостью."""
+        self.single = MovementValuationPostingDomainTests()
+        self.single.setUp()
+        self.prepare_pairs()
+
+    def prepare_pairs(self, *, second_currency: str = "UAH") -> None:
+        """Добавляет второе движение между другими адресами того же склада."""
+        one = self.single
+        f = one.f
+        source_location = replace(f.first_location, id=StockLocationIdVO(uuid4()))
+        target_location = replace(f.second_location, id=StockLocationIdVO(uuid4()))
+        source = f.position(
+            dimensions=replace(f.dimensions, location_id=source_location.id)
+        )
+        target = f.position(
+            dimensions=replace(f.dimensions, location_id=target_location.id)
+        )
+        self.positions = (*one.positions, source.snapshot(), target.snapshot())
+        self.locations = (*one.locations, source_location, target_location)
+        outgoing = f.entry("-7", source)
+        incoming = f.entry("7", target)
+        self.posting = f.movement(
+            identifier=one.posting.id,
+            entries=(outgoing, *one.posting.entries, incoming),
+            positions=self.positions,
+            locations=self.locations,
+            posted_at=one.posting.posted_at,
+        )
+        receipt = f.posting(
+            entries=(f.entry("7", source),), positions=(source.snapshot(),)
+        )
+        layer = ValuationLayer.create_from_receipt(
+            identifier=ValuationLayerIdVO(uuid4()),
+            receipt=receipt.receipt_valuation_snapshot(
+                ledger_entry_id=receipt.entries[0].id,
+                position=source.snapshot(),
+                location=source_location,
+            ),
+            total_cost=MoneyVO(Decimal(105), CurrencyVO(second_currency)),
+            created_at=receipt.posted_at,
+        )
+        movement = self.posting.movement_valuation_snapshot(
+            pair=StockMovementEntryPairVO(outgoing.id, incoming.id),
+            positions=self.positions,
+            locations=self.locations,
+        )
+        _, consumption = one.m.consume(layer, movement)
+        destination = one.m.destination(consumption)
+        self.pairs = (
+            ValuationMovementPairSnapshot(one.consumption, one.target.basis_snapshot()),
+            ValuationMovementPairSnapshot(consumption, destination.basis_snapshot()),
+        )
+        self.bindings = (
+            *one.bindings,
+            ValuationEntryBindingVO(destination.id, ValuationEntryIdVO(uuid4())),
+            ValuationEntryBindingVO(layer.id, ValuationEntryIdVO(uuid4())),
+        )
+
+    def create(self, **changes: object) -> ValuationPosting:
+        """Создаёт один журнал всего физического проведения."""
+        return ValuationPosting.create_from_movement_pairs(
+            **(
+                dict(
+                    identifier=self.single.identifier,
+                    posting=self.posting.snapshot(),
+                    pairs=self.pairs,
+                    entry_bindings=self.bindings,
+                    positions=self.positions,
+                    locations=self.locations,
+                    posted_at=self.single.at,
+                )
+                | changes
+            )
+        )
+
+    def test_registers_both_pairs_with_original_sources_and_destinations(self) -> None:
+        """Равные количества разных пар сохраняют собственную стоимость и явную связь."""
+        journal = self.create()
+        self.assertEqual(journal.stock_posting_id, self.posting.id)
+        self.assertEqual(
+            journal.movement_pairs,
+            tuple(p.consumption.movement.pair for p in self.pairs),
+        )
+        self.assertEqual(
+            [
+                (entry.quantity_delta.value, entry.cost_delta.amount)
+                for entry in journal.entries
+            ],
+            [
+                (Decimal(qty), Decimal(cost))
+                for qty, cost in ((-7, -84), (7, 84), (-7, -105), (7, 105))
+            ],
+        )
+        self.assertEqual(
+            [entry.layer_id for entry in journal.entries],
+            [
+                layer_id
+                for pair in self.pairs
+                for layer_id in (pair.consumption.layer.id, pair.destination.id)
+            ],
+        )
+        self.assertEqual(self.single.restore(journal), journal)
+        reversed_pairs = self.create(pairs=self.pairs[::-1])
+        self.assertEqual(reversed_pairs.movement_pairs, journal.movement_pairs[::-1])
+        self.assertEqual(
+            reversed_pairs.entries, (*journal.entries[2:], *journal.entries[:2])
+        )
+
+    def test_allows_independent_currencies_for_different_pairs(self) -> None:
+        """Каждая пара погашается в своей валюте при общем физическом проведении."""
+        self.prepare_pairs(second_currency="USD")
+        journal = self.create()
+        self.assertEqual(
+            [entry.cost_delta.currency for entry in journal.entries],
+            [
+                CurrencyVO("UAH"),
+                CurrencyVO("UAH"),
+                CurrencyVO("USD"),
+                CurrencyVO("USD"),
+            ],
+        )
+        self.assertEqual(self.single.restore(journal), journal)
+
+    def test_single_pair_factory_and_legacy_restore_remain_compatible(self) -> None:
+        """Старая фабрика и запись без сохранённой связи приводятся к тому же основанию."""
+        one = self.single
+        journal = one.create()
+        self.assertEqual(
+            self.create(
+                posting=one.posting.snapshot(),
+                pairs=self.pairs[:1],
+                entry_bindings=one.bindings,
+                positions=one.positions,
+                locations=one.locations,
+            ),
+            journal,
+        )
+        restored = one.restore(
+            journal, movement_pairs=None, entries=journal.entries[::-1]
+        )
+        self.assertEqual(restored.movement_pairs, journal.movement_pairs)
+        self.assertEqual(restored.entries, journal.entries[::-1])
+
+    def test_rejects_incomplete_and_repeated_physical_pairs(self) -> None:
+        """Для полного журнала нужны все Ledger ID, каждый ровно один раз."""
+        for pairs in ((), self.pairs[:1], [*self.pairs], (None, *self.pairs)):
+            with (
+                self.subTest(pairs=pairs),
+                self.assertRaises(ValuationPostingSourceError),
+            ):
+                self.create(pairs=pairs)
+        with self.assertRaises(DuplicateValuationEntryError):
+            self.create(pairs=(*self.pairs, self.pairs[0]))
+
+    def test_rejects_crossed_destinations_and_reused_layer_id(self) -> None:
+        """Совпадение количества не разрешает подменить основание или повторно использовать слой."""
+        first, second = self.pairs
+        with self.assertRaises(ValuationPostingSourceError):
+            self.create(pairs=(replace(first, destination=second.destination), second))
+        duplicate_layer = replace(second.destination, id=first.destination.id)
+        with self.assertRaises(DuplicateValuationEntryError):
+            self.create(pairs=(first, replace(second, destination=duplicate_layer)))
+
+    def test_requires_bindings_and_chronology_for_every_pair(self) -> None:
+        """Правильная первая пара не скрывает отсутствующую привязку или позднее назначение второй."""
+        with self.assertRaises(ValuationPostingSourceError):
+            self.create(entry_bindings=self.bindings[:-1])
+        first, second = self.pairs
+        late = replace(
+            second.destination, created_at=self.single.at + timedelta(seconds=1)
+        )
+        with self.assertRaises(ValuationPostingTimeError):
+            self.create(pairs=(first, replace(second, destination=late)))
+
+    def test_restore_requires_complete_explicit_and_directional_pairs(self) -> None:
+        """Восстановление требует типизированных связей со всеми сторонами Ledger."""
+        journal = self.create()
+        first, second = journal.movement_pairs
+        for pairs in (
+            None,
+            (),
+            (first,),
+            (first, None),
+            (first, replace(second, incoming_entry_id=StockLedgerEntryIdVO(uuid4()))),
+            (
+                first,
+                StockMovementEntryPairVO(
+                    second.incoming_entry_id, second.outgoing_entry_id
+                ),
+            ),
+        ):
+            with (
+                self.subTest(pairs=pairs),
+                self.assertRaises(InvalidValuationPostingValueError),
+            ):
+                self.single.restore(journal, movement_pairs=pairs)
+        with self.assertRaises(DuplicateValuationEntryError):
+            self.single.restore(journal, movement_pairs=(first, second, first))
+        with self.assertRaises(InvalidValuationPostingValueError):
+            self.single.restore(
+                journal,
+                operation_type=StockOperationType.ISSUE,
+                entries=(journal.entries[0],),
+            )
+
+    def test_restore_rejects_pair_imbalance_even_if_grand_total_is_zero(self) -> None:
+        """Встречные суммы должны совпасть по сохранённым связям, а не только по журналу."""
+        journal = self.create()
+        first, second = journal.movement_pairs
+        crossed = (
+            replace(first, incoming_entry_id=second.incoming_entry_id),
+            replace(second, incoming_entry_id=first.incoming_entry_id),
+        )
+        with self.assertRaises(InvalidValuationPostingValueError):
+            self.single.restore(journal, movement_pairs=crossed)
+
+    def test_restore_rejects_two_balanced_pairs_in_different_warehouses(self) -> None:
+        """Две самостоятельные сбалансированные пары должны принадлежать одному складу."""
+        journal = self.create()
+        warehouse_id = WarehouseIdVO(uuid4())
+        entries = (
+            *journal.entries[:2],
+            *(
+                replace(entry, warehouse_id=warehouse_id)
+                for entry in journal.entries[2:]
+            ),
+        )
+        with self.assertRaises(InvalidValuationPostingValueError):
+            self.single.restore(journal, entries=entries)

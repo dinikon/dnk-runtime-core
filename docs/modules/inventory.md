@@ -6490,7 +6490,7 @@ restored_partial_layer = ValuationLayer.restore(
 ## Регистрация стоимости прихода ValuationPosting
 
 `ValuationPosting` — самостоятельный immutable Aggregate Root завершённой
-стоимостной регистрации RECEIPT, ISSUE и INTERNAL_MOVE из одной пары. Он владеет
+стоимостной регистрации RECEIPT, ISSUE и INTERNAL_MOVE из полных пар. Он владеет
 дочерними `ValuationEntry` и ссылается на физическое проведение и слои по ID.
 Приход, расход и перенос регистрируются отдельными фабриками.
 
@@ -6502,6 +6502,7 @@ restored_partial_layer = ValuationLayer.restore(
 | stock_posted_at | Историческое время физического проведения в UTC |
 | posted_at | Время регистрации стоимости в UTC |
 | entries | Непустой tuple[ValuationEntry, ...] |
+| movement_pairs | Явные связи записей Ledger в INTERNAL_MOVE, пустой tuple для RECEIPT и ISSUE |
 
 У `ValuationEntry` поля id: ValuationEntryIdVO, ledger_entry_id, position_id,
 layer_id, inventory_item_id, owner_id, warehouse_id, base_uom,
@@ -6603,7 +6604,7 @@ InvalidValuationLayerReceiptSnapshotError; сохраняются прежние
 записей по основанию обеспечит tenant-хранение; повторное построение другого
 Domain-объекта сейчас допустимо. Будущий Application/UoW атомарно согласует
 физическое проведение, позиции, слои, журнал стоимости и Outbox.
-Расходный ValuationPosting, FIFO и регистрация одной пары INTERNAL_MOVE описаны
+Расходный ValuationPosting, FIFO и регистрация пар INTERNAL_MOVE описаны
 ниже. Корректировки, сторно, переоценка, SQL/API и конверсия валют остаются
 отдельными срезами.
 
@@ -7353,9 +7354,110 @@ movement_valuation = ValuationPosting.create_from_movement(
 # Остаток назначения после расхода: 5 KG / 60 UAH.
 ```
 
-Многопарный Ledger требует отдельного среза полного покрытия. Будущий
-Application/UoW атомарно сохранит исходный и производный слои вместе с журналом
-с проверкой версии исходного слоя и однократности регистрации проведения.
+### Регистрация нескольких полных пар
+
+`ValuationPosting.create_from_movement_pairs(...)` регистрирует весь Ledger одним
+журналом. Каждый `ValuationMovementPairSnapshot` содержит результат потребления и
+первоначальное основание слоя назначения. Одиночная фабрика вызывает тот же метод.
+Общий физический контекст проверяется один раз, затем каждое основание сверяется
+с соответствующей парой. Для всех пар требуются полное покрытие Ledger, уникальные
+слои, одна привязка на слой и согласованные даты.
+
+Корень хранит явные связи в `movement_pairs`. Фабрика сохраняет порядок переданных
+пар и записывает выбытие перед поступлением внутри каждой из них. Restore проверяет
+направления и баланс по сохранённым связям, единый склад для проведения и одну
+валюту на пару. Для прежней одиночной записи журнала с двумя сторонами без поля
+`movement_pairs` связь выводится по знакам. При нескольких парах передаётся весь
+набор связей.
+
+В независимом примере перемещаем по 7 KG двух владельцев между теми же адресами.
+Стоимость первой пары 84 UAH, второй 105 USD.
+
+```python
+from dataclasses import replace
+from src.modules.inventory.domain.valuation_posting.movement_pair_snapshot import ValuationMovementPairSnapshot
+
+other_owner = StockOwnerIdVO(UUID(int=3100))
+other_positions = tuple(
+    StockPosition.restore(
+        identifier=StockPositionIdVO(UUID(int=3101 + index)),
+        dimensions=replace(movement_dimensions, owner_id=other_owner, location_id=location.id),
+        base_uom=UomCodeVO("KG"),
+        on_hand_qty=QuantityVO(Decimal("0")),
+        version=0,
+    )
+    for index, location in enumerate((issue_cost_location, movement_location))
+)
+other_source, other_target = other_positions
+other_receipt_entry = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=3103)), position_id=other_source.id,
+    quantity_delta=StockDeltaVO(Decimal("7")), base_uom=UomCodeVO("KG"),
+    conversion=movement_conversion,
+)
+other_receipt = StockPosting.create(
+    identifier=StockPostingIdVO(UUID(int=3104)), source=PostingSourceVO(StockExecutionIdVO(UUID(int=3105))),
+    operation_type=StockOperationType.RECEIPT, posted_at=issue_cost_receipt.posted_at,
+    entries=(other_receipt_entry,), positions=(other_source.snapshot(),),
+)
+other_layer = ValuationLayer.create_from_receipt(
+    identifier=ValuationLayerIdVO(UUID(int=3106)),
+    receipt=other_receipt.receipt_valuation_snapshot(
+        ledger_entry_id=other_receipt_entry.id, position=other_source.snapshot(), location=issue_cost_location,
+    ),
+    total_cost=MoneyVO(Decimal("105"), CurrencyVO("USD")), created_at=other_receipt.posted_at,
+)
+other_outgoing = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=3107)), position_id=other_source.id,
+    quantity_delta=StockDeltaVO(Decimal("-7")), base_uom=UomCodeVO("KG"),
+    conversion=movement_conversion,
+)
+other_incoming = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=3108)), position_id=other_target.id,
+    quantity_delta=StockDeltaVO(Decimal("7")), base_uom=UomCodeVO("KG"),
+    conversion=movement_conversion,
+)
+batch_positions = (
+    issue_cost_position.snapshot(), movement_target.snapshot(), other_source.snapshot(), other_target.snapshot(),
+)
+batch_locations = (issue_cost_location, movement_location)
+batch_posting = StockPosting.create(
+    identifier=StockPostingIdVO(UUID(int=3110)), source=PostingSourceVO(StockExecutionIdVO(UUID(int=3111))),
+    operation_type=StockOperationType.INTERNAL_MOVE, posted_at=movement_posting.posted_at,
+    entries=(movement_outgoing, movement_incoming, other_outgoing, other_incoming),
+    positions=batch_positions, locations=batch_locations,
+)
+batch_pairs = []
+batch_bindings = []
+for index, layer, pair in (
+    (3120, split_layers[1], movement_basis.pair),
+    (3130, other_layer, StockMovementEntryPairVO(other_outgoing.id, other_incoming.id)),
+):
+    basis = batch_posting.movement_valuation_snapshot(
+        pair=pair, positions=batch_positions, locations=batch_locations,
+    )
+    _, consumption = layer.consume_for_movement(
+        basis, expected_version=layer.version, updated_at=batch_posting.posted_at,
+    )
+    destination = ValuationLayer.create_from_movement(
+        identifier=ValuationLayerIdVO(UUID(int=index)), consumption=consumption,
+        created_at=batch_posting.posted_at,
+    )
+    batch_pairs.append(ValuationMovementPairSnapshot(consumption, destination.basis_snapshot()))
+    batch_bindings.extend((
+        ValuationEntryBindingVO(layer.id, ValuationEntryIdVO(UUID(int=index + 1))),
+        ValuationEntryBindingVO(destination.id, ValuationEntryIdVO(UUID(int=index + 2))),
+    ))
+batch_valuation = ValuationPosting.create_from_movement_pairs(
+    identifier=ValuationPostingIdVO(UUID(int=3140)), posting=batch_posting.snapshot(),
+    pairs=tuple(batch_pairs), entry_bindings=tuple(batch_bindings),
+    positions=batch_positions, locations=batch_locations, posted_at=batch_posting.posted_at,
+)
+# Один журнал, две сохранённые связи, четыре записи:
+# -7 KG / -84 UAH, +7 KG / +84 UAH, -7 KG / -105 USD, +7 KG / +105 USD.
+```
+
+Будущий Application/UoW атомарно сохранит все участвующие слои вместе с журналом
+с проверкой версий исходных слоёв и однократности регистрации проведения.
 
 Тесты: `test/test_inventory_movement_valuation_posting_domain.py`.
 
