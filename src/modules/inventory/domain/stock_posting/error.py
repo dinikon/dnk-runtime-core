@@ -5,6 +5,22 @@ class StockPostingError(InventoryError):
     """Базовая ошибка проведения физического движения."""
 
 
+class InvalidStockMovementEntryPairError(StockPostingError):
+    """Требует различные номинальные ссылки на расходную и приходную записи перемещения."""
+
+
+class StockMovementValuationSourceError(StockPostingError):
+    """Отклоняет неподходящее проведение или несогласованную пару записей внутреннего перемещения."""
+
+
+class InvalidStockMovementValuationSnapshotError(StockPostingError):
+    """Отклоняет некорректное основание будущего переноса стоимости между позициями."""
+
+
+class InvalidStockPostingFifoPlanError(StockPostingError):
+    """Отклоняет неполное или несогласованное FIFO-основание всего расходного проведения."""
+
+
 class StockReceiptValuationSourceError(StockPostingError):
     """Отклоняет неподходящий приход или несовпадающий контекст записи для фиксации стоимости."""
 

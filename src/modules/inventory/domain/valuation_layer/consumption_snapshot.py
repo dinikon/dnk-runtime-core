@@ -16,9 +16,10 @@ from src.modules.inventory.domain.stock_posting.issue_valuation_snapshot import 
 )
 from src.modules.inventory.domain.valuation_layer.error import (
     InvalidValuationLayerConsumptionSnapshotError,
+    ValuationLayerConsumptionError,
 )
-from src.modules.inventory.domain.valuation_layer.receipt_snapshot import (
-    ValuationLayerReceiptSnapshot,
+from src.modules.inventory.domain.valuation_layer.basis_snapshot import (
+    ValuationLayerBasisSnapshot,
 )
 from src.modules.inventory.domain.valuation_layer.time import normalize_valuation_time
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
@@ -27,9 +28,9 @@ from src.modules.shared.domain.value_object.money import MoneyVO
 
 @dataclass(frozen=True, slots=True)
 class ValuationLayerConsumptionSnapshot:
-    """Фиксирует проверяемый переход одного слоя по полной записи ISSUE без доказательства сохранения в БД."""
+    """Фиксирует проверяемый переход одного слоя по части ISSUE без доказательства сохранения в БД."""
 
-    layer: ValuationLayerReceiptSnapshot
+    layer: ValuationLayerBasisSnapshot
     issue: StockIssueValuationSnapshot
     quantity: QuantityVO
     cost: MoneyVO
@@ -43,21 +44,24 @@ class ValuationLayerConsumptionSnapshot:
     consumed_at: datetime
 
     def ensure_valid(self) -> None:
-        """Проверяет связь оснований, полный расход, накопленные денежные остатки, версии и UTC-хронологию."""
+        """Проверяет связь оснований, часть расхода, накопленные денежные остатки, версии и UTC-хронологию."""
         ValuationLayerIssuePolicy.ensure_compatible(layer=self.layer, issue=self.issue)
+        try:
+            ValuationLayerIssuePolicy.ensure_quantity(
+                issue=self.issue, quantity=self.quantity
+            )
+        except ValuationLayerConsumptionError as exc:
+            raise InvalidValuationLayerConsumptionSnapshotError(
+                "Некорректное количество части ISSUE в результате потребления."
+            ) from exc
         if (
-            not isinstance(self.quantity, QuantityVO)
-            or not isinstance(self.quantity.value, Decimal)
-            or not self.quantity.value.is_finite()
-            or self.quantity.value <= 0
-            or self.quantity != self.issue.quantity
-            or type(self.version_before) is not int
+            type(self.version_before) is not int
             or self.version_before < 0
             or type(self.version_after) is not int
             or self.version_after != self.version_before + 1
         ):
             raise InvalidValuationLayerConsumptionSnapshotError(
-                "Нужны полное количество ISSUE и последовательные строгие версии слоя."
+                "Нужны последовательные строгие версии слоя."
             )
         expected_before = ValuationLayerConsumptionPolicy.calculate_remaining_cost(
             cost_basis=self.layer.cost_basis,
@@ -75,7 +79,7 @@ class ValuationLayerConsumptionSnapshot:
             != self.remaining_qty_after
         ):
             raise InvalidValuationLayerConsumptionSnapshotError(
-                "Уменьшение остатка должно точно соответствовать полной записи ISSUE."
+                "Уменьшение остатка должно точно соответствовать выбранной части ISSUE."
             )
         for value in (self.cost, self.remaining_cost_before, self.remaining_cost_after):
             if (

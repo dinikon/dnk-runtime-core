@@ -558,7 +558,9 @@ class ValuationPostingDomainTests(unittest.TestCase):
         )
         self.assertEqual(restored, posting)
 
-    def test_restore_requires_nominal_ids_receipt_and_nonempty_tuple(self) -> None:
+    def test_restore_requires_nominal_ids_compatible_operation_and_nonempty_tuple(
+        self,
+    ) -> None:
         """Аннотации не заменяют проверки ID, вида операции и состава дочерних записей."""
         posting = self.create()
         for changes in (
@@ -620,8 +622,8 @@ class ValuationPostingDomainTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(InvalidValuationEntryError):
                 self.restore_entry(entry, **{name: None})
 
-    def test_entry_restore_rejects_zero_negative_and_corrupted_quantity(self) -> None:
-        """Количество записи прихода строго положительно даже после обхода конструктора VO."""
+    def test_entry_restore_rejects_zero_opposite_and_corrupted_quantity(self) -> None:
+        """Ноль, неконечное количество и отрицательное направление при положительной стоимости отклоняются."""
         entry = self.create().entries[0]
         for value in (
             Decimal(0),
@@ -639,10 +641,10 @@ class ValuationPostingDomainTests(unittest.TestCase):
             ):
                 self.restore_entry(entry, quantity_delta=delta)
 
-    def test_entry_restore_rejects_negative_nonfinite_and_noncanonical_cost(
+    def test_entry_restore_rejects_opposite_nonfinite_and_noncanonical_cost(
         self,
     ) -> None:
-        """Стоимость прихода неотрицательна и соответствует сохранённой точности MoneyVO."""
+        """Стоимость согласована с положительным количеством и соответствует сохранённой точности MoneyVO."""
         entry = self.create().entries[0]
         for value in (
             Decimal(-1),

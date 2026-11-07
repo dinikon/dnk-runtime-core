@@ -16,7 +16,7 @@ from src.modules.inventory.domain.valuation_layer.error import (
 
 @dataclass(frozen=True, slots=True)
 class ValuationLayerSourceVO:
-    """Сохраняет ссылки на конкретную запись прихода и её исходную позицию без чужих агрегатов."""
+    """Хранит ссылки на входящую запись формирования слоя и её позицию."""
 
     posting_id: StockPostingIdVO
     ledger_entry_id: StockLedgerEntryIdVO
@@ -27,7 +27,7 @@ class ValuationLayerSourceVO:
         self.ensure_valid()
 
     def ensure_valid(self) -> None:
-        """Запрещает сырые UUID и идентификаторы других видов вместо ссылок прихода."""
+        """Требует номинальные идентификаторы проведения, записи и позиции."""
         if (
             not isinstance(self.posting_id, StockPostingIdVO)
             or not isinstance(self.ledger_entry_id, StockLedgerEntryIdVO)

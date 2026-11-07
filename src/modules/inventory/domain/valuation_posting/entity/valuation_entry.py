@@ -30,7 +30,7 @@ from src.modules.shared.domain.value_object.money import MoneyVO
 
 @dataclass(frozen=True, slots=True)
 class ValuationEntry:
-    """Фиксирует стоимость одной записи прихода внутри агрегата ValuationPosting."""
+    """Фиксирует согласованные количественную и денежную дельты внутри агрегата ValuationPosting."""
 
     id: ValuationEntryIdVO
     ledger_entry_id: StockLedgerEntryIdVO
@@ -58,7 +58,7 @@ class ValuationEntry:
         quantity_delta: StockDeltaVO,
         cost_delta: MoneyVO,
     ) -> Self:
-        """Создаёт положительную запись первоначальной стоимости без вычисления цены единицы."""
+        """Создаёт запись прихода или расхода без вычисления округлённой цены единицы."""
         return cls.restore(
             identifier=identifier,
             ledger_entry_id=ledger_entry_id,
@@ -104,7 +104,7 @@ class ValuationEntry:
         return entry
 
     def ensure_valid(self) -> None:
-        """Требует номинальные ссылки, конечное положительное количество и сохранённую неотрицательную стоимость."""
+        """Требует номинальные ссылки, ненулевое количество, сохранённые деньги и согласованные направления дельт."""
         if (
             not isinstance(self.id, ValuationEntryIdVO)
             or not isinstance(self.ledger_entry_id, StockLedgerEntryIdVO)
@@ -117,17 +117,22 @@ class ValuationEntry:
             or not isinstance(self.quantity_delta, StockDeltaVO)
             or not isinstance(self.quantity_delta.value, Decimal)
             or not self.quantity_delta.value.is_finite()
-            or self.quantity_delta.value <= 0
+            or self.quantity_delta.value == 0
             or not isinstance(self.cost_delta, MoneyVO)
             or not isinstance(self.cost_delta.amount, Decimal)
             or not self.cost_delta.amount.is_finite()
-            or self.cost_delta.amount < 0
         ):
             raise InvalidValuationEntryError(
-                "Нужны номинальные поля положительной записи первоначальной стоимости."
+                "Нужны номинальные поля записи стоимости с конечным ненулевым количеством."
             )
         get_uom(self.base_uom)
         if MoneyVO(self.cost_delta.amount, self.cost_delta.currency) != self.cost_delta:
             raise InvalidValuationEntryError(
                 "Стоимость записи должна соответствовать сохранённой точности MoneyVO."
+            )
+        if not self.cost_delta.amount.is_zero() and (
+            self.quantity_delta.value.is_signed() != self.cost_delta.amount.is_signed()
+        ):
+            raise InvalidValuationEntryError(
+                "Направления количества и ненулевой стоимости записи должны совпадать."
             )

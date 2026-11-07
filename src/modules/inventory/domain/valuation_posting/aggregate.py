@@ -5,6 +5,18 @@ from typing import Self
 from src.modules.inventory.domain.policy.stock_receipt_valuation_posting import (
     StockReceiptValuationPostingPolicy,
 )
+from src.modules.inventory.domain.policy.stock_issue_valuation_posting import (
+    StockIssueValuationPostingPolicy,
+)
+from src.modules.inventory.domain.policy.stock_posting_fifo_valuation import (
+    StockPostingFifoValuationPolicy,
+)
+from src.modules.inventory.domain.stock_posting.posting_fifo_plan_snapshot import (
+    StockPostingFifoPlanSnapshot,
+)
+from src.modules.inventory.domain.valuation_layer.consumption_snapshot import (
+    ValuationLayerConsumptionSnapshot,
+)
 from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
 from src.modules.inventory.domain.stock_position.snapshot import StockPositionSnapshot
 from src.modules.inventory.domain.stock_posting.snapshot import StockPostingSnapshot
@@ -38,7 +50,7 @@ from src.modules.inventory.domain.valuation_posting.value_object.identifier impo
 
 @dataclass(frozen=True, slots=True)
 class ValuationPosting:
-    """Фиксирует неизменяемую первоначальную стоимость полного физического прихода."""
+    """Фиксирует неизменяемую стоимость полного физического прихода или расхода."""
 
     id: ValuationPostingIdVO
     stock_posting_id: StockPostingIdVO
@@ -78,6 +90,63 @@ class ValuationPosting:
         )
 
     @classmethod
+    def create_from_issue(
+        cls,
+        *,
+        identifier: ValuationPostingIdVO,
+        posting: StockPostingSnapshot,
+        consumptions: tuple[ValuationLayerConsumptionSnapshot, ...],
+        entry_bindings: tuple[ValuationEntryBindingVO, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        posted_at: datetime,
+    ) -> Self:
+        """Регистрирует весь ISSUE по заново проверенным результатам без повторного потребления слоёв."""
+        entries = StockIssueValuationPostingPolicy.build_entries(
+            posting=posting,
+            consumptions=consumptions,
+            entry_bindings=entry_bindings,
+            positions=positions,
+            locations=locations,
+            posted_at=posted_at,
+        )
+        return cls.restore(
+            identifier=identifier,
+            stock_posting_id=posting.id,
+            operation_type=posting.operation_type,
+            stock_posted_at=posting.posted_at,
+            posted_at=posted_at,
+            entries=entries,
+        )
+
+    @classmethod
+    def create_from_fifo_plan(
+        cls,
+        *,
+        identifier: ValuationPostingIdVO,
+        plan: StockPostingFifoPlanSnapshot,
+        posting: StockPostingSnapshot,
+        consumptions: tuple[ValuationLayerConsumptionSnapshot, ...],
+        entry_bindings: tuple[ValuationEntryBindingVO, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        posted_at: datetime,
+    ) -> Self:
+        """Повторно проверяет полный FIFO-план и регистрирует только его точные результаты без нового потребления."""
+        StockPostingFifoValuationPolicy.ensure_consumptions(
+            plan=plan, posting=posting, consumptions=consumptions
+        )
+        return cls.create_from_issue(
+            identifier=identifier,
+            posting=posting,
+            consumptions=consumptions,
+            entry_bindings=entry_bindings,
+            positions=positions,
+            locations=locations,
+            posted_at=posted_at,
+        )
+
+    @classmethod
     def restore(
         cls,
         *,
@@ -105,12 +174,15 @@ class ValuationPosting:
         if (
             not isinstance(self.id, ValuationPostingIdVO)
             or not isinstance(self.stock_posting_id, StockPostingIdVO)
-            or self.operation_type is not StockOperationType.RECEIPT
+            or (
+                self.operation_type is not StockOperationType.RECEIPT
+                and self.operation_type is not StockOperationType.ISSUE
+            )
             or not isinstance(self.entries, tuple)
             or not self.entries
         ):
             raise InvalidValuationPostingValueError(
-                "Нужны номинальные ID, операция RECEIPT и непустой tuple записей стоимости."
+                "Нужны номинальные ID, операция RECEIPT или ISSUE и непустой tuple записей стоимости."
             )
         normalize_valuation_posting_time(self.stock_posted_at)
         normalize_valuation_posting_time(self.posted_at)
@@ -120,12 +192,12 @@ class ValuationPosting:
             or self.posted_at < self.stock_posted_at
         ):
             raise ValuationPostingTimeError(
-                "Даты хранятся в UTC; регистрация стоимости не раньше физического прихода."
+                "Даты хранятся в UTC; регистрация стоимости не раньше физического проведения."
             )
         entry_ids = set()
-        ledger_ids = set()
+        ledger_contexts = {}
         layer_ids = set()
-        position_ids = set()
+        position_ledgers = {}
         for entry in self.entries:
             if not isinstance(entry, ValuationEntry):
                 raise InvalidValuationPostingValueError(
@@ -133,15 +205,47 @@ class ValuationPosting:
                 )
             entry.ensure_valid()
             if (
-                entry.id in entry_ids
-                or entry.ledger_entry_id in ledger_ids
-                or entry.layer_id in layer_ids
-                or entry.position_id in position_ids
+                self.operation_type is StockOperationType.RECEIPT
+                and entry.quantity_delta.value < 0
+            ) or (
+                self.operation_type is StockOperationType.ISSUE
+                and entry.quantity_delta.value > 0
+            ):
+                raise InvalidValuationPostingValueError(
+                    "Направление записи стоимости должно соответствовать виду проведения."
+                )
+            if entry.id in entry_ids or entry.layer_id in layer_ids:
+                raise DuplicateValuationEntryError(
+                    "ID записей стоимости и слои не должны повторяться."
+                )
+            context = (
+                entry.position_id,
+                entry.inventory_item_id,
+                entry.owner_id,
+                entry.warehouse_id,
+                entry.base_uom,
+            )
+            if (
+                (
+                    self.operation_type is StockOperationType.RECEIPT
+                    and (
+                        entry.ledger_entry_id in ledger_contexts
+                        or entry.position_id in position_ledgers
+                    )
+                )
+                or (
+                    entry.ledger_entry_id in ledger_contexts
+                    and ledger_contexts[entry.ledger_entry_id] != context
+                )
+                or (
+                    entry.position_id in position_ledgers
+                    and position_ledgers[entry.position_id] != entry.ledger_entry_id
+                )
             ):
                 raise DuplicateValuationEntryError(
-                    "Записи стоимости, Ledger, слои и исходные позиции не должны повторяться."
+                    "Приходные ссылки уникальны; расходная группа имеет единые измерения и одну запись Ledger на позицию."
                 )
             entry_ids.add(entry.id)
-            ledger_ids.add(entry.ledger_entry_id)
+            ledger_contexts[entry.ledger_entry_id] = context
             layer_ids.add(entry.layer_id)
-            position_ids.add(entry.position_id)
+            position_ledgers[entry.position_id] = entry.ledger_entry_id

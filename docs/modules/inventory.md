@@ -6217,24 +6217,26 @@ Application/SQL/API/Outbox, частичное применение, сторн�
 
 ## Первоначальная стоимость поступления ValuationLayer
 
-ValuationLayer — самостоятельный Aggregate Root первоначальной стоимости одной
-положительной записи Ledger обычного прихода. Теперь реализовано 19 из 23 целевых
-корней. Слой не меняет физический запас, журнал, резервы или другие агрегаты.
+ValuationLayer — самостоятельный Aggregate Root первоначальной и остаточной
+стоимости запаса на позиции. Он создаётся по положительной записи Ledger
+обычного прихода или по результату переноса стоимости. Реализовано 19 из 23
+целевых корней.
 
 | Поле | Состав и назначение |
 | --- | --- |
 | id | ValuationLayerIdVO |
-| source | ValuationLayerSourceVO(posting_id, ledger_entry_id, position_id) |
-| inventory_item_id / owner_id | Товар и владелец исходной позиции |
-| warehouse_id | Склад исходного поступления, выведенный из локации позиции |
+| source | ValuationLayerSourceVO(posting_id, ledger_entry_id, position_id) входящей записи формирования слоя |
+| inventory_item_id / owner_id | Товар и владелец позиции слоя |
+| warehouse_id | Склад позиции слоя |
 | base_uom | Сохранённая базовая единица записи Ledger |
 | cost_basis | CostBasisVO(quantity, total_cost: MoneyVO) |
-| received_at | Исторический posted_at исходного StockPosting в UTC |
-| created_at | Момент регистрации стоимости, не раньше received_at |
+| received_at | Дата первоначального прихода для порядка FIFO в UTC |
+| created_at | Момент регистрации слоя, не раньше появления на позиции |
 | remaining_qty | Оставшееся количество QuantityVO в base_uom |
 | remaining_cost | Оставшаяся стоимость MoneyVO в исходной валюте |
 | updated_at | Момент последнего изменения слоя в UTC, не раньше created_at |
 | version | Строго целая неотрицательная версия, bool не допускается |
+| transfer_origin | ValuationLayerTransferOriginVO для производного слоя, None для закупочного слоя |
 
 Слой сразу фиксирует стоимость поступления. Создание задаёт полные remaining_qty
 и remaining_cost, updated_at = created_at и version = 0. Частичное и полное
@@ -6376,9 +6378,8 @@ liquid_position, liquid_posting, liquid_layer = receipt_with_cost("L", "2.375", 
 Уникальность слоя по (stock_posting_id, ledger_entry_id) в tenant-схеме, глобальная
 идемпотентность, распределение общей стоимости прихода, актуальность прочитанных
 оснований, SQL и Outbox остаются хранению и следующим срезам. Потребление отдельного
-слоя и регистрация стоимости прихода в ValuationPosting реализованы ниже; FIFO,
-расходный ValuationPosting, переоценка и валютная конверсия
-пока не реализованы.
+слоя, регистрация стоимости прихода/расхода в ValuationPosting и FIFO исходной
+позиции реализованы ниже. Переоценка и валютная конверсия пока не реализованы.
 
 Тесты: test/test_inventory_valuation_layer_domain.py.
 
@@ -6479,8 +6480,8 @@ restored_partial_layer = ValuationLayer.restore(
 Проверка версии защищает один переход: повтор со старой версией отклоняется,
 с актуальной версией можно сделать новый расход. Она не устанавливает глобальную
 идемпотентность или факт физического списания. Привязка потребления к отдельной
-записи ISSUE реализована ниже; выбор FIFO-слоёв и расходные записи
-ValuationPosting/ValuationEntry — будущие срезы.
+записи ISSUE и расходные записи ValuationPosting/ValuationEntry реализованы ниже;
+выбор FIFO-слоёв одной исходной позиции также реализован ниже.
 Будущий Application/UoW должен атомарно сохранять потребление слоя и журнал стоимости
 с дедупликацией по факту расхода, SQL compare-and-set и Outbox.
 
@@ -6489,21 +6490,22 @@ ValuationPosting/ValuationEntry — будущие срезы.
 ## Регистрация стоимости прихода ValuationPosting
 
 `ValuationPosting` — самостоятельный immutable Aggregate Root завершённой
-стоимостной регистрации обычного RECEIPT. Он владеет дочерними `ValuationEntry`,
+стоимостной регистрации обычных RECEIPT и ISSUE. Здесь описан приходной сценарий;
+расходный приведён ниже. Он владеет дочерними `ValuationEntry`,
 ссылается на физическое проведение и слои по ID и не изменяет их.
 
 | Поле корня | Назначение |
 | --- | --- |
 | id | ValuationPostingIdVO |
 | stock_posting_id | StockPostingIdVO исходного физического проведения |
-| operation_type | StockOperationType, в первом срезе только RECEIPT |
+| operation_type | StockOperationType: RECEIPT или ISSUE |
 | stock_posted_at | Историческое время физического проведения в UTC |
 | posted_at | Время регистрации стоимости в UTC |
 | entries | Непустой tuple[ValuationEntry, ...] |
 
 У `ValuationEntry` поля id: ValuationEntryIdVO, ledger_entry_id, position_id,
 layer_id, inventory_item_id, owner_id, warehouse_id, base_uom,
-quantity_delta: StockDeltaVO и cost_delta: MoneyVO. Количество в этом срезе
+quantity_delta: StockDeltaVO и cost_delta: MoneyVO. В приходном сценарии количество
 конечное строго положительное, стоимость конечная неотрицательная; бесплатный
 приход тоже получает запись с нулевой стоимостью. Готовая сумма соответствует
 сохранённой точности MoneyVO и не округляется заново при восстановлении.
@@ -6601,7 +6603,7 @@ InvalidValuationLayerReceiptSnapshotError; сохраняются прежние
 записей по основанию обеспечит tenant-хранение; повторное построение другого
 Domain-объекта сейчас допустимо. Будущий Application/UoW атомарно согласует
 физическое проведение, позиции, слои, журнал стоимости и Outbox.
-Привязка потребления к ISSUE реализована ниже; расходный ValuationPosting,
+Привязка потребления к ISSUE и расходный ValuationPosting реализованы ниже.
 FIFO, перемещения стоимости, корректировки,
 сторно, переоценка, SQL/API и конверсия валют остаются будущими срезами.
 
@@ -6620,27 +6622,29 @@ INTERNAL_MOVE, ADJUSTMENT и компенсации не подходят, вк�
 
 Immutable `StockIssueValuationSnapshot` содержит posting_id, ledger_entry_id,
 position_id, inventory_item_id, owner_id, warehouse_id, base_uom, положительный
-QuantityVO quantity (модуль отрицательной дельты) и issued_at в UTC.
+QuantityVO quantity (модуль отрицательной дельты), issued_at в UTC и обязательный
+serial_id: StockSerialIdVO | None. ID серии выводится из позиции; серия требует одну PCS.
 Готовый снимок проверяет типы, конечность, положительность, известную единицу и UTC.
 
-`ValuationLayer.consume_from_issue(issue, *, expected_version, updated_at)`
+`ValuationLayer.consume_from_issue(issue, *, quantity=None, expected_version, updated_at)`
 возвращает `tuple[Self, ValuationLayerConsumptionSnapshot]`: новый слой и проверенный
-результат потребления. Количество целиком выводится из выбранной записи ISSUE,
-отдельный аргумент quantity не принимается. Используется прежний consume() с
+результат потребления. Без quantity потребляется всё количество ISSUE; явный
+QuantityVO выбирает положительную часть не больше ISSUE и остатка слоя. Используется прежний consume() с
 накопленной оценкой стоимости; его существующий API сохраняется.
 
-Границы первого среза: **одна выбранная запись ISSUE полностью оценивается одним
-слоем**. Сам слой можно потребить частично или полностью. Если его текущего остатка
-недостаточно, операция отклоняется без частичного изменения. Это ещё не полная
-стоимостная регистрация всего StockPosting, содержащего несколько записей.
-Разбиение записи между слоями и автоматический FIFO пока не реализованы.
+В первом срезе запись ISSUE целиком оценивалась одним слоем; теперь реализованы
+явные части и ручное распределение между слоями ниже. Сам слой потребляется частично
+или полностью. Если остатка не хватает на выбранную часть, операция отклоняется.
+Один переход слоя ещё не означает полную регистрацию всего StockPosting.
+SERIAL потребляется только целиком: разделить один экземпляр на две половины нельзя.
+FIFO-планирование исходной позиции описано ниже.
 
 `ValuationLayerIssuePolicy` проверяет исходную StockPosition слоя и совпадение
-товара, владельца, склада и base_uom. Другая позиция того же товара, включая адрес
-после перемещения внутри того же склада, отклоняется: перенос стоимости требует
-отдельного поведения. Связь с исходной позицией сохраняет LOT/SERIAL; свежие сроки
-годности и текущий шаг товара не запрашиваются.
-Физический ISSUE не раньше received_at слоя. Регистрация перехода не раньше ISSUE,
+товара, владельца, склада и base_uom. Для расхода на другом адресе используется
+производный слой, созданный переносом стоимости. Связь с позицией сохраняет
+LOT/SERIAL без запроса свежих сроков годности и текущего шага товара.
+Физический ISSUE допускается с `available_at` слоя: для закупочного слоя это
+`received_at`, для производного — момент перемещения. Регистрация перехода не раньше ISSUE,
 создания и предыдущего изменения слоя. Aware-время нормализуется в UTC; ожидаемая
 версия строго целая, неотрицательная, актуальная, bool отклоняется. Поздняя
 регистрация стоимости после физического расхода допустима при корректной хронологии.
@@ -6649,9 +6653,9 @@ QuantityVO quantity (модуль отрицательной дельты) и is
 
 | Поле | Содержание |
 | --- | --- |
-| layer | ValuationLayerReceiptSnapshot первоначального основания |
+| layer | ValuationLayerBasisSnapshot первоначального основания |
 | issue | StockIssueValuationSnapshot конкретного расхода |
-| quantity / cost | Полное количество ISSUE и неотрицательная стоимость потребления |
+| quantity / cost | Часть количества ISSUE и её неотрицательная стоимость потребления |
 | remaining_qty_before / after | Количественные остатки до и после |
 | remaining_cost_before / after | Денежные остатки в исходной валюте |
 | version_before / after | Последовательные строгие версии слоя |
@@ -6660,7 +6664,7 @@ QuantityVO quantity (модуль отрицательной дельты) и is
 
 Контракт frozen/slots с явным ensure_valid, без __post_init__, статуса или
 самостоятельного репозитория. Проверяются совместимость оснований, полное
-количество ISSUE, точная разница количеств, обе накопленные денежные оценки,
+количество части (не больше ISSUE), точная разница количеств, обе накопленные денежные оценки,
 разница стоимости, версии +1 и вся хронология. Нулевая стоимость допустима для
 бесплатного поступления и после округления. Отрицательный знак будущей расходной
 записи ValuationPosting здесь не формируется. История результатов не встраивается
@@ -6713,10 +6717,602 @@ InvalidValuationLayerConsumptionSnapshotError. Используются преж
 или резервы. Повтор со старой версией отклоняется, но та же запись ISSUE с новой
 версией может потребить слой повторно. Глобальную однократность по факту расхода,
 SQL compare-and-set и атомарное сохранение слоёв/журнала стоимости/Outbox обеспечит
-будущий Application/UoW. Расходный ValuationPosting, распределение по нескольким
-слоям, FIFO, перенос стоимости и компенсации остаются следующими срезами.
+будущий Application/UoW. Расходный ValuationPosting и ручное распределение по
+нескольким слоям, FIFO позиции и первый перенос стоимости описаны ниже.
 
 Тесты: `test/test_inventory_issue_valuation_domain.py`.
+
+## Регистрация стоимости ISSUE по результатам потребления
+
+`ValuationPosting.create_from_issue(identifier, posting, consumptions, entry_bindings,
+positions, locations, posted_at)` строит полный неизменяемый расходный журнал.
+Используются StockPostingSnapshot, tuple[ValuationLayerConsumptionSnapshot, ...],
+прежние ValuationEntryBindingVO и снимки позиций/локаций. Новых корней, полей
+корня/Entity или VO нет: состав остаётся 19 из 23. Создание сразу фиксирует факт
+без черновика, редактирования и версии изменения.
+
+Чистая `StockIssueValuationPostingPolicy` повторно проверяет весь результат каждого
+потребления: количество его части ISSUE, разницу остатков, обе накопленные денежные
+оценки, стоимость перехода, версии и хронологию. Затем `StockIssueValuationPolicy`
+заново выводит основание из физического проведения и контекста. Полученный снимок
+полностью совпадает с consumption.issue: Posting/Entry/Position ID, товар, владелец,
+склад, единица, полное количество, issued_at и serial_id. Совпадения одних ID недостаточно.
+
+Принимается только обычный ISSUE без reversal_of_id. Каждая запись Ledger целиком
+покрывается группой результатов разных слоёв, по одной ValuationEntry на часть.
+Сумма частей точно равна полному количеству записи. Пропуски, лишние результаты,
+повторные слои, привязки и ID создаваемых записей отклоняются. Требуются ровно позиции
+и их локации; сохраняются проверки SERIAL и исходной позиции слоя. Результат следует
+порядку Ledger, внутри группы — возрастанию UUID слоя, независимо от входных tuple.
+Свежие цены, правила шага и активность локации не меняют
+историческое основание и уже рассчитанное потребление.
+
+`ValuationEntry` поддерживает обе стороны движения. Локально проверяются конечная
+ненулевая количественная дельта, конечные деньги сохранённой точности и совпадение
+направлений количества и ненулевой стоимости. Корень проверяет знак по операции:
+
+| Операция | quantity_delta | cost_delta |
+| --- | --- | --- |
+| RECEIPT | Строго положительное количество | Неотрицательная стоимость |
+| ISSUE | Строго отрицательное количество | Неположительная стоимость |
+
+Для ISSUE значения выводятся из consumption.quantity и consumption.cost со сменой
+знака без потери точности во внешнем Decimal context. Полная первоначальная
+стоимость слоя повторно не списывается. Нулевая стоимость бесплатного расхода
+допустима и хранится как канонический денежный ноль. Валюты и единицы остаются
+раздельными по записям, общей суммы без конвертации нет. Цены единицы и нового
+округления стоимости не вводится.
+
+Продолжение предыдущего примера: результат потребления 30 KG / 1500 UAH переносится
+в расходную запись -30 KG / -1500 UAH. Уже изменённый слой остаётся 70 KG / 3500 UAH.
+
+```python
+issue_valuation = ValuationPosting.create_from_issue(
+    identifier=ValuationPostingIdVO(UUID(int=2300)), posting=issue_cost_posting.snapshot(),
+    consumptions=(issue_cost_consumption,),
+    entry_bindings=(ValuationEntryBindingVO(issue_cost_layer_after.id, ValuationEntryIdVO(UUID(int=2301))),),
+    positions=(issue_cost_position.snapshot(),), locations=(issue_cost_location,),
+    posted_at=issue_cost_consumption.consumed_at + timedelta(hours=1),
+)
+issue_valuation_entry = issue_valuation.entries[0]
+# quantity_delta=-30 KG, cost_delta=-1500.0000 UAH.
+# Слой не потребляется повторно: issue_cost_layer_after по-прежнему имеет version=1.
+
+restored_issue_valuation = ValuationPosting.restore(
+    identifier=issue_valuation.id, stock_posting_id=issue_valuation.stock_posting_id,
+    operation_type=issue_valuation.operation_type, stock_posted_at=issue_valuation.stock_posted_at,
+    posted_at=issue_valuation.posted_at, entries=issue_valuation.entries,
+)
+# restored_issue_valuation == issue_valuation.
+```
+
+Aware-время регистрации нормализуется в UTC и не предшествует физическому ISSUE
+или consumed_at любого результата. Более позднее изменение слоя не обесценивает
+исторический результат: его текущий остаток и версия для построения не требуются.
+Restore принимает прежний полный состав и проверяет собственные типы, непустоту,
+уникальность, согласованность расходных групп, хронологию и направления для RECEIPT/ISSUE. Внешние основания
+повторно проверяются при создании. Смешанные направления обычного проведения,
+другие операции и строки вместо enum отклоняются.
+
+Используются прежние доменные ошибки: ValuationPostingSourceError,
+DuplicateValuationEntryError, ValuationPostingTimeError, InvalidValuationEntryError,
+InvalidValuationPostingValueError и ошибки проверки результатов/физического
+основания. API типизированы, объекты frozen/slots, фабрики явные, __post_init__
+остаётся только у VO. Бизнес-проверки не используют assert, Policy не получают
+чужие Aggregate Roots и не выполняют I/O.
+
+Построение журнала не вызывает consume(), не меняет слои, физические позиции,
+Ledger или резервы и не означает commit. Глобальную однократность и атомарное
+сохранение нового состояния слоёв вместе с журналом/Outbox обеспечит будущий
+Application/UoW и tenant-хранение. Ручное распределение, FIFO позиции и первый
+перенос стоимости описаны ниже. Корректировки, сторно и валютная конверсия
+остаются отдельными срезами.
+
+Тесты: `test/test_inventory_issue_valuation_posting_domain.py` и
+`test/test_inventory_valuation_posting_domain.py`.
+
+## Ручное распределение ISSUE между слоями
+
+Одна физическая запись может оцениваться несколькими слоями исходной позиции.
+Новых корней, Entity и VO нет. Для каждого слоя вызывается consume_from_issue с
+явным quantity: положительный конечный QuantityVO не больше полного ISSUE и текущего
+остатка слоя. Без quantity прежний вызов потребляет полный ISSUE. Версии, даты,
+исходная позиция, товар, владелец, склад и единица проверяются по прежним правилам.
+
+В каждом результате issue.quantity хранит полное количество физической записи,
+а quantity — выбранную часть. Разница количественных остатков равна этой части;
+стоимость сохраняет накопленный ROUND_HALF_UP исходного слоя. Бесплатные и
+округлённые до нуля части сохраняются в журнале. Суммы разных валют не объединяются.
+
+Policy группирует части по Ledger Entry и требует точную сумму количества,
+равную модулю физической дельты. Недобор и превышение отклоняются; совпадение общего
+количества всего документа не заменяет проверку каждой группы. Один слой участвует
+одним итоговым потреблением на проведение. Прежние привязки layer_id → entry_id
+сохраняются. Внутри группы порядок стабилен по UUID слоя, выбор слоёв остаётся явным.
+
+Корень допускает повторные Ledger Entry и Position только для согласованной группы
+ISSUE разных слоёв: у записей одинаковы позиция, товар, владелец, склад и base_uom.
+Одна позиция относится ровно к одной группе Ledger. ID стоимостных записей и слои
+уникальны во всём проведении. Для RECEIPT прежняя строгая уникальность Ledger и
+позиций сохраняется. Restore проверяет собственные групповые инварианты без внешнего
+основания; полное покрытие физического количества проверяется при создании.
+
+StockIssueValuationSnapshot теперь явно хранит serial_id без значения по умолчанию.
+Производитель берёт его из позиции; снимок серии требует одну PCS. Частичное
+серийное потребление отклоняется и методом слоя, и ensure_valid результата.
+При построении журнала ID серии сверяется с физическим контекстом, поэтому удалить
+его из частей и зарегистрировать две половины нельзя. Свежий InventoryItem не нужен.
+
+Продолжение примеров: два реальных поступления одной позиции — 3 KG за 30 UAH и
+10 KG за 120 UAH. Вручную расходуем 7 KG как 3 + 4; оба слоя имеют одну исходную позицию.
+
+```python
+split_layers: list[ValuationLayer] = []
+for index, quantity, cost in ((2400, "3", "30"), (2420, "10", "120")):
+    qty = QuantityVO(Decimal(quantity))
+    entry = StockLedgerEntry.create(
+        identifier=StockLedgerEntryIdVO(UUID(int=index)), position_id=issue_cost_position.id,
+        quantity_delta=StockDeltaVO(qty.value), base_uom=UomCodeVO("KG"),
+        conversion=QuantityConversionSnapshotVO.create(quantity=qty, uom=UomCodeVO("KG"), base_uom=UomCodeVO("KG")),
+    )
+    receipt = StockPosting.create(
+        identifier=StockPostingIdVO(UUID(int=index + 1)),
+        source=PostingSourceVO(StockExecutionIdVO(UUID(int=index + 2))),
+        operation_type=StockOperationType.RECEIPT, posted_at=issue_cost_receipt.posted_at,
+        entries=(entry,), positions=(issue_cost_position.snapshot(),),
+    )
+    split_layers.append(ValuationLayer.create_from_receipt(
+        identifier=ValuationLayerIdVO(UUID(int=index + 3)),
+        receipt=receipt.receipt_valuation_snapshot(
+            ledger_entry_id=entry.id, position=issue_cost_position.snapshot(), location=issue_cost_location,
+        ),
+        total_cost=MoneyVO(Decimal(cost), CurrencyVO("UAH")), created_at=issue_cost_layer.created_at,
+    ))
+
+split_issue_entry = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=2461)), position_id=issue_cost_position.id,
+    quantity_delta=StockDeltaVO(Decimal("-7")), base_uom=UomCodeVO("KG"),
+    conversion=QuantityConversionSnapshotVO.create(
+        quantity=QuantityVO(Decimal("7")), uom=UomCodeVO("KG"), base_uom=UomCodeVO("KG"),
+    ),
+)
+split_issue = StockPosting.create(
+    identifier=StockPostingIdVO(UUID(int=2460)), source=PostingSourceVO(StockExecutionIdVO(UUID(int=2462))),
+    operation_type=StockOperationType.ISSUE, posted_at=issue_cost_posting.posted_at,
+    entries=(split_issue_entry,), positions=(issue_cost_position.snapshot(),),
+)
+split_basis = split_issue.issue_valuation_snapshot(
+    ledger_entry_id=split_issue_entry.id, position=issue_cost_position.snapshot(), location=issue_cost_location,
+)
+split_after_a, split_part_a = split_layers[0].consume_from_issue(
+    split_basis, quantity=QuantityVO(Decimal("3")), expected_version=0, updated_at=split_issue.posted_at,
+)
+split_after_b, split_part_b = split_layers[1].consume_from_issue(
+    split_basis, quantity=QuantityVO(Decimal("4")), expected_version=0, updated_at=split_issue.posted_at,
+)
+split_valuation = ValuationPosting.create_from_issue(
+    identifier=ValuationPostingIdVO(UUID(int=2480)), posting=split_issue.snapshot(),
+    consumptions=(split_part_b, split_part_a),
+    entry_bindings=(
+        ValuationEntryBindingVO(split_layers[0].id, ValuationEntryIdVO(UUID(int=2481))),
+        ValuationEntryBindingVO(split_layers[1].id, ValuationEntryIdVO(UUID(int=2482))),
+    ),
+    positions=(issue_cost_position.snapshot(),), locations=(issue_cost_location,),
+    posted_at=split_issue.posted_at,
+)
+# Две записи одного Ledger: -3 KG / -30 UAH и -4 KG / -48 UAH.
+# split_after_a: 0 KG / 0 UAH; split_after_b: 6 KG / 72 UAH; обе версии равны 1.
+# Исходные слои остаются версиями 0; физический Ledger содержит одну запись.
+```
+
+Проверки используют прежние доменные ошибки количества, оснований, результатов,
+версии и времени; конфликт расходной группы отклоняется DuplicateValuationEntryError,
+неполная сумма — ValuationPostingSourceError. Объекты immutable, Policy чистые,
+бизнес-проверки без assert. Полнота групп и части независимы от внешнего Decimal context.
+
+Регистрация не потребляет слои повторно и не применяет физический Ledger.
+Все изменённые слои, журнал и Outbox должен атомарно сохранить будущий Application/UoW
+с глобальной однократностью и SQL compare-and-set.
+
+Тесты: `test/test_inventory_layer_split_domain.py` и
+`test/test_inventory_issue_valuation_posting_domain.py`.
+
+## FIFO-план одной записи ISSUE
+
+FIFO автоматически выбирает количества из слоёв **позиции расхода**, включая
+производные слои от внутренних перемещений, доступные к моменту ISSUE.
+
+`ValuationLayer.fifo_snapshot()` проверяет корень и возвращает frozen/slots
+`ValuationLayerFifoSnapshot`: layer: ValuationLayerBasisSnapshot, remaining_qty,
+remaining_cost, version и updated_at. Явный ensure_valid проверяет основание,
+остаток по накопленной формуле, исходную валюту, строгую неотрицательную версию
+без bool и UTC-время изменения не раньше создания слоя. Нулевая стоимость не
+означает исчерпание; для FIFO важен положительный остаток количества.
+
+`ValuationLayerIssueAllocationVO(layer_id, quantity, expected_version)` фиксирует
+номинальный ID слоя, конечную строго положительную часть и ожидаемую версию.
+Стоимость не сохраняется в назначении: её рассчитает существующее потребление.
+Собственные значения VO проверяются в __post_init__/ensure_valid; snapshots и
+Aggregate используют явные проверки без __post_init__.
+
+Чистая `StockIssueFifoPolicy.build_allocations(issue, candidates)` принимает
+StockIssueValuationSnapshot и tuple снимков кандидатов. Проверяется весь пул:
+принадлежность исходной позиции, товару, владельцу, складу и базовой единице,
+доступность на позиции к моменту ISSUE, корректные остатки и версии. Дубликаты ID
+слоёв либо входящих записей (posting_id, ledger_entry_id), чужие и ещё недоступные
+слои отклоняются даже при достаточном количестве у других кандидатов. Пул
+задаётся явно через снимки.
+
+Кандидаты сортируются по received_at, затем UUID слоя. Исчерпанные пропускаются;
+бесплатные и округлённые до нулевой стоимости положительные остатки участвуют.
+Из очередного слоя берётся минимум доступного количества и непокрытого остатка
+ISSUE. QuantityArithmeticPolicy сохраняет точность независимо от Decimal context.
+При недостатке количества частичный план не возвращается. Цена, валюта и дата
+регистрации стоимости не влияют на выбор. SERIAL требует исходную одну PCS и
+остаток 0/1, выбирается один целый слой; дробные серийные остатки отклоняются.
+
+`StockIssueFifoPlanSnapshot` содержит issue, candidates и allocations.
+Фабрика create(issue, candidates) сама выводит назначения. ensure_valid повторяет
+FIFO по сохранённым кандидатам и требует точное совпадение количества, порядка,
+ссылок и версий: нельзя пропустить старый слой, переставить назначения или изменить
+количество, даже сохранив общий итог. Это immutable-контракт решения без статуса
+и самостоятельного репозитория.
+
+`ValuationLayer.consume_fifo_allocation(plan, *, updated_at)` проверяет план,
+наличие собственного назначения, его ожидаемую версию и полное совпадение текущего
+fifo_snapshot со снимком кандидата. Невыбранный, отсутствующий или изменившийся
+слой отклоняется. Применение использует consume_from_issue с назначенной частью
+и возвращает прежние новый слой/ValuationLayerConsumptionSnapshot. Даты, SERIAL,
+накопленная стоимость и нормализация aware-времени в UTC сохраняют прежние правила.
+
+Ниже FIFO заменяет ручной выбор предыдущего примера. Используем исходные immutable
+слои версии 0 и то же основание ISSUE; это альтернативный способ построения одной
+оценки. Пул специально передан в обратном порядке.
+
+```python
+from src.modules.inventory.domain.stock_posting.fifo_plan_snapshot import StockIssueFifoPlanSnapshot
+
+fifo_plan = StockIssueFifoPlanSnapshot.create(
+    issue=split_basis, candidates=tuple(layer.fifo_snapshot() for layer in reversed(split_layers)),
+)
+# При равных received_at меньший UUID слоя выбирается первым: 3 KG, затем 4 KG.
+fifo_updated_layers: list[ValuationLayer] = []
+fifo_consumptions = []
+fifo_by_id = {layer.id: layer for layer in split_layers}
+for allocation in fifo_plan.allocations:
+    updated_layer, consumption = fifo_by_id[allocation.layer_id].consume_fifo_allocation(
+        fifo_plan, updated_at=split_issue.posted_at,
+    )
+    fifo_updated_layers.append(updated_layer)
+    fifo_consumptions.append(consumption)
+
+fifo_valuation = ValuationPosting.create_from_issue(
+    identifier=ValuationPostingIdVO(UUID(int=2500)), posting=split_issue.snapshot(),
+    consumptions=tuple(fifo_consumptions),
+    entry_bindings=tuple(
+        ValuationEntryBindingVO(layer.id, ValuationEntryIdVO(UUID(int=2501 + index)))
+        for index, layer in enumerate(fifo_updated_layers)
+    ),
+    positions=(issue_cost_position.snapshot(),), locations=(issue_cost_location,),
+    posted_at=split_issue.posted_at,
+)
+# Остатки новых слоёв: 0 KG / 0 UAH и 6 KG / 72 UAH, версии 1.
+# Журнал: -3 KG / -30 UAH и -4 KG / -48 UAH; повторного consume при регистрации нет.
+# Исходные split_layers по-прежнему имеют версии 0; физическая позиция не изменяется.
+```
+
+Результаты регистрируются существующим расходным ValuationPosting. Порядок выбора
+зафиксирован планом; технический порядок записей журнала внутри группы по UUID
+не меняется. Разные валюты остаются раздельными по записям, новой цены единицы нет.
+
+Доменные ошибки: InvalidValuationLayerFifoSnapshotError,
+InvalidValuationIssueAllocationError, InvalidStockIssueFifoPlanError,
+InsufficientValuationFifoQuantityError, ValuationFifoStateConflictError. Старая версия
+отклоняется прежним ValuationLayerVersionConflictError; сохраняются ошибки оснований,
+количества и времени. Бизнес-проверки не используют assert, методы типизированы.
+
+FIFO гарантируется относительно переданных снимков. Полноту и свежесть выборки,
+конкурентные изменения всех кандидатов, глобальную однократность и атомарное
+сохранение слоёв/журнала/Outbox обеспечит будущий Application/UoW и tenant SQL.
+План не восстанавливает остаток на историческую дату и не выполняет переоценку
+задним числом.
+
+Тесты: `test/test_inventory_fifo_domain.py`.
+
+## Полный FIFO-план расходного StockPosting
+
+`StockPosting.issue_fifo_plan(candidates, positions, locations)` строит единое
+FIFO-основание всех записей обычного ISSUE без reversal_of_id. Новый immutable
+`StockPostingFifoPlanSnapshot` содержит полный posting: StockPostingSnapshot и
+plans: tuple[StockIssueFifoPlanSnapshot, ...]. У него нет статуса, самостоятельной
+версии и репозитория; версии слоёв уже сохранены во вложенных планах. Корней остаётся 19 из 23.
+
+Чистая `StockPostingFifoPolicy` проверяет весь контекст: ровно участвующие позиции
+и их локации, номинальные снимки кандидатов, глобальную уникальность слоёв и
+источников поступления. Кандидат относится к исходной позиции одной записи ISSUE;
+чужие позиции отклоняются, в том числе у невыбираемых слоёв. Затем каждой записи
+строится существующий FIFO-план. Планы следуют Ledger, а назначения внутри каждого
+— прежнему FIFO-порядку. Недостаток одной группы отклоняет весь запрос без частичного
+результата и без изменения агрегатов.
+
+Явный ensure_valid полного снимка проверяет источник, каждый вложенный план,
+соответствие ID/позиции/единицы/полного количества/времени записям Ledger, точное
+покрытие и порядок. Один слой или источник поступления не участвует в нескольких
+группах. SERIAL, исходная позиция, даты, версии и точная арифметика сохраняются.
+Для применения используются прежние consume_fifo_allocation и результаты потребления.
+
+`ValuationPosting.create_from_fifo_plan(...)` принимает ID нового факта, полный
+план, исходный StockPostingSnapshot, tuple результатов, привязки ID записей,
+позиции/локации и posted_at. Чистая `StockPostingFifoValuationPolicy` повторно
+проверяет план и требует точное совпадение переданного физического проведения
+с сохранённым источником, включая execution source и исторические коэффициенты.
+Идентификаторов одного Posting недостаточно.
+
+Каждому назначению соответствует ровно один результат по Ledger Entry/слою.
+Проверяются основание ISSUE, назначенное количество и полное состояние кандидата
+до потребления: первоначальное основание, версия, количественный и денежный
+остатки, предыдущее время изменения. Результат также проходит собственную проверку
+денежной формулы, разницы остатков, версии +1 и хронологии. Пропуски, лишние результаты,
+дубли и другое самосогласованное ручное распределение не подтверждают этот FIFO-план.
+
+Затем фабрика использует прежний create_from_issue с повторной проверкой физического
+контекста, SERIAL, привязок, знаков, полноты количества и времени регистрации.
+Так согласованные снимки другого владельца не заменяют реальную позицию.
+Повторного потребления нет. Более поздняя текущая версия слоя не обесценивает
+исторический результат, совпадающий с зафиксированным основанием плана.
+
+Ниже независимый вариант с исходными split_layers версии 0 из предыдущих примеров.
+Добавляем другой товар в PCS и USD: одна запись ISSUE расходует 7 KG, другая 4 PCS.
+
+```python
+posting_second_position, posting_second_receipt, posting_second_layer = receipt_with_cost(
+    "PCS", "5", "100", "USD", 2600,
+)
+posting_second_location = StockLocationSnapshot(
+    posting_second_position.dimensions.location_id, posting_second_layer.warehouse_id,
+    LocationType.STORAGE, True,
+)
+posting_fifo_positions = (issue_cost_position.snapshot(), posting_second_position.snapshot())
+posting_fifo_locations = (issue_cost_location, posting_second_location)
+posting_fifo_entries = []
+for index, position, quantity in (
+    (2701, issue_cost_position, "7"), (2702, posting_second_position, "4"),
+):
+    qty = QuantityVO(Decimal(quantity))
+    posting_fifo_entries.append(StockLedgerEntry.create(
+        identifier=StockLedgerEntryIdVO(UUID(int=index)), position_id=position.id,
+        quantity_delta=StockDeltaVO(qty.value.copy_negate()), base_uom=position.base_uom,
+        conversion=QuantityConversionSnapshotVO.create(quantity=qty, uom=position.base_uom, base_uom=position.base_uom),
+    ))
+posting_fifo_issue = StockPosting.create(
+    identifier=StockPostingIdVO(UUID(int=2700)), source=PostingSourceVO(StockExecutionIdVO(UUID(int=2703))),
+    operation_type=StockOperationType.ISSUE, posted_at=split_issue.posted_at,
+    entries=tuple(posting_fifo_entries), positions=posting_fifo_positions,
+)
+posting_fifo_layers = (*split_layers, posting_second_layer)
+posting_fifo_plan = posting_fifo_issue.issue_fifo_plan(
+    candidates=tuple(layer.fifo_snapshot() for layer in reversed(posting_fifo_layers)),
+    positions=posting_fifo_positions, locations=posting_fifo_locations,
+)
+# Первый план: 3 + 4 KG, второй: 4 PCS.
+posting_fifo_by_id = {layer.id: layer for layer in posting_fifo_layers}
+posting_fifo_results = []
+posting_fifo_updated = []
+for item in posting_fifo_plan.plans:
+    for allocation in item.allocations:
+        updated, consumption = posting_fifo_by_id[allocation.layer_id].consume_fifo_allocation(
+            item, updated_at=posting_fifo_issue.posted_at,
+        )
+        posting_fifo_updated.append(updated)
+        posting_fifo_results.append(consumption)
+posting_fifo_valuation = ValuationPosting.create_from_fifo_plan(
+    identifier=ValuationPostingIdVO(UUID(int=2800)), plan=posting_fifo_plan,
+    posting=posting_fifo_issue.snapshot(), consumptions=tuple(posting_fifo_results),
+    entry_bindings=tuple(
+        ValuationEntryBindingVO(layer.id, ValuationEntryIdVO(UUID(int=2801 + index)))
+        for index, layer in enumerate(posting_fifo_updated)
+    ),
+    positions=posting_fifo_positions, locations=posting_fifo_locations,
+    posted_at=posting_fifo_issue.posted_at,
+)
+# Журнал: -3 KG / -30 UAH, -4 KG / -48 UAH, -4 PCS / -80 USD.
+# Остатки новых слоёв: 0 KG / 0 UAH, 6 KG / 72 UAH, 1 PCS / 20 USD; версии 1.
+# Исходные слои остаются версиями 0; физические позиции не изменяются.
+```
+
+Добавлен InvalidStockPostingFifoPlanError. Сохраняются прежние доменные ошибки
+FIFO и ValuationPosting; методы типизированы, контракты frozen/slots с явными
+проверками, Policy без чужих Aggregate Roots и I/O, бизнес-проверки без assert.
+Ручное распределение, отдельные планы и прежние фабрики журналов сохраняются.
+
+Полный план означает покрытие всех записей конкретного Ledger. Полнота и свежесть
+tenant-выборки слоёв, конкурентные изменения, глобальная однократность и атомарное
+сохранение всех слоёв/журнала/Outbox относятся к будущим Application/UoW и SQL.
+
+Тесты: `test/test_inventory_posting_fifo_domain.py`.
+
+## Основание переноса стоимости по INTERNAL_MOVE
+
+`StockPosting.movement_valuation_snapshot(pair, positions, locations)` выделяет
+проверяемую пару расходной и приходной записей внутреннего перемещения одного
+склада. Оно служит входом для переноса стоимости из исходного стоимостного слоя.
+
+`StockMovementEntryPairVO(outgoing_entry_id, incoming_entry_id)` содержит различные
+номинальные StockLedgerEntryIdVO. VO проверяет собственные ссылки через
+__post_init__/ensure_valid. Автоматического сопоставления по товару или количеству
+нет; направления и принадлежность проведению проверяются при построении основания.
+
+Чистая `StockMovementValuationPolicy` принимает StockPostingSnapshot, пару и
+tuple полных снимков позиций/локаций. Только обычный INTERNAL_MOVE без reversal_of_id.
+Сначала повторно используется StockMovementBalancePolicy для **всего проведения**:
+уникальные позиции и локации, соответствие единиц, один склад и баланс по товару,
+владельцу, LOT/SERIAL, состоянию и единице. Выбранная корректная пара не скрывает
+несбалансированные остальные записи восстановленной истории.
+
+Затем выбираются существующие отрицательная и положительная записи. Их модули
+количества равны; позиции и локации разные, склад общий. Стороны сохраняют товар,
+владельца, LOT, SERIAL, состояние и base_uom; серия перемещается ровно одной PCS.
+В первой версии обе записи используются целиком: -7 → +7 допустимо, -7 → +3/+4
+и объединение нескольких источников одному назначению требуют другого сопоставления.
+
+Immutable `StockMovementValuationSnapshot`:
+
+| Поле | Назначение |
+| --- | --- |
+| posting_id | Исходный StockPostingIdVO |
+| pair | StockMovementEntryPairVO выбранных записей |
+| source_position / target_position | StockPositionSnapshot сторон, включая измерения и base_uom |
+| warehouse_id | Общий WarehouseIdVO, выведенный из проверенного контекста локаций |
+| quantity | Положительный конечный QuantityVO в общей базовой единице |
+| moved_at | Исторический posted_at в UTC |
+
+Явный ensure_valid проверяет собственные типы, пару, позиции/адреса, сохраняемые
+измерения, количество, SERIAL и UTC. __post_init__ у Snapshot/Policy/Aggregate нет.
+Готовое основание можно проверить по собственным данным без чтения источника;
+связь с реальным Ledger и складом локаций проверяется производителем.
+Исторические коэффициенты и базовые количества не заменяются текущими; активность
+локаций, новые шаги товара и свежие сроки партии не переоценивают проведённую историю.
+
+В независимом примере используем прежнюю KG-позицию и создаём вторую в том же складе.
+
+```python
+from src.modules.inventory.domain.stock_posting.value_object.movement_entry_pair import StockMovementEntryPairVO
+
+movement_location = StockLocationSnapshot(
+    StockLocationIdVO(UUID(int=3001)), issue_cost_layer.warehouse_id, LocationType.STORAGE, True,
+)
+movement_dimensions = issue_cost_position.dimensions
+movement_target = StockPosition.create(
+    identifier=StockPositionIdVO(UUID(int=3006)),
+    dimensions=StockDimensionsVO(
+        movement_dimensions.inventory_item_id, movement_location.id, movement_dimensions.owner_id,
+        movement_dimensions.lot_id, movement_dimensions.serial_id, movement_dimensions.stock_status,
+    ),
+    inventory_item=InventoryItemStockSnapshot(
+        movement_dimensions.inventory_item_id, UomCodeVO("KG"), QuantityRulesVO(Decimal(".001")), TrackingMode.NONE,
+    ),
+    warehouse=WarehouseSnapshot(issue_cost_layer.warehouse_id, True, None), location=movement_location,
+)
+movement_conversion = QuantityConversionSnapshotVO.create(
+    quantity=QuantityVO(Decimal("7")), uom=UomCodeVO("KG"), base_uom=UomCodeVO("KG"),
+)
+movement_outgoing = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=3004)), position_id=issue_cost_position.id,
+    quantity_delta=StockDeltaVO(Decimal("-7")), base_uom=UomCodeVO("KG"), conversion=movement_conversion,
+)
+movement_incoming = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=3005)), position_id=movement_target.id,
+    quantity_delta=StockDeltaVO(Decimal("7")), base_uom=UomCodeVO("KG"), conversion=movement_conversion,
+)
+movement_posting = StockPosting.create(
+    identifier=StockPostingIdVO(UUID(int=3002)), source=PostingSourceVO(StockExecutionIdVO(UUID(int=3003))),
+    operation_type=StockOperationType.INTERNAL_MOVE, posted_at=split_issue.posted_at,
+    entries=(movement_outgoing, movement_incoming),
+    positions=(issue_cost_position.snapshot(), movement_target.snapshot()),
+    locations=(issue_cost_location, movement_location),
+)
+movement_basis = movement_posting.movement_valuation_snapshot(
+    pair=StockMovementEntryPairVO(movement_outgoing.id, movement_incoming.id),
+    positions=(issue_cost_position.snapshot(), movement_target.snapshot()),
+    locations=(issue_cost_location, movement_location),
+)
+movement_basis.ensure_valid()
+# quantity=7 KG; source_position.id == issue_cost_position.id;
+# target_position.id == movement_target.id; warehouse_id общий.
+# Физические позиции и стоимостные слои не изменились; основание не содержит цены.
+```
+
+Проведение может содержать несколько независимых пар, но снимок выделяет только
+выбранную: он не доказывает полное стоимостное покрытие всех записей. Положительная
+сторона перемещения не экспортируется как закупочный RECEIPT, отрицательная — как
+обычный ISSUE; прежние фабрики сохраняют эти ограничения.
+
+Ошибки: InvalidStockMovementEntryPairError, StockMovementValuationSourceError,
+InvalidStockMovementValuationSnapshotError и прежние ошибки физического контекста,
+баланса и единиц. Методы типизированы, объекты frozen/slots, бизнес-проверки без assert,
+Policy не получает чужие Aggregate Roots и не выполняет I/O.
+
+Тесты: `test/test_inventory_movement_valuation_domain.py`.
+
+## Перенос стоимости одного слоя по INTERNAL_MOVE
+
+`ValuationLayer.consume_for_movement(movement, expected_version=..., updated_at=...)`
+потребляет полное количество проверенной пары из одного слоя закупочного прихода.
+`ValuationLayerMovementPolicy` сверяет позицию, товар, владельца, склад, базовую единицу
+и дату доступности. Для SERIAL исходная стоимость относится ровно к одной PCS.
+Корень проверяет достаточность остатка, ожидаемую версию и время регистрации.
+
+Результат содержит новую версию исходного слоя и
+`ValuationLayerMovementConsumptionSnapshot`. Снимок фиксирует основания, версии,
+количественные и денежные остатки до и после перехода и время регистрации. Стоимость
+переноса равна разнице между двумя денежными остатками после применения накопленного
+округления. Поэтому суммарная стоимость запаса сохраняется в валюте исходного слоя.
+
+`ValuationLayer.create_from_movement(identifier, consumption, created_at)` проверяет
+снимок и создаёт новый слой с версией 0. Его `source` указывает на положительную
+запись INTERNAL_MOVE и позицию назначения. `ValuationLayerTransferOriginVO` хранит
+`parent_layer_id`, `receipt_source`, `outgoing_entry_id` и `moved_at`. Время
+создания слоя следует за регистрацией потребления или совпадает с ней. При
+восстановлении проверяются сохранённые ссылки, остаток и порядок дат.
+
+Обычный ISSUE и FIFO используют `ValuationLayerBasisSnapshot`. Для производного
+слоя `received_at` остаётся датой закупочного прихода для сортировки FIFO, а
+`available_at` равен `moved_at` и определяет доступность на новом адресе. Журнал
+RECEIPT принимает только `ValuationLayerReceiptSnapshot` от закупочного слоя.
+
+Продолжение примера выше. Из независимого слоя 10 KG за 120 UAH перемещаем 7 KG,
+затем расходуем 2 KG на новом адресе.
+
+```python
+movement_source_after, movement_consumption = split_layers[1].consume_for_movement(
+    movement_basis, expected_version=0, updated_at=movement_basis.moved_at,
+)
+movement_destination_layer = ValuationLayer.create_from_movement(
+    identifier=ValuationLayerIdVO(UUID(int=3010)),
+    consumption=movement_consumption,
+    created_at=movement_basis.moved_at,
+)
+# Исходный слой: 3 KG / 36 UAH. Новый слой: 7 KG / 84 UAH.
+
+movement_issue_qty = QuantityVO(Decimal("2"))
+movement_issue_entry = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=3011)),
+    position_id=movement_target.id,
+    quantity_delta=StockDeltaVO(Decimal("-2")),
+    base_uom=movement_target.base_uom,
+    conversion=QuantityConversionSnapshotVO.create(
+        quantity=movement_issue_qty, uom=movement_target.base_uom, base_uom=movement_target.base_uom,
+    ),
+)
+movement_issue_positions = (movement_target.snapshot(),)
+movement_issue = StockPosting.create(
+    identifier=StockPostingIdVO(UUID(int=3012)),
+    source=PostingSourceVO(StockExecutionIdVO(UUID(int=3013))),
+    operation_type=StockOperationType.ISSUE,
+    posted_at=movement_basis.moved_at,
+    entries=(movement_issue_entry,),
+    positions=movement_issue_positions,
+)
+movement_issue_fifo = movement_issue.issue_fifo_plan(
+    candidates=(movement_destination_layer.fifo_snapshot(),),
+    positions=movement_issue_positions,
+    locations=(movement_location,),
+)
+movement_destination_after, movement_issue_consumption = (
+    movement_destination_layer.consume_fifo_allocation(
+        movement_issue_fifo.plans[0], updated_at=movement_issue.posted_at,
+    )
+)
+# Расход: 2 KG / 24 UAH. Остаток на новом адресе: 5 KG / 60 UAH.
+```
+
+Текущий срез ограничен одной парой и одним исходным слоем. Перенос из нескольких
+слоёв, повторное перемещение производного слоя, межскладские маршруты A → T → B
+и ValuationPosting для INTERNAL_MOVE остаются отдельными срезами. При сохранении
+Application/UoW должен атомарно записать обе версии состояния с проверкой актуальной
+версии исходного слоя и однократности стоимостной обработки пары.
+
+Тесты: `test/test_inventory_layer_movement_domain.py`.
 
 ## Изменения, восстановление и проверки
 
@@ -6772,5 +7368,10 @@ SQL compare-and-set и атомарное сохранение слоёв/жур
 `test/test_inventory_valuation_layer_domain.py`
 `test/test_inventory_valuation_consumption_domain.py`
 `test/test_inventory_valuation_posting_domain.py`
-и `test/test_inventory_issue_valuation_domain.py`.
+`test/test_inventory_issue_valuation_domain.py`
+`test/test_inventory_issue_valuation_posting_domain.py`
+`test/test_inventory_layer_split_domain.py`
+`test/test_inventory_fifo_domain.py`
+`test/test_inventory_posting_fifo_domain.py`
+и `test/test_inventory_movement_valuation_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

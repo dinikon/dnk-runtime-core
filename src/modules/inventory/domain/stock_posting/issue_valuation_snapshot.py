@@ -18,6 +18,9 @@ from src.modules.inventory.domain.stock_posting.value_object.identifier import (
 from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import (
     StockLedgerEntryIdVO,
 )
+from src.modules.inventory.domain.stock_serial.value_object.identifier import (
+    StockSerialIdVO,
+)
 from src.modules.inventory.domain.uom_catalog import get_uom
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
@@ -38,6 +41,7 @@ class StockIssueValuationSnapshot:
     base_uom: UomCodeVO
     quantity: QuantityVO
     issued_at: datetime
+    serial_id: StockSerialIdVO | None
 
     def ensure_valid(self) -> None:
         """Требует номинальные ссылки, конечное положительное количество и сохранённое UTC-время ISSUE."""
@@ -53,11 +57,21 @@ class StockIssueValuationSnapshot:
             or not isinstance(self.quantity.value, Decimal)
             or not self.quantity.value.is_finite()
             or self.quantity.value <= 0
+            or (
+                self.serial_id is not None
+                and not isinstance(self.serial_id, StockSerialIdVO)
+            )
         ):
             raise InvalidStockIssueValuationSnapshotError(
                 "Нужны типизированные данные расхода с положительным базовым количеством."
             )
         get_uom(self.base_uom)
+        if self.serial_id is not None and (
+            self.base_uom != UomCodeVO("PCS") or self.quantity.value != 1
+        ):
+            raise InvalidStockIssueValuationSnapshotError(
+                "Расход конкретной серии требует ровно одну PCS."
+            )
         StockPostingPolicy.normalize_time(self.issued_at)
         if self.issued_at.utcoffset() != timedelta(0):
             raise InvalidStockIssueValuationSnapshotError(

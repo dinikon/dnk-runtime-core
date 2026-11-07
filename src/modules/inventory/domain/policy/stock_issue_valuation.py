@@ -69,6 +69,7 @@ class StockIssueValuationPolicy:
             entry.base_uom,
             QuantityVO(entry.quantity_delta.value.copy_abs()),
             posting.posted_at,
+            position.dimensions.serial_id,
         )
         snapshot.ensure_valid()
         return snapshot

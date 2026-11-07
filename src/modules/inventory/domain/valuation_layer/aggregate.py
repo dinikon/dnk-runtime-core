@@ -15,8 +15,23 @@ from src.modules.inventory.domain.policy.valuation_layer_consumption import (
 from src.modules.inventory.domain.policy.valuation_layer_issue import (
     ValuationLayerIssuePolicy,
 )
+from src.modules.inventory.domain.policy.valuation_layer_movement import (
+    ValuationLayerMovementPolicy,
+)
 from src.modules.inventory.domain.stock_posting.issue_valuation_snapshot import (
     StockIssueValuationSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.fifo_plan_snapshot import (
+    StockIssueFifoPlanSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.movement_valuation_snapshot import (
+    StockMovementValuationSnapshot,
+)
+from src.modules.inventory.domain.valuation_layer.basis_snapshot import (
+    ValuationLayerBasisSnapshot,
+)
+from src.modules.inventory.domain.valuation_layer.fifo_snapshot import (
+    ValuationLayerFifoSnapshot,
 )
 from src.modules.inventory.domain.valuation_layer.consumption_snapshot import (
     ValuationLayerConsumptionSnapshot,
@@ -24,12 +39,17 @@ from src.modules.inventory.domain.valuation_layer.consumption_snapshot import (
 from src.modules.inventory.domain.stock_posting.receipt_valuation_snapshot import (
     StockReceiptValuationSnapshot,
 )
-from src.modules.inventory.domain.uom_catalog import get_uom
 from src.modules.inventory.domain.valuation_layer.error import (
+    InvalidValuationLayerReceiptSnapshotError,
     InvalidValuationLayerValueError,
     ValuationLayerConsumptionError,
     ValuationLayerTimeError,
     ValuationLayerVersionConflictError,
+    InvalidStockIssueFifoPlanError,
+    ValuationFifoStateConflictError,
+)
+from src.modules.inventory.domain.valuation_layer.movement_consumption_snapshot import (
+    ValuationLayerMovementConsumptionSnapshot,
 )
 from src.modules.inventory.domain.valuation_layer.time import normalize_valuation_time
 from src.modules.inventory.domain.valuation_layer.receipt_snapshot import (
@@ -44,6 +64,9 @@ from src.modules.inventory.domain.valuation_layer.value_object.identifier import
 from src.modules.inventory.domain.valuation_layer.value_object.source import (
     ValuationLayerSourceVO,
 )
+from src.modules.inventory.domain.valuation_layer.value_object.transfer_origin import (
+    ValuationLayerTransferOriginVO,
+)
 from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
@@ -53,7 +76,7 @@ from src.modules.shared.domain.value_object.money import MoneyVO
 
 @dataclass(frozen=True, slots=True)
 class ValuationLayer:
-    """Хранит первоначальную и остаточную стоимость поступления без изменения физического запаса."""
+    """Хранит первоначальную и остаточную стоимость запаса на конкретной позиции."""
 
     id: ValuationLayerIdVO
     source: ValuationLayerSourceVO
@@ -68,6 +91,7 @@ class ValuationLayer:
     remaining_cost: MoneyVO
     updated_at: datetime
     version: int
+    transfer_origin: ValuationLayerTransferOriginVO | None = None
 
     @classmethod
     def create_from_receipt(
@@ -103,6 +127,52 @@ class ValuationLayer:
         )
 
     @classmethod
+    def create_from_movement(
+        cls,
+        *,
+        identifier: ValuationLayerIdVO,
+        consumption: ValuationLayerMovementConsumptionSnapshot,
+        created_at: datetime,
+    ) -> Self:
+        """Создаёт слой на позиции назначения с перенесённой стоимостью и прежней FIFO-датой."""
+        if not isinstance(consumption, ValuationLayerMovementConsumptionSnapshot):
+            raise InvalidValuationLayerValueError(
+                "Нужен специализированный результат потребления по INTERNAL_MOVE."
+            )
+        consumption.ensure_valid()
+        at = normalize_valuation_time(created_at)
+        if at < consumption.consumed_at:
+            raise ValuationLayerTimeError(
+                "Слой назначения нельзя зарегистрировать раньше потребления исходного слоя."
+            )
+        movement = consumption.movement
+        target = movement.target_position
+        cost = consumption.cost
+        return cls.restore(
+            identifier=identifier,
+            source=ValuationLayerSourceVO(
+                movement.posting_id, movement.pair.incoming_entry_id, target.id
+            ),
+            inventory_item_id=target.dimensions.inventory_item_id,
+            owner_id=target.dimensions.owner_id,
+            warehouse_id=movement.warehouse_id,
+            base_uom=target.base_uom,
+            cost_basis=CostBasisVO(consumption.quantity, cost),
+            received_at=consumption.layer.received_at,
+            created_at=at,
+            remaining_qty=consumption.quantity,
+            remaining_cost=cost,
+            updated_at=at,
+            version=0,
+            transfer_origin=ValuationLayerTransferOriginVO(
+                parent_layer_id=consumption.layer.id,
+                receipt_source=consumption.layer.source,
+                outgoing_entry_id=movement.pair.outgoing_entry_id,
+                moved_at=movement.moved_at,
+            ),
+        )
+
+    @classmethod
     def restore(
         cls,
         *,
@@ -119,6 +189,7 @@ class ValuationLayer:
         remaining_cost: MoneyVO,
         updated_at: datetime,
         version: int,
+        transfer_origin: ValuationLayerTransferOriginVO | None = None,
     ) -> Self:
         """Восстанавливает все собственные исторические поля без чтения проведения, цен и текущих справочников."""
         layer = cls(
@@ -135,14 +206,28 @@ class ValuationLayer:
             remaining_cost,
             normalize_valuation_time(updated_at),
             version,
+            transfer_origin,
         )
         layer._validate()
         return layer
 
     def receipt_valuation_snapshot(self) -> ValuationLayerReceiptSnapshot:
-        """Возвращает проверенную первоначальную стоимость независимо от последующего потребления слоя."""
+        """Экспортирует первоначальное основание слоя закупочного прихода для журнала RECEIPT."""
+        basis = self.basis_snapshot()
+        if not isinstance(basis, ValuationLayerReceiptSnapshot):
+            raise InvalidValuationLayerReceiptSnapshotError(
+                "Для приходной оценки нужен слой закупочного прихода."
+            )
+        return basis
+
+    def basis_snapshot(self) -> ValuationLayerBasisSnapshot:
+        """Экспортирует проверенную исходную оценку слоя независимо от его остатка."""
         self._validate()
-        snapshot = ValuationLayerReceiptSnapshot(
+        return self._basis_snapshot()
+
+    def _basis_snapshot(self) -> ValuationLayerBasisSnapshot:
+        """Собирает основание подходящего вида из собственных исторических полей слоя."""
+        fields = (
             self.id,
             self.source,
             self.inventory_item_id,
@@ -153,8 +238,54 @@ class ValuationLayer:
             self.received_at,
             self.created_at,
         )
+        if self.transfer_origin is None:
+            return ValuationLayerReceiptSnapshot(*fields)
+        return ValuationLayerBasisSnapshot(*fields, self.transfer_origin)
+
+    def fifo_snapshot(self) -> ValuationLayerFifoSnapshot:
+        """Возвращает проверенное состояние кандидата FIFO с первоначальным основанием и текущей версией."""
+        snapshot = ValuationLayerFifoSnapshot(
+            self.basis_snapshot(),
+            self.remaining_qty,
+            self.remaining_cost,
+            self.version,
+            self.updated_at,
+        )
         snapshot.ensure_valid()
         return snapshot
+
+    def consume_fifo_allocation(
+        self, plan: StockIssueFifoPlanSnapshot, *, updated_at: datetime
+    ) -> tuple[Self, ValuationLayerConsumptionSnapshot]:
+        """Применяет собственное назначение только по неизменившемуся состоянию кандидата FIFO."""
+        self._validate()
+        if not isinstance(plan, StockIssueFifoPlanSnapshot):
+            raise InvalidStockIssueFifoPlanError(
+                "Нужен проверяемый план FIFO одной записи ISSUE."
+            )
+        plan.ensure_valid()
+        allocation = next(
+            (value for value in plan.allocations if value.layer_id == self.id), None
+        )
+        if allocation is None:
+            raise ValuationFifoStateConflictError("Слой не выбран в этом плане FIFO.")
+        if self.version != allocation.expected_version:
+            raise ValuationLayerVersionConflictError(
+                "Версия выбранного FIFO-слоя устарела."
+            )
+        candidate = next(
+            value for value in plan.candidates if value.layer.id == self.id
+        )
+        if self.fifo_snapshot() != candidate:
+            raise ValuationFifoStateConflictError(
+                "Состояние слоя отличается от сохранённого кандидата FIFO."
+            )
+        return self.consume_from_issue(
+            plan.issue,
+            quantity=allocation.quantity,
+            expected_version=allocation.expected_version,
+            updated_at=updated_at,
+        )
 
     def is_exhausted(self) -> bool:
         """Определяет исчерпание по количеству: нулевая стоимость допускает ненулевой запас."""
@@ -210,25 +341,59 @@ class ValuationLayer:
         self,
         issue: StockIssueValuationSnapshot,
         *,
+        quantity: QuantityVO | None = None,
         expected_version: int,
         updated_at: datetime,
     ) -> tuple[Self, ValuationLayerConsumptionSnapshot]:
-        """Потребляет полную запись ISSUE одним слоем и возвращает новый корень с проверенным результатом перехода."""
-        basis = self.receipt_valuation_snapshot()
+        """Потребляет выбранную часть ISSUE или всё количество по умолчанию, возвращая новый слой и проверенный переход."""
+        basis = self.basis_snapshot()
         ValuationLayerIssuePolicy.ensure_compatible(layer=basis, issue=issue)
+        selected = issue.quantity if quantity is None else quantity
+        ValuationLayerIssuePolicy.ensure_quantity(issue=issue, quantity=selected)
         at = normalize_valuation_time(updated_at)
         if at < issue.issued_at:
             raise ValuationLayerTimeError(
                 "Регистрация потребления не может предшествовать физическому расходу."
             )
-        layer = self.consume(
-            issue.quantity, expected_version=expected_version, updated_at=at
-        )
+        layer = self.consume(selected, expected_version=expected_version, updated_at=at)
         consumption = ValuationLayerConsumptionSnapshot(
             layer=basis,
             issue=issue,
-            quantity=issue.quantity,
+            quantity=selected,
             cost=self.remaining_cost - layer.remaining_cost,
+            remaining_qty_before=self.remaining_qty,
+            remaining_qty_after=layer.remaining_qty,
+            remaining_cost_before=self.remaining_cost,
+            remaining_cost_after=layer.remaining_cost,
+            version_before=self.version,
+            version_after=layer.version,
+            updated_at_before=self.updated_at,
+            consumed_at=layer.updated_at,
+        )
+        consumption.ensure_valid()
+        return layer, consumption
+
+    def consume_for_movement(
+        self,
+        movement: StockMovementValuationSnapshot,
+        *,
+        expected_version: int,
+        updated_at: datetime,
+    ) -> tuple[Self, ValuationLayerMovementConsumptionSnapshot]:
+        """Потребляет всё количество пары INTERNAL_MOVE и возвращает проверенный переход стоимости."""
+        basis = self.basis_snapshot()
+        ValuationLayerMovementPolicy.ensure_compatible(layer=basis, movement=movement)
+        at = normalize_valuation_time(updated_at)
+        if at < movement.moved_at:
+            raise ValuationLayerTimeError(
+                "Регистрация потребления не может предшествовать физическому перемещению."
+            )
+        layer = self.consume(
+            movement.quantity, expected_version=expected_version, updated_at=at
+        )
+        consumption = ValuationLayerMovementConsumptionSnapshot(
+            layer=basis,
+            movement=movement,
             remaining_qty_before=self.remaining_qty,
             remaining_qty_after=layer.remaining_qty,
             remaining_cost_before=self.remaining_cost,
@@ -243,21 +408,7 @@ class ValuationLayer:
 
     def _validate(self) -> None:
         """Проверяет собственные ссылки, стоимость, единицу и UTC-хронологию неизменяемого слоя."""
-        if (
-            not isinstance(self.id, ValuationLayerIdVO)
-            or not isinstance(self.source, ValuationLayerSourceVO)
-            or not isinstance(self.inventory_item_id, InventoryItemIdVO)
-            or not isinstance(self.owner_id, StockOwnerIdVO)
-            or not isinstance(self.warehouse_id, WarehouseIdVO)
-            or not isinstance(self.base_uom, UomCodeVO)
-            or not isinstance(self.cost_basis, CostBasisVO)
-        ):
-            raise InvalidValuationLayerValueError(
-                "Нужны номинальные поля стоимостного слоя и CostBasisVO."
-            )
-        self.source.ensure_valid()
-        self.cost_basis.ensure_valid()
-        get_uom(self.base_uom)
+        self._basis_snapshot().ensure_valid()
         if type(self.version) is not int or self.version < 0:
             raise InvalidValuationLayerValueError(
                 "Версия слоя должна быть целым числом от нуля."
@@ -274,16 +425,11 @@ class ValuationLayer:
             raise InvalidValuationLayerValueError(
                 "Остаточная стоимость должна соответствовать валюте и накопленной оценке количества слоя."
             )
-        normalize_valuation_time(self.received_at)
-        normalize_valuation_time(self.created_at)
         normalize_valuation_time(self.updated_at)
         if (
-            self.received_at.utcoffset() != timedelta(0)
-            or self.created_at.utcoffset() != timedelta(0)
-            or self.updated_at.utcoffset() != timedelta(0)
-            or self.created_at < self.received_at
+            self.updated_at.utcoffset() != timedelta(0)
             or self.updated_at < self.created_at
         ):
             raise ValuationLayerTimeError(
-                "Даты слоя хранятся в UTC: поступление <= регистрация <= изменение."
+                "Изменение слоя должно храниться в UTC и следовать за регистрацией."
             )

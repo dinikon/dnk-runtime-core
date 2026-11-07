@@ -10,7 +10,7 @@ class InvalidValuationPostingValueError(ValuationPostingError):
 
 
 class InvalidValuationEntryError(ValuationPostingError):
-    """Отклоняет некорректные ссылки, количество или стоимость записи прихода."""
+    """Отклоняет некорректные ссылки, количество, стоимость или направления дельт записи."""
 
 
 class InvalidValuationEntryBindingError(ValuationPostingError):
@@ -18,7 +18,7 @@ class InvalidValuationEntryBindingError(ValuationPostingError):
 
 
 class ValuationPostingSourceError(ValuationPostingError):
-    """Отклоняет неподходящее или неполное основание регистрации стоимости прихода."""
+    """Отклоняет неподходящее, неполное или несовпадающее основание регистрации стоимости."""
 
 
 class DuplicateValuationEntryError(ValuationPostingError):

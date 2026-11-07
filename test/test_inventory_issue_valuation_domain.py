@@ -558,8 +558,8 @@ class IssueValuationDomainTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(InventoryError):
                 replace(result, **changes).ensure_valid()
 
-    def test_result_requires_full_issue_quantity_and_exact_difference(self) -> None:
-        """Нельзя выдать частичное количество ISSUE или другую разницу остатков за проверенный результат."""
+    def test_result_requires_valid_issue_part_and_exact_difference(self) -> None:
+        """Количество части должно точно соответствовать сохранённой разнице остатков."""
         _, result = self.consume()
         for changes in (
             dict(quantity=QuantityVO(Decimal(1))),

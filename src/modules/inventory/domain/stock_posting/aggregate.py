@@ -8,6 +8,24 @@ from src.modules.inventory.domain.policy.stock_receipt_valuation import (
 from src.modules.inventory.domain.policy.stock_issue_valuation import (
     StockIssueValuationPolicy,
 )
+from src.modules.inventory.domain.policy.stock_movement_valuation import (
+    StockMovementValuationPolicy,
+)
+from src.modules.inventory.domain.stock_posting.movement_valuation_snapshot import (
+    StockMovementValuationSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.value_object.movement_entry_pair import (
+    StockMovementEntryPairVO,
+)
+from src.modules.inventory.domain.policy.stock_posting_fifo import (
+    StockPostingFifoPolicy,
+)
+from src.modules.inventory.domain.stock_posting.posting_fifo_plan_snapshot import (
+    StockPostingFifoPlanSnapshot,
+)
+from src.modules.inventory.domain.valuation_layer.fifo_snapshot import (
+    ValuationLayerFifoSnapshot,
+)
 from src.modules.inventory.domain.stock_posting.issue_valuation_snapshot import (
     StockIssueValuationSnapshot,
 )
@@ -356,6 +374,42 @@ class StockPosting:
             ledger_entry_id=ledger_entry_id,
             position=position,
             location=location,
+        )
+
+    def issue_fifo_plan(
+        self,
+        *,
+        candidates: tuple[ValuationLayerFifoSnapshot, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> StockPostingFifoPlanSnapshot:
+        """Строит полное FIFO-основание всех записей расхода без изменения физического журнала или слоёв."""
+        posting = self.snapshot()
+        plan = StockPostingFifoPlanSnapshot(
+            posting,
+            StockPostingFifoPolicy.build_plans(
+                posting=posting,
+                candidates=candidates,
+                positions=positions,
+                locations=locations,
+            ),
+        )
+        plan.ensure_valid()
+        return plan
+
+    def movement_valuation_snapshot(
+        self,
+        *,
+        pair: StockMovementEntryPairVO,
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> StockMovementValuationSnapshot:
+        """Выделяет проверяемую пару переноса стоимости после проверки всего INTERNAL_MOVE без изменения запасов."""
+        return StockMovementValuationPolicy.build_snapshot(
+            posting=self.snapshot(),
+            pair=pair,
+            positions=positions,
+            locations=locations,
         )
 
     def snapshot(self) -> StockPostingSnapshot:

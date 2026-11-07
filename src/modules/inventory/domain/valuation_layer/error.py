@@ -2,7 +2,7 @@ from src.modules.inventory.domain.error import InventoryError
 
 
 class ValuationLayerError(InventoryError):
-    """Базовая ошибка фиксации и потребления стоимости поступления."""
+    """Базовая ошибка фиксации, переноса и потребления стоимости слоя."""
 
 
 class InvalidValuationLayerValueError(ValuationLayerError):
@@ -10,7 +10,25 @@ class InvalidValuationLayerValueError(ValuationLayerError):
 
 
 class InvalidValuationLayerReceiptSnapshotError(InvalidValuationLayerValueError):
-    """Отклоняет некорректный снимок первоначального стоимостного основания слоя."""
+    """Отклоняет некорректное основание закупочного прихода."""
+
+
+class InvalidValuationLayerBasisSnapshotError(InvalidValuationLayerValueError):
+    """Отклоняет некорректное первоначальное основание стоимостного слоя."""
+
+
+class InvalidValuationLayerTransferOriginError(InvalidValuationLayerValueError):
+    """Отклоняет некорректные ссылки и дату происхождения производного слоя."""
+
+
+class ValuationLayerMovementMismatchError(ValuationLayerError):
+    """Отклоняет перенос стоимости из слоя, несовместимого с парой INTERNAL_MOVE."""
+
+
+class InvalidValuationLayerMovementConsumptionSnapshotError(
+    InvalidValuationLayerValueError
+):
+    """Отклоняет несогласованный результат потребления слоя по паре INTERNAL_MOVE."""
 
 
 class InvalidValuationLayerSourceError(ValuationLayerError):
@@ -39,3 +57,23 @@ class ValuationLayerIssueMismatchError(ValuationLayerError):
 
 class InvalidValuationLayerConsumptionSnapshotError(InvalidValuationLayerValueError):
     """Отклоняет несогласованный результат потребления слоя по конкретному расходу."""
+
+
+class InvalidValuationLayerFifoSnapshotError(InvalidValuationLayerValueError):
+    """Отклоняет некорректное состояние кандидата FIFO."""
+
+
+class InvalidValuationIssueAllocationError(ValuationLayerError):
+    """Требует номинальный слой, положительную часть расхода и строгую ожидаемую версию."""
+
+
+class InvalidStockIssueFifoPlanError(ValuationLayerError):
+    """Отклоняет некорректный пул кандидатов или назначения, не соответствующие FIFO."""
+
+
+class InsufficientValuationFifoQuantityError(ValuationLayerConsumptionError):
+    """Не позволяет построить частичный FIFO-план при недостаточном количестве слоёв."""
+
+
+class ValuationFifoStateConflictError(ValuationLayerError):
+    """Отклоняет невыбранный слой или его состояние, отличающееся от основания плана."""
