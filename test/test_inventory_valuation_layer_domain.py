@@ -155,6 +155,11 @@ class ValuationLayerDomainTests(unittest.TestCase):
         self.assertIs(layer.cost_basis.total_cost, self.cost)
         self.assertEqual(layer.received_at, self.posting.posted_at)
         self.assertEqual(layer.created_at, self.at)
+        self.assertEqual(layer.remaining_qty, layer.cost_basis.quantity)
+        self.assertIs(layer.remaining_cost, self.cost)
+        self.assertEqual(layer.updated_at, layer.created_at)
+        self.assertEqual(layer.version, 0)
+        self.assertFalse(layer.is_exhausted())
 
     def test_source_snapshot_is_positive_canonical_and_immutable(self) -> None:
         """Основание не хранит цену и не меняет время фактического прихода."""

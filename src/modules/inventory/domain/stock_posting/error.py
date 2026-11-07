@@ -13,6 +13,14 @@ class InvalidStockReceiptValuationSnapshotError(StockPostingError):
     """Требует типизированное положительное основание стоимости с историческим временем UTC."""
 
 
+class StockIssueValuationSourceError(StockPostingError):
+    """Отклоняет неподходящий расход или несовпадающий контекст записи для потребления стоимости."""
+
+
+class InvalidStockIssueValuationSnapshotError(StockPostingError):
+    """Требует типизированное основание расхода с положительным модулем количества и UTC-временем."""
+
+
 class InvalidStockPostingValueError(StockPostingError):
     """Сообщает о некорректном собственном составе проведения или времени."""
 

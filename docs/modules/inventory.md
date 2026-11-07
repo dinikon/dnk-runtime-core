@@ -1,15 +1,18 @@
-# Inventory: Domain-модель товара, складов, физического журнала и первоначальной стоимости
+# Inventory: Domain-модель товара, складов, физического журнала и стоимости запасов
 
 Модуль `inventory` содержит самостоятельные корни `InventoryItem`,
 `PackagingType`, `StockLot`, `StockSerial`, `Warehouse`, `StockLocation`, `StockPosition`,
 `StockPosting`, `StockDocument`, `StockExecution`, `AvailabilityPool`, `StockReservation`,
-`Shipment`, `StockTransfer`, `InventoryCount`, `CountSheet`, `FulfillmentPlan` и `ValuationLayer`
+`Shipment`, `StockTransfer`, `InventoryCount`, `CountSheet`, `FulfillmentPlan`, `ValuationLayer`
+и `ValuationPosting`
 в `domain/inventory_item/`, `domain/packaging_type/`, `domain/stock_lot/`,
 `domain/stock_serial/`, `domain/warehouse/`, `domain/stock_location/`, `domain/stock_position/`,
 `domain/stock_posting/`, `domain/stock_document/`, `domain/stock_execution/`,
 `domain/availability_pool/`, `domain/stock_reservation/`, `domain/shipment/`, `domain/stock_transfer/`
-`domain/inventory_count/`, `domain/count_sheet/`, `domain/fulfillment_plan/` и
-`domain/valuation_layer/`. Текущий состав — 18 самостоятельных корней из 23 целевых.
+`domain/inventory_count/`, `domain/count_sheet/`, `domain/fulfillment_plan/`,
+`domain/valuation_layer/` и `domain/valuation_posting/`.
+Текущий состав — 19 самостоятельных корней из 23 целевых. Все 19 корней Inventory
+представлены; реализация их поведения продолжается по срезам.
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -6215,7 +6218,7 @@ Application/SQL/API/Outbox, частичное применение, сторн�
 ## Первоначальная стоимость поступления ValuationLayer
 
 ValuationLayer — самостоятельный Aggregate Root первоначальной стоимости одной
-положительной записи Ledger обычного прихода. Теперь реализовано 18 из 23 целевых
+положительной записи Ledger обычного прихода. Теперь реализовано 19 из 23 целевых
 корней. Слой не меняет физический запас, журнал, резервы или другие агрегаты.
 
 | Поле | Состав и назначение |
@@ -6228,11 +6231,15 @@ ValuationLayer — самостоятельный Aggregate Root первона�
 | cost_basis | CostBasisVO(quantity, total_cost: MoneyVO) |
 | received_at | Исторический posted_at исходного StockPosting в UTC |
 | created_at | Момент регистрации стоимости, не раньше received_at |
+| remaining_qty | Оставшееся количество QuantityVO в base_uom |
+| remaining_cost | Оставшаяся стоимость MoneyVO в исходной валюте |
+| updated_at | Момент последнего изменения слоя в UTC, не раньше created_at |
+| version | Строго целая неотрицательная версия, bool не допускается |
 
-В первом срезе слой сразу фиксирует стоимость поступления. DRAFT, редактирование,
-потребление, remaining_qty/remaining_cost, статусы исчерпания и версия изменения
-не добавлены. Они появятся вместе с поведением расхода слоя и ValuationPosting;
-история всех расходов не будет коллекцией внутри ValuationLayer.
+Слой сразу фиксирует стоимость поступления. Создание задаёт полные remaining_qty
+и remaining_cost, updated_at = created_at и version = 0. Частичное и полное
+потребление описаны ниже. DRAFT и редактирования исходного основания нет;
+история всех расходов не становится коллекцией внутри ValuationLayer.
 
 StockPosting.receipt_valuation_snapshot(ledger_entry_id, position, location)
 строит специализированный frozen/slots StockReceiptValuationSnapshot. Он содержит
@@ -6268,7 +6275,8 @@ MoneyVO полной стоимости; бесплатный приход со 
 
 Create/restore принимают явные aware-даты и нормализуют их в UTC. Restore принимает
 все собственные поля, проверяет номинальные ссылки, CostBasisVO, известную единицу
-и received_at <= created_at, без чтения StockPosting, текущих цен или справочников.
+и received_at <= created_at <= updated_at, остатки и версию без чтения StockPosting,
+текущих цен или справочников. Стоимость остатка сверяется с накопленным расчётом ниже.
 Готовый StockReceiptValuationSnapshot уже должен хранить UTC. Aggregate и snapshots
 не используют __post_init__; локальная валидация VO находится в их __post_init__.
 
@@ -6367,10 +6375,348 @@ liquid_position, liquid_posting, liquid_layer = receipt_with_cost("L", "2.375", 
 Будущий Application/UoW должен согласовать StockPosting, StockPosition и слой стоимости.
 Уникальность слоя по (stock_posting_id, ledger_entry_id) в tenant-схеме, глобальная
 идемпотентность, распределение общей стоимости прихода, актуальность прочитанных
-оснований, SQL и Outbox остаются хранению и следующим срезам. FIFO, списание
-стоимости, ValuationPosting, переоценка и валютная конверсия пока не реализованы.
+оснований, SQL и Outbox остаются хранению и следующим срезам. Потребление отдельного
+слоя и регистрация стоимости прихода в ValuationPosting реализованы ниже; FIFO,
+расходный ValuationPosting, переоценка и валютная конверсия
+пока не реализованы.
 
 Тесты: test/test_inventory_valuation_layer_domain.py.
+
+## Потребление ValuationLayer и остаточная стоимость
+
+Корень `ValuationLayer` сохраняет первоначальный `cost_basis` неизменным.
+`consume(quantity, *, expected_version, updated_at)` принимает положительный
+конечный `QuantityVO` в базовой единице и возвращает новый слой с version + 1.
+Количество не превышает текущий remaining_qty; время явно передаётся, нормализуется
+в UTC и не предшествует предыдущему updated_at. Ноль, нетипизированные значения,
+перерасход, расход исчерпанного слоя, устаревшая версия, bool вместо версии,
+наивное или более раннее время отклоняются.
+
+Чистая `ValuationLayerConsumptionPolicy` работает с CostBasisVO и остаточным
+QuantityVO, без чужих Aggregate Roots и I/O. Она вычисляет:
+
+```text
+consumed_qty = cost_basis.quantity - remaining_qty
+consumed_cost = ROUND_HALF_UP(cost_basis.total_cost × consumed_qty / cost_basis.quantity, 4)
+remaining_cost = cost_basis.total_cost - consumed_cost
+```
+
+Точные целочисленные отношения Decimal позволяют округлять только накопленную
+денежную сумму, независимо от внешнего Decimal context и traps. Округлённая цена
+единицы не хранится. Одинаковое накопленное количество расхода даёт одинаковую
+стоимость остатка при любом разбиении на операции. Стоимость отдельного потребления
+получается вычитанием remaining_cost после операции из remaining_cost до неё.
+
+Продолжение предыдущего примера: частичное и полное потребление 100 KG за 5000 UAH.
+
+```python
+partial_layer = kg_layer.consume(
+    QuantityVO(Decimal("30")), expected_version=0,
+    updated_at=kg_layer.created_at + timedelta(hours=1),
+)
+partial_cost = kg_layer.remaining_cost - partial_layer.remaining_cost
+# partial_layer: remaining_qty=70, remaining_cost=3500.0000 UAH, version=1.
+# partial_cost: 1500.0000 UAH. kg_layer по-прежнему содержит все 100 KG / 5000 UAH.
+
+exhausted_layer = partial_layer.consume(
+    QuantityVO(Decimal("70")), expected_version=1,
+    updated_at=partial_layer.updated_at + timedelta(hours=1),
+)
+# exhausted_layer: remaining_qty=0, remaining_cost=0.0000 UAH, version=2.
+# exhausted_layer.is_exhausted() == True.
+```
+
+Распределение округления для трёх PCS за 1.0000 UAH:
+
+```python
+rounding_position, rounding_posting, rounding_layer = receipt_with_cost(
+    "PCS", "3", "1", "UAH", 2080,
+)
+consumption_costs: list[MoneyVO] = []
+for offset in range(1, 4):
+    next_layer = rounding_layer.consume(
+        QuantityVO(Decimal("1")), expected_version=rounding_layer.version,
+        updated_at=rounding_layer.created_at + timedelta(hours=offset),
+    )
+    consumption_costs.append(rounding_layer.remaining_cost - next_layer.remaining_cost)
+    rounding_layer = next_layer
+# consumption_costs: 0.3333 UAH, 0.3334 UAH, 0.3333 UAH.
+# rounding_layer: remaining_qty=0, remaining_cost=0.0000 UAH, version=3.
+```
+
+`is_exhausted()` зависит только от количества. Бесплатный слой с ненулевым запасом
+не исчерпан. Для 3 единиц за .0001 после расхода двух остаётся 1 единица за .0000;
+её ещё можно потребить. Последний расход оставляет ровно ноль количества и стоимости.
+Отдельного статуса исчерпания, новой Entity или VO не добавлено.
+
+Restore принимает весь состав, включая remaining_qty, remaining_cost, updated_at
+и version. Проверяет диапазон количества от нуля до исходного, исходную валюту,
+неотрицательную остаточную стоимость не больше первоначальной и **точное соответствие
+накопленной формуле**, включая промежуточный остаток. Некорректная сохранённая сумма
+не округляется повторно. Восстановление частично потреблённого слоя без внешнего контекста:
+
+```python
+restored_partial_layer = ValuationLayer.restore(
+    identifier=partial_layer.id, source=partial_layer.source,
+    inventory_item_id=partial_layer.inventory_item_id, owner_id=partial_layer.owner_id,
+    warehouse_id=partial_layer.warehouse_id, base_uom=partial_layer.base_uom,
+    cost_basis=partial_layer.cost_basis, received_at=partial_layer.received_at,
+    created_at=partial_layer.created_at, remaining_qty=partial_layer.remaining_qty,
+    remaining_cost=partial_layer.remaining_cost, updated_at=partial_layer.updated_at,
+    version=partial_layer.version,
+)
+# restored_partial_layer == partial_layer.
+```
+
+Это арифметика стоимости; шаг товара и единичность фактического SERIAL-расхода
+проверяет физическая цепочка StockExecution/StockPosting. Свежие настройки товара,
+склада, партий или серий для consume не запрашиваются. Физические позиции, Ledger
+и резервы не изменяются; warehouse_id остаётся складом первоначального поступления.
+
+Ошибки расхода и версии: `ValuationLayerConsumptionError` и
+`ValuationLayerVersionConflictError`; ошибки собственных данных и дат — прежние
+`InvalidValuationLayerValueError` и `ValuationLayerTimeError`.
+Проверка версии защищает один переход: повтор со старой версией отклоняется,
+с актуальной версией можно сделать новый расход. Она не устанавливает глобальную
+идемпотентность или факт физического списания. Привязка потребления к отдельной
+записи ISSUE реализована ниже; выбор FIFO-слоёв и расходные записи
+ValuationPosting/ValuationEntry — будущие срезы.
+Будущий Application/UoW должен атомарно сохранять потребление слоя и журнал стоимости
+с дедупликацией по факту расхода, SQL compare-and-set и Outbox.
+
+Тесты: `test/test_inventory_valuation_consumption_domain.py`.
+
+## Регистрация стоимости прихода ValuationPosting
+
+`ValuationPosting` — самостоятельный immutable Aggregate Root завершённой
+стоимостной регистрации обычного RECEIPT. Он владеет дочерними `ValuationEntry`,
+ссылается на физическое проведение и слои по ID и не изменяет их.
+
+| Поле корня | Назначение |
+| --- | --- |
+| id | ValuationPostingIdVO |
+| stock_posting_id | StockPostingIdVO исходного физического проведения |
+| operation_type | StockOperationType, в первом срезе только RECEIPT |
+| stock_posted_at | Историческое время физического проведения в UTC |
+| posted_at | Время регистрации стоимости в UTC |
+| entries | Непустой tuple[ValuationEntry, ...] |
+
+У `ValuationEntry` поля id: ValuationEntryIdVO, ledger_entry_id, position_id,
+layer_id, inventory_item_id, owner_id, warehouse_id, base_uom,
+quantity_delta: StockDeltaVO и cost_delta: MoneyVO. Количество в этом срезе
+конечное строго положительное, стоимость конечная неотрицательная; бесплатный
+приход тоже получает запись с нулевой стоимостью. Готовая сумма соответствует
+сохранённой точности MoneyVO и не округляется заново при восстановлении.
+Разные валюты и единицы сохраняются по записям; общей суммы без конвертации нет.
+
+Создание сразу формирует завершённый факт: DRAFT, редактирования и версии изменения
+нет. Корень и Entity — frozen/slots, с явными фабриками создания/восстановления,
+без __post_init__ у Aggregate/Entity/snapshot. Отдельного репозитория у Entity нет.
+
+`ValuationLayer.receipt_valuation_snapshot()` возвращает проверенный immutable
+`ValuationLayerReceiptSnapshot`: ID слоя, source, товар, владелец, склад,
+base_uom, первоначальный cost_basis, received_at и created_at. Остатки и версия
+потребления в контракт не входят. Перед экспортом слой проверяет собственное
+состояние; снимок имеет явный ensure_valid, включая сохранённую UTC-хронологию.
+После частичного или полного потребления снимок первоначальной стоимости прежний.
+
+`ValuationPosting.create_from_receipt(...)` принимает ID нового проведения,
+StockPostingSnapshot, tuple снимков слоёв, привязок ValuationEntryBindingVO,
+снимков позиций/локаций и явный posted_at. Привязка `(layer_id, entry_id)` назначает
+ID каждой записи без генерации идентификаторов внутри Domain.
+Чистая `StockReceiptValuationPostingPolicy.build_entries(...)` работает со снимками
+и повторно использует `StockReceiptValuationPolicy` для проверки оснований.
+
+Правила создания:
+
+- Только обычный RECEIPT без reversal_of_id. ISSUE, INTERNAL_MOVE, ADJUSTMENT
+  и компенсации, включая положительную компенсацию расхода, отклоняются.
+- Полное взаимно однозначное покрытие Ledger: одна запись → один слой → одна запись
+  стоимости. Неполная оценка, лишние слои/привязки и повторные ID отклоняются.
+- Источники слоя совпадают с Posting/Entry/Position; товар, владелец, склад,
+  базовая единица, первоначальное количество и received_at соответствуют приходу.
+- Передаются ровно исходные позиции и их локации, без повторов; одну локацию
+  могут использовать несколько разных позиций. Прежние проверки SERIAL сохраняются.
+  Исторический коэффициент не заменяется текущим; отключённая локация не отменяет
+  уже проведённую историю. Свежие цены и правила шага товара не запрашиваются.
+- Записи следуют порядку Ledger независимо от порядка снимков и привязок.
+  quantity_delta и cost_delta выводятся из первоначального cost_basis слоя,
+  не из remaining_qty/remaining_cost. Округлённая цена единицы не вводится.
+- Явные aware-даты нормализуются в UTC; posted_at не раньше физического проведения
+  и created_at каждого слоя.
+
+Продолжение предыдущих примеров: слой уже частично потреблён и хранит 70 KG за
+3500 UAH, но запись **исходного прихода** фиксирует 100 KG за 5000 UAH.
+Снимок локации представляет принадлежность исходной позиции складу примера.
+
+```python
+from src.modules.inventory.domain.valuation_posting.aggregate import ValuationPosting
+from src.modules.inventory.domain.valuation_posting.value_object.entry_binding import ValuationEntryBindingVO
+from src.modules.inventory.domain.valuation_posting.value_object.entry_id import ValuationEntryIdVO
+from src.modules.inventory.domain.valuation_posting.value_object.identifier import ValuationPostingIdVO
+
+receipt_layer_basis = partial_layer.receipt_valuation_snapshot()
+valuation_location = StockLocationSnapshot(
+    kg_position.dimensions.location_id, kg_layer.warehouse_id,
+    LocationType.STORAGE, True,
+)
+receipt_valuation = ValuationPosting.create_from_receipt(
+    identifier=ValuationPostingIdVO(UUID(int=2200)), posting=kg_posting.snapshot(),
+    layers=(receipt_layer_basis,),
+    entry_bindings=(ValuationEntryBindingVO(partial_layer.id, ValuationEntryIdVO(UUID(int=2201))),),
+    positions=(kg_position.snapshot(),), locations=(valuation_location,),
+    posted_at=partial_layer.updated_at + timedelta(hours=1),
+)
+receipt_cost_entry = receipt_valuation.entries[0]
+# receipt_cost_entry: quantity_delta=+100 KG, cost_delta=5000.0000 UAH.
+# receipt_cost_entry.layer_id == partial_layer.id.
+# receipt_cost_entry.ledger_entry_id == kg_posting.entries[0].id.
+# partial_layer по-прежнему содержит 70 KG / 3500 UAH и version=1.
+# kg_position остаётся нулевой: регистрация стоимости не применяет физический Ledger.
+```
+
+Restore принимает весь собственный состав и проверяет номинальные поля, непустой
+tuple, дочерние записи, уникальность ID записей/Ledger/слоёв/исходных позиций и
+stock_posted_at <= posted_at. Он не читает физический журнал и слои заново;
+полное соответствие внешним основаниям проверяется при создании.
+
+```python
+restored_receipt_valuation = ValuationPosting.restore(
+    identifier=receipt_valuation.id, stock_posting_id=receipt_valuation.stock_posting_id,
+    operation_type=receipt_valuation.operation_type,
+    stock_posted_at=receipt_valuation.stock_posted_at, posted_at=receipt_valuation.posted_at,
+    entries=receipt_valuation.entries,
+)
+# restored_receipt_valuation == receipt_valuation.
+```
+
+Ошибки принадлежат Domain: ValuationPostingError, InvalidValuationPostingValueError,
+InvalidValuationEntryError, InvalidValuationEntryBindingError,
+ValuationPostingSourceError, DuplicateValuationEntryError, ValuationPostingTimeError,
+InvalidValuationLayerReceiptSnapshotError; сохраняются прежние ошибки оснований
+прихода и стоимости. Бизнес-проверки не используют assert.
+
+Создание факта не создаёт/потребляет слои, не меняет Ledger, позиции или резервы
+и не доказывает commit. Глобальную однократность регистрации по StockPosting и
+записей по основанию обеспечит tenant-хранение; повторное построение другого
+Domain-объекта сейчас допустимо. Будущий Application/UoW атомарно согласует
+физическое проведение, позиции, слои, журнал стоимости и Outbox.
+Привязка потребления к ISSUE реализована ниже; расходный ValuationPosting,
+FIFO, перемещения стоимости, корректировки,
+сторно, переоценка, SQL/API и конверсия валют остаются будущими срезами.
+
+Тесты: `test/test_inventory_valuation_posting_domain.py`.
+
+## Потребление ValuationLayer по записи ISSUE
+
+`StockPosting.issue_valuation_snapshot(ledger_entry_id, position, location)`
+выделяет основание фактического расхода без цены и изменения физических остатков.
+Чистая `StockIssueValuationPolicy` требует обычный ISSUE без reversal_of_id,
+существующую отрицательную запись, соответствие позиции, базовой единицы и локации.
+Повторно используется проверка единичности SERIAL. Положительная сторона движения,
+INTERNAL_MOVE, ADJUSTMENT и компенсации не подходят, включая отрицательное сторно
+прихода. Исторические коэффициент и количество не заменяются современными;
+отключённая локация не отменяет проведённую историю.
+
+Immutable `StockIssueValuationSnapshot` содержит posting_id, ledger_entry_id,
+position_id, inventory_item_id, owner_id, warehouse_id, base_uom, положительный
+QuantityVO quantity (модуль отрицательной дельты) и issued_at в UTC.
+Готовый снимок проверяет типы, конечность, положительность, известную единицу и UTC.
+
+`ValuationLayer.consume_from_issue(issue, *, expected_version, updated_at)`
+возвращает `tuple[Self, ValuationLayerConsumptionSnapshot]`: новый слой и проверенный
+результат потребления. Количество целиком выводится из выбранной записи ISSUE,
+отдельный аргумент quantity не принимается. Используется прежний consume() с
+накопленной оценкой стоимости; его существующий API сохраняется.
+
+Границы первого среза: **одна выбранная запись ISSUE полностью оценивается одним
+слоем**. Сам слой можно потребить частично или полностью. Если его текущего остатка
+недостаточно, операция отклоняется без частичного изменения. Это ещё не полная
+стоимостная регистрация всего StockPosting, содержащего несколько записей.
+Разбиение записи между слоями и автоматический FIFO пока не реализованы.
+
+`ValuationLayerIssuePolicy` проверяет исходную StockPosition слоя и совпадение
+товара, владельца, склада и base_uom. Другая позиция того же товара, включая адрес
+после перемещения внутри того же склада, отклоняется: перенос стоимости требует
+отдельного поведения. Связь с исходной позицией сохраняет LOT/SERIAL; свежие сроки
+годности и текущий шаг товара не запрашиваются.
+Физический ISSUE не раньше received_at слоя. Регистрация перехода не раньше ISSUE,
+создания и предыдущего изменения слоя. Aware-время нормализуется в UTC; ожидаемая
+версия строго целая, неотрицательная, актуальная, bool отклоняется. Поздняя
+регистрация стоимости после физического расхода допустима при корректной хронологии.
+
+Состав `ValuationLayerConsumptionSnapshot`:
+
+| Поле | Содержание |
+| --- | --- |
+| layer | ValuationLayerReceiptSnapshot первоначального основания |
+| issue | StockIssueValuationSnapshot конкретного расхода |
+| quantity / cost | Полное количество ISSUE и неотрицательная стоимость потребления |
+| remaining_qty_before / after | Количественные остатки до и после |
+| remaining_cost_before / after | Денежные остатки в исходной валюте |
+| version_before / after | Последовательные строгие версии слоя |
+| updated_at_before | Предыдущее время изменения слоя в UTC |
+| consumed_at | UTC-момент регистрации перехода, равный updated_at нового слоя |
+
+Контракт frozen/slots с явным ensure_valid, без __post_init__, статуса или
+самостоятельного репозитория. Проверяются совместимость оснований, полное
+количество ISSUE, точная разница количеств, обе накопленные денежные оценки,
+разница стоимости, версии +1 и вся хронология. Нулевая стоимость допустима для
+бесплатного поступления и после округления. Отрицательный знак будущей расходной
+записи ValuationPosting здесь не формируется. История результатов не встраивается
+внутрь ValuationLayer; для повторной проверки результата достаточно его данных.
+
+Продолжение примеров выше с отдельным слоем 100 KG / 5000 UAH и реальным ISSUE -30 KG:
+
+```python
+issue_cost_position, issue_cost_receipt, issue_cost_layer = receipt_with_cost(
+    "KG", "100", "5000", "UAH", 2240,
+)
+issue_cost_location = StockLocationSnapshot(
+    issue_cost_position.dimensions.location_id, issue_cost_layer.warehouse_id,
+    LocationType.STORAGE, True,
+)
+issue_cost_entry = StockLedgerEntry.create(
+    identifier=StockLedgerEntryIdVO(UUID(int=2281)), position_id=issue_cost_position.id,
+    quantity_delta=StockDeltaVO(Decimal("-30")), base_uom=UomCodeVO("KG"),
+    conversion=QuantityConversionSnapshotVO.create(
+        quantity=QuantityVO(Decimal("30")), uom=UomCodeVO("KG"), base_uom=UomCodeVO("KG"),
+    ),
+)
+issue_cost_posting = StockPosting.create(
+    identifier=StockPostingIdVO(UUID(int=2280)),
+    source=PostingSourceVO(StockExecutionIdVO(UUID(int=2282))),
+    operation_type=StockOperationType.ISSUE,
+    posted_at=issue_cost_layer.created_at + timedelta(hours=1),
+    entries=(issue_cost_entry,), positions=(issue_cost_position.snapshot(),),
+)
+issue_cost_basis = issue_cost_posting.issue_valuation_snapshot(
+    ledger_entry_id=issue_cost_entry.id, position=issue_cost_position.snapshot(),
+    location=issue_cost_location,
+)
+issue_cost_layer_after, issue_cost_consumption = issue_cost_layer.consume_from_issue(
+    issue_cost_basis, expected_version=0, updated_at=issue_cost_posting.posted_at,
+)
+issue_cost_consumption.ensure_valid()
+# issue_cost_layer_after: 70 KG / 3500.0000 UAH, version=1.
+# issue_cost_consumption: quantity=30 KG, cost=1500.0000 UAH, версии 0 → 1.
+# issue_cost_layer по-прежнему содержит 100 KG / 5000 UAH, version=0.
+# Физическая позиция по-прежнему нулевая: эти фабрики не применяют Ledger к остатку.
+```
+
+Новые доменные ошибки: StockIssueValuationSourceError,
+InvalidStockIssueValuationSnapshotError, ValuationLayerIssueMismatchError,
+InvalidValuationLayerConsumptionSnapshotError. Используются прежние ошибки
+стоимости, количества, версии и времени. Бизнес-проверки не используют assert.
+
+Результат не доказывает сохранение в БД, не меняет физический журнал, позиции
+или резервы. Повтор со старой версией отклоняется, но та же запись ISSUE с новой
+версией может потребить слой повторно. Глобальную однократность по факту расхода,
+SQL compare-and-set и атомарное сохранение слоёв/журнала стоимости/Outbox обеспечит
+будущий Application/UoW. Расходный ValuationPosting, распределение по нескольким
+слоям, FIFO, перенос стоимости и компенсации остаются следующими срезами.
+
+Тесты: `test/test_inventory_issue_valuation_domain.py`.
 
 ## Изменения, восстановление и проверки
 
@@ -6423,5 +6769,8 @@ liquid_position, liquid_posting, liquid_layer = receipt_with_cost("L", "2.375", 
 `test/test_inventory_fulfillment_allocation_cancellation_domain.py`
 `test/test_inventory_fulfillment_demand_extension_domain.py`
 `test/test_inventory_fulfillment_shipment_groups_domain.py`
-и `test/test_inventory_valuation_layer_domain.py`.
+`test/test_inventory_valuation_layer_domain.py`
+`test/test_inventory_valuation_consumption_domain.py`
+`test/test_inventory_valuation_posting_domain.py`
+и `test/test_inventory_issue_valuation_domain.py`.
 Application, SQL-хранение, миграции, API и интеграционные события в этот срез не входят.

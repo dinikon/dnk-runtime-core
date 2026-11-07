@@ -5,6 +5,12 @@ from typing import Self
 from src.modules.inventory.domain.policy.stock_receipt_valuation import (
     StockReceiptValuationPolicy,
 )
+from src.modules.inventory.domain.policy.stock_issue_valuation import (
+    StockIssueValuationPolicy,
+)
+from src.modules.inventory.domain.stock_posting.issue_valuation_snapshot import (
+    StockIssueValuationSnapshot,
+)
 from src.modules.inventory.domain.stock_posting.receipt_valuation_snapshot import (
     StockReceiptValuationSnapshot,
 )
@@ -331,6 +337,21 @@ class StockPosting:
     ) -> StockReceiptValuationSnapshot:
         """Выделяет историческое основание стоимости одной записи прихода без цены, новых движений или изменения позиции."""
         return StockReceiptValuationPolicy.build_snapshot(
+            posting=self.snapshot(),
+            ledger_entry_id=ledger_entry_id,
+            position=position,
+            location=location,
+        )
+
+    def issue_valuation_snapshot(
+        self,
+        *,
+        ledger_entry_id: StockLedgerEntryIdVO,
+        position: StockPositionSnapshot,
+        location: StockLocationSnapshot,
+    ) -> StockIssueValuationSnapshot:
+        """Выделяет основание стоимости конкретного ISSUE без потребления слоя или изменения физической позиции."""
+        return StockIssueValuationPolicy.build_snapshot(
             posting=self.snapshot(),
             ledger_entry_id=ledger_entry_id,
             position=position,
