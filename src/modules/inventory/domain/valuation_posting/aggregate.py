@@ -8,6 +8,9 @@ from src.modules.inventory.domain.policy.stock_receipt_valuation_posting import 
 from src.modules.inventory.domain.policy.stock_issue_valuation_posting import (
     StockIssueValuationPostingPolicy,
 )
+from src.modules.inventory.domain.policy.stock_movement_valuation_posting import (
+    StockMovementValuationPostingPolicy,
+)
 from src.modules.inventory.domain.policy.stock_posting_fifo_valuation import (
     StockPostingFifoValuationPolicy,
 )
@@ -25,6 +28,12 @@ from src.modules.inventory.domain.stock_posting.value_object.identifier import (
 )
 from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
     StockOperationType,
+)
+from src.modules.inventory.domain.valuation_layer.basis_snapshot import (
+    ValuationLayerBasisSnapshot,
+)
+from src.modules.inventory.domain.valuation_layer.movement_consumption_snapshot import (
+    ValuationLayerMovementConsumptionSnapshot,
 )
 from src.modules.inventory.domain.valuation_layer.receipt_snapshot import (
     ValuationLayerReceiptSnapshot,
@@ -50,7 +59,7 @@ from src.modules.inventory.domain.valuation_posting.value_object.identifier impo
 
 @dataclass(frozen=True, slots=True)
 class ValuationPosting:
-    """Фиксирует неизменяемую стоимость полного физического прихода или расхода."""
+    """Фиксирует неизменяемую стоимость полного физического проведения."""
 
     id: ValuationPostingIdVO
     stock_posting_id: StockPostingIdVO
@@ -105,6 +114,38 @@ class ValuationPosting:
         entries = StockIssueValuationPostingPolicy.build_entries(
             posting=posting,
             consumptions=consumptions,
+            entry_bindings=entry_bindings,
+            positions=positions,
+            locations=locations,
+            posted_at=posted_at,
+        )
+        return cls.restore(
+            identifier=identifier,
+            stock_posting_id=posting.id,
+            operation_type=posting.operation_type,
+            stock_posted_at=posting.posted_at,
+            posted_at=posted_at,
+            entries=entries,
+        )
+
+    @classmethod
+    def create_from_movement(
+        cls,
+        *,
+        identifier: ValuationPostingIdVO,
+        posting: StockPostingSnapshot,
+        consumption: ValuationLayerMovementConsumptionSnapshot,
+        destination: ValuationLayerBasisSnapshot,
+        entry_bindings: tuple[ValuationEntryBindingVO, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        posted_at: datetime,
+    ) -> Self:
+        """Регистрирует выбытие и поступление стоимости по одной полной паре INTERNAL_MOVE."""
+        entries = StockMovementValuationPostingPolicy.build_entries(
+            posting=posting,
+            consumption=consumption,
+            destination=destination,
             entry_bindings=entry_bindings,
             positions=positions,
             locations=locations,
@@ -177,12 +218,13 @@ class ValuationPosting:
             or (
                 self.operation_type is not StockOperationType.RECEIPT
                 and self.operation_type is not StockOperationType.ISSUE
+                and self.operation_type is not StockOperationType.INTERNAL_MOVE
             )
             or not isinstance(self.entries, tuple)
             or not self.entries
         ):
             raise InvalidValuationPostingValueError(
-                "Нужны номинальные ID, операция RECEIPT или ISSUE и непустой tuple записей стоимости."
+                "Нужны номинальные ID, операция RECEIPT, ISSUE или INTERNAL_MOVE и непустой tuple записей стоимости."
             )
         normalize_valuation_posting_time(self.stock_posted_at)
         normalize_valuation_posting_time(self.posted_at)
@@ -227,7 +269,7 @@ class ValuationPosting:
             )
             if (
                 (
-                    self.operation_type is StockOperationType.RECEIPT
+                    self.operation_type is not StockOperationType.ISSUE
                     and (
                         entry.ledger_entry_id in ledger_contexts
                         or entry.position_id in position_ledgers
@@ -243,9 +285,39 @@ class ValuationPosting:
                 )
             ):
                 raise DuplicateValuationEntryError(
-                    "Приходные ссылки уникальны; расходная группа имеет единые измерения и одну запись Ledger на позицию."
+                    "Ссылки Ledger и позиции уникальны вне расходных групп одного контекста."
                 )
             entry_ids.add(entry.id)
             ledger_contexts[entry.ledger_entry_id] = context
             layer_ids.add(entry.layer_id)
             position_ledgers[entry.position_id] = entry.ledger_entry_id
+        if self.operation_type is StockOperationType.INTERNAL_MOVE:
+            self._ensure_movement_balanced()
+
+    def _ensure_movement_balanced(self) -> None:
+        """Требует две встречные записи с равными количествами и стоимостью в одном контексте."""
+        if len(self.entries) != 2:
+            raise InvalidValuationPostingValueError(
+                "Стоимость INTERNAL_MOVE требует ровно две записи одной полной пары."
+            )
+        first, second = self.entries
+        if (
+            first.inventory_item_id,
+            first.owner_id,
+            first.warehouse_id,
+            first.base_uom,
+            first.cost_delta.currency,
+            first.quantity_delta.value.copy_negate(),
+            first.cost_delta.amount.copy_negate(),
+        ) != (
+            second.inventory_item_id,
+            second.owner_id,
+            second.warehouse_id,
+            second.base_uom,
+            second.cost_delta.currency,
+            second.quantity_delta.value,
+            second.cost_delta.amount,
+        ):
+            raise InvalidValuationPostingValueError(
+                "Дельты INTERNAL_MOVE должны точно погашаться для одного товара, владельца, склада, единицы и валюты."
+            )

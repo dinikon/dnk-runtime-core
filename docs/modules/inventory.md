@@ -6490,15 +6490,15 @@ restored_partial_layer = ValuationLayer.restore(
 ## Регистрация стоимости прихода ValuationPosting
 
 `ValuationPosting` — самостоятельный immutable Aggregate Root завершённой
-стоимостной регистрации обычных RECEIPT и ISSUE. Здесь описан приходной сценарий;
-расходный приведён ниже. Он владеет дочерними `ValuationEntry`,
-ссылается на физическое проведение и слои по ID и не изменяет их.
+стоимостной регистрации RECEIPT, ISSUE и INTERNAL_MOVE из одной пары. Он владеет
+дочерними `ValuationEntry` и ссылается на физическое проведение и слои по ID.
+Приход, расход и перенос регистрируются отдельными фабриками.
 
 | Поле корня | Назначение |
 | --- | --- |
 | id | ValuationPostingIdVO |
 | stock_posting_id | StockPostingIdVO исходного физического проведения |
-| operation_type | StockOperationType: RECEIPT или ISSUE |
+| operation_type | StockOperationType: RECEIPT, ISSUE или INTERNAL_MOVE |
 | stock_posted_at | Историческое время физического проведения в UTC |
 | posted_at | Время регистрации стоимости в UTC |
 | entries | Непустой tuple[ValuationEntry, ...] |
@@ -6603,9 +6603,9 @@ InvalidValuationLayerReceiptSnapshotError; сохраняются прежние
 записей по основанию обеспечит tenant-хранение; повторное построение другого
 Domain-объекта сейчас допустимо. Будущий Application/UoW атомарно согласует
 физическое проведение, позиции, слои, журнал стоимости и Outbox.
-Привязка потребления к ISSUE и расходный ValuationPosting реализованы ниже.
-FIFO, перемещения стоимости, корректировки,
-сторно, переоценка, SQL/API и конверсия валют остаются будущими срезами.
+Расходный ValuationPosting, FIFO и регистрация одной пары INTERNAL_MOVE описаны
+ниже. Корректировки, сторно, переоценка, SQL/API и конверсия валют остаются
+отдельными срезами.
 
 Тесты: `test/test_inventory_valuation_posting_domain.py`.
 
@@ -7306,13 +7306,58 @@ movement_destination_after, movement_issue_consumption = (
 # Расход: 2 KG / 24 UAH. Остаток на новом адресе: 5 KG / 60 UAH.
 ```
 
-Текущий срез ограничен одной парой и одним исходным слоем. Перенос из нескольких
-слоёв, повторное перемещение производного слоя, межскладские маршруты A → T → B
-и ValuationPosting для INTERNAL_MOVE остаются отдельными срезами. При сохранении
-Application/UoW должен атомарно записать обе версии состояния с проверкой актуальной
-версии исходного слоя и однократности стоимостной обработки пары.
+Текущий срез переноса ограничен одной парой и одним исходным слоем. Перенос из
+нескольких слоёв, повторное перемещение производного слоя и маршруты A → T → B
+остаются отдельными срезами.
 
 Тесты: `test/test_inventory_layer_movement_domain.py`.
+
+## Регистрация стоимости INTERNAL_MOVE в ValuationPosting
+
+`ValuationPosting.create_from_movement(...)` принимает снимок обычного физического
+проведения, результат потребления исходного слоя, первоначальный снимок слоя
+назначения, снимки позиций и локаций, привязки ID обеих записей и время регистрации.
+Policy повторно строит проверенную пару через StockMovementValuationPolicy и
+требует, чтобы она покрывала все две записи физического Ledger.
+
+Слой назначения должен совпасть с первоначальным основанием, построенным из
+потребления. Сверяются обе ссылки Ledger, позиции, исходный слой и закупочный
+приход, товар, владелец, склад, базовая единица, FIFO-дата, количество и сумма
+в исходной валюте. Времена идут в порядке от физического перемещения через
+регистрацию потребления и создание назначения до регистрации журнала.
+
+Журнал содержит сначала выбытие, затем поступление. Каждая запись связывает свой
+слой и физическую запись. Количественные и денежные дельты взаимно погашаются,
+включая перенос запаса с нулевой стоимостью. Restore проверяет эту пару по
+сохранённым полям, включая разные ID, позиции, записи Ledger и слои, а также
+единый учётный контекст и валюту.
+
+Регистрируем то же перемещение после расхода 2 KG с нового адреса. Журнал использует
+первоначальную стоимость слоя назначения и фиксирует перенос всех 7 KG.
+
+```python
+movement_valuation = ValuationPosting.create_from_movement(
+    identifier=ValuationPostingIdVO(UUID(int=3020)),
+    posting=movement_posting.snapshot(),
+    consumption=movement_consumption,
+    destination=movement_destination_after.basis_snapshot(),
+    entry_bindings=(
+        ValuationEntryBindingVO(movement_source_after.id, ValuationEntryIdVO(UUID(int=3021))),
+        ValuationEntryBindingVO(movement_destination_after.id, ValuationEntryIdVO(UUID(int=3022))),
+    ),
+    positions=(issue_cost_position.snapshot(), movement_target.snapshot()),
+    locations=(issue_cost_location, movement_location),
+    posted_at=movement_issue.posted_at,
+)
+# Дельты журнала: -7 KG / -84 UAH и +7 KG / +84 UAH.
+# Остаток назначения после расхода: 5 KG / 60 UAH.
+```
+
+Многопарный Ledger требует отдельного среза полного покрытия. Будущий
+Application/UoW атомарно сохранит исходный и производный слои вместе с журналом
+с проверкой версии исходного слоя и однократности регистрации проведения.
+
+Тесты: `test/test_inventory_movement_valuation_posting_domain.py`.
 
 ## Изменения, восстановление и проверки
 

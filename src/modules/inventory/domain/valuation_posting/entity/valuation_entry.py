@@ -58,7 +58,7 @@ class ValuationEntry:
         quantity_delta: StockDeltaVO,
         cost_delta: MoneyVO,
     ) -> Self:
-        """Создаёт запись прихода или расхода без вычисления округлённой цены единицы."""
+        """Создаёт запись с явно переданными дельтами количества и стоимости."""
         return cls.restore(
             identifier=identifier,
             ledger_entry_id=ledger_entry_id,

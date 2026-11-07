@@ -139,37 +139,24 @@ class ValuationLayer:
             raise InvalidValuationLayerValueError(
                 "Нужен специализированный результат потребления по INTERNAL_MOVE."
             )
-        consumption.ensure_valid()
-        at = normalize_valuation_time(created_at)
-        if at < consumption.consumed_at:
-            raise ValuationLayerTimeError(
-                "Слой назначения нельзя зарегистрировать раньше потребления исходного слоя."
-            )
-        movement = consumption.movement
-        target = movement.target_position
-        cost = consumption.cost
+        basis = consumption.destination_basis(
+            identifier=identifier, created_at=created_at
+        )
         return cls.restore(
-            identifier=identifier,
-            source=ValuationLayerSourceVO(
-                movement.posting_id, movement.pair.incoming_entry_id, target.id
-            ),
-            inventory_item_id=target.dimensions.inventory_item_id,
-            owner_id=target.dimensions.owner_id,
-            warehouse_id=movement.warehouse_id,
-            base_uom=target.base_uom,
-            cost_basis=CostBasisVO(consumption.quantity, cost),
-            received_at=consumption.layer.received_at,
-            created_at=at,
-            remaining_qty=consumption.quantity,
-            remaining_cost=cost,
-            updated_at=at,
+            identifier=basis.id,
+            source=basis.source,
+            inventory_item_id=basis.inventory_item_id,
+            owner_id=basis.owner_id,
+            warehouse_id=basis.warehouse_id,
+            base_uom=basis.base_uom,
+            cost_basis=basis.cost_basis,
+            received_at=basis.received_at,
+            created_at=basis.created_at,
+            remaining_qty=basis.cost_basis.quantity,
+            remaining_cost=basis.cost_basis.total_cost,
+            updated_at=basis.created_at,
             version=0,
-            transfer_origin=ValuationLayerTransferOriginVO(
-                parent_layer_id=consumption.layer.id,
-                receipt_source=consumption.layer.source,
-                outgoing_entry_id=movement.pair.outgoing_entry_id,
-                moved_at=movement.moved_at,
-            ),
+            transfer_origin=basis.transfer_origin,
         )
 
     @classmethod

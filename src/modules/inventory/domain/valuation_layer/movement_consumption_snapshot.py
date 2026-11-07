@@ -19,8 +19,21 @@ from src.modules.inventory.domain.valuation_layer.basis_snapshot import (
 )
 from src.modules.inventory.domain.valuation_layer.error import (
     InvalidValuationLayerMovementConsumptionSnapshotError,
+    ValuationLayerTimeError,
 )
 from src.modules.inventory.domain.valuation_layer.time import normalize_valuation_time
+from src.modules.inventory.domain.valuation_layer.value_object.cost_basis import (
+    CostBasisVO,
+)
+from src.modules.inventory.domain.valuation_layer.value_object.identifier import (
+    ValuationLayerIdVO,
+)
+from src.modules.inventory.domain.valuation_layer.value_object.source import (
+    ValuationLayerSourceVO,
+)
+from src.modules.inventory.domain.valuation_layer.value_object.transfer_origin import (
+    ValuationLayerTransferOriginVO,
+)
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.shared.domain.value_object.money import MoneyVO
 
@@ -49,6 +62,40 @@ class ValuationLayerMovementConsumptionSnapshot:
     def cost(self) -> MoneyVO:
         """Вычисляет переносимую сумму как разницу проверенных остатков слоя."""
         return self.remaining_cost_before - self.remaining_cost_after
+
+    def destination_basis(
+        self, *, identifier: ValuationLayerIdVO, created_at: datetime
+    ) -> ValuationLayerBasisSnapshot:
+        """Выводит первоначальное основание назначения для создания слоя и проверки журнала."""
+        self.ensure_valid()
+        at = normalize_valuation_time(created_at)
+        if at < self.consumed_at:
+            raise ValuationLayerTimeError(
+                "Слой назначения нельзя зарегистрировать раньше потребления исходного слоя."
+            )
+        movement = self.movement
+        target = movement.target_position
+        basis = ValuationLayerBasisSnapshot(
+            id=identifier,
+            source=ValuationLayerSourceVO(
+                movement.posting_id, movement.pair.incoming_entry_id, target.id
+            ),
+            inventory_item_id=target.dimensions.inventory_item_id,
+            owner_id=target.dimensions.owner_id,
+            warehouse_id=movement.warehouse_id,
+            base_uom=target.base_uom,
+            cost_basis=CostBasisVO(self.quantity, self.cost),
+            received_at=self.layer.received_at,
+            created_at=at,
+            transfer_origin=ValuationLayerTransferOriginVO(
+                parent_layer_id=self.layer.id,
+                receipt_source=self.layer.source,
+                outgoing_entry_id=movement.pair.outgoing_entry_id,
+                moved_at=movement.moved_at,
+            ),
+        )
+        basis.ensure_valid()
+        return basis
 
     def ensure_valid(self) -> None:
         """Проверяет основания, переход количества и стоимости, версии и хронологию."""
