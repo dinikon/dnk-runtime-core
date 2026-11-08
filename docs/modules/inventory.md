@@ -11,8 +11,8 @@
 `domain/availability_pool/`, `domain/stock_reservation/`, `domain/shipment/`, `domain/stock_transfer/`
 `domain/inventory_count/`, `domain/count_sheet/`, `domain/fulfillment_plan/`,
 `domain/valuation_layer/` и `domain/valuation_posting/`.
-Текущий состав — 19 самостоятельных корней из 23 целевых. Все 19 корней Inventory
-представлены; реализация их поведения продолжается по срезам.
+В Inventory представлены все 19 запланированных корней. Внешние источники
+поставки описывает отдельный модуль [Supplier Sourcing](supplier_sourcing.md).
 Общие значения названий, кодов тары и единиц находятся в `domain/value_object/`.
 
 Нормативные требования: [архитектура backend](../architecture/backend.md).
@@ -2032,10 +2032,9 @@ pool_after = pool.consume_reservations(
 
 ## Ручной план исполнения FulfillmentPlan
 
-FulfillmentPlan — самостоятельный Aggregate Root выбора собственных складов
+FulfillmentPlan — самостоятельный Aggregate Root выбора складов и поставщиков
 для потребности одного заказа и владельца. Он владеет tuple FulfillmentAllocation,
 ссылается на другие объекты по ID/непрозрачным ссылкам и не изменяет их состояние.
-Текущий состав модуля — 18 корней из 23 целевых; первоначальная стоимость ValuationLayer описана ниже.
 
 | Поле FulfillmentPlan | Назначение |
 | --- | --- |
@@ -2051,10 +2050,9 @@ FulfillmentAllocation хранит id, source_ref: ReservationSourceVO стро�
 inventory_item_id, base_uom, source: FulfillmentSourceRefVO и положительное
 quantity в базовой единице. Срезы ниже добавляют status, reservation,
 fulfilled_qty, shipment_progress и shipment_assignment.
-Источник принимает только enum OWN_WAREHOUSE и
-warehouse_id: WarehouseIdVO. Полей поставщика, цен, резерва и исполненного
-количества в первом срезе нет. Entity имеет create/restore и локальную проверку;
-самостоятельного write repository или жизненного цикла у неё нет.
+Складской источник использует OWN_WAREHOUSE и warehouse_id: WarehouseIdVO.
+Прямая поставка использует SUPPLIER_DROPSHIP и отдельную типизированную ссылку,
+описанную ниже. Entity имеет create/restore и локальную проверку.
 
 Ссылки заказа и строк непрозрачны: trim краёв, без пустых/управляющих значений,
 с сохранением регистра и ведущих нулей. FulfillmentOrderRefVO не зависит от Shipment;
@@ -2214,10 +2212,10 @@ consumed_qty, status, expires_at, updated_at, version. Он проверяет �
 FulfillmentPlan.confirm_reservations() принимает непустые новые bindings,
 reservations, текущую demand, inventory_items/warehouses ещё не начатых распределений,
 expected_version и updated_at. Допустимы PLANNED, PARTIALLY_CONFIRMED и PARTIALLY_FULFILLED.
-Повторно проверяются весь оставшийся спрос заказа, его лимиты/разделение, текущие
-правила количества и активные склады ещё не начатых распределений, включая ещё
-не подтверждаемые. Нужны ровно участвующие уникальные снимки
-товаров и складов. Затем FulfillmentReservationPolicy проверяет назначения.
+Повторно проверяются весь оставшийся спрос заказа и допустимость его разделения.
+Текущие учётные снимки нужны для всех ещё не начатых складских распределений,
+включая пока не подтверждаемые. Затем FulfillmentReservationPolicy проверяет
+складские назначения.
 
 Набор reservations — ровно объединение новых назначений и ранее закреплённых
 резервов без зарегистрированного Shipment. Снимки начатых распределений исключены:
@@ -2318,8 +2316,97 @@ CONFIRMED — исторический результат проверки на 
 истечение, освобождение или расход резерва не переписывают план автоматически.
 Построение Shipment ниже повторно проверяет свежие удержания. Регистрация прогресса
 в плане, снятие резервных подтверждений и перепланирование не начатых строк
-также реализованы ниже. Поставщики, SQL/API/Outbox и глобальная идемпотентность
-остаются следующими срезами.
+также реализованы ниже. Сохранение, API, Outbox и глобальная идемпотентность
+относятся к следующим срезам.
+
+## Ручное распределение SUPPLIER_DROPSHIP
+
+`SupplierDropshipSourceRefVO` хранит ID источника и предложения. Внешняя
+`FulfillmentAllocation` фиксирует `quoted_purchase_price` за базовую единицу.
+`SupplierDropshipOptionSnapshot` передаёт идентичность и принадлежность обеих
+карточек, активность, поддержку DROPSHIP, цену, минимум и кратность. Будущий
+Application-сценарий собирает этот снимок из [Supplier Sourcing](supplier_sourcing.md).
+
+`add_supplier_allocation()` и `change_supplier_allocation_quantity()` проверяют
+черновик по актуальным товару, спросу и предложению. Источник и предложение
+должны быть активны, относиться к одному поставщику и соблюдать ограничение
+предложения по источнику. Количество проверяется по складскому шагу, минимуму
+и коммерческой кратности. Ручной выбор допускает неизвестное наличие.
+
+`mark_planned(..., supplier_options=...)` требует снимки всех выбранных внешних
+предложений. При изменившейся цене пользователь удаляет строку и выбирает её
+заново. Источник поставщика остаётся плановым до внешнего подтверждения.
+Складские резервы и Shipment принимают только собственные распределения.
+
+Вариант предыдущего примера. Берём черновик `one` с 3 PCS со своего склада и
+планируем ещё 4 PCS у поставщика.
+
+```python
+from src.modules.inventory.domain.fulfillment_plan.supplier_dropship_option_snapshot import SupplierDropshipOptionSnapshot
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_dropship_source_ref import SupplierDropshipSourceRefVO
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_identity import (
+    FulfillmentSupplierIdVO, FulfillmentSupplierOfferIdVO, FulfillmentSupplierSourceIdVO,
+)
+from src.modules.shared.domain.value_object.currency import CurrencyVO
+from src.modules.shared.domain.value_object.money import MoneyVO
+
+supplier_id = FulfillmentSupplierIdVO(UUID(int=721))
+supplier_source = SupplierDropshipSourceRefVO(
+    FulfillmentSupplierSourceIdVO(UUID(int=722)), FulfillmentSupplierOfferIdVO(UUID(int=723)),
+)
+supplier_option = SupplierDropshipOptionSnapshot(
+    source=supplier_source, source_supplier_id=supplier_id, offer_supplier_id=supplier_id,
+    offer_source_id=supplier_source.supplier_source_id,
+    source_is_active=True, source_supports_dropship=True, offer_is_active=True,
+    inventory_item_id=item.inventory_item_id, base_uom=item.base_uom,
+    purchase_price=MoneyVO(Decimal("120.05"), CurrencyVO("UAH")),
+    min_order_qty=QuantityVO(Decimal(2)), order_multiple=QuantityVO(Decimal(2)),
+)
+external_id = FulfillmentAllocationIdVO(UUID(int=724))
+mixed_draft = one.add_supplier_allocation(
+    identifier=external_id, source_ref=row_ref, quantity=QuantityVO(Decimal(4)),
+    demand=demand, inventory_item=item, supplier_option=supplier_option,
+    expected_version=one.version, updated_at=at,
+)
+mixed_planned = mixed_draft.mark_planned(
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a,),
+    supplier_options=(supplier_option,), expected_version=mixed_draft.version, updated_at=at,
+)
+mixed_confirmed = mixed_planned.confirm_reservations(
+    bindings=(FulfillmentReservationBindingVO(first.id, reserve_a.id, reserve_a.version),),
+    reservations=(reserve_a.fulfillment_snapshot(),),
+    demand=demand, inventory_items=(item,), warehouses=(warehouse_a,),
+    expected_version=mixed_planned.version, updated_at=confirmed_at,
+)
+external_allocation = mixed_confirmed.get_allocation(external_id)
+# mixed_confirmed.status == PARTIALLY_CONFIRMED
+# external_allocation.status == PLANNED, цена 120.05 UAH за PCS.
+```
+
+Отгрузка трёх складских единиц переводит смешанный план в PARTIALLY_FULFILLED.
+`supplier_order_basis_snapshot(allocation_ids=...)` экспортирует выбранные
+плановые внешние строки для [черновика SupplierFulfillmentOrder](external_fulfillment.md).
+`assign_supplier_order()` закрепляет все строки черновика после повторной
+проверки спроса и коммерческих условий. Закреплённые строки сохраняют PLANNED
+до подтверждения поставщика и защищены от конкурирующего назначения и отмены.
+`register_supplier_confirmation()` подтверждает всю закреплённую группу по
+[ответу поставщика](external_fulfillment.md#полное-подтверждение-поставщиком).
+Подтверждение внешней строки учитывается в статусе плана как обязательство
+поставщика. Фактическое исполнение учитывается отдельно.
+При [частичном подтверждении](external_fulfillment.md#частичное-подтверждение-поставщиком)
+исходное количество остаётся в истории, а в расчёте потребности участвует только
+подтверждённый остаток к исполнению. `remaining_to_allocate()` возвращает
+освободившееся количество для ручного допланирования.
+При [полном отказе](external_fulfillment.md#полный-отказ-поставщика) план
+закрывает всю группу и сохраняет её историю. Если других распределений
+к исполнению уже нет, AWAITING_ALLOCATION оставляет план доступным для
+допланирования по актуальному спросу.
+`register_supplier_shipment()` отражает
+[внешнюю отправку](external_fulfillment.md#полная-внешняя-отгрузка) по всему
+положительному подтверждению. План учитывает её отдельно от складского Shipment.
+После исполнения всех действующих распределений частичное подтверждение
+сохраняет возможность допланировать свободный спрос.
+Тесты находятся в `test/test_inventory_fulfillment_supplier_domain.py`.
 
 ## Построение Shipment из подтверждённого FulfillmentPlan
 
@@ -6219,8 +6306,7 @@ Application/SQL/API/Outbox, частичное применение, сторн�
 
 ValuationLayer — самостоятельный Aggregate Root первоначальной и остаточной
 стоимости запаса на позиции. Он создаётся по положительной записи Ledger
-обычного прихода или по результату переноса стоимости. Реализовано 19 из 23
-целевых корней.
+обычного прихода или по результату переноса стоимости.
 
 | Поле | Состав и назначение |
 | --- | --- |
@@ -6728,8 +6814,7 @@ SQL compare-and-set и атомарное сохранение слоёв/жур
 `ValuationPosting.create_from_issue(identifier, posting, consumptions, entry_bindings,
 positions, locations, posted_at)` строит полный неизменяемый расходный журнал.
 Используются StockPostingSnapshot, tuple[ValuationLayerConsumptionSnapshot, ...],
-прежние ValuationEntryBindingVO и снимки позиций/локаций. Новых корней, полей
-корня/Entity или VO нет: состав остаётся 19 из 23. Создание сразу фиксирует факт
+прежние ValuationEntryBindingVO и снимки позиций/локаций. Создание сразу фиксирует факт
 без черновика, редактирования и версии изменения.
 
 Чистая `StockIssueValuationPostingPolicy` повторно проверяет весь результат каждого
@@ -7026,7 +7111,7 @@ FIFO гарантируется относительно переданных с
 FIFO-основание всех записей обычного ISSUE без reversal_of_id. Новый immutable
 `StockPostingFifoPlanSnapshot` содержит полный posting: StockPostingSnapshot и
 plans: tuple[StockIssueFifoPlanSnapshot, ...]. У него нет статуса, самостоятельной
-версии и репозитория; версии слоёв уже сохранены во вложенных планах. Корней остаётся 19 из 23.
+версии и репозитория; версии слоёв уже сохранены во вложенных планах.
 
 Чистая `StockPostingFifoPolicy` проверяет весь контекст: ровно участвующие позиции
 и их локации, номинальные снимки кандидатов, глобальную уникальность слоёв и

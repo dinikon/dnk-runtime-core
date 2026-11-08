@@ -19,8 +19,17 @@ from src.modules.inventory.domain.fulfillment_plan.error import (
     FulfillmentSourceSplitForbiddenError,
     InvalidFulfillmentAllocationError,
 )
+from src.modules.inventory.domain.fulfillment_plan.supplier_dropship_option_snapshot import (
+    SupplierDropshipOptionSnapshot,
+)
 from src.modules.inventory.domain.fulfillment_plan.value_object.order_ref import (
     FulfillmentOrderRefVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import (
+    FulfillmentSourceRefVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_dropship_source_ref import (
+    SupplierDropshipSourceRefVO,
 )
 from src.modules.inventory.domain.inventory_item.stock_snapshot import (
     InventoryItemStockSnapshot,
@@ -74,6 +83,7 @@ class FulfillmentPlanPolicy:
             row.ensure_valid()
             if (
                 row.id in used_ids
+                or not isinstance(row.source, FulfillmentSourceRefVO)
                 or row.status is not FulfillmentAllocationStatus.PLANNED
                 or row.reservation is not None
                 or row.reservation_releases
@@ -83,7 +93,7 @@ class FulfillmentPlanPolicy:
                 or not row.fulfilled_qty.value.is_zero()
             ):
                 raise FulfillmentAllocationExtensionConflictError(
-                    "Нужны новые уникальные PLANNED без истории и привязок."
+                    "Допланирование требует новые складские PLANNED без истории и привязок."
                 )
             used_ids.add(row.id)
         FulfillmentPlanPolicy.ensure_confirmable_reservations(
@@ -149,7 +159,7 @@ class FulfillmentPlanPolicy:
             selected.add(allocation.source)
             if not line.allow_source_split and len(selected) > 1:
                 raise FulfillmentSourceSplitForbiddenError(
-                    "Строка заказа не разрешает распределение между несколькими складами."
+                    "Строка заказа не разрешает распределение между несколькими источниками."
                 )
 
     @staticmethod
@@ -160,6 +170,7 @@ class FulfillmentPlanPolicy:
         demand: FulfillmentDemandSnapshot,
         inventory_items: tuple[InventoryItemStockSnapshot, ...],
         warehouses: tuple[WarehouseSnapshot, ...],
+        supplier_options: tuple[SupplierDropshipOptionSnapshot, ...] = (),
     ) -> None:
         """Перед PLANNED повторно требует непустой план и ровно участвующие уникальные текущие снимки товаров/складов."""
         FulfillmentPlanPolicy.ensure_demand(
@@ -173,6 +184,7 @@ class FulfillmentPlanPolicy:
             allocations=allocations,
             inventory_items=inventory_items,
             warehouses=warehouses,
+            supplier_options=supplier_options,
         )
 
     @staticmethod
@@ -194,6 +206,7 @@ class FulfillmentPlanPolicy:
                 for row in allocations
                 if row.status is not FulfillmentAllocationStatus.CANCELLED
                 and row.shipment_progress is None
+                and isinstance(row.source, FulfillmentSourceRefVO)
             ),
             inventory_items=inventory_items,
             warehouses=warehouses,
@@ -205,13 +218,18 @@ class FulfillmentPlanPolicy:
         allocations: tuple[FulfillmentAllocation, ...],
         inventory_items: tuple[InventoryItemStockSnapshot, ...],
         warehouses: tuple[WarehouseSnapshot, ...],
+        supplier_options: tuple[SupplierDropshipOptionSnapshot, ...] = (),
     ) -> None:
-        """Требует ровно участвующие текущие снимки и проверяет товар, единицу, шаг и активность склада."""
-        if not isinstance(inventory_items, tuple) or not isinstance(warehouses, tuple):
+        """Требует ровно участвующие снимки и повторно проверяет каждый вид источника."""
+        if (
+            not isinstance(inventory_items, tuple)
+            or not isinstance(warehouses, tuple)
+            or not isinstance(supplier_options, tuple)
+        ):
             raise FulfillmentPlanContextError(
-                "Снимки товаров и складов передаются в tuple."
+                "Снимки товаров, складов и предложений передаются в tuple."
             )
-        by_item, by_warehouse = {}, {}
+        by_item, by_warehouse, by_supplier = {}, {}, {}
         for item in inventory_items:
             if not isinstance(item, InventoryItemStockSnapshot):
                 raise FulfillmentPlanContextError("Нужны учётные снимки товаров плана.")
@@ -226,16 +244,41 @@ class FulfillmentPlanPolicy:
             if warehouse.id in by_warehouse:
                 raise FulfillmentPlanContextError("Снимок склада повторяется.")
             by_warehouse[warehouse.id] = warehouse
-        if set(by_item) != {
-            allocation.inventory_item_id for allocation in allocations
-        } or set(by_warehouse) != {
-            allocation.source.warehouse_id for allocation in allocations
-        }:
+        for option in supplier_options:
+            if not isinstance(option, SupplierDropshipOptionSnapshot):
+                raise FulfillmentPlanContextError(
+                    "Нужны снимки предложений прямой поставки."
+                )
+            option.ensure_valid()
+            if option.source in by_supplier:
+                raise FulfillmentPlanContextError("Снимок прямой поставки повторяется.")
+            by_supplier[option.source] = option
+        if (
+            set(by_item) != {allocation.inventory_item_id for allocation in allocations}
+            or set(by_warehouse)
+            != {
+                row.source.warehouse_id
+                for row in allocations
+                if isinstance(row.source, FulfillmentSourceRefVO)
+            }
+            or set(by_supplier)
+            != {
+                row.source
+                for row in allocations
+                if isinstance(row.source, SupplierDropshipSourceRefVO)
+            }
+        ):
             raise FulfillmentPlanContextError(
-                "Нужны ровно участвующие товары и склады без пропусков или лишних снимков."
+                "Нужны ровно участвующие товары, склады и предложения без пропусков или лишних снимков."
             )
         for allocation in allocations:
-            allocation.ensure_compatible(
-                inventory_item=by_item[allocation.inventory_item_id],
-                warehouse=by_warehouse[allocation.source.warehouse_id],
-            )
+            item = by_item[allocation.inventory_item_id]
+            if isinstance(allocation.source, SupplierDropshipSourceRefVO):
+                allocation.ensure_supplier_compatible(
+                    inventory_item=item, option=by_supplier[allocation.source]
+                )
+            else:
+                allocation.ensure_compatible(
+                    inventory_item=item,
+                    warehouse=by_warehouse[allocation.source.warehouse_id],
+                )

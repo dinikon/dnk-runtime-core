@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import (
+    FulfillmentSourceRefVO,
+)
 from src.modules.inventory.domain.fulfillment_plan.entity.fulfillment_allocation import (
     FulfillmentAllocation,
 )
@@ -178,9 +181,12 @@ class FulfillmentShipmentAssignmentPolicy:
                 )
             ids.add(row.id)
             if row.id in requested:
-                if row.source.warehouse_id != shipment.warehouse_id:
+                if (
+                    not isinstance(row.source, FulfillmentSourceRefVO)
+                    or row.source.warehouse_id != shipment.warehouse_id
+                ):
                     raise FulfillmentShipmentAssignmentConflictError(
-                        "Выбранная Allocation относится к другому складу."
+                        "Назначение Shipment относится к указанному собственному складу."
                     )
                 selected[row.id] = row
             if (

@@ -19,6 +19,9 @@ from src.modules.inventory.domain.fulfillment_plan.value_object.allocation_statu
 from src.modules.inventory.domain.fulfillment_plan.value_object.order_ref import (
     FulfillmentOrderRefVO,
 )
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import (
+    FulfillmentSourceRefVO,
+)
 from src.modules.inventory.domain.inventory_item.stock_snapshot import (
     InventoryItemStockSnapshot,
 )
@@ -79,9 +82,12 @@ class FulfillmentReplanningPolicy:
                     "Выберите существующие уникальные типизированные ID распределений."
                 )
             selected.add(identifier)
-            if by_id[identifier].status is not FulfillmentAllocationStatus.PLANNED:
+            if (
+                not isinstance(by_id[identifier].source, FulfillmentSourceRefVO)
+                or by_id[identifier].status is not FulfillmentAllocationStatus.PLANNED
+            ):
                 raise FulfillmentReplanningConflictError(
-                    "Для замены выбираются только действующие не начатые PLANNED."
+                    "Для замены выбираются только действующие складские PLANNED."
                 )
         # Entity проверяет локальный переход до проверки внешнего контекста всего кандидата.
         cancelled = {
@@ -105,6 +111,7 @@ class FulfillmentReplanningPolicy:
             if (
                 row.id in by_id
                 or row.id in new_ids
+                or not isinstance(row.source, FulfillmentSourceRefVO)
                 or row.status is not FulfillmentAllocationStatus.PLANNED
                 or row.reservation_releases
                 or row.reservation is not None

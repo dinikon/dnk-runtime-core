@@ -35,6 +35,21 @@ from src.modules.inventory.domain.fulfillment_plan.value_object.reservation_rele
 from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import (
     FulfillmentSourceRefVO,
 )
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_dropship_source_ref import (
+    SupplierDropshipSourceRefVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_order_assignment import (
+    FulfillmentSupplierOrderAssignmentRefVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_order_confirmation import (
+    FulfillmentSupplierOrderConfirmationRefVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_order_rejection import (
+    FulfillmentSupplierOrderRejectionRefVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_order_shipment import (
+    FulfillmentSupplierOrderShipmentRefVO,
+)
 from src.modules.inventory.domain.fulfillment_plan.value_object.status import (
     FulfillmentPlanStatus,
 )
@@ -47,6 +62,7 @@ from src.modules.inventory.domain.stock_reservation.value_object.source import (
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+from src.modules.shared.domain.value_object.money import MoneyVO
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +73,7 @@ class FulfillmentAllocationShipmentSnapshot:
     source_ref: ReservationSourceVO
     inventory_item_id: InventoryItemIdVO
     base_uom: UomCodeVO
-    source: FulfillmentSourceRefVO
+    source: FulfillmentSourceRefVO | SupplierDropshipSourceRefVO
     quantity: QuantityVO
     reservation: FulfillmentReservationRefVO | None
     status: FulfillmentAllocationStatus
@@ -66,6 +82,12 @@ class FulfillmentAllocationShipmentSnapshot:
     shipment_assignment: FulfillmentShipmentAssignmentRefVO | None
     reservation_releases: tuple[FulfillmentReservationReleaseRefVO, ...]
     cancelled_at: datetime | None
+    quoted_purchase_price: MoneyVO | None = None
+    supplier_order_assignment: FulfillmentSupplierOrderAssignmentRefVO | None = None
+    supplier_confirmation: FulfillmentSupplierOrderConfirmationRefVO | None = None
+    supplier_confirmed_qty: QuantityVO | None = None
+    supplier_rejection: FulfillmentSupplierOrderRejectionRefVO | None = None
+    supplier_shipment: FulfillmentSupplierOrderShipmentRefVO | None = None
 
     def ensure_valid(self) -> None:
         """Проверяет поля и матрицу подтверждения/исполнения по локальным правилам Entity."""
@@ -90,6 +112,12 @@ class FulfillmentAllocationShipmentSnapshot:
             shipment_assignment=self.shipment_assignment,
             reservation_releases=self.reservation_releases,
             cancelled_at=self.cancelled_at,
+            quoted_purchase_price=self.quoted_purchase_price,
+            supplier_order_assignment=self.supplier_order_assignment,
+            supplier_confirmation=self.supplier_confirmation,
+            supplier_confirmed_qty=self.supplier_confirmed_qty,
+            supplier_rejection=self.supplier_rejection,
+            supplier_shipment=self.supplier_shipment,
         )
 
 
@@ -160,6 +188,14 @@ class FulfillmentPlanShipmentSnapshot:
                     allocation.reservation is not None
                     and allocation.reservation.confirmed_at > self.updated_at
                 )
+                or (
+                    allocation.supplier_confirmation is not None
+                    and allocation.supplier_confirmation.confirmed_at > self.updated_at
+                )
+                or (
+                    allocation.supplier_shipment is not None
+                    and allocation.supplier_shipment.shipped_at > self.updated_at
+                )
             ):
                 raise InvalidFulfillmentPlanShipmentSnapshotError(
                     "Повтор распределения/резерва/источника, разная идентичность строки либо подтверждение из будущего."
@@ -193,7 +229,18 @@ class FulfillmentPlanShipmentSnapshot:
         any_fulfilled = any(
             not row.fulfilled_qty.value.is_zero() for row in self.allocations
         )
-        all_fulfilled = all(row.fulfilled_qty == row.quantity for row in active)
+        all_fulfilled = all(
+            row.fulfilled_qty
+            == (
+                row.quantity
+                if row.supplier_confirmed_qty is None
+                else row.supplier_confirmed_qty
+            )
+            for row in active
+        )
+        confirmed = len(reservations) + sum(
+            row.supplier_confirmation is not None for row in active
+        )
         shipment_scopes, line_ids = {}, set()
         assigned_shipments, assigned_lines = {}, set()
         for row in self.allocations:
@@ -246,19 +293,15 @@ class FulfillmentPlanShipmentSnapshot:
             or (
                 self.status is FulfillmentPlanStatus.PARTIALLY_CONFIRMED
                 and (
-                    not reservations
-                    or len(reservations) == len(active)
+                    not confirmed
+                    or confirmed == len(active)
                     or any_fulfilled
                     or bool(shipment_scopes)
                 )
             )
             or (
                 self.status is FulfillmentPlanStatus.CONFIRMED
-                and (
-                    len(reservations) != len(active)
-                    or any_fulfilled
-                    or bool(shipment_scopes)
-                )
+                and (confirmed != len(active) or any_fulfilled or bool(shipment_scopes))
             )
             or (
                 self.status is FulfillmentPlanStatus.PARTIALLY_FULFILLED

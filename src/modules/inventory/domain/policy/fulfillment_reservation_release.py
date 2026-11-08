@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import (
+    FulfillmentSourceRefVO,
+)
 from src.modules.inventory.domain.fulfillment_plan.entity.fulfillment_allocation import (
     FulfillmentAllocation,
 )
@@ -100,6 +103,10 @@ class FulfillmentReservationReleasePolicy:
         for allocation_id, binding in selected.items():
             allocation = by_allocation[allocation_id]
             snapshot = snapshots[binding.reservation_id]
+            if not isinstance(allocation.source, FulfillmentSourceRefVO):
+                raise FulfillmentReservationReleaseConflictError(
+                    "Снятие складского резерва относится только к собственному складу."
+                )
             if (
                 allocation.shipment_assignment is not None
                 or allocation.shipment_progress is not None

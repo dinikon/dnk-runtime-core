@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import (
+    FulfillmentSourceRefVO,
+)
 from src.modules.inventory.domain.fulfillment_plan.entity.fulfillment_allocation import (
     FulfillmentAllocation,
 )
@@ -102,6 +105,10 @@ class FulfillmentReservationPolicy:
             if allocation is None:
                 raise FulfillmentReservationMismatchError(
                     "Назначение относится к отсутствующему распределению."
+                )
+            if not isinstance(allocation.source, FulfillmentSourceRefVO):
+                raise FulfillmentReservationMismatchError(
+                    "Складской резерв относится только к распределению собственного склада."
                 )
             if (
                 allocation.status is not FulfillmentAllocationStatus.PLANNED

@@ -5,6 +5,10 @@ class FulfillmentPlanError(InventoryError):
     """Базовая ошибка ручного планирования исполнения заказа."""
 
 
+class FulfillmentSupplierOrderAssignmentError(FulfillmentPlanError):
+    """Отклоняет неполное, изменённое или конфликтующее назначение внешнего заказа."""
+
+
 class FulfillmentReplanningConflictError(FulfillmentPlanError):
     """Запрещает замену неподходящих распределений или нарушение истории и действующих обязательств."""
 
@@ -95,6 +99,18 @@ class InvalidFulfillmentDemandError(FulfillmentPlanError):
 
 class FulfillmentPlanContextError(FulfillmentPlanError):
     """Отклоняет чужой заказ, товар, единицу, склад или неверный состав текущих снимков."""
+
+
+class FulfillmentSupplierOrderConfirmationError(FulfillmentPlanError):
+    """Отклоняет подтверждение, не соответствующее закреплённому внешнему заказу."""
+
+
+class FulfillmentSupplierOrderRejectionError(FulfillmentPlanError):
+    """Отклоняет отказ, не соответствующий закреплённому внешнему заказу."""
+
+
+class FulfillmentSupplierOrderShipmentError(FulfillmentPlanError):
+    """Отклоняет внешнюю отправку, не соответствующую подтверждённому обязательству."""
 
 
 class FulfillmentPlanStatusError(FulfillmentPlanError):

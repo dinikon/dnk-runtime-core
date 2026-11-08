@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 
+from src.modules.inventory.domain.fulfillment_plan.value_object.source_ref import (
+    FulfillmentSourceRefVO,
+)
 from src.modules.inventory.domain.fulfillment_plan.value_object.allocation_status import (
     FulfillmentAllocationStatus,
 )
@@ -129,9 +132,13 @@ class FulfillmentShipmentPolicy:
                 "Выбор содержит неизвестную Allocation."
             )
         allocations = tuple(by_id[identifier] for identifier in bindings)
-        if any(row.source.warehouse_id != warehouse.id for row in allocations):
+        if any(
+            not isinstance(row.source, FulfillmentSourceRefVO)
+            or row.source.warehouse_id != warehouse.id
+            for row in allocations
+        ):
             raise InvalidFulfillmentShipmentLineBindingError(
-                "Выбранная Allocation относится к другому складу."
+                "Для Shipment выбираются распределения указанного собственного склада."
             )
         if any(
             row.status is not FulfillmentAllocationStatus.CONFIRMED
