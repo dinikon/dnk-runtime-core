@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, Nullable, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.inventory.application.inventory_item.query.get_inventory_item.dto import (
@@ -7,10 +7,6 @@ from src.modules.inventory.application.inventory_item.query.get_inventory_item.d
 from src.modules.inventory.application.inventory_item.query.get_inventory_item.query import (
     GetInventoryItemQuery,
 )
-from src.modules.inventory.infrastructure.persistence.models.item_barcode import (
-    ItemBarcodeModel,
-)
-
 from src.modules.inventory.application.inventory_item.query.list_inventory_items.dto import (
     ListInventoryItemsResultDTO,
 )
@@ -23,10 +19,13 @@ from src.modules.inventory.infrastructure.inventory_item.persistence.query_mappe
 from src.modules.inventory.infrastructure.persistence.models.inventory_item import (
     InventoryItemModel,
 )
+from src.modules.inventory.infrastructure.persistence.models.item_barcode import (
+    ItemBarcodeModel,
+)
 
 
 class SqlAlchemyInventoryItemQueryRepository:
-    """Читает список и total напрямую из таблицы текущего tenant."""
+    """Читает проекции списка и карточки для текущего tenant без восстановления агрегата."""
 
     def __init__(self, session: AsyncSession) -> None:
         """Принимает сессию внешней сборки с выбранной tenant-схемой."""
@@ -36,41 +35,45 @@ class SqlAlchemyInventoryItemQueryRepository:
         self, query: GetInventoryItemQuery
     ) -> GetInventoryItemResultDTO | None:
         """Читает карточку и штрихкоды одной SQL-проекцией текущей схемы."""
-        items = InventoryItemModel.__table__
-        barcodes = ItemBarcodeModel.__table__
-        result = await self._session.execute(
-            select(items, barcodes.c.id.label("barcode_id"), barcodes.c.barcode)
-            .select_from(
-                items.outerjoin(barcodes, barcodes.c.inventory_item_id == items.c.id)
+        statement = (
+            select(InventoryItemModel, Nullable(ItemBarcodeModel))
+            .outerjoin(
+                ItemBarcodeModel,
+                ItemBarcodeModel.inventory_item_id == InventoryItemModel.id,
             )
-            .where(items.c.id == query.inventory_item_id.uuid)
-            .order_by(barcodes.c.position)
+            .where(InventoryItemModel.id == query.inventory_item_id.uuid)
+            .order_by(ItemBarcodeModel.position)
+            .execution_options(populate_existing=True)
         )
-        rows = result.mappings().all()
-        return InventoryItemQueryMapper.to_details(rows) if rows else None
+        rows = (await self._session.execute(statement)).all()
+        if not rows:
+            return None
+        model = rows[0][0]
+        barcodes = tuple(barcode for _, barcode in rows if barcode is not None)
+        return InventoryItemQueryMapper.to_details(model, barcodes)
 
     async def list(self, query: ListInventoryItemsQuery) -> ListInventoryItemsResultDTO:
         """Применяет одинаковые фильтры к total и странице со стабильным порядком."""
-        table = InventoryItemModel.__table__
-        filters = (
+        filters: tuple[ColumnElement[bool], ...] = (
             ()
             if query.search is None
-            else (table.c.sku.contains(query.search, autoescape=True),)
+            else (InventoryItemModel.sku.contains(query.search, autoescape=True),)
         )
         total = await self._session.execute(
-            select(func.count()).select_from(table).where(*filters)
+            select(func.count()).select_from(InventoryItemModel).where(*filters)
         )
-        rows = await self._session.execute(
-            select(table)
+        statement = (
+            select(InventoryItemModel)
             .where(*filters)
-            .order_by(table.c.sku, table.c.id)
+            .order_by(InventoryItemModel.sku, InventoryItemModel.id)
             .offset(query.offset)
             .limit(query.limit)
+            .execution_options(populate_existing=True)
         )
+        models = (await self._session.scalars(statement)).all()
         return ListInventoryItemsResultDTO(
             items=tuple(
-                InventoryItemQueryMapper.to_list_item(row)
-                for row in rows.mappings().all()
+                InventoryItemQueryMapper.to_list_item(model) for model in models
             ),
             total=total.scalar_one(),
             offset=query.offset,

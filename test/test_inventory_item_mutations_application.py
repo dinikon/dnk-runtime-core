@@ -92,7 +92,7 @@ class InventoryItemMutationsApplicationTests(unittest.IsolatedAsyncioTestCase):
             original.constraint_name = constraint
             failure = IntegrityError("delete", {}, original)
             repository = SqlAlchemyInventoryItemRepository(
-                Mock(execute=AsyncMock(side_effect=failure))
+                Mock(scalar=AsyncMock(side_effect=failure))
             )
             expected = (
                 InventoryItemInUseError
@@ -183,11 +183,13 @@ class InventoryItemMutationsApplicationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_missing_sql_row_stops_before_child_mutations(self) -> None:
         """Отсутствие строки в RETURNING не позволяет создать детей вместо отсутствующего корня."""
-        returned = Mock(scalar_one_or_none=Mock(return_value=None))
-        session = SimpleNamespace(execute=AsyncMock(return_value=returned))
+        session = SimpleNamespace(
+            scalar=AsyncMock(return_value=None), execute=AsyncMock()
+        )
         repository = SqlAlchemyInventoryItemRepository(session)
         for action in (repository.save, repository.delete):
-            session.execute.reset_mock()
+            session.scalar.reset_mock()
             with self.assertRaises(InventoryItemNotFoundError):
                 await action(self.item)
-            session.execute.assert_awaited_once()
+            session.scalar.assert_awaited_once()
+            session.execute.assert_not_awaited()

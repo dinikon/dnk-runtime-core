@@ -3,6 +3,7 @@
 from dataclasses import replace
 from decimal import Decimal, InvalidOperation, localcontext
 from types import SimpleNamespace
+from typing import Any
 import unittest
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -14,6 +15,12 @@ from sqlalchemy.exc import IntegrityError
 from src.config import dnk_config
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
+from src.modules.inventory.infrastructure.persistence.models.inventory_item import (
+    InventoryItemModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.item_barcode import (
+    ItemBarcodeModel,
+)
 from src.modules.inventory.presentation.inventory_item.http.request.create_inventory_item import (
     CreateInventoryItemQuantityRulesRequest,
 )
@@ -40,10 +47,13 @@ class InventoryItemHttpTests(unittest.IsolatedAsyncioTestCase):
             expiration_mode="REQUIRED",
         )
         self.result = Mock()
-        self.result.mappings.return_value.all.return_value = [self.row]
+        self.result.scalars.return_value.all.return_value = [
+            InventoryItemModel(**self.row)
+        ]
         self.result.scalar_one.return_value = 1
         self.session = SimpleNamespace(
             execute=AsyncMock(return_value=self.result),
+            scalars=AsyncMock(side_effect=self.scalars),
             commit=AsyncMock(),
             rollback=AsyncMock(),
             close=AsyncMock(),
@@ -64,6 +74,11 @@ class InventoryItemHttpTests(unittest.IsolatedAsyncioTestCase):
             "base_uom": "KG",
             "quantity_rules": {"step": "0.001"},
         }
+
+    async def scalars(self, statement: Any) -> Mock:
+        """Возвращает типизированные ORM-модели из тестового SQL-результата."""
+        result = await self.session.execute(statement)
+        return result.scalars()
 
     async def asyncTearDown(self) -> None:
         """Закрывает HTTP-клиент теста."""
@@ -102,7 +117,7 @@ class InventoryItemHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((body["total"], body["offset"], body["limit"]), (1, 2, 3))
         self.assertEqual(body["items"][0]["quantity_rules"], {"step": "0.001"})
         self.assertNotIn("barcodes", body["items"][0])
-        self.result.mappings.return_value.all.return_value = []
+        self.result.scalars.return_value.all.return_value = []
         self.result.scalar_one.return_value = 0
         empty = (await self.client.get(self.url)).json()
         self.assertEqual(empty, {"items": [], "total": 0, "offset": 0, "limit": 50})
@@ -181,14 +196,14 @@ class InventoryItemHttpTests(unittest.IsolatedAsyncioTestCase):
         """Проверяет чтение карточки без write-репозитория и HTTP 404."""
         barcode_id = uuid4()
         step = "0.123456789012345678901234567890123456789"
-        self.result.mappings.return_value.all.return_value = [
-            {
-                **self.row,
-                "quantity_step": Decimal(step),
-                "barcode_id": barcode_id,
-                "barcode": "000AbC",
-            }
-        ]
+        model = InventoryItemModel(**{**self.row, "quantity_step": Decimal(step)})
+        barcode = ItemBarcodeModel(
+            id=barcode_id,
+            inventory_item_id=model.id,
+            barcode="000AbC",
+            position=0,
+        )
+        self.result.all.return_value = [(model, barcode)]
         response = await self.client.get(f"{self.url}/{self.row['id']}")
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
@@ -197,14 +212,12 @@ class InventoryItemHttpTests(unittest.IsolatedAsyncioTestCase):
             body["barcodes"], [{"id": str(barcode_id), "barcode": "000AbC"}]
         )
         self.assertEqual(body["id"], str(self.row["id"]))
-        self.result.mappings.return_value.all.return_value = [
-            {**self.row, "barcode_id": None, "barcode": None}
-        ]
+        self.result.all.return_value = [(model, None)]
         self.assertEqual(
             (await self.client.get(f"{self.url}/{self.row['id']}")).json()["barcodes"],
             [],
         )
-        self.result.mappings.return_value.all.return_value = []
+        self.result.all.return_value = []
         self.assertEqual(
             (await self.client.get(f"{self.url}/{uuid4()}")).status_code, 404
         )

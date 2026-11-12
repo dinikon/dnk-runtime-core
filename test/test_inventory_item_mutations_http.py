@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 import unittest
 from unittest.mock import AsyncMock, Mock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.sql.dml import Insert, Update
@@ -16,6 +16,12 @@ from sqlalchemy.exc import IntegrityError
 from src.config import dnk_config
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
+from src.modules.inventory.infrastructure.persistence.models.inventory_item import (
+    InventoryItemModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.item_barcode import (
+    ItemBarcodeModel,
+)
 from test.inventory_item_support import inventory_item_app
 
 
@@ -47,7 +53,8 @@ class InventoryItemMutationsHttpTests(unittest.IsolatedAsyncioTestCase):
         self.failure = None
         self.session = SimpleNamespace(
             execute=AsyncMock(side_effect=self.execute),
-            scalar=AsyncMock(return_value=None),
+            scalars=AsyncMock(side_effect=self.scalars),
+            scalar=AsyncMock(side_effect=self.scalar),
             commit=AsyncMock(),
             rollback=AsyncMock(),
             close=AsyncMock(),
@@ -79,13 +86,28 @@ class InventoryItemMutationsHttpTests(unittest.IsolatedAsyncioTestCase):
         result = Mock()
         if isinstance(statement, Select):
             table = statement.get_final_froms()[0]
-            result.mappings.return_value.one_or_none.return_value = self.row
-            result.mappings.return_value.all.return_value = (
-                self.barcodes if table.name == "inventory_item_barcodes" else [self.row]
+            model = InventoryItemModel(**self.row) if self.row is not None else None
+            result.scalars.return_value.one_or_none.return_value = model
+            result.scalars.return_value.all.return_value = (
+                [ItemBarcodeModel(**row) for row in self.barcodes]
+                if table.name == "inventory_item_barcodes"
+                else [model]
             )
         else:
             result.scalar_one_or_none.return_value = self.row["id"]
         return result
+
+    async def scalars(self, statement: Any) -> Mock:
+        """Возвращает ORM-модели из тестового результата SELECT."""
+        result = await self.session.execute(statement)
+        return result.scalars()
+
+    async def scalar(self, statement: Any) -> UUID | None:
+        """Возвращает ID из RETURNING; запрос использования в Catalog не находит связи."""
+        if isinstance(statement, Select):
+            return None
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
 
     async def asyncTearDown(self) -> None:
         """Закрывает HTTP-клиент теста."""

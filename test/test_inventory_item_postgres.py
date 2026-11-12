@@ -51,6 +51,7 @@ from src.modules.inventory.domain.inventory_item.error import (
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
     InventoryItemIdVO,
 )
+from src.modules.inventory.domain.inventory_item.value_object.sku import SkuVO
 from src.modules.inventory.infrastructure.inventory_item.persistence.repository import (
     SqlAlchemyInventoryItemRepository,
 )
@@ -214,6 +215,59 @@ class InventoryItemPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         reused = await self.create("Other", ["free-code"])
         self.assertEqual(reused.status_code, 201, reused.text)
+
+    async def test_locked_reads_refresh_models_already_loaded_in_session(self) -> None:
+        """Блокировка восстанавливает актуальный агрегат поверх ранее загруженных ORM-моделей."""
+        created = (await self.create("cached", ["cached-barcode"])).json()
+        identifier = InventoryItemIdVO.from_value(created["id"])
+        for by_sku in (False, True):
+            with self.subTest(by_sku=by_sku):
+                async with self.engine.connect() as connection:
+                    await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
+                    async with self.sessions(bind=connection) as session:
+                        cached_root = await session.get(
+                            InventoryItemModel, identifier.uuid
+                        )
+                        self.assertIsNotNone(cached_root)
+                        cached_children = (
+                            await session.scalars(
+                                sa.select(ItemBarcodeModel).where(
+                                    ItemBarcodeModel.inventory_item_id
+                                    == identifier.uuid
+                                )
+                            )
+                        ).all()
+                        self.assertEqual(len(cached_children), 1)
+                        sku, barcode = (
+                            f"fresh-{int(by_sku)}",
+                            f"fresh-barcode-{int(by_sku)}",
+                        )
+                        async with self.engine.begin() as writer:
+                            await bind_tenant_schema(
+                                writer, self.tenant.uuid, self.naming
+                            )
+                            await writer.execute(
+                                sa.update(InventoryItemModel)
+                                .where(InventoryItemModel.id == identifier.uuid)
+                                .values(sku=sku)
+                            )
+                            await writer.execute(
+                                sa.update(ItemBarcodeModel)
+                                .where(ItemBarcodeModel.id == cached_children[0].id)
+                                .values(barcode=barcode)
+                            )
+                        repository = SqlAlchemyInventoryItemRepository(session)
+                        restored = (
+                            await repository.get_by_sku_for_update(SkuVO(sku))
+                            if by_sku
+                            else await repository.get_for_update(identifier)
+                        )
+                        self.assertIsNotNone(restored)
+                        self.assertEqual(restored.sku.value, SkuVO(sku).value)
+                        self.assertEqual(restored.barcodes[0].barcode.value, barcode)
+                        self.assertEqual(
+                            str(restored.barcodes[0].id), created["barcodes"][0]["id"]
+                        )
 
     async def test_minimal_creation_persists_defaults_and_explicit_values(self) -> None:
         """Создаёт по одному SKU и сохраняет независимые переопределения настроек."""

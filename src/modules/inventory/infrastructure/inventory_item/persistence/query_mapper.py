@@ -1,7 +1,5 @@
 from collections.abc import Sequence
 
-from sqlalchemy.engine import RowMapping
-
 from src.modules.inventory.application.inventory_item.query.get_inventory_item.dto import (
     GetInventoryItemBarcodeDTO,
     GetInventoryItemResultDTO,
@@ -16,39 +14,43 @@ from src.modules.inventory.domain.inventory_item.value_object.expiration_mode im
 from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import (
     TrackingMode,
 )
+from src.modules.inventory.infrastructure.persistence.models.inventory_item import (
+    InventoryItemModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.item_barcode import (
+    ItemBarcodeModel,
+)
 
 
 class InventoryItemQueryMapper:
-    """Преобразует SQL-проекции в строки списка без восстановления агрегатов."""
+    """Преобразует ORM-модели в DTO чтения без восстановления доменных агрегатов."""
 
     @staticmethod
-    def to_details(rows: Sequence[RowMapping]) -> GetInventoryItemResultDTO:
-        """Собирает карточку из непустой проекции с внешним соединением штрихкодов."""
-        row = rows[0]
+    def to_details(
+        model: InventoryItemModel, barcodes: Sequence[ItemBarcodeModel]
+    ) -> GetInventoryItemResultDTO:
+        """Собирает карточку из позиции и штрихкодов в порядке SQL-проекции."""
         return GetInventoryItemResultDTO(
-            id=row["id"],
-            sku=row["sku"],
-            base_uom=row["base_uom"],
-            quantity_step=row["quantity_step"],
-            tracking_mode=TrackingMode(row["tracking_mode"]),
-            expiration_mode=ExpirationMode(row["expiration_mode"]),
+            id=model.id,
+            sku=model.sku,
+            base_uom=model.base_uom,
+            quantity_step=model.quantity_step,
+            tracking_mode=TrackingMode(model.tracking_mode),
+            expiration_mode=ExpirationMode(model.expiration_mode),
             barcodes=tuple(
-                GetInventoryItemBarcodeDTO(
-                    id=child["barcode_id"], barcode=child["barcode"]
-                )
-                for child in rows
-                if child["barcode_id"] is not None
+                GetInventoryItemBarcodeDTO(id=barcode.id, barcode=barcode.barcode)
+                for barcode in barcodes
             ),
         )
 
     @staticmethod
-    def to_list_item(row: RowMapping) -> InventoryItemListItemDTO:
-        """Собирает конкретный DTO из именованных полей SQL-результата."""
+    def to_list_item(model: InventoryItemModel) -> InventoryItemListItemDTO:
+        """Собирает конкретный DTO списка из типизированной модели позиции."""
         return InventoryItemListItemDTO(
-            id=row["id"],
-            sku=row["sku"],
-            base_uom=row["base_uom"],
-            quantity_step=row["quantity_step"],
-            tracking_mode=TrackingMode(row["tracking_mode"]),
-            expiration_mode=ExpirationMode(row["expiration_mode"]),
+            id=model.id,
+            sku=model.sku,
+            base_uom=model.base_uom,
+            quantity_step=model.quantity_step,
+            tracking_mode=TrackingMode(model.tracking_mode),
+            expiration_mode=ExpirationMode(model.expiration_mode),
         )

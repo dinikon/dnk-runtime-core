@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
@@ -19,30 +19,36 @@ from src.modules.inventory.domain.inventory_item.value_object.tracking_mode impo
 )
 from src.modules.inventory.domain.value_object.quantity_rules import QuantityRulesVO
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+from src.modules.inventory.infrastructure.persistence.models.inventory_item import (
+    InventoryItemModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.item_barcode import (
+    ItemBarcodeModel,
+)
 
 
 class InventoryItemMapper:
-    """Извлекает представление записи агрегата без SQL и бизнес-проверок."""
+    """Преобразует ORM-модели и агрегат без SQL и бизнес-проверок."""
 
     @staticmethod
     def to_domain(
-        row: Mapping[str, Any], barcode_rows: Sequence[Mapping[str, Any]]
+        model: InventoryItemModel, barcode_models: Sequence[ItemBarcodeModel]
     ) -> InventoryItem:
         """Восстанавливает полный сохранённый состав с исходными идентификаторами."""
         return InventoryItem.restore(
-            identifier=InventoryItemIdVO.from_value(row["id"]),
-            sku=SkuVO(row["sku"]),
-            base_uom=UomCodeVO(row["base_uom"]),
-            quantity_rules=QuantityRulesVO(row["quantity_step"]),
-            tracking_mode=TrackingMode(row["tracking_mode"]),
-            expiration_mode=ExpirationMode(row["expiration_mode"]),
+            identifier=InventoryItemIdVO.from_value(model.id),
+            sku=SkuVO(model.sku),
+            base_uom=UomCodeVO(model.base_uom),
+            quantity_rules=QuantityRulesVO(model.quantity_step),
+            tracking_mode=TrackingMode(model.tracking_mode),
+            expiration_mode=ExpirationMode(model.expiration_mode),
             packagings=(),
             barcodes=tuple(
                 ItemBarcode.restore(
-                    identifier=ItemBarcodeIdVO.from_value(child["id"]),
-                    barcode=BarcodeVO(child["barcode"]),
+                    identifier=ItemBarcodeIdVO.from_value(child.id),
+                    barcode=BarcodeVO(child.barcode),
                 )
-                for child in barcode_rows
+                for child in barcode_models
             ),
         )
 
