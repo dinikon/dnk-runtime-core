@@ -405,7 +405,7 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(foreign_keys[0]["referred_schema"], schema)
             self.assertEqual(foreign_keys[0]["referred_table"], "users")
-            self.assertFalse(
+            self.assertTrue(
                 await connection.run_sync(
                     lambda conn: inspect(conn).has_table("warehouses", schema=schema)
                 )

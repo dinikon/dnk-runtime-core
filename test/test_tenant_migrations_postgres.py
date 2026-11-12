@@ -501,7 +501,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.current(connection, schema),
                 (self.migrator.head(),),
             )
-            self.assertFalse(
+            self.assertTrue(
                 await connection.run_sync(
                     lambda conn: inspect(conn).has_table("warehouses", schema=schema)
                 )

@@ -31,6 +31,7 @@
 - Инварианты агрегата не переносятся в persistence mapper или VO
   ради обхода требований.
 - Соблюдены направление импортов, границы слоёв и транзакций.
+- Репозитории и mapper соответствуют [типизированному стилю SQLAlchemy](#стиль-реализации-sqlalchemy-репозиториев).
 - HTTP Request/Response разделены согласно архитектурному документу.
 - Выполнены требования к именованию, расположению файлов и docstrings.
 
@@ -1382,341 +1383,368 @@ OrderModel
 
 в Application или Domain.
 
+##### Стиль реализации SQLAlchemy-репозиториев
+
+Для новых и изменяемых реализаций репозиториев обязателен типизированный стиль,
+используемый в InventoryItem. Примеры реализации:
+
+- [Write Repository](../../src/modules/inventory/infrastructure/inventory_item/persistence/repository.py).
+- [Persistence Mapper](../../src/modules/inventory/infrastructure/inventory_item/persistence/mapper.py).
+- [Query Repository](../../src/modules/inventory/infrastructure/inventory_item/persistence/query_repository.py).
+- [Query Mapper](../../src/modules/inventory/infrastructure/inventory_item/persistence/query_mapper.py).
+
+Эти файлы показывают стиль; нормативные требования определяются этим документом.
+Правила применяются к репозиториям всех backend-модулей, а не только Inventory.
+
+###### Запросы и типы результатов
+
+1. SQL-модели объявляют поля через `Mapped[T]` и `mapped_column(...)`.
+   Запросы к mapped-моделям строятся через классы и их типизированные атрибуты:
+   `select(Model)`, `insert(Model)`, `update(Model)`, `delete(Model)`, `Model.id`.
+   Для обычных операций с такими моделями не использовать `Model.__table__`,
+   `.c` и динамический доступ к столбцам.
+2. Сложный запрос сначала сохраняется в локальную переменную `statement`, затем
+   выполняется. Короткий INSERT или DELETE можно передавать прямо в `execute`,
+   как в Write Repository InventoryItem.
+3. Для одной ORM-модели использовать
+   `(await session.scalars(statement)).one_or_none()`, для списка —
+   `(await session.scalars(statement)).all()`. `session.get(Model, id)` допустим
+   для чтения по Primary Key, если сценарию не нужна блокировка или обязательное
+   перечитывание состояния из БД.
+4. Несколько моделей или скалярных столбцов читать через `session.execute`;
+   результат разбирать как типизированные строки, обращаясь по позиции или
+   распаковывая значения. Для `COUNT` без `GROUP BY` использовать
+   `result.scalar_one()`: результат должен оставаться `int`, без подстановки
+   фиктивного нуля для невозможного отсутствия строки.
+5. Для `LEFT JOIN` явно отражать возможность отсутствия правой модели или
+   столбца через `Nullable(Model)` / `Nullable(Model.field)`. После чтения
+   проверять `None` до передачи значения в mapper с обязательным параметром.
+6. Фильтры, общие для страницы и `total`, формировать один раз. Для набора
+   условий использовать `tuple[ColumnElement[bool], ...]`. Задавать стабильный
+   порядок страницы с уникальным дополнительным ключом, например `(sku, id)`.
+   При буквальном поиске через `contains` экранировать LIKE-символы:
+   `contains(search, autoescape=True)`.
+7. Все методы, включая приватные и `__init__`, имеют аннотации параметров,
+   результата и docstrings на русском языке. Использовать выведенные SQLAlchemy
+   типы там, где они однозначны; в остальных местах указывать конкретный тип.
+   Не скрывать проблемы типизации через `Any`, `typing.cast`, `type: ignore` или
+   отключение инспекций IDE. Словари значений для DML внутри mapper могут иметь
+   тип `dict[str, Any]`, как в примере ниже; это не тип результата чтения.
+
+Прямой Core/SQL допустим для миграций и специализированных проекций, которым
+нужны CTE, агрегаты, оконные функции или таблицы без ORM-моделей. Такое решение
+обосновывается формой запроса, а не обходом типизации. По возможности использовать
+типизированные атрибуты моделей и отдельные столбцы. Если необходима Core-таблица,
+её тип должен быть `Table`, а не неуточнённый `FromClause` из `Model.__table__`.
+Результат сложной проекции передавать в mapper с конкретными типами полей;
+универсальный `Mapping[str, Any]` не заменяет типизированный контракт чтения.
+Не переводить обычный репозиторий на Core ради обхода предупреждений IDE.
+
+###### Сессия, блокировки и ошибки
+
+- Репозиторий получает `AsyncSession` внешнего UoW и не создаёт свою сессию,
+  транзакцию или UoW. `commit`, `rollback` и выбор tenant-схемы остаются снаружи.
+  Один UoW работает с одним tenant; `schema_translate_map` привязывает Tenancy.
+- Для изменения существующего агрегата, когда требуется сериализация операций,
+  сначала блокировать его корень через `select(Model).with_for_update()`, затем
+  читать детей. `session.get()` без блокировки не заменяет этот запрос.
+- При обязательном перечитывании, в том числе после ожидания блокировки,
+  использовать `.execution_options(populate_existing=True)`. Ранее загруженная
+  модель в identity map не должна подменять актуальное состояние БД.
+  Это относится и к Query Repository, если он должен читать свежее состояние.
+- Запись выполнять через DML по mapped-классам. Для UPDATE/DELETE, которым нужно
+  различать существующую и отсутствующую запись, применять `.returning(Model.id)`
+  и `session.scalar(statement)` с проверкой `None`. Не делать дополнительный
+  SELECT только ради проверки существования и не заменять UPDATE на upsert.
+- Корень и принадлежащие ему дети сохраняются в общей транзакции. При замене
+  коллекции сохранять доменные ID и порядок; не генерировать новые ID в mapper.
+  Передавать непустой список значений детей в `execute(insert(ChildModel), values)`.
+- Если сценарий требует атомарного «создать, если отсутствует», использовать
+  `insert` из `sqlalchemy.dialects.postgresql` с псевдонимом `pg_insert`:
+  `pg_insert(Model).on_conflict_do_nothing(...)` с конкретным ограничением и
+  `RETURNING`. Предварительный SELECT не защищает от гонки уникальности.
+- `IntegrityError` переводить только по известным `SQLSTATE` и именам ограничений
+  в соответствующие предметные ошибки. Учитывать, что `error.orig` может быть
+  `None`; атрибуты драйвера читать безопасно через `getattr`, включая `__cause__`.
+  Неизвестную ошибку пробрасывать; при переводе сохранять причину через `raise ... from`.
+  Не выполнять локальный commit/rollback для сокрытия конфликта.
+- Бизнес-условия, например запрет удаления используемого агрегата, проверяются
+  через Domain/Application. Перевод ошибки защитного FK дополняет эту проверку.
+
 ##### Persistence Mapper
 
-Mapper является единственной точкой преобразования persistence representation → Domain.
+Mapper — единственная точка преобразования persistence representation → Domain.
+При обычном чтении он принимает конкретную ORM-модель и типизированную коллекцию
+дочерних моделей. ORM-модели остаются внутри Infrastructure.
 
 ```python
-class OrderMapper:
-    """Преобразует представление хранения в Domain и обратно без выполнения I/O."""
+class InventoryItemMapper:
+    """Преобразует ORM-модели и агрегат без SQL и бизнес-проверок."""
 
     @staticmethod
     def to_domain(
-        order_row: Mapping[str, Any],
-        item_rows: Sequence[
-            Mapping[str, Any]
-        ],
-    ) -> Order:
-
-        """Восстанавливает сохранённый агрегат с позициями, не создавая событие OrderCreated."""
-        return Order(
-            id=OrderIdVO.from_value(
-                order_row["id"]
+        model: InventoryItemModel,
+        barcode_models: Sequence[ItemBarcodeModel],
+    ) -> InventoryItem:
+        """Восстанавливает агрегат и детей с сохранёнными идентификаторами."""
+        return InventoryItem.restore(
+            identifier=InventoryItemIdVO.from_value(model.id),
+            sku=SkuVO(model.sku),
+            base_uom=UomCodeVO(model.base_uom),
+            quantity_rules=QuantityRulesVO(model.quantity_step),
+            tracking_mode=TrackingMode(model.tracking_mode),
+            expiration_mode=ExpirationMode(model.expiration_mode),
+            packagings=(),
+            barcodes=tuple(
+                ItemBarcode.restore(
+                    identifier=ItemBarcodeIdVO.from_value(child.id),
+                    barcode=BarcodeVO(child.barcode),
+                )
+                for child in barcode_models
             ),
-            customer_id=EntityIdVO.from_value(
-                order_row["customer_id"]
-            ),
-            status=OrderStatus(
-                order_row["status"]
-            ),
-            items=[
-                OrderItemMapper.to_domain(row)
-                for row in item_rows
-            ],
-            created_at=order_row[
-                "created_at"
-            ],
-            updated_at=order_row[
-                "updated_at"
-            ],
         )
 
     @staticmethod
-    def to_insert_values(
-        order: Order,
-    ) -> dict[str, Any]:
-
-        """Извлекает поля заказа в словарь для вставки; сам INSERT не выполняет."""
+    def to_insert_values(item: InventoryItem) -> dict[str, Any]:
+        """Извлекает скалярные настройки, сохраняя точный Decimal."""
         return {
-            "id": order.id.uuid,
-            "customer_id":
-                order.customer_id.uuid,
-            "status":
-                order.status.value,
-            "created_at":
-                order.created_at,
-            "updated_at":
-                order.updated_at,
+            "id": item.id.uuid,
+            "sku": item.sku.value,
+            "base_uom": item.base_uom.value,
+            "quantity_step": item.quantity_rules.step,
+            "tracking_mode": item.tracking_mode.value,
+            "expiration_mode": item.expiration_mode.value,
         }
 ```
 
-Mapper:
-
-```text
-не делает SELECT;
-не делает INSERT;
-не вызывает Repository;
-не делает commit;
-не содержит business rules.
-```
+Восстановление выполняется через явные фабрики `restore` агрегата и его Entity,
+без создания новых идентификаторов и событий создания. Mapper не выполняет SQL,
+не вызывает Repository, не управляет транзакцией и не содержит бизнес-инвариантов.
+Методы `to_insert_values`, `to_update_values`, `to_barcode_insert_values`
+подготавливают данные записи, но сами ничего не сохраняют.
 
 ##### Domain Repository implementation
 
-```python
-class SqlAlchemyOrderRepository:
+Write Repository работает с доменным агрегатом: методы записи принимают его,
+методы загрузки возвращают агрегат или `None` согласно контракту. ORM-модель,
+строка результата и DTO не заменяют агрегат. Контракт находится в Domain.
 
-    """Загружает агрегат из таблиц, скрывая SQL и ORM от внутренних слоёв."""
-    def __init__(
-        self,
-        session: AsyncSession,
-    ) -> None:
-        """Принимает сессию внешнего UoW с привязанной tenant-схемой."""
+```python
+class SqlAlchemyInventoryItemRepository:
+    """Хранит полный агрегат на сессии внешнего UoW."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Принимает общую сессию с выбранной tenant-схемой."""
         self._session = session
 
-    async def get(
-        self,
-        tenant_id: EntityIdVO,
-        order_id: OrderIdVO,
-    ) -> Order:
+    async def get_for_update(
+        self, identifier: InventoryItemIdVO
+    ) -> InventoryItem | None:
+        """Блокирует и перечитывает корень, затем читает его штрихкоды."""
+        statement = (
+            select(InventoryItemModel)
+            .where(InventoryItemModel.id == identifier.uuid)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        if model is None:
+            return None
+        return await self._restore(model)
 
-        """Читает заказ и его позиции в контексте tenant, затем восстанавливает агрегат."""
-        orders = OrderModel.__table__
-        items = OrderItemModel.__table__
+    async def _restore(self, model: InventoryItemModel) -> InventoryItem:
+        """Читает детей заблокированного корня и делегирует преобразование mapper."""
+        statement = (
+            select(ItemBarcodeModel)
+            .where(ItemBarcodeModel.inventory_item_id == model.id)
+            .order_by(ItemBarcodeModel.position)
+            .execution_options(populate_existing=True)
+        )
+        children = (await self._session.scalars(statement)).all()
+        return InventoryItemMapper.to_domain(model, children)
+```
 
-        order_result = (
-            await self._session.execute(
-                select(orders)
-                .where(
-                    orders.c.id
-                    == order_id.uuid
-                )
+Repository отвечает за механизмы хранения. Aggregate отвечает за бизнес-правила.
+Не добавлять отдельный репозиторий для штрихкодов, принадлежащих InventoryItem.
+
+###### Сохранение Aggregate
+
+Для записи используются mapped-классы и значения, подготовленные mapper:
+
+```python
+# Вставка корня внутри внешней транзакции.
+await session.execute(
+    insert(InventoryItemModel).values(InventoryItemMapper.to_insert_values(item))
+)
+
+# Обновление без замены идентичности и без неявного создания отсутствующего корня.
+statement = (
+    update(InventoryItemModel)
+    .where(InventoryItemModel.id == item.id.uuid)
+    .values(InventoryItemMapper.to_update_values(item))
+    .returning(InventoryItemModel.id)
+)
+identifier = await session.scalar(statement)
+if identifier is None:
+    raise InventoryItemNotFoundError("Складская позиция не найдена.")
+
+# Замена дочернего состава с прежними ID и доменным порядком.
+await session.execute(
+    delete(ItemBarcodeModel).where(ItemBarcodeModel.inventory_item_id == item.id.uuid)
+)
+children = InventoryItemMapper.to_barcode_insert_values(item)
+if children:
+    await session.execute(insert(ItemBarcodeModel), children)
+
+# Удаление корня: собственные штрихкоды удаляются защитным FK с CASCADE.
+statement = (
+    delete(InventoryItemModel)
+    .where(InventoryItemModel.id == item.id.uuid)
+    .returning(InventoryItemModel.id)
+)
+identifier = await session.scalar(statement)
+if identifier is None:
+    raise InventoryItemNotFoundError("Складская позиция не найдена.")
+```
+
+Фрагменты показывают отдельные операции, а не одну последовательность вызовов.
+В рабочих методах обязательны обработка известных конфликтов и защита от потери
+неподдерживаемых частей агрегата, как в Write Repository InventoryItem.
+`session.add(model)` не отправляет INSERT немедленно. Если выбран этот способ,
+репозиторий должен выполнить необходимый `flush` внутри обработки известных
+конфликтов, без самостоятельного commit. Отложенные ошибки commit по-прежнему
+обрабатываются на границе внешнего UoW.
+
+##### Query Repository implementation
+
+Query Repository возвращает DTO конкретного сценария и не восстанавливает Domain
+Aggregate. Использование ORM-моделей внутри Infrastructure не меняет это правило.
+Обычный список читается через `select(Model)` и `session.scalars`; карточка с
+детьми может читаться одной SQL-проекцией:
+
+```python
+class SqlAlchemyInventoryItemQueryRepository:
+    """Читает проекции текущего tenant без восстановления агрегата."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Принимает сессию внешнего UoW с выбранной tenant-схемой."""
+        self._session = session
+
+    async def get_details(
+        self, query: GetInventoryItemQuery
+    ) -> GetInventoryItemResultDTO | None:
+        """Читает карточку и штрихкоды одной SQL-проекцией."""
+        statement = (
+            select(InventoryItemModel, Nullable(ItemBarcodeModel))
+            .outerjoin(
+                ItemBarcodeModel,
+                ItemBarcodeModel.inventory_item_id == InventoryItemModel.id,
             )
+            .where(InventoryItemModel.id == query.inventory_item_id.uuid)
+            .order_by(ItemBarcodeModel.position)
+            .execution_options(populate_existing=True)
+        )
+        rows = (await self._session.execute(statement)).all()
+        if not rows:
+            return None
+        model = rows[0][0]
+        barcodes = tuple(barcode for _, barcode in rows if barcode is not None)
+        return InventoryItemQueryMapper.to_details(model, barcodes)
+
+    async def list(self, query: ListInventoryItemsQuery) -> ListInventoryItemsResultDTO:
+        """Применяет одинаковые фильтры к total и странице со стабильным порядком."""
+        filters: tuple[ColumnElement[bool], ...] = (
+            ()
+            if query.search is None
+            else (InventoryItemModel.sku.contains(query.search, autoescape=True),)
+        )
+        total = await self._session.execute(
+            select(func.count()).select_from(InventoryItemModel).where(*filters)
+        )
+        statement = (
+            select(InventoryItemModel)
+            .where(*filters)
+            .order_by(InventoryItemModel.sku, InventoryItemModel.id)
+            .offset(query.offset)
+            .limit(query.limit)
+            .execution_options(populate_existing=True)
+        )
+        models = (await self._session.scalars(statement)).all()
+        return ListInventoryItemsResultDTO(
+            items=tuple(
+                InventoryItemQueryMapper.to_list_item(model) for model in models
+            ),
+            total=total.scalar_one(),
+            offset=query.offset,
+            limit=query.limit,
+        )
+```
+
+На Query side допустимы JOIN, GROUP BY, CTE, оконные функции, JSON-агрегация,
+materialized views и read replicas. Это не основание восстанавливать Domain
+Aggregate или выдавать ORM-модель за DTO. Сложные проекции также остаются
+типизированными по правилам выше.
+
+###### Query Mapper
+
+Query Mapper принимает модели или конкретные типизированные значения проекции
+и возвращает DTO. Он не выполняет запросы и не вызывает persistence mapper
+для восстановления агрегата.
+
+```python
+class InventoryItemQueryMapper:
+    """Преобразует ORM-модели в DTO чтения без восстановления агрегата."""
+
+    @staticmethod
+    def to_list_item(model: InventoryItemModel) -> InventoryItemListItemDTO:
+        """Собирает строку списка из типизированной модели позиции."""
+        return InventoryItemListItemDTO(
+            id=model.id,
+            sku=model.sku,
+            base_uom=model.base_uom,
+            quantity_step=model.quantity_step,
+            tracking_mode=TrackingMode(model.tracking_mode),
+            expiration_mode=ExpirationMode(model.expiration_mode),
         )
 
-        order_row = (
-            order_result
-            .mappings()
-            .one_or_none()
-        )
-
-        if order_row is None:
-            raise OrderNotFoundError()
-
-        item_result = (
-            await self._session.execute(
-                select(items)
-                .where(
-                    items.c.order_id
-                    == order_id.uuid
-                )
-                .order_by(
-                    items.c.position
-                )
-            )
-        )
-
-        return OrderMapper.to_domain(
-            order_row,
-            tuple(
-                item_result.mappings()
+    @staticmethod
+    def to_details(
+        model: InventoryItemModel, barcodes: Sequence[ItemBarcodeModel]
+    ) -> GetInventoryItemResultDTO:
+        """Собирает карточку со штрихкодами в порядке SQL-проекции."""
+        return GetInventoryItemResultDTO(
+            id=model.id,
+            sku=model.sku,
+            base_uom=model.base_uom,
+            quantity_step=model.quantity_step,
+            tracking_mode=TrackingMode(model.tracking_mode),
+            expiration_mode=ExpirationMode(model.expiration_mode),
+            barcodes=tuple(
+                GetInventoryItemBarcodeDTO(id=barcode.id, barcode=barcode.barcode)
+                for barcode in barcodes
             ),
         )
 ```
 
-Repository отвечает за persistence mechanics.
+Методы чтения называются `to_details`, `to_list_item` или `to_projection`.
+Имя `to_domain` используется только при восстановлении доменного объекта.
 
-Aggregate отвечает за business rules.
+###### Проверка реализации репозиториев
 
-###### Сохранение Aggregate
+Перед завершением изменений проверить:
 
-При сохранении repository сам разбирает Aggregate на persistence representation.
-
-```python
-async def save(
-    self,
-    tenant_id: EntityIdVO,
-    order: Order,
-) -> None:
-
-    """Обновляет заказ и заменяет его позиции в общей транзакции, не выполняя commit."""
-    orders = OrderModel.__table__
-    items = OrderItemModel.__table__
-
-    await self._session.execute(
-        update(orders)
-        .where(
-            orders.c.id
-            == order.id.uuid
-        )
-        .values(
-            OrderMapper.to_update_values(
-                order
-            )
-        )
-    )
-
-    await self._session.execute(
-        delete(items)
-        .where(
-            items.c.order_id
-            == order.id.uuid
-        )
-    )
-
-    await self._session.execute(
-        insert(items),
-        [
-            OrderItemMapper
-            .to_insert_values(
-                order.id,
-                item,
-            )
-            for item in order.items
-        ],
-    )
-```
-
-Domain не знает, каким способом Aggregate сохраняется.
-
-##### Query Repository implementation
-
-Infrastructure может выполнять оптимизированный SQL напрямую.
-
-```python
-class SqlAlchemyOrderQueryRepository:
-
-    """Читает SQL-проекции заказов и преобразует результат в DTO."""
-    def __init__(
-        self,
-        session: AsyncSession,
-    ) -> None:
-        """Принимает внешнюю сессию с привязанной tenant-схемой."""
-        self._session = session
-
-    async def get_details(
-        self,
-        *,
-        tenant_id: EntityIdVO,
-        order_id: OrderIdVO,
-    ) -> OrderDetailsDTO | None:
-
-        """Соединяет таблицы, агрегирует позиции и возвращает DTO либо None."""
-        orders = OrderModel.__table__
-        customers = CustomerModel.__table__
-        items = OrderItemModel.__table__
-
-        statement = (
-            select(
-                orders.c.id,
-                orders.c.number,
-                orders.c.status,
-
-                customers.c.name.label(
-                    "customer_name"
-                ),
-
-                func.count(
-                    items.c.id
-                ).label("items_count"),
-
-                func.sum(
-                    items.c.total
-                ).label("total"),
-
-                orders.c.currency,
-                orders.c.created_at,
-            )
-            .select_from(
-                orders
-                .join(
-                    customers,
-                    customers.c.id
-                    == orders.c.customer_id,
-                )
-                .outerjoin(
-                    items,
-                    items.c.order_id
-                    == orders.c.id,
-                )
-            )
-            .where(
-                orders.c.id
-                == order_id.uuid
-            )
-            .group_by(
-                orders.c.id,
-                customers.c.name,
-            )
-        )
-
-        result = await self._session.execute(
-            statement
-        )
-
-        row = result.mappings().one_or_none()
-
-        if row is None:
-            return None
-
-        return OrderQueryMapper.to_details(
-            row
-        )
-```
-
-Это нормальная архитектура.
-
-На Query side допустимы:
-
-```text
-JOIN
-GROUP BY
-CTE
-window functions
-JSON aggregation
-raw SQL при необходимости
-materialized views
-read replicas
-```
-
-Потому что Query Repository не отвечает за восстановление domain state.
-
-###### Query Mapper
-
-```python
-class OrderQueryMapper:
-    """Преобразует строки SQL-проекции в DTO без запросов к базе данных."""
-
-    @staticmethod
-    def to_details(
-        row: Mapping[str, Any],
-    ) -> OrderDetailsDTO:
-
-        """Собирает детали заказа из именованных полей результата SQL."""
-        return OrderDetailsDTO(
-            id=row["id"],
-            number=row["number"],
-            customer_name=row[
-                "customer_name"
-            ],
-            status=row["status"],
-            items_count=row[
-                "items_count"
-            ],
-            total=row["total"],
-            currency=row["currency"],
-            created_at=row[
-                "created_at"
-            ],
-        )
-```
-
-Называть:
-
-```python
-# Имена отражают создание проекции для чтения, а не доменного объекта.
-to_projection()
-to_details()
-to_list_item()
-```
-
-Не называть:
-
-```python
-# Антипример: это имя вводит в заблуждение, если метод возвращает DTO.
-to_domain()
-```
-
-если Domain Entity фактически не создаётся.
+- Направление импортов и контракты: ORM-типы остаются в Infrastructure,
+  загрузка через Write Repository возвращает агрегат, Query Repository — конкретный DTO.
+- Типизированные запросы и mapper: нет обхода инспекций IDE; отсутствие записи
+  и nullable-сторона JOIN обработаны явно; аннотации и docstrings заполнены.
+- Общую сессию UoW, tenant isolation, порядок блокировок, свежесть загруженных
+  моделей, атомарность корня и детей и точность Decimal.
+- Совпадение фильтров страницы и total, стабильную сортировку и порядок детей.
+- Перевод только известных конфликтов с сохранением причины исключения.
+- Статическую проверку изменённых файлов и тесты соответствующего сценария.
+  Изменения SQL, ограничений, блокировок и ORM-загрузки проверять на PostgreSQL;
+  тестовые сессии должны поддерживать используемые `scalars` / `scalar` / `execute`.
+  Нельзя ослаблять проверки поведения ради прохождения после смены API запросов.
 
 ##### Unit of Work
 

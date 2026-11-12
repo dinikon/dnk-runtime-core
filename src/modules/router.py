@@ -5,6 +5,9 @@ from src.modules.inventory.presentation.uom.router import (
 from src.modules.inventory.presentation.inventory_item.router import (
     router as inventory_items_router,
 )
+from src.modules.inventory.presentation.warehouse.router import (
+    router as inventory_warehouses_router,
+)
 from fastapi import APIRouter
 
 from src.modules.crm.presentation.contact.router import router as contacts_router
@@ -23,6 +26,7 @@ router = APIRouter(prefix="/api/console")
 
 router.include_router(catalog_router)
 router.include_router(inventory_items_router)
+router.include_router(inventory_warehouses_router)
 router.include_router(inventory_uoms_router)
 from src.modules.files.presentation.router import router as files_router
 

@@ -5,6 +5,14 @@ class WarehouseError(InventoryError):
     """Базовая ошибка складского справочника."""
 
 
+class WarehouseCodeAlreadyExistsError(WarehouseError):
+    """Сообщает о занятом каноническом коде склада в текущем tenant."""
+
+
+class WarehouseNotFoundError(WarehouseError):
+    """Сообщает об отсутствии склада в текущем tenant."""
+
+
 class InvalidWarehouseValueError(WarehouseError):
     """Сообщает о некорректных типах собственного состояния склада."""
 
