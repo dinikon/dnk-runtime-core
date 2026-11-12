@@ -46,6 +46,10 @@ from src.modules.inventory.domain.inventory_item.error import (
     InvalidTrackingConfigurationError,
     InventoryItemComponentNotFoundError,
     InventoryItemConflictError,
+    InventoryItemInUseError,
+)
+from src.modules.inventory.domain.inventory_item.deletion_usage import (
+    InventoryItemDeletionUsage,
 )
 from src.modules.inventory.domain.inventory_item.value_object.barcode import BarcodeVO
 from src.modules.inventory.domain.inventory_item.value_object.expiration_mode import (
@@ -77,19 +81,26 @@ class InventoryItem:
     packagings: tuple[ItemPackaging, ...]
     barcodes: tuple[ItemBarcode, ...]
 
+    def ensure_can_delete(self, usage: InventoryItemDeletionUsage) -> None:
+        """Запрещает удаление при любой сохранённой связи с каталогом."""
+        if usage.has_catalog_items:
+            raise InventoryItemInUseError(
+                "Нельзя удалить складскую позицию: она связана с элементом каталога."
+            )
+
     @classmethod
     def create(
         cls,
         *,
         identifier: InventoryItemIdVO,
         sku: SkuVO,
-        base_uom: UomCodeVO,
-        quantity_rules: QuantityRulesVO,
+        base_uom: UomCodeVO = UomCodeVO("PCS"),
+        quantity_rules: QuantityRulesVO = QuantityRulesVO(Decimal("1")),
         tracking_mode: TrackingMode = TrackingMode.NONE,
         expiration_mode: ExpirationMode = ExpirationMode.NONE,
         barcodes: tuple[ItemBarcode, ...] = (),
     ) -> Self:
-        """Создаёт складской вариант с необязательными упаковками и штрихкодами."""
+        """Создаёт позицию с доменными defaults либо явно заданными настройками."""
         return cls.restore(
             identifier=identifier,
             packagings=(),
@@ -131,6 +142,26 @@ class InventoryItem:
     def change_sku(self, sku: SkuVO) -> Self:
         """Возвращает позицию с новым ручным SKU и прежней идентичностью."""
         return self._with_changes(sku=sku)
+
+    def revise(
+        self,
+        *,
+        sku: SkuVO,
+        base_uom: UomCodeVO,
+        quantity_rules: QuantityRulesVO,
+        tracking_mode: TrackingMode,
+        expiration_mode: ExpirationMode,
+        barcodes: tuple[ItemBarcode, ...],
+    ) -> Self:
+        """Атомарно проверяет итоговые данные без некорректных промежуточных состояний."""
+        return self._with_changes(
+            sku=sku,
+            base_uom=base_uom,
+            quantity_rules=quantity_rules,
+            tracking_mode=tracking_mode,
+            expiration_mode=expiration_mode,
+            barcodes=barcodes,
+        )
 
     def availability_snapshot(self) -> InventoryItemAvailabilitySnapshot:
         """Возвращает проверенные настройки количества, прослеживаемости и срока для доступности."""
@@ -345,6 +376,8 @@ class InventoryItem:
         """Проверяет новый кандидат целиком, сохраняя исходный агрегат при отказе."""
         candidate = replace(self, **changes)
         candidate._validate()
+        if candidate == self:
+            return self
         return candidate
 
     def _find_barcode(self, identifier: ItemBarcodeIdVO) -> ItemBarcode:

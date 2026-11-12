@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import {
+  InventorySkuPicker,
+  inventoryItemEditLocation,
+} from "@/modules/inventory";
 import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +16,9 @@ import ProductHeader from "../product/ProductHeader.vue";
 import ProductEditor from "../product/ProductEditor.vue";
 const {
   ctx,
+  skuSearch,
+  skuMutation,
+  setSku,
   id,
   scope,
   item,
@@ -150,6 +157,41 @@ function focused(): void {
       @focused="focused"
       @tab="pageState.selectTab"
     >
+      <template #sku>
+        <InventorySkuPicker
+          :id="`${item.data.value.id}-sku`"
+          :search="skuSearch.search.value"
+          :options="skuSearch.options.value"
+          :loading="skuSearch.loading.value"
+          :error="skuSearch.error.value"
+          :total="skuSearch.total.value"
+          :selected-code="item.data.value.sku"
+          :selected-id="item.data.value.inventoryItemId"
+          :disabled="blocked"
+          :pending="skuMutation.isPending.value"
+          @search="skuSearch.search.value = $event"
+          @select="setSku({ mode: 'existing', inventoryItemId: $event.id })"
+          @create="setSku({ mode: 'create', sku: $event })"
+          @clear="setSku({ mode: 'clear' })"
+          @retry="skuSearch.retry"
+        />
+        <Button
+          v-if="item.data.value.inventoryItemId"
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="blocked || pending"
+          @click="
+            ctx.router.push(
+              inventoryItemEditLocation(
+                item.data.value.inventoryItemId,
+                ctx.route.fullPath,
+              ),
+            )
+          "
+          >Настройки SKU</Button
+        >
+      </template>
       <template v-if="item.data.value.kind === 'variable'" #variants
         ><CatalogVariantsPage
           :root-id="id"

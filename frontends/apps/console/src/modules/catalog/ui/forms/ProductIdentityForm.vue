@@ -10,27 +10,19 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { CatalogItem } from "../../model/catalog.types";
 import type { ProductSection } from "../../model/product.types";
-import { useProductSectionDraft } from "../../model/use-product-section-draft";
 import ProductFieldError from "../product/ProductFieldError.vue";
-const props = defineProps<{
+defineProps<{
   item: CatalogItem;
   content: Record<string, string>;
   disabled: boolean;
   contentDisabled?: boolean;
   virtual: boolean;
   errors: Partial<Record<ProductSection, string>>;
-  resets: Partial<Record<ProductSection, number>>;
 }>();
 const emit = defineEmits<{
   title: [value: string];
   virtual: [value: boolean];
-  save: [section: ProductSection, value: Record<string, unknown>];
 }>();
-const { value: sku, change: changeSku } = useProductSectionDraft(
-  () => props.item.sku ?? "",
-  () => props.resets.sku ?? 0,
-  (value) => emit("save", "sku", { sku: value || null }),
-);
 </script>
 <template>
   <fieldset :disabled="disabled" class="min-w-0">
@@ -63,22 +55,12 @@ const { value: sku, change: changeSku } = useProductSectionDraft(
         />
       </Field>
       <Field
+        v-if="item.kind !== 'variable'"
         class="product-property-field"
         :data-invalid="!!errors.sku || undefined"
       >
-        <FieldLabel :for="`${item.id}-sku`">Артикул</FieldLabel>
-        <Input
-          :id="`${item.id}-sku`"
-          :model-value="sku"
-          placeholder="Например, CUP-001"
-          maxlength="128"
-          :aria-invalid="!!errors.sku || undefined"
-          :aria-describedby="`${item.id}-sku-hint ${errors.sku ? `${item.id}-sku-error` : ''}`"
-          @update:model-value="changeSku(String($event))"
-        />
-        <FieldDescription :id="`${item.id}-sku-hint`" class="sr-only"
-          >Уникальный артикул для поиска и учёта.</FieldDescription
-        >
+        <FieldLabel :for="`${item.id}-sku`">SKU</FieldLabel>
+        <slot name="sku" />
         <ProductFieldError :id="`${item.id}-sku-error`" :error="errors.sku" />
       </Field>
       <Field

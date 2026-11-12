@@ -1,3 +1,6 @@
+from src.modules.catalog.infrastructure.catalog_item.inventory_assembly import (
+    build_catalog_inventory,
+)
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +39,6 @@ from src.modules.catalog.infrastructure.catalog_item.persistence.repository impo
 from src.modules.catalog.infrastructure.catalog_item.content_schema import (
     SqlAlchemyProductTypeSchemas,
 )
-from src.modules.catalog.infrastructure.catalog_item.sku import SqlAlchemyCatalogItemSku
 from src.modules.catalog.infrastructure.catalog_item.files import FilesCatalogImages
 from src.modules.catalog.infrastructure.catalog_import.files import (
     FilesCatalogImportImages,
@@ -91,7 +93,7 @@ def build_process_import_row(
         items,
         PostgresCatalogMutationLock(session),
         CatalogStockEvents(
-            SqlAlchemyOutboxRepository(session), build_scheduled_job_repository(session)
+            SqlAlchemyOutboxRepository(session),
         ),
     )
     schemas = SqlAlchemyProductTypeSchemas(session)
@@ -110,7 +112,7 @@ def build_process_import_row(
         schemas,
         locales,
         currencies,
-        SqlAlchemyCatalogItemSku(session),
+        build_catalog_inventory(session),
         sanitizer,
         files,
         clock,
@@ -122,7 +124,7 @@ def build_process_import_row(
     return ProcessCatalogImportRowHandler(
         EntityIdVO(tenant_id),
         SqlAlchemyCatalogImportRepository(session),
-        SqlAlchemyImportRows(session),
+        SqlAlchemyImportRows(session, build_catalog_inventory(session).inventory),
         items,
         creation,
         mutations,

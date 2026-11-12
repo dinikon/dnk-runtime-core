@@ -135,7 +135,7 @@ content contract, не требует изменений Catalog и его DTO. 
 
 | Данные и правило | Владелец | Последствие для Catalog |
 | --- | --- | --- |
-| Товар, SKU, title/body, галереи, каноническая цена и заявленное наличие | Catalog | Источник исходящих данных; явное создание нового Draft допустимо через публичный контракт, повторный импорт его не меняет |
+| Товар, связь SKU, title/body, галереи, каноническая цена и заявленное наличие | Catalog; код SKU принадлежит Inventory | Источник исходящих данных; явное создание нового Draft допустимо через публичный контракт, повторный импорт его не меняет |
 | Включение интеграции, склады обслуживания, наценка и отбор товаров | Channel в Channels | Политики публикации, без дополнительных полей интеграций в товаре |
 | Магазин/кабинет/site, credentials, валюта ресурса, языки, разрешённые операции, доступность | Connection в Channels | Читает нужные locale через публичный контракт, не меняет локали/валюту товара |
 | Внешние категории, product types, схемы характеристик, dictionaries | Channels, scope Connection | Не становятся ProductType, Category или AttributeDefinition Catalog |
@@ -341,12 +341,13 @@ item ID/изменённых разделов; Catalog revisions для этог
    категорий, ровно одну основную при непустом наборе. Только SIMPLE получает теги.
    Назначения VARIABLE/VARIANT не включаются в MVP; проекция канала может иметь
    свою классификацию через mapping и overrides.
-7. Catalog хранит SKU-код, базовую цену/скидку, массу/размеры и вручную заданные
-   настройки наличия. Это полноценные поля нового MVP, а не условие подключения
-   будущего Inventory. Код SKU не является идентификатором складского агрегата.
+7. Catalog хранит inventory_item_id — nullable UUID FK на InventoryItem,
+   базовую цену/скидку, массу/размеры и вручную заданные настройки наличия.
+   Код SKU принадлежит Inventory и возвращается в read-проекциях по ссылке;
+   переименование кода не меняет UUID связи.
 8. Catalog не реализует склады, резервы, движения, заказы, списание остатков,
    налоги, оплату и права на скачивание. Количество здесь — заявленное наличие
-   карточки; подключение Inventory и fallback сейчас не проектируются.
+   карточки; подключение складских остатков и fallback проектируются отдельным срезом.
 9. `price`, `backorders_allowed`, `backordered` и effective stock status —
    вычисляемые поля чтения. Они не получают самостоятельных команд записи.
 10. `virtual` входит в MVP. Downloadable, цифровая выдача, упаковка, бренды,
@@ -427,8 +428,11 @@ Catalog проверяет полноту и допустимость состо
 
 ID, kind, parent_id, product_type, status, SKU, audit/revision и структура
 сохраняют правила разделов 1–2. Status — draft/active/archived; это жизненный
-цикл Catalog, а не статус внешнего канала. SKU — собственный trim-код
-SIMPLE/VARIANT, уникальный в tenant с сохранением регистра, у VARIABLE отсутствует.
+цикл Catalog, а не статус внешнего канала. SKU задаётся собственной ссылкой
+inventory_item_id у SIMPLE/VARIANT; у VARIABLE она отсутствует. Ссылка уникальна
+среди узлов Catalog текущего tenant. Код нормализуется Inventory через trim и
+casefold, длина после нормализации 1..25. Старое текстовое поле очищается при
+миграции и не используется для автоматического создания складских позиций.
 
 | Поле | SIMPLE | VARIABLE | VARIANT |
 | --- | --- | --- | --- |
@@ -715,7 +719,7 @@ EnumAttributeAssignmentInput и VariableStructureInput. Они не заменя
 | replace_catalog_item_structure | Полная структура, сохраняемые child ID, явные удаления и default | ReplaceCatalogItemStructureResultDTO | PUT /items/{root_id}/structure |
 | change_catalog_item_kind | Целевой kind, полная структура и политика перехода из раздела 8 | ChangeCatalogItemKindResultDTO | PUT /items/{root_id}/kind |
 | set_catalog_item_status | status | SetCatalogItemStatusResultDTO | PUT /items/{item_id}/status |
-| set_catalog_item_sku | SKU-код либо None | SetCatalogItemSkuResultDTO | PUT /items/{item_id}/sku |
+| set_catalog_item_sku | existing по inventory_item_id, create по ручному коду либо clear | SetCatalogItemSkuResultDTO | PUT /items/{item_id}/sku |
 | set_catalog_item_virtual | Собственный bool SIMPLE/VARIANT | SetCatalogItemVirtualResultDTO | PUT /items/{item_id}/virtual |
 | set_catalog_item_price | Собственная спецификация или None, только SIMPLE/VARIANT | SetCatalogItemPriceResultDTO | PUT /items/{item_id}/price |
 | set_catalog_item_stock | Полная спецификация с boolean manage_stock | SetCatalogItemStockResultDTO | PUT /items/{item_id}/stock |
@@ -837,7 +841,7 @@ Usage port нужен для удаления/переходов; пока вн�
 ### 10.1. Центральная модель и связанные таблицы
 
 `CatalogItemModel`, файл `catalog_item.py`, `__tablename__ = "catalog_item"`:
-UUID id, kind, parent_id, root product_type_id, status, sku, revision/audit,
+UUID id, kind, parent_id, root product_type_id, status, inventory_item_id, revision/audit,
 virtual bool, nullable price specification, обязательная stock specification,
 nullable weight/length/width/height и отдельные unit-столбцы. Mode-столбцов этих
 полей нет; SQL проверяет согласованность пар, единицы и точность канонических значений.
@@ -882,7 +886,9 @@ translations/content/media в новой схеме нет. Контент и me
   UNIQUE(id, kind) — цель FK. Так глубина ограничивается схемой без рекурсии.
 - Root product_type_id задан, VARIANT product_type_id отсутствует; собственный
   SKU только у SIMPLE/VARIANT. FK типов/blocks защищают системную схему.
-- UNIQUE непустого SKU в tenant, индексы parent_id и owner-ссылок;
+- UNIQUE непустого inventory_item_id, FK на inventory_items.id с ON DELETE RESTRICT;
+  бизнес-проверка Inventory запрещает удаление при любой связи Catalog;
+  индексы parent_id и owner-ссылок;
   частичный индекс списка корней по принятому фильтру и стабильному порядку.
 - UNIQUE content(item, locale, block), gallery(item, locale), image(gallery, position),
   selection(item, attribute), assignments(item, attribute), tags(item, tag).
@@ -1221,3 +1227,20 @@ optional ожидаемые root revisions. Для чтения деактиви
 Текущий usage adapter возвращает пустой набор при отсутствии внешних связей.
 При добавлении потребителей адаптер проверяет их публичные контракты,
 а необходимые события записываются в Outbox общего UoW.
+
+
+## Связь Catalog/Inventory (ноябрь 2026)
+
+Реализованы отдельные PUT назначения SKU корню и варианту, выбор существующего
+InventoryItem, быстрое создание с PCS/step=1/NONE/NONE и явное снятие связи.
+POST принимает выбор inventory_item атомарно с карточкой. Общий PATCH больше
+не принимает текстовый SKU. Один InventoryItem имеет максимум одного владельца
+Catalog; связь не наследуется от VARIABLE и не передаёт ему право редактировать
+складские настройки. Конкурентное создание и FK работают на общей tenant-сессии.
+
+Миграция 0018_catalog_inventory_items заменяет очищенную текстовую колонку
+nullable UUID-ссылкой. Коды читаются через публичный batch-контракт Inventory.
+Импорт simple-only использует точный канонический код и проверяет актуальность
+ссылки под блокировкой. Console предоставляет поиск и явный выбор/создание,
+создание SKU откладывается до подтверждения товара. DELETE InventoryItem сначала
+выполняет доменный запрет по снимку использования Catalog, затем защищён RESTRICT.

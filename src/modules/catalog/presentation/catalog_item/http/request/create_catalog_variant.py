@@ -1,3 +1,7 @@
+from src.modules.catalog.presentation.catalog_item.http.inventory_item_selection_value import (
+    InventoryItemSelectionValue,
+    inventory_item_selection,
+)
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
 )
@@ -31,7 +35,7 @@ class CreateCatalogVariantRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     status: CatalogItemStatus = CatalogItemStatus.DRAFT
-    sku: str | None = None
+    inventory_item: InventoryItemSelectionValue | None = None
     virtual: StrictBool = False
     price_specification: PriceValue | None = None
     stock: StockValue | None = None
@@ -54,7 +58,7 @@ class CreateCatalogVariantRequest(BaseModel):
         """Преобразует собственные значения без разрешения наследования."""
         return CreateCatalogVariantValues(
             status=self.status,
-            sku=self.sku,
+            inventory_item=inventory_item_selection(self.inventory_item),
             virtual=self.virtual,
             price_specification=(
                 self.price_specification.to_vo() if self.price_specification else None

@@ -144,7 +144,10 @@ class SqlAlchemyCatalogItemRepository:
                 await self._session.execute(insert(CatalogItemModel).values(**values))
             except IntegrityError as error:
                 original = getattr(error.orig, "__cause__", None) or error.orig
-                if getattr(original, "constraint_name", None) != "uq_catalog_item_sku":
+                if (
+                    getattr(original, "constraint_name", None)
+                    != "uq_catalog_item_inventory_item"
+                ):
                     raise
                 raise CatalogConflictError(
                     "Конфликт уникального SKU.", ("sku",)

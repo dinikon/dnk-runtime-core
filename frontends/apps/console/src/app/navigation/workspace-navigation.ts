@@ -1,4 +1,11 @@
-import { Building2, LifeBuoy, ShoppingBasket, Users, Plug } from "@lucide/vue";
+import {
+  Building2,
+  LifeBuoy,
+  ShoppingBasket,
+  Users,
+  Plug,
+  Warehouse,
+} from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
@@ -11,6 +18,12 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Каталог",
       items: [{ title: "Товары", url: "/catalog/items", icon: ShoppingBasket }],
+    },
+    {
+      title: "Склад",
+      items: [
+        { title: "Номенклатура", url: "/inventory/items", icon: Warehouse },
+      ],
     },
     {
       title: "CRM",

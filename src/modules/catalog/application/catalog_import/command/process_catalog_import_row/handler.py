@@ -77,7 +77,8 @@ class ProcessCatalogImportRowHandler:
             )
         entity.begin(self.clock.now())
         values = mapped_values(entity.configuration, command.row.values)
-        sku = scalar(values, "sku") or None
+        raw_sku = scalar(values, "sku") or None
+        sku = self.creation.inventory.inventory.normalize(raw_sku) if raw_sku else None
         mode = entity.configuration.mode
         if mode != "create" and not sku:
             raise InvalidCatalogValueError(
@@ -122,7 +123,17 @@ class ProcessCatalogImportRowHandler:
                 item = await self.mutations.load(
                     self.tenant_id, CatalogItemIdVO(identifier)
                 )
-                if item.sku is None or item.sku.value != sku:
+                current_codes = (
+                    await self.creation.inventory.inventory.codes(
+                        (item.inventory_item_id.uuid,)
+                    )
+                    if item.inventory_item_id
+                    else {}
+                )
+                if (
+                    item.inventory_item_id is None
+                    or current_codes.get(item.inventory_item_id.uuid) != sku
+                ):
                     raise CatalogConflictError(
                         "SKU товара изменился во время импорта. Проверьте строку и повторите импорт.",
                         ("sku",),
@@ -135,7 +146,7 @@ class ProcessCatalogImportRowHandler:
                     else {}
                 )
                 product = prepared.product
-                fields = prepared.fields - {"sku"}
+                fields = prepared.fields - {"inventory_item"}
                 if fields:
                     await self.updates.apply(
                         UpdateCatalogItemCommand(

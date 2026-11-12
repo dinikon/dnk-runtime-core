@@ -1,4 +1,7 @@
 from dataclasses import dataclass, field
+from src.modules.catalog.application.catalog_item.inventory_item_selection import (
+    CatalogInventoryItemSelection,
+)
 from src.modules.catalog.domain.catalog_item.value_object.kind import (
     CatalogItemKind,
 )
@@ -31,7 +34,7 @@ class CreateCatalogVariantValues:
     """Собственные значения варианта, отсутствующие разделы наследуются."""
 
     status: CatalogItemStatus = CatalogItemStatus.DRAFT
-    sku: str | None = None
+    inventory_item: CatalogInventoryItemSelection | None = None
     virtual: bool = False
     price_specification: PriceSpecificationVO | None = None
     stock: StockSpecificationVO = field(default_factory=StockSpecificationVO)
@@ -48,7 +51,7 @@ class CreateCatalogItemValues:
     product_type_code: str = "default"
     virtual: bool = False
     status: CatalogItemStatus = CatalogItemStatus.DRAFT
-    sku: str | None = None
+    inventory_item: CatalogInventoryItemSelection | None = None
     price_specification: PriceSpecificationVO | None = None
     stock: StockSpecificationVO = field(default_factory=StockSpecificationVO)
     weight: WeightVO | None = None

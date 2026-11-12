@@ -6,7 +6,7 @@ from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, localcontext
 import unittest
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_DNS
 from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
 from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImage
@@ -26,7 +26,6 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
@@ -372,10 +371,10 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             expected_schema_version=1,
         )
         self.item.update(
-            fields=frozenset({"sku"}),
+            fields=frozenset({"inventory_item_id"}),
             actor=self.actor,
             now=self.now,
-            sku=SkuCodeVO(" SKU "),
+            inventory_item_id=EntityIdVO(uuid5(NAMESPACE_DNS, "SKU")),
         )
         row = CatalogItemMapper.to_insert_values(self.item)
         parts = CatalogItemMapper.to_parts(
@@ -441,10 +440,10 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         before = self.item.snapshot()
         with self.assertRaises(InvalidCatalogValueError):
             self.item.update(
-                fields=frozenset({"sku", "content"}),
+                fields=frozenset({"inventory_item_id", "content"}),
                 actor=self.actor,
                 now=self.now + timedelta(seconds=1),
-                sku=SkuCodeVO("candidate"),
+                inventory_item_id=EntityIdVO(uuid5(NAMESPACE_DNS, "candidate")),
                 locale=LocaleVO("en"),
                 content={"title": ""},
                 schema=self.schema,
@@ -452,19 +451,19 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             )
         self.assertEqual(before, self.item.snapshot())
         self.item.update(
-            fields=frozenset({"sku", "status", "virtual"}),
+            fields=frozenset({"inventory_item_id", "status", "virtual"}),
             actor=self.actor,
             now=self.now + timedelta(seconds=2),
-            sku=SkuCodeVO("atomic"),
+            inventory_item_id=EntityIdVO(uuid5(NAMESPACE_DNS, "atomic")),
             status=CatalogItemStatus.ACTIVE,
             virtual=True,
         )
         accepted = self.item.snapshot()
         self.item.update(
-            fields=frozenset({"sku", "status", "virtual"}),
+            fields=frozenset({"inventory_item_id", "status", "virtual"}),
             actor=EntityIdVO(uuid4()),
             now=self.now + timedelta(seconds=3),
-            sku=SkuCodeVO("atomic"),
+            inventory_item_id=EntityIdVO(uuid5(NAMESPACE_DNS, "atomic")),
             status=CatalogItemStatus.ACTIVE,
             virtual=True,
         )

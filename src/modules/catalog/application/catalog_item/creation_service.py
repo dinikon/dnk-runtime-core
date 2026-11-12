@@ -12,7 +12,9 @@ from src.modules.catalog.domain.product_type.value_object.schema import (
 from src.modules.catalog.application.catalog_item.creation_values import (
     CreateCatalogItemValues,
 )
-from src.modules.catalog.application.catalog_item.port.sku import CatalogItemSkuPort
+from src.modules.catalog.application.catalog_item.inventory_service import (
+    CatalogItemInventoryService,
+)
 from src.modules.catalog.application.catalog_item.port.content_schema import (
     CatalogItemContentSchemaPort,
 )
@@ -26,7 +28,6 @@ from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.value_object.locale import LocaleVO
 from src.modules.catalog.domain.error import (
     CatalogConflictError,
@@ -40,25 +41,25 @@ from src.modules.shared.application.uuid.uuid_port import UUIdGeneratorProtocol
 
 
 class CatalogItemCreationService:
-    """Готовит полностью проверенный агрегат для создания или предварительной проверки."""
+    """Готовит агрегат и разрешает складскую ссылку внутри атомарного создания."""
 
     def __init__(
         self,
         schemas: CatalogItemContentSchemaPort,
         locales: LocalePort,
         currencies: CurrencyPort,
-        skus: CatalogItemSkuPort,
+        inventory: CatalogItemInventoryService,
         sanitizer: RichTextSanitizerPort,
         files: CatalogImageFilesPort,
         clock: ClockPort,
         uuid: UUIdGeneratorProtocol,
     ) -> None:
         """Получает порты внешнего UoW; не сохраняет товар и не завершает транзакцию."""
-        self.schemas, self.locales, self.currencies, self.skus = (
+        self.schemas, self.locales, self.currencies, self.inventory = (
             schemas,
             locales,
             currencies,
-            skus,
+            inventory,
         )
         self.sanitizer, self.files, self.clock, self.uuid = (
             sanitizer,
@@ -75,11 +76,10 @@ class CatalogItemCreationService:
         *,
         identifier: CatalogItemIdVO | None = None,
     ) -> CatalogItem:
-        """Проверяет внешние ссылки и применяет значения через фабрику и методы Domain."""
+        """Разрешает SKU в общей транзакции, проверяет ссылки и применяет методы Domain."""
         schema = await self.schemas.get_by_code(values.product_type_code)
-        sku = SkuCodeVO(values.sku) if values.sku is not None else None
-        if sku and await self.skus.in_use(sku.value):
-            raise CatalogConflictError("SKU уже используется.", ("sku",))
+        reference = await self.inventory.resolve(values.inventory_item)
+        inventory_item_id = EntityIdVO(reference.id) if reference else None
         if values.price_specification is not None:
             try:
                 await self.currencies.ensure_active(values.price_specification.currency)
@@ -115,7 +115,7 @@ class CatalogItemCreationService:
             fields=frozenset(
                 (
                     "status",
-                    "sku",
+                    "inventory_item_id",
                     "price_specification",
                     "stock",
                     "weight",
@@ -125,7 +125,7 @@ class CatalogItemCreationService:
             actor=actor_id,
             now=now,
             status=CatalogItemStatus.DRAFT,
-            sku=sku,
+            inventory_item_id=inventory_item_id,
             price_specification=values.price_specification,
             stock=values.stock,
             weight=values.weight,
@@ -204,9 +204,8 @@ class CatalogItemCreationService:
         schema: ProductTypeSchemaSnapshot,
     ) -> CatalogVariant:
         """Проверяет внешние значения entity, не записывая унаследованные поля."""
-        sku = SkuCodeVO(values.sku) if values.sku is not None else None
-        if sku and await self.skus.in_use(sku.value):
-            raise CatalogConflictError("SKU уже используется.", ("sku",))
+        reference = await self.inventory.resolve(values.inventory_item)
+        inventory_item_id = EntityIdVO(reference.id) if reference else None
         if values.price_specification:
             await self.currencies.ensure_active(values.price_specification.currency)
         now = self.clock.now()
@@ -220,7 +219,7 @@ class CatalogItemCreationService:
             fields=frozenset(
                 {
                     "status",
-                    "sku",
+                    "inventory_item_id",
                     "virtual",
                     "price_specification",
                     "stock",
@@ -231,7 +230,7 @@ class CatalogItemCreationService:
             actor=actor_id,
             now=now,
             status=values.status,
-            sku=sku,
+            inventory_item_id=inventory_item_id,
             virtual=values.virtual,
             price_specification=values.price_specification,
             stock=values.stock,

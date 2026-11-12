@@ -1,3 +1,15 @@
+from src.modules.catalog.presentation.catalog_item.http.controller.set_catalog_item_sku import (
+    set_catalog_item_sku,
+)
+from src.modules.catalog.presentation.catalog_item.http.controller.set_catalog_variant_sku import (
+    set_catalog_variant_sku,
+)
+from src.modules.catalog.presentation.catalog_item.http.response.set_catalog_item_sku import (
+    SetCatalogItemSkuResponse,
+)
+from src.modules.catalog.presentation.catalog_item.http.response.set_catalog_variant_sku import (
+    SetCatalogVariantSkuResponse,
+)
 from fastapi import APIRouter, Depends
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
@@ -236,4 +248,29 @@ router.add_api_route(
     methods=["GET"],
     status_code=200,
     dependencies=[Depends(require_authenticated_request_context)],
+)
+
+
+router.add_api_route(
+    "/{item_id}/sku",
+    set_catalog_item_sku,
+    methods=["PUT"],
+    status_code=200,
+    response_model=SetCatalogItemSkuResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+router.add_api_route(
+    "/{item_id}/variants/{variant_id}/sku",
+    set_catalog_variant_sku,
+    methods=["PUT"],
+    status_code=200,
+    response_model=SetCatalogVariantSkuResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
 )

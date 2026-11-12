@@ -1,3 +1,6 @@
+from src.modules.catalog.presentation.catalog_item.http.inventory_item_selection_value import (
+    inventory_item_selection,
+)
 from src.modules.catalog.application.catalog_item.creation_values import (
     CreateCatalogItemValues,
     CreateCatalogItemTranslation,
@@ -6,7 +9,6 @@ from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
 )
 from fastapi import HTTPException
-from sqlalchemy.exc import IntegrityError
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -53,7 +55,7 @@ async def create_catalog_item(
                     product_type_code=payload.product_type_code,
                     virtual=payload.virtual,
                     status=payload.status,
-                    sku=payload.sku,
+                    inventory_item=inventory_item_selection(payload.inventory_item),
                     price_specification=(
                         payload.price_specification.to_vo()
                         if payload.price_specification
@@ -89,8 +91,4 @@ async def create_catalog_item(
         raise HTTPException(422, str(exc)) from exc
     except (ValueError, ArithmeticError) as exc:
         raise HTTPException(422, "Некорректное значение.") from exc
-    except IntegrityError as exc:
-        raise HTTPException(
-            409, "Конфликт уникального кода или используемой ссылки."
-        ) from exc
     return CreateCatalogItemResponse.model_validate(transport_value(result))

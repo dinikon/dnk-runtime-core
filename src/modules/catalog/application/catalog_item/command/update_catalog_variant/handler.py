@@ -84,7 +84,6 @@ class UpdateCatalogVariantHandler:
             actor=command.actor_id,
             now=self._clock.now(),
             status=command.status,
-            sku=command.sku,
             virtual=command.virtual,
             price_specification=command.price_specification,
             stock=command.stock,

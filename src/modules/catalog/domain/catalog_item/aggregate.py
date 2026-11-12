@@ -27,7 +27,6 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     DimensionsVO,
     WeightVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
 )
@@ -51,7 +50,7 @@ class CatalogItem:
     id: CatalogItemIdVO
     product_type_id: EntityIdVO
     status: CatalogItemStatus
-    sku: SkuCodeVO | None
+    inventory_item_id: EntityIdVO | None
     virtual: bool
     price: PriceSpecificationVO | None
     weight: WeightVO | None
@@ -83,7 +82,7 @@ class CatalogItem:
             identifier=identifier,
             product_type_id=product_type_id,
             status=CatalogItemStatus.DRAFT,
-            sku=None,
+            inventory_item_id=None,
             virtual=virtual,
             price=None,
             weight=None,
@@ -102,7 +101,7 @@ class CatalogItem:
         identifier: CatalogItemIdVO,
         product_type_id: EntityIdVO,
         status: CatalogItemStatus,
-        sku: SkuCodeVO | None,
+        inventory_item_id: EntityIdVO | None,
         virtual: bool,
         price: PriceSpecificationVO | None,
         weight: WeightVO | None,
@@ -123,7 +122,7 @@ class CatalogItem:
             id=identifier,
             product_type_id=product_type_id,
             status=status,
-            sku=sku,
+            inventory_item_id=inventory_item_id,
             virtual=virtual,
             price=price,
             weight=weight,
@@ -164,13 +163,39 @@ class CatalogItem:
         item._validate()
         return item
 
+    def set_inventory_item(
+        self,
+        *,
+        identifier: EntityIdVO | None,
+        actor: EntityIdVO,
+        now: datetime,
+        target_id: CatalogItemIdVO | None = None,
+    ) -> None:
+        """Назначает собственную складскую позицию через границу корня агрегата."""
+        if target_id is not None and target_id != self.id:
+            variant = self.variant(target_id).changed(
+                fields=frozenset({"inventory_item_id"}),
+                inventory_item_id=identifier,
+                actor=actor,
+                now=now,
+            )
+            self.change_variant(variant=variant, actor=actor, now=now)
+            return
+        self.update(
+            fields=frozenset({"inventory_item_id"}),
+            inventory_item_id=identifier,
+            actor=actor,
+            now=now,
+        )
+
     def snapshot(self) -> CatalogItemValuesSnapshot:
         """Передаёт значения чистой политике без ссылки на агрегат."""
         return CatalogItemValuesSnapshot(
             id=self.id,
             product_type_id=self.product_type_id,
             status=self.status,
-            sku=self.sku.value if self.sku else None,
+            sku=None,
+            inventory_item_id=self.inventory_item_id,
             virtual=self.virtual,
             price=self.price,
             weight=self.weight,
@@ -204,8 +229,14 @@ class CatalogItem:
             )
         ):
             raise InvalidCatalogValueError("Audit требует timezone.")
-        if self.sku is not None and not isinstance(self.sku, SkuCodeVO):
+        if self.inventory_item_id is not None and not isinstance(
+            self.inventory_item_id, EntityIdVO
+        ):
             raise InvalidCatalogValueError("Некорректный SKU.", ("sku",))
+        if self.kind is CatalogItemKind.VARIABLE and self.inventory_item_id is not None:
+            raise InvalidCatalogValueError(
+                "Контейнер VARIABLE не имеет собственного SKU.", ("sku",)
+            )
         if type(self.virtual) is not bool:
             raise InvalidCatalogValueError("Virtual требует bool.", ("virtual",))
         if self.price is not None and (
@@ -248,7 +279,7 @@ class CatalogItem:
         actor: EntityIdVO,
         now: datetime,
         status: CatalogItemStatus | None = None,
-        sku: SkuCodeVO | None = None,
+        inventory_item_id: EntityIdVO | None = None,
         virtual: bool | None = None,
         price_specification: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO | None = None,
@@ -263,7 +294,7 @@ class CatalogItem:
         """Атомарно принимает явно заданные значения после проверки итогового кандидата."""
         values: dict[str, object] = {
             "status": status,
-            "sku": sku,
+            "inventory_item_id": inventory_item_id,
             "virtual": virtual,
             "price_specification": price_specification,
             "stock": stock,
@@ -409,8 +440,11 @@ class CatalogItem:
                 "Идентификаторы семьи должны быть уникальны."
             )
         skus = [
-            value.value
-            for value in (self.sku, *(v.sku for v in self.variants))
+            value.uuid
+            for value in (
+                self.inventory_item_id,
+                *(v.inventory_item_id for v in self.variants),
+            )
             if value is not None
         ]
         if len(set(skus)) != len(skus):

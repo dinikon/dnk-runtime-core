@@ -39,6 +39,7 @@ export interface CatalogItem {
   product_type_id: string;
   status: "draft" | "active" | "archived";
   sku: string | null;
+  inventoryItemId: string | null;
   virtual: boolean;
   price_specification: ProductPrice | null;
   price: string | null;
@@ -71,6 +72,7 @@ export interface CatalogListItem {
   id: string;
   status: import("./product.types").ProductStatus;
   sku: string | null;
+  inventoryItemId: string | null;
   title: string | null;
   price: string | null;
   currency: string | null;

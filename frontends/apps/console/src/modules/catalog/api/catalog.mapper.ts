@@ -10,8 +10,10 @@ import type {
   CatalogSchema,
 } from "../model/catalog.types";
 export function itemFromDto(value: ReadItemDTO): CatalogItem {
+  const { inventory_item_id, ...item } = value;
   return {
-    ...value,
+    ...item,
+    inventoryItemId: inventory_item_id ?? null,
     title: value.effective_content?.title ?? value.content?.title ?? null,
   };
 }
@@ -30,6 +32,7 @@ export function listItemFromDto(value: ListItemDTO): CatalogListItem {
     mixed_currencies: value.mixed_currencies,
     status: value.status,
     sku: value.sku,
+    inventoryItemId: value.inventory_item_id ?? null,
     title: value.title,
     price: value.price,
     currency: value.currency,

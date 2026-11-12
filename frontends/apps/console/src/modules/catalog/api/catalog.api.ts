@@ -1,3 +1,12 @@
+import type {
+  CatalogSkuSelection,
+  SetCatalogSkuResult,
+} from "../model/catalog-sku.types";
+import type { SetCatalogSkuResponseDTO } from "./catalog-sku.dto";
+import {
+  catalogSkuSelectionToDto,
+  setCatalogSkuResultFromDto,
+} from "./catalog-sku.mapper";
 import {
   itemFromDto,
   listItemFromDto,
@@ -54,11 +63,15 @@ export const catalogApi = {
   async createItem(
     virtual = false,
     kind: "simple" | "variable" = "simple",
+    inventoryItem: CatalogSkuSelection | null = null,
   ): Promise<{ id: string }> {
     return (
       await httpClient.post<DTO.CreateItemResponse>(base + "/items", {
         virtual,
         kind,
+        inventory_item: inventoryItem
+          ? catalogSkuSelectionToDto(inventoryItem)
+          : null,
       })
     ).data;
   },
@@ -74,6 +87,20 @@ export const catalogApi = {
         { params: { locale } },
       )
     ).data;
+  },
+  async setSku(
+    id: string,
+    selection: CatalogSkuSelection,
+    variantId?: string,
+  ): Promise<SetCatalogSkuResult> {
+    const path = variantId
+      ? `${base}/items/${encodeURIComponent(id)}/variants/${encodeURIComponent(variantId)}/sku`
+      : `${base}/items/${encodeURIComponent(id)}/sku`;
+    const { data } = await httpClient.put<SetCatalogSkuResponseDTO>(
+      path,
+      catalogSkuSelectionToDto(selection),
+    );
+    return setCatalogSkuResultFromDto(data);
   },
   async deleteItem(id: string): Promise<void> {
     await httpClient.delete(base + `/items/${encodeURIComponent(id)}`);

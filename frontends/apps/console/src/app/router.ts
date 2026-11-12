@@ -10,6 +10,7 @@ import { catalogRoutes } from "@/modules/catalog/routes";
 import { filesRoutes } from "@/modules/files/routes";
 import { funnelRoutes } from "@/modules/funnel";
 import { channelRoutes } from "@/modules/channels";
+import { inventoryRoutes } from "@/modules/inventory";
 import { crmRoutes } from "@/modules/crm";
 import { dashboardRoutes } from "@/modules/dashboard";
 import { exampleRoutes } from "@/modules/example";
@@ -43,6 +44,7 @@ export const router = createRouter({
         ...crmRoutes,
         ...funnelRoutes,
         ...channelRoutes,
+        ...inventoryRoutes,
         {
           path: "settings/members",
           redirect: { name: "admin-users" },

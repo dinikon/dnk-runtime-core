@@ -20,7 +20,6 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     WeightVO,
     DimensionsVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
 )
@@ -41,7 +40,7 @@ class CatalogVariant:
     created_by: EntityIdVO
     updated_by: EntityIdVO
     status: CatalogItemStatus = CatalogItemStatus.DRAFT
-    sku: SkuCodeVO | None = None
+    inventory_item_id: EntityIdVO | None = None
     virtual: bool = False
     price: PriceSpecificationVO | None = None
     stock: StockSpecificationVO = field(default_factory=StockSpecificationVO)
@@ -80,7 +79,7 @@ class CatalogVariant:
         created_by: EntityIdVO,
         updated_by: EntityIdVO,
         status: CatalogItemStatus = CatalogItemStatus.DRAFT,
-        sku: SkuCodeVO | None = None,
+        inventory_item_id: EntityIdVO | None = None,
         virtual: bool = False,
         price: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO = StockSpecificationVO(),
@@ -98,7 +97,7 @@ class CatalogVariant:
             created_by,
             updated_by,
             status,
-            sku,
+            inventory_item_id,
             virtual,
             price,
             stock,
@@ -133,7 +132,7 @@ class CatalogVariant:
         ):
             raise InvalidCatalogValueError("Некорректный audit варианта.")
         for value, expected, name in (
-            (self.sku, SkuCodeVO, "sku"),
+            (self.inventory_item_id, EntityIdVO, "sku"),
             (self.price, PriceSpecificationVO, "price_specification"),
             (self.weight, WeightVO, "weight"),
             (self.dimensions, DimensionsVO, "dimensions"),
@@ -171,7 +170,8 @@ class CatalogVariant:
             id=self.id,
             product_type_id=product_type_id,
             status=self.status,
-            sku=self.sku.value if self.sku else None,
+            sku=None,
+            inventory_item_id=self.inventory_item_id,
             virtual=self.virtual,
             price=self.price,
             weight=self.weight,
@@ -194,7 +194,7 @@ class CatalogVariant:
         actor: EntityIdVO,
         now: datetime,
         status: CatalogItemStatus | None = None,
-        sku: SkuCodeVO | None = None,
+        inventory_item_id: EntityIdVO | None = None,
         virtual: bool | None = None,
         price_specification: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO | None = None,
@@ -207,7 +207,7 @@ class CatalogVariant:
         """Готовит кандидата; агрегат проверяет наследование перед применением."""
         values = {
             "status": status,
-            "sku": sku,
+            "inventory_item_id": inventory_item_id,
             "virtual": virtual,
             "price_specification": price_specification,
             "stock": stock,

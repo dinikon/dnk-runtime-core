@@ -1,3 +1,6 @@
+from src.modules.catalog.application.catalog_item.inventory_item_selection import (
+    CatalogInventoryItemSelection,
+)
 import re
 import json
 from dataclasses import dataclass, replace
@@ -225,7 +228,7 @@ def product_values(
         else CreateCatalogItemValues(
             virtual=current.virtual,
             status=current.status,
-            sku=current.sku.value if current.sku else None,
+            inventory_item=None,
             price_specification=current.price,
             stock=current.stock,
             weight=current.weight,
@@ -241,8 +244,14 @@ def product_values(
     try:
         if "sku" in values:
             section = "sku"
-            product = replace(product, sku=scalar(values, "sku") or None)
-            fields.add("sku")
+            code = scalar(values, "sku")
+            product = replace(
+                product,
+                inventory_item=(
+                    CatalogInventoryItemSelection("create", sku=code) if code else None
+                ),
+            )
+            fields.add("inventory_item")
         if "status" in values:
             section = "status"
             product = replace(

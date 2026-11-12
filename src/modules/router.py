@@ -1,4 +1,10 @@
 from src.modules.catalog.presentation.router import router as catalog_router
+from src.modules.inventory.presentation.uom.router import (
+    router as inventory_uoms_router,
+)
+from src.modules.inventory.presentation.inventory_item.router import (
+    router as inventory_items_router,
+)
 from fastapi import APIRouter
 
 from src.modules.crm.presentation.contact.router import router as contacts_router
@@ -16,6 +22,8 @@ from src.modules.reference_data.presentation.router import (
 router = APIRouter(prefix="/api/console")
 
 router.include_router(catalog_router)
+router.include_router(inventory_items_router)
+router.include_router(inventory_uoms_router)
 from src.modules.files.presentation.router import router as files_router
 
 router.include_router(files_router)

@@ -1,3 +1,6 @@
+from src.modules.catalog.application.catalog_item.port.inventory import (
+    CatalogInventoryItemPort,
+)
 from dataclasses import replace
 from uuid import UUID
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -68,9 +71,12 @@ from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
 class SqlAlchemyCatalogItemQueryRepository:
     """Читает согласованные batch-проекции простых товаров на внешнем UoW."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, inventory: CatalogInventoryItemPort
+    ) -> None:
         """Не восстанавливает Domain Aggregate и не управляет UoW."""
         self._session = session
+        self._inventory = inventory
 
     async def _values(
         self, rows: Sequence[Mapping[str, Any]], locale: str
@@ -81,7 +87,33 @@ class SqlAlchemyCatalogItemQueryRepository:
             if rows
             else {}
         )
-        return tuple((CatalogItemMapper.to_values(row, parts) for row in rows))
+        return await self._with_codes(
+            tuple(CatalogItemMapper.to_values(row, parts) for row in rows)
+        )
+
+    async def _with_codes(
+        self, values: tuple[CatalogItemValuesSnapshot, ...]
+    ) -> tuple[CatalogItemValuesSnapshot, ...]:
+        """Дополняет read-проекции актуальными кодами одним публичным batch Inventory."""
+        identifiers = tuple(
+            {
+                value.inventory_item_id.uuid
+                for value in values
+                if value.inventory_item_id is not None
+            }
+        )
+        codes = await self._inventory.codes(identifiers)
+        return tuple(
+            replace(
+                value,
+                sku=(
+                    codes.get(value.inventory_item_id.uuid)
+                    if value.inventory_item_id
+                    else None
+                ),
+            )
+            for value in values
+        )
 
     async def get(
         self, query: GetCatalogItemQuery, as_of: datetime
@@ -149,9 +181,10 @@ class SqlAlchemyCatalogItemQueryRepository:
                 )
                 .exists()
             )
+            inventory_ids = await self._inventory.search_ids(query.search)
             matches = (
                 select(func.coalesce(table.c.parent_id, table.c.id))
-                .where(or_(table.c.sku.ilike("%" + query.search + "%"), name))
+                .where(or_(table.c.inventory_item_id.in_(inventory_ids), name))
                 .correlate(None)
             )
             filters.append(table.c.id.in_(matches))
@@ -243,9 +276,11 @@ class SqlAlchemyCatalogItemQueryRepository:
             if include_parts
             else {}
         )
-        return tuple(
-            CatalogItemMapper.to_values(row, parts, types[row["parent_id"]])
-            for row in rows
+        return await self._with_codes(
+            tuple(
+                CatalogItemMapper.to_values(row, parts, types[row["parent_id"]])
+                for row in rows
+            )
         )
 
     async def get_variant(
@@ -273,6 +308,7 @@ class SqlAlchemyCatalogItemQueryRepository:
         parts = await read_parts(self._session, (root["id"], row["id"]), query.locale)
         parent = CatalogItemMapper.to_values(root, parts)
         own = CatalogItemMapper.to_values(row, parts, parent.product_type_id)
+        parent, own = await self._with_codes((parent, own))
         return GetCatalogVariantResultDTO(
             CatalogItemQueryMapper.variant(parent, own, query.locale, as_of), as_of
         )
@@ -308,9 +344,11 @@ class SqlAlchemyCatalogItemQueryRepository:
             self._session, (root["id"], *(r["id"] for r in rows)), query.locale
         )
         parent = CatalogItemMapper.to_values(root, parts)
-        values = tuple(
-            CatalogItemMapper.to_values(row, parts, parent.product_type_id)
-            for row in rows
+        values = await self._with_codes(
+            tuple(
+                CatalogItemMapper.to_values(row, parts, parent.product_type_id)
+                for row in rows
+            )
         )
         items = []
         for own in values:

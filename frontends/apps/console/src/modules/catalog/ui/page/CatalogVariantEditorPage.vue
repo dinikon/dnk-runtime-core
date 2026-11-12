@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import {
+  InventorySkuPicker,
+  inventoryItemEditLocation,
+} from "@/modules/inventory";
 import { computed, toRef } from "vue";
 import {
   Sheet,
@@ -107,7 +111,46 @@ const dirty = computed(() => sections.filter(page.isDirty));
           @upload="page.upload"
           @reload="page.reload"
           @retry="page.retry"
-        />
-      </template> </SheetContent
-  ></Sheet>
+        >
+          <template #sku>
+            <InventorySkuPicker
+              :id="`${item.data.value.id}-sku`"
+              :search="page.skuSearch.search.value"
+              :options="page.skuSearch.options.value"
+              :loading="page.skuSearch.loading.value"
+              :error="page.skuSearch.error.value"
+              :total="page.skuSearch.total.value"
+              :selected-code="item.data.value.sku"
+              :selected-id="item.data.value.inventoryItemId"
+              :disabled="blocked"
+              :pending="page.skuMutation.isPending.value"
+              @search="page.skuSearch.search.value = $event"
+              @select="
+                page.setSku({ mode: 'existing', inventoryItemId: $event.id })
+              "
+              @create="page.setSku({ mode: 'create', sku: $event })"
+              @clear="page.setSku({ mode: 'clear' })"
+              @retry="page.skuSearch.retry"
+            />
+            <Button
+              v-if="item.data.value.inventoryItemId"
+              type="button"
+              variant="outline"
+              size="sm"
+              :disabled="blocked || pending"
+              @click="
+                page.ctx.router.push(
+                  inventoryItemEditLocation(
+                    item.data.value.inventoryItemId,
+                    page.ctx.route.fullPath,
+                  ),
+                )
+              "
+              >Настройки SKU</Button
+            >
+          </template>
+        </ProductEditor>
+      </template>
+    </SheetContent></Sheet
+  >
 </template>

@@ -27,8 +27,6 @@ export function sectionError(
     )
       return "Введите название до 255 символов.";
   }
-  if (section === "sku" && patch.sku && patch.sku.length > 128)
-    return "SKU не длиннее 128 символов.";
   if (section === "price" && patch.price_specification) {
     const price = patch.price_specification;
     const regular = decimal(price.regular_price),

@@ -67,6 +67,7 @@ export interface ReadItemDTO {
   product_type_id: string;
   status: ItemStatus;
   sku: string | null;
+  inventory_item_id: string | null;
   virtual: boolean;
   price_specification: PriceDTO | null;
   price: string | null;
@@ -140,6 +141,7 @@ export interface ListItemDTO {
 
   status: ItemStatus;
   sku: string | null;
+  inventory_item_id: string | null;
   title: string | null;
   price: string | null;
   currency: string | null;
@@ -152,7 +154,6 @@ export interface ListItemDTO {
 
 export interface UpdateItemRequest {
   status?: ItemStatus;
-  sku?: string | null;
   virtual?: boolean;
   price_specification?: PriceDTO | null;
   stock?: StockDTO;

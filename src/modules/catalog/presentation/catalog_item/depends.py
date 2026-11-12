@@ -1,3 +1,9 @@
+from src.modules.catalog.infrastructure.catalog_item.inventory_assembly import (
+    build_catalog_inventory,
+)
+from src.modules.catalog.application.catalog_item.command.set_catalog_item_sku.handler import (
+    SetCatalogItemSkuHandler,
+)
 from typing import Annotated
 
 from fastapi import Depends
@@ -11,7 +17,6 @@ from src.modules.shared.infrastructure.events.sqlalchemy_outbox_repository impor
 from src.modules.catalog.application.catalog_item.creation_service import (
     CatalogItemCreationService,
 )
-from src.modules.catalog.infrastructure.catalog_item.sku import SqlAlchemyCatalogItemSku
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
@@ -133,7 +138,9 @@ FilesDep = Annotated[CatalogImageFilesPort, Depends(get_files)]
 
 def get_queries(uow: UoWDep) -> CatalogItemQueryRepositoryProtocol:
     """Собирает read порт на UoW, настроенном внешней зависимостью роутера."""
-    return SqlAlchemyCatalogItemQueryRepository(uow.session)
+    return SqlAlchemyCatalogItemQueryRepository(
+        uow.session, build_catalog_inventory(uow.session).inventory
+    )
 
 
 QueriesDep = Annotated[CatalogItemQueryRepositoryProtocol, Depends(get_queries)]
@@ -170,7 +177,7 @@ def get_creation_service(
         schemas,
         locales,
         currencies,
-        SqlAlchemyCatalogItemSku(uow.session),
+        build_catalog_inventory(uow.session),
         sanitizer,
         files,
         clock,
@@ -388,4 +395,18 @@ def get_get_catalog_variant_image_content_handler(
 GetCatalogVariantImageContentHandlerDep = Annotated[
     GetCatalogVariantImageContentHandler,
     Depends(get_get_catalog_variant_image_content_handler),
+]
+
+
+def get_set_catalog_item_sku_handler(
+    mutations: MutationsDep, clock: ClockDep, uow: UoWDep
+) -> SetCatalogItemSkuHandler:
+    """Собирает привязку SKU на общей сессии Catalog и Inventory."""
+    return SetCatalogItemSkuHandler(
+        mutations, build_catalog_inventory(uow.session), clock
+    )
+
+
+SetCatalogItemSkuHandlerDep = Annotated[
+    SetCatalogItemSkuHandler, Depends(get_set_catalog_item_sku_handler)
 ]

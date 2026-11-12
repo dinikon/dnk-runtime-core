@@ -252,11 +252,10 @@ onMounted(async () => {
             :disabled="disabled"
             :content-disabled="contentDisabled"
             :errors="props.errors"
-            :resets="resets"
             @title="emit('content', 'title', $event)"
             @virtual="changeVirtual"
-            @save="(section, value) => emit('save', section, value)"
-          />
+            ><template #sku><slot name="sku" /></template
+          ></ProductIdentityForm>
         </ProductEditorSection>
         <ProductEditorSection
           v-if="item.kind !== 'variable'"

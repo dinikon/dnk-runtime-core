@@ -74,6 +74,7 @@ class CatalogItemDetailsDTO:
     created_by: UUID
     updated_by: UUID
 
+    inventory_item_id: UUID | None = None
     kind: str = "simple"
     parent_id: UUID | None = None
     stock_source: str = "own"

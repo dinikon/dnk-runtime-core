@@ -177,6 +177,7 @@ class ListItemResponse(BaseModel):
     id: UUID
     status: Literal["draft", "active", "archived"]
     sku: str | None
+    inventory_item_id: UUID | None = None
     title: str | None
     price: Decimal | None
     currency: str | None

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { InventorySkuPicker } from "@/modules/inventory";
 import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -210,11 +211,34 @@ async function remove(): Promise<void> {
     <ProductCreateDialog
       :open="creation.open.value"
       :state="creation.state"
+      :preset="creation.preset.value"
       :disabled="!ctx.active.value"
       @choose="creation.choose"
+      @confirm="creation.confirm"
+      @back="creation.back"
       @close="creation.close"
       @check="creation.checkCatalog"
-    />
+    >
+      <template #sku>
+        <InventorySkuPicker
+          id="create-catalog-sku"
+          :search="creation.skuSearch.search.value"
+          :options="creation.skuSearch.options.value"
+          :loading="creation.skuSearch.loading.value"
+          :error="creation.skuSearch.error.value"
+          :total="creation.skuSearch.total.value"
+          :selected-code="creation.skuCode.value"
+          :selected-id="creation.skuId.value"
+          :disabled="!creation.ctx.active.value || creation.state.uncertain"
+          :pending="creation.state.pending"
+          @search="creation.skuSearch.search.value = $event"
+          @select="creation.selectSku"
+          @create="creation.createSku"
+          @clear="creation.clearSku"
+          @retry="creation.skuSearch.retry"
+        />
+      </template>
+    </ProductCreateDialog>
     <CatalogQuickEditDialog
       v-if="quick.selection.value"
       :key="quick.key.value"

@@ -46,7 +46,6 @@ export interface ProductGallery {
 export type ProductStatus = "draft" | "active" | "archived";
 export interface ProductPatch {
   status?: ProductStatus;
-  sku?: string | null;
   virtual?: boolean;
   price_specification?: ProductPrice | null;
   stock?: ProductStock;

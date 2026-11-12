@@ -1,3 +1,6 @@
+from src.modules.catalog.infrastructure.catalog_item.inventory_assembly import (
+    build_catalog_inventory,
+)
 import asyncio
 import hashlib
 import logging
@@ -202,7 +205,10 @@ class CatalogImportJobHandler:
                     if entity is not None:
                         await ImportProgressService(
                             SqlAlchemyCatalogImportRepository(uow.session),
-                            SqlAlchemyImportRows(uow.session),
+                            SqlAlchemyImportRows(
+                                uow.session,
+                                build_catalog_inventory(uow.session).inventory,
+                            ),
                             UtcClock(),
                         ).fail(
                             entity.id.uuid,
@@ -255,7 +261,9 @@ class CatalogImportJobHandler:
                     return
                 await ImportProgressService(
                     SqlAlchemyCatalogImportRepository(uow.session),
-                    SqlAlchemyImportRows(uow.session),
+                    SqlAlchemyImportRows(
+                        uow.session, build_catalog_inventory(uow.session).inventory
+                    ),
                     UtcClock(),
                 ).attach_source(current.id.uuid, source_id)
                 current = await SqlAlchemyCatalogImportRepository(uow.session).get(
@@ -274,7 +282,9 @@ class CatalogImportJobHandler:
             async with runtime.transaction() as uow:
                 if await self.current(uow.session, job) is None:
                     return
-                await SqlAlchemyImportRows(uow.session).reset(entity.id.uuid)
+                await SqlAlchemyImportRows(
+                    uow.session, build_catalog_inventory(uow.session).inventory
+                ).reset(entity.id.uuid)
                 await uow.session.execute(
                     update(CatalogImportModel)
                     .where(CatalogImportModel.id == entity.id.uuid)
@@ -308,9 +318,9 @@ class CatalogImportJobHandler:
                     async with runtime.transaction() as uow:
                         if await self.current(uow.session, job) is None:
                             return
-                        await SqlAlchemyImportRows(uow.session).stage(
-                            entity.id.uuid, batch
-                        )
+                        await SqlAlchemyImportRows(
+                            uow.session, build_catalog_inventory(uow.session).inventory
+                        ).stage(entity.id.uuid, batch)
                         await self.fence(uow.session, job)
             finally:
                 iterator.close()
@@ -327,7 +337,9 @@ class CatalogImportJobHandler:
                 await PrepareCatalogImportHandler(
                     SqlAlchemyCatalogImportRepository(uow.session),
                     UtcClock(),
-                    SqlAlchemyImportRows(uow.session),
+                    SqlAlchemyImportRows(
+                        uow.session, build_catalog_inventory(uow.session).inventory
+                    ),
                 ).execute(
                     PrepareCatalogImportCommand(
                         current.id.uuid, current.version, total, configuration, analysis
@@ -348,12 +360,16 @@ class CatalogImportJobHandler:
                 if entity.status == "cancelling":
                     await ImportProgressService(
                         SqlAlchemyCatalogImportRepository(uow.session),
-                        SqlAlchemyImportRows(uow.session),
+                        SqlAlchemyImportRows(
+                            uow.session, build_catalog_inventory(uow.session).inventory
+                        ),
                         UtcClock(),
                     ).stop(entity.id.uuid)
                     await self.fence(uow.session, job)
                     return
-                row = await SqlAlchemyImportRows(uow.session).next_row(entity.id.uuid)
+                row = await SqlAlchemyImportRows(
+                    uow.session, build_catalog_inventory(uow.session).inventory
+                ).next_row(entity.id.uuid)
                 if row is None:
                     return
             sku: str | None = None
@@ -372,7 +388,10 @@ class CatalogImportJobHandler:
                     if current.status == "cancelling":
                         await ImportProgressService(
                             SqlAlchemyCatalogImportRepository(uow.session),
-                            SqlAlchemyImportRows(uow.session),
+                            SqlAlchemyImportRows(
+                                uow.session,
+                                build_catalog_inventory(uow.session).inventory,
+                            ),
                             UtcClock(),
                         ).stop(current.id.uuid)
                         await self.fence(uow.session, job)
@@ -397,14 +416,26 @@ class CatalogImportJobHandler:
                     if current.status == "cancelling":
                         await ImportProgressService(
                             SqlAlchemyCatalogImportRepository(uow.session),
-                            SqlAlchemyImportRows(uow.session),
+                            SqlAlchemyImportRows(
+                                uow.session,
+                                build_catalog_inventory(uow.session).inventory,
+                            ),
                             UtcClock(),
                         ).stop(current.id.uuid)
                         await self.fence(uow.session, job)
                         return
+                    if sku:
+                        try:
+                            sku = build_catalog_inventory(
+                                uow.session
+                            ).inventory.normalize(sku)
+                        except InvalidCatalogValueError:
+                            pass  # Некорректный код остаётся диагностическим значением строки.
                     applied = await ImportProgressService(
                         SqlAlchemyCatalogImportRepository(uow.session),
-                        SqlAlchemyImportRows(uow.session),
+                        SqlAlchemyImportRows(
+                            uow.session, build_catalog_inventory(uow.session).inventory
+                        ),
                         UtcClock(),
                     ).record_error(
                         entity.id.uuid,

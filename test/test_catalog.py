@@ -73,6 +73,7 @@ class CatalogArchitectureTests(unittest.TestCase):
                 scenario, aggregate = path.parent.name, path.parents[2].name
                 if scenario in {
                     "find_used_image_files",
+                    "find_inventory_item_usage",
                     "get_catalog_product_snapshot",
                     "prepare_catalog_import",
                     "process_catalog_import_row",

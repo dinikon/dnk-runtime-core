@@ -1,3 +1,6 @@
+from src.modules.catalog.application.catalog_item.inventory_service import (
+    CatalogItemInventoryService,
+)
 from src.modules.catalog.application.catalog_item.creation_service import (
     CatalogItemCreationService,
 )
@@ -134,7 +137,7 @@ class CatalogProductTypeTests(unittest.IsolatedAsyncioTestCase):
                 schemas,
                 AsyncMock(),
                 AsyncMock(),
-                AsyncMock(),
+                CatalogItemInventoryService(AsyncMock(), AsyncMock()),
                 Nh3RichTextSanitizer(),
                 AsyncMock(),
                 clock,

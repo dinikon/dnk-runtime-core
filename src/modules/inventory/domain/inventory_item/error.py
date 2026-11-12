@@ -45,9 +45,25 @@ class InventoryItemConflictError(InventoryItemError):
     """Сообщает о дубликатах или конфликте зависимых частей агрегата."""
 
 
+class InventoryItemNotFoundError(InventoryItemError):
+    """Сообщает об отсутствии позиции в текущем tenant."""
+
+
+class InventoryItemSkuAlreadyExistsError(InventoryItemConflictError):
+    """Сообщает, что канонический SKU уже занят в текущем tenant."""
+
+
+class InventoryItemBarcodeAlreadyExistsError(InventoryItemConflictError):
+    """Сообщает, что штрихкод уже принадлежит позиции текущего tenant."""
+
+
 class InventoryItemComponentNotFoundError(InventoryItemError):
     """Сообщает об отсутствии дочернего объекта в данной позиции."""
 
 
 class InvalidPackagingQuantityError(InventoryItemError):
     """Сообщает о некорректном количестве содержимого упаковки."""
+
+
+class InventoryItemInUseError(InventoryItemConflictError):
+    """Запрещает удаление позиции, на которую ссылается каталог."""

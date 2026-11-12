@@ -46,6 +46,9 @@ class CatalogItemQueryMapper:
             product_type_id=item.product_type_id.uuid,
             status=original.status,
             sku=item.sku,
+            inventory_item_id=(
+                item.inventory_item_id.uuid if item.inventory_item_id else None
+            ),
             virtual=item.virtual,
             price_specification=item.price,
             price=computed.price,
@@ -121,6 +124,9 @@ class CatalogItemQueryMapper:
             id=item.id.uuid,
             status=item.status,
             sku=item.sku,
+            inventory_item_id=(
+                item.inventory_item_id.uuid if item.inventory_item_id else None
+            ),
             title=item.translations.get(locale, {}).get("title"),
             price=computed.price,
             currency=item.price.currency if item.price else None,

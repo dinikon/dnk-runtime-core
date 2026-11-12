@@ -144,13 +144,53 @@ class InventoryItemDomainTests(unittest.TestCase):
         item = InventoryItem.create(
             identifier=self.identifier,
             sku=SkuVO("MANUAL"),
-            base_uom=self.pcs,
-            quantity_rules=QuantityRulesVO(Decimal(1)),
         )
         self.assertEqual(item.sku, SkuVO("MANUAL"))
+        self.assertEqual(item.base_uom, UomCodeVO("PCS"))
+        self.assertEqual(item.quantity_rules, QuantityRulesVO(Decimal("1")))
         self.assertIs(item.tracking_mode, TrackingMode.NONE)
         self.assertIs(item.expiration_mode, ExpirationMode.NONE)
         self.assertEqual((item.barcodes, item.packagings), ((), ()))
+
+    def test_create_defaults_are_independent_and_explicit_values_take_priority(
+        self,
+    ) -> None:
+        """Дополняет только пропущенные настройки и проверяет совместимость результата."""
+        mass = InventoryItem.create(
+            identifier=self.identifier, sku=SkuVO("mass"), base_uom=UomCodeVO("KG")
+        )
+        self.assertEqual(mass.base_uom, UomCodeVO("KG"))
+        self.assertEqual(mass.quantity_rules.step, Decimal("1"))
+        fractional = InventoryItem.create(
+            identifier=self.identifier,
+            sku=SkuVO("fractional"),
+            quantity_rules=QuantityRulesVO(Decimal("0.125")),
+        )
+        self.assertEqual(fractional.base_uom, self.pcs)
+        self.assertEqual(fractional.quantity_rules.step, Decimal("0.125"))
+        serial = InventoryItem.create(
+            identifier=self.identifier,
+            sku=SkuVO("serial"),
+            tracking_mode=TrackingMode.SERIAL,
+            expiration_mode=ExpirationMode.REQUIRED,
+        )
+        self.assertEqual(serial.base_uom, self.pcs)
+        self.assertEqual(serial.quantity_rules.step, Decimal("1"))
+        self.assertEqual(serial.tracking_mode, TrackingMode.SERIAL)
+        self.assertEqual(serial.expiration_mode, ExpirationMode.REQUIRED)
+        with self.assertRaises(InvalidTrackingConfigurationError):
+            InventoryItem.create(
+                identifier=self.identifier,
+                sku=SkuVO("invalid"),
+                base_uom=UomCodeVO("KG"),
+                tracking_mode=TrackingMode.SERIAL,
+            )
+        with self.assertRaises(InvalidTrackingConfigurationError):
+            InventoryItem.create(
+                identifier=self.identifier,
+                sku=SkuVO("invalid"),
+                expiration_mode=ExpirationMode.REQUIRED,
+            )
 
     def test_restore_preserves_the_full_state_and_child_identity(self) -> None:
         """Восстанавливает данные без генерации или замены идентификаторов."""

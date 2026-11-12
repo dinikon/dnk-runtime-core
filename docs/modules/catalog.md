@@ -12,7 +12,8 @@ CatalogItem и ProductType — отдельные Aggregate Roots. Блоки к
 Фабрики create/restore и доменные методы проверяют состояние. Mapper выполняет
 только преобразования; чтение коллекций использует batch-проекции без N+1.
 
-Товар изменяется одним атомарным PATCH под блокировкой конкретного item.
+Основные разделы товара изменяются атомарным PATCH под блокировкой item;
+складская ссылка назначается отдельным PUT /items/{id}/sku.
 Разные поля применяются к актуальному состоянию; для одного поля побеждает
 последняя успешная запись. Репозиторий сохраняет изменённые группы связей.
 Reference guards удалены вместе с изменяемыми справочниками.
@@ -40,16 +41,20 @@ ProductType и каждый блок получают собственный UUI
 
 Объект product команды CreateCatalogItemCommand содержит product_type_code="default". Application
 разрешает код в существующий UUID текущего tenant и передаёт его фабрике товара.
-HTTP принимает все поддержанные разделы создания; Console по-прежнему создаёт
-пустой Draft и открывает редактор. Выбора и изменения типа в Console нет.
+HTTP принимает все поддержанные разделы создания; Console создаёт Draft
+с необязательным выбором или созданием SKU и открывает редактор. Выбора и изменения схемы ProductType в Console нет.
 Схема сохранённого товара читается по его product_type_id. GET /product-type/default
 находит схему по коду. Фиксированных UUID и таблиц соответствия UUID в коде нет.
 
 ## Поля товара
 
-Сохраняются status draft/active/archived, virtual, nullable SKU, цена, наличие,
-измерения, переводы и галереи. SKU уникален в tenant после trim с сохранением
-регистра. Товар создаётся черновиком без контента, цены и SKU.
+Сохраняются status draft/active/archived, virtual, nullable inventory_item_id,
+цена, наличие, измерения, переводы и галереи. inventory_item_id — UUID FK на
+InventoryItem текущего tenant; одна складская позиция имеет максимум одного
+владельца в Catalog. SKU-код принадлежит Inventory, нормализуется через trim и
+casefold и ограничен 25 символами. В ответах sku — актуальный код по ссылке,
+а не отдельное изменяемое текстовое поле. SIMPLE и VARIANT имеют собственную
+ссылку, VARIABLE её не имеет. Создание без выбора SKU сохраняет null.
 
 Price specification хранит regular/sale, currency и UTC-интервал [from,to).
 Текущая price вычисляется на as_of. Decimal точный, до шести дробных разрядов;
@@ -57,7 +62,8 @@ Price specification хранит regular/sale, currency и UTC-интервал 
 
 Вес — nullable value/unit g/kg; размеры независимо nullable cm/m. Точность
 проверяется в g/mm до шести знаков без округления, хранятся исходные пары.
-Virtual не очищает измерения и не меняет наличие. Inventory и резервы отсутствуют.
+Virtual не очищает измерения и не меняет наличие. Связь с Inventory задаёт
+идентичность SKU; складские остатки и резервы не заменяют заявленное наличие Catalog.
 
 Новый товар: manage_stock=false, stock_quantity=null, stock_status=in_stock,
 backorders=no. При учёте количества требуется целое число, включая отрицательное;
@@ -86,7 +92,7 @@ Image stream закрывается после ответа; снятие свя
 
 Префикс /api/console/catalog: POST/GET /items, GET/PATCH/DELETE /items/{id},
 GET /product-type/default, upload и image content. Удалённые справочники отсутствуют
-в OpenAPI. PATCH принимает status, sku, virtual, price_specification, stock, weight,
+в OpenAPI. PATCH принимает status, virtual, price_specification, stock, weight,
 dimensions, content, gallery. Неизвестные поля и пустой PATCH дают 422.
 Пропуск поля сохраняет значение; null очищает только nullable-поля. Изменение
 content/gallery требует query locale. Ошибки разделов содержат field/message.
@@ -107,9 +113,11 @@ Baseline 0023_catalog_item создаёт структуру без seed Catalog
 создаются только через onboarding. Таблицы справочников, назначений, metadata,
 variant selections и default selections удалены. Сохраняются SQL kind,
 parent_id и ограничения ролей simple/variable/variant. Корни simple и variable используют эти роли; variant принадлежит одному variable.
-Аддитивная tenant-миграция `0008_catalog_variants` только разрешает SKU
-контейнера, сохраняя общую уникальность и прежнюю схему остатков. Откат
-отказывается продолжать при наличии variable с непустым SKU; данные не очищаются.
+Историческая `0008_catalog_variants` разрешала текстовый SKU контейнера.
+Текущая `0018_catalog_inventory_items` удаляет прежнюю текстовую колонку вместе
+с её значениями, добавляет nullable UUID FK, уникальный индекс ссылки и запрет
+собственной ссылки VARIABLE. Старые коды не создают InventoryItem автоматически.
+Downgrade 0018 возвращает пустой текстовый столбец и не восстанавливает старые коды.
 
 Ревизия 0026_catalog_attribute_ids удалена; 0027_remove_channels следует за
 0025_user_display_currency. Глобальные миграции и другие модули сохраняются.
@@ -121,16 +129,18 @@ parent_id и ограничения ролей simple/variable/variant. Корн
 ## Публичный контракт Draft и внешние связи
 
 `CreateCatalogItem` принимает типизированный объект `CreateCatalogItemValues`:
-тип, статус, virtual, SKU, price specification с периодом акции, stock, вес,
+тип, статус, virtual, выбор inventory_item, price specification с периодом акции, stock, вес,
 габариты, контент нескольких локалей и локализованные галереи. Пустой объект
 по-прежнему создаёт Draft типа Default. Старые HTTP-входы `{}` и `{virtual: ...}`
 сохраняются; POST `/catalog/items` принимает дополнительные разделы без изменения
 ответа `{id}`. Переводы передаются как `translations[locale]` с `values` и
 `expected_schema_version`, галереи — как `galleries[locale]` по прежнему контракту Files.
 
-`CatalogItemCreationService` проверяет справочники, SKU, схемы, доступность файлов,
-очищает rich text и применяет Domain create/update до единственного сохранения.
-`ValidateCatalogDraft` использует ту же подготовку без записи. Отдельный сценарий
+`CatalogItemCreationService` проверяет справочники, разрешает выбор SKU через
+Application-контракт Inventory, проверяет схемы и Files, очищает rich text и
+применяет Domain create/update. Создание InventoryItem и CatalogItem входит в
+один внешний UoW. Подготовка предпросмотра импорта только разбирает и проверяет
+значения; разрешение с созданием выполняется при применении строки. Отдельный сценарий
 CreateDraftCatalogItem удалён. `LockCatalogItemForBinding` предоставляет потребителю
 собственную item-блокировку и безопасную проекцию. Consumer query/lock не требуют
 дополнительных HTTP endpoints. Channels задаёт Draft/Default/virtual=false явно.
@@ -174,7 +184,7 @@ UTC-границу следующего дня. Категории, характ
 новых полей Catalog и остаются несопоставленными.
 
 Режимы: создание (начальный), обновление и создание с обновлением. Существующий
-товар определяется только по SKU после trim с сохранением регистра. При создании
+товар определяется по каноническому SKU Inventory после trim и casefold. При создании
 найденный SKU пропускается; при обновлении отсутствующий SKU пропускается.
 Без SKU можно только создавать. Повтор SKU внутри источника пропускается после
 первой записи, включая случай ошибки первой записи. Новые товары используют
@@ -336,8 +346,8 @@ Helm `application.catalogImport`: размер источника, число з
 `CatalogItem` — корень семьи; `CatalogVariant` — принадлежащая ему Entity без
 отдельного repository. SQL сохраняет все роли в `catalog_item`. Simple продаётся
 сам; variable — контейнер без цены и virtual; variant имеет собственные SKU,
-цену, virtual и статус. SKU уникальны среди всех ролей tenant, включая необязательный
-SKU контейнера. Преобразование kind, перенос между родителями, атрибуты и
+цену, virtual и статус. Ссылки на InventoryItem уникальны среди SIMPLE/VARIANT
+текущего tenant. Контейнер VARIABLE не имеет собственной ссылки SKU. Преобразование kind, перенос между родителями, атрибуты и
 комбинации не поддерживаются.
 
 Draft/Archived variable может быть пустым. Active требует хотя бы один
@@ -391,8 +401,11 @@ PATCH содержит только выбранный раздел, сохра�
 варианта настраивается в полном редакторе. Несохранённый ввод защищён при
 навигации, ошибка не закрывает форму, фоновые ответы не заменяют черновик.
 Мутация обновляет список, раскрытые варианты и детали текущего контекста.
-CSV/XML импорт остаётся simple-only: SKU variable/variant даёт ошибку строки,
-без обновления семьи.
+CSV/XML импорт остаётся simple-only: SKU варианта даёт ошибку строки без
+обновления семьи. Коды источника проверяются и нормализуются Inventory; поиск
+сопоставляет UUID ссылки, включая проверку после захвата блокировки карточки.
+Создание SKU, карточки и результата строки атомарно. Повторы кодов с разным
+регистром считаются одним SKU, в том числе после ошибки первой строки.
 
 Публичный `GetCatalogProductSnapshot` возвращает типизированный корень, дочерние
 позиции, собственные и эффективные значения, источники, locale/as_of. Consumer
@@ -431,3 +444,50 @@ Domain блокирует физическое удаление использо
 задание доставки до commit общего UoW. HTTP и импорт используют одну реализацию.
 Ручное получение остатка Channels не изменяет Catalog. Правила отправки и
 разрешения описаны в [синхронизации остатков Channels](channels.md#синхронизация-остатков).
+
+
+## Назначение складского SKU
+
+`PUT /api/console/catalog/items/{item_id}/sku` назначает ссылку SIMPLE.
+Для VARIANT используется `PUT /items/{item_id}/variants/{variant_id}/sku`:
+команда загружает родителя и изменяет entity через доменный метод корня.
+Оба endpoint используют authentication, CSRF и одну общую tenant-транзакцию.
+
+Тело — строго один вариант:
+
+```json
+{"mode": "existing", "inventory_item_id": "UUID"}
+```
+
+```json
+{"mode": "create", "sku": "CUP-001"}
+```
+
+```json
+{"mode": "clear"}
+```
+
+POST создания товара и варианта принимает такой же выбор в поле `inventory_item`
+либо null. Старое поле sku на запись в POST/PATCH запрещено. Ответ PUT содержит
+item_id, inventory_item_id, канонический sku и inventory_item_created.
+Повтор назначения той же ссылки успешен; занятая другим узлом ссылка даёт 409,
+несуществующий ID — 404, недопустимое значение — 422. Снятие связи не удаляет SKU.
+
+Режим create ищет точное каноническое совпадение. Если оно уже существует,
+используется прежняя позиция с её настройками. Иначе Domain Inventory создаёт
+позицию с PCS, шагом Decimal("1"), tracking_mode=NONE, expiration_mode=NONE,
+пустыми штрихкодами и упаковками. Конкурентный дубль SKU обрабатывается без
+прерывания транзакции; UNIQUE ссылки в Catalog закрывает гонку двух владельцев.
+Коды в списках, поиске и публичных снимках читаются batch через контракт Inventory;
+переименование кода сохраняет UUID-связь. Фильтрация SKU выполняется до пагинации.
+
+InventoryItem с любой связанной карточкой, включая draft и archived, удалять
+нельзя. Inventory получает факт использования через публичный read-сценарий
+Catalog и вызывает InventoryItem.ensure_can_delete до DELETE. HTTP возвращает
+409. FK fk_catalog_item_inventory_item с ON DELETE RESTRICT дополнительно
+защищает конкурентные и прямые SQL-записи. Для удаления сначала очищают или
+заменяют ссылку в каталоге.
+
+Проверки: test_catalog_inventory_item.py, test_catalog_inventory_postgres.py,
+регрессия Catalog/вариантов/импорта и InventoryItem; Console test:catalog и
+обязательные lint/typecheck/build плюс desktop/mobile browser QA.

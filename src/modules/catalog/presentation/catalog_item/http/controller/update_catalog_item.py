@@ -2,7 +2,6 @@ from collections.abc import Callable
 from typing import TypeVar
 from uuid import UUID
 from fastapi import HTTPException
-from sqlalchemy.exc import IntegrityError
 from src.modules.identity.presentation.auth.depends import (
     AuthenticatedRequestContextDep,
 )
@@ -10,7 +9,6 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.error import (
     CatalogError,
     CatalogConflictError,
@@ -64,11 +62,6 @@ async def update_catalog_item(
                 fields=frozenset(payload.model_fields_set),
                 locale=locale,
                 status=payload.status,
-                sku=(
-                    converted("sku", lambda: SkuCodeVO(payload.sku))
-                    if payload.sku is not None
-                    else None
-                ),
                 virtual=payload.virtual,
                 price_specification=(
                     converted("price_specification", payload.price_specification.to_vo)
@@ -117,13 +110,4 @@ async def update_catalog_item(
                 ],
             },
         ) from exc
-    except IntegrityError as exc:
-        original = getattr(exc.orig, "__cause__", None) or exc.orig
-        constraint = getattr(original, "constraint_name", None)
-        if constraint == "uq_catalog_item_sku":
-            raise HTTPException(
-                409,
-                {"errors": [{"field": "sku", "message": "Этот SKU уже используется."}]},
-            ) from exc
-        raise HTTPException(409, {"message": "Конфликт используемой ссылки."}) from exc
     return UpdateCatalogItemResponse(id=result.id)

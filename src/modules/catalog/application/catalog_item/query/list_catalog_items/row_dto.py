@@ -37,6 +37,7 @@ class CatalogItemListRowDTO:
     available_for_sale: bool
     weight: WeightVO | None
     dimensions: DimensionsVO | None
+    inventory_item_id: UUID | None = None
     kind: str = "simple"
     parent_id: UUID | None = None
     variant_count: int = 0

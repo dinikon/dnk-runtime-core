@@ -1,3 +1,10 @@
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
+    TenantMigrator,
+)
+from src.modules.catalog.infrastructure.catalog_item.inventory_assembly import (
+    build_catalog_inventory,
+)
+
 """Вложенные позиции: HTTP, реальные FK, наследование и публичный снимок."""
 
 import unittest
@@ -81,7 +88,6 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
                 "/items",
                 {
                     "kind": "variable",
-                    "sku": "FAMILY",
                     "translations": {
                         "en": {
                             "expected_schema_version": 1,
@@ -103,7 +109,7 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
                 "POST",
                 f"/items/{root}/variants",
                 {
-                    "sku": "CHILD",
+                    "inventory_item": {"mode": "create", "sku": "CHILD"},
                     "status": "active",
                     "price_specification": {
                         "regular_price": "12.345678",
@@ -149,7 +155,7 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
             "PATCH", path, {"sku": "MUST-NOT-SAVE", "status": "archived"}, 422
         )
         self.assertEqual(
-            (await self.request("GET", path + "?locale=en"))["item"]["sku"], "CHILD"
+            (await self.request("GET", path + "?locale=en"))["item"]["sku"], "child"
         )
         await self.request("DELETE", path, status=422)
         await self.request("PATCH", path, {"stock_source": "own"}, 422)
@@ -172,7 +178,9 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
         )
         value = (await self.request("GET", path + "?locale=en"))["item"]
         self.assertEqual(value["effective_content"]["body"], "Description")
-        await self.request("PATCH", f"/items/{root}", {"sku": "CHILD"}, 409)
+        await self.request(
+            "PUT", f"/items/{root}/sku", {"mode": "create", "sku": "CHILD"}, 422
+        )
         await self.request(
             "PATCH",
             f"/items/{root}",
@@ -203,7 +211,10 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
                 {
                     "kind": "variable",
                     "status": "active",
-                    "variants": [{"sku": "FIRST"}, {"sku": "SECOND"}],
+                    "variants": [
+                        {"inventory_item": {"mode": "create", "sku": "FIRST"}},
+                        {"inventory_item": {"mode": "create", "sku": "SECOND"}},
+                    ],
                 },
                 201,
             )
@@ -222,9 +233,7 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
             self.assertEqual(count, 0)
 
     async def test_migration_refuses_lossy_downgrade(self) -> None:
-        await self.request(
-            "POST", "/items", {"kind": "variable", "sku": "CONTAINER"}, 201
-        )
+        await self.request("POST", "/items", {"kind": "variable"}, 201)
         # Проверяем guard самой исторической ревизии: новый head не допускает
         # пересечения необратимой очистки Channels при обычном downgrade.
         import importlib.util
@@ -243,6 +252,15 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
         spec.loader.exec_module(migration)
         with self.assertRaisesRegex(RuntimeError, "SKU"):
             async with self.engine.begin() as connection:
+                await TenantMigrator().downgrade(
+                    connection, self.schemas[0], "0017_inventory_items"
+                )
+                await connection.execute(
+                    text(
+                        f'UPDATE "{self.schemas[0]}".catalog_item SET sku=:sku WHERE kind=:kind'
+                    ),
+                    {"sku": "CONTAINER", "kind": "variable"},
+                )
                 await connection.execute(
                     text("SELECT set_config('search_path', :schema, true)"),
                     {"schema": self.schemas[0]},
@@ -285,14 +303,15 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
                 "/items",
                 {
                     "kind": "variable",
-                    "sku": "PARENT",
                     "translations": {
                         "en": {
                             "expected_schema_version": 1,
                             "values": {"title": "Parent"},
                         }
                     },
-                    "variants": [{"sku": "CHILD"}],
+                    "variants": [
+                        {"inventory_item": {"mode": "create", "sku": "CHILD"}}
+                    ],
                 },
                 201,
             )
@@ -302,7 +321,9 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
                 await session.connection(), self.tenant.uuid, self.naming
             )
             handler = GetCatalogProductSnapshotHandler(
-                SqlAlchemyCatalogItemQueryRepository(session),
+                SqlAlchemyCatalogItemQueryRepository(
+                    session, build_catalog_inventory(session).inventory
+                ),
                 UtcClock(),
                 PostgresCatalogMutationLock(session),
             )
@@ -317,8 +338,10 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
             self.assertIsNone(variant.content)
             self.assertEqual(variant.effective_content["title"], "Parent")
             self.assertEqual(variant.sources.title, UUID(root))
-            rows = SqlAlchemyImportRows(session)
-            for sku in ("PARENT", "CHILD"):
+            rows = SqlAlchemyImportRows(
+                session, build_catalog_inventory(session).inventory
+            )
+            for sku in ("CHILD",):
                 with self.assertRaises(CatalogConflictError):
                     await rows.find_item(sku)
             await session.rollback()

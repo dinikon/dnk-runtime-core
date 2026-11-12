@@ -139,6 +139,18 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Строит PATCH из полного значения раздела для общей регрессии карточки."""
         body = dict(body or {})
         name, _, locale = section.partition("/")
+        if name == "sku":
+            selection = (
+                {"mode": "create", "sku": body["sku"]}
+                if body.get("sku") is not None
+                else {"mode": "clear"}
+            )
+            return await self.request(
+                "PUT",
+                f"/items/{item_id}/sku",
+                selection,
+                200 if status == 204 else status,
+            )
         if name == "content":
             patch = {"content": body if body else None}
         elif name == "gallery":
@@ -640,11 +652,14 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         ]
         for section, body in sections:
             result = await self.patch_section(ident, f"{section}", {**body})
-            self.assertEqual(result, {"id": ident})
+            if section == "sku":
+                self.assertEqual((result["item_id"], result["sku"]), (ident, "zero"))
+            else:
+                self.assertEqual(result, {"id": ident})
         item = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertEqual(item["price"], "0")
         self.assertTrue(item["available_for_sale"])
-        self.assertEqual(item["sku"], "ZERO")
+        self.assertEqual(item["sku"], "zero")
         self.assertEqual(item["content"], {"title": "Simple", "body": ""})
         self.assertFalse(
             {
@@ -699,7 +714,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(children["total"], 1)
         await self.request("GET", f"/items/{child['id']}?locale=en", status=404)
         await self.request(
-            "PATCH", f"/items/{child['id']}", {"sku": "denied"}, status=404
+            "PUT",
+            f"/items/{child['id']}/sku",
+            {"mode": "create", "sku": "denied"},
+            status=404,
         )
         self.assertEqual((await self.request("GET", "/items?locale=en"))["total"], 1)
 
@@ -789,7 +807,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.base + f"/items/{ident}?locale=en",
             headers=self.headers,
             json={
-                "sku": "candidate",
                 "virtual": True,
                 "content": {"expected_schema_version": 1, "values": {"title": ""}},
             },
@@ -804,7 +821,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             "PATCH",
             f"/items/{ident}?locale=en",
             {
-                "sku": "atomic",
                 "virtual": True,
                 "price_specification": {"regular_price": "0", "currency": "UAH"},
                 "content": {
@@ -813,11 +829,12 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 },
             },
         )
+        await self.request(
+            "PUT", f"/items/{ident}/sku", {"mode": "create", "sku": "atomic"}
+        )
         saved = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertNotIn("revision", saved)
-        await self.request(
-            "PATCH", f"/items/{ident}", {"sku": "atomic", "virtual": True}
-        )
+        await self.request("PATCH", f"/items/{ident}", {"virtual": True})
         noop = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertEqual(noop["updated_at"], saved["updated_at"])
         async with self.engine.begin() as connection:
@@ -827,7 +844,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 {"id": UUID(ident)},
             )
-        await self.request("PATCH", f"/items/{ident}", {"sku": None})
+        await self.request("PUT", f"/items/{ident}/sku", {"mode": "clear"})
         cleared = (await self.request("GET", f"/items/{ident}?locale=en"))["item"]
         self.assertIsNone(cleared["sku"])
         self.assertEqual(cleared["content"], saved["content"])
@@ -851,7 +868,11 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         item = await self.create_item()
         url = self.base + f'/items/{item["id"]}'
         responses = await asyncio.gather(
-            self.client.patch(url, headers=self.headers, json={"sku": "parallel"}),
+            self.client.put(
+                url + "/sku",
+                headers=self.headers,
+                json={"mode": "create", "sku": "parallel"},
+            ),
             self.client.patch(url, headers=self.headers, json={"virtual": True}),
         )
         self.assertEqual([r.status_code for r in responses], [200, 200])
@@ -859,10 +880,10 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(read["sku"], "parallel")
         self.assertTrue(read["virtual"])
         other = await self.create_item()
-        failed = await self.client.patch(
-            self.base + f'/items/{other["id"]}',
+        failed = await self.client.put(
+            self.base + f'/items/{other["id"]}/sku',
             headers=self.headers,
-            json={"sku": "parallel", "virtual": True},
+            json={"mode": "create", "sku": "parallel"},
         )
         self.assertEqual(failed.status_code, 409)
         self.assertEqual(failed.json()["detail"]["errors"][0]["field"], "sku")
@@ -959,7 +980,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         image, file = str(uuid4()), str(uuid4())
         body = {
             "status": "active",
-            "sku": "FULL-CREATE",
+            "inventory_item": {"mode": "create", "sku": "FULL-CREATE"},
             "virtual": False,
             "price_specification": {
                 "regular_price": "123.456789",
@@ -1000,7 +1021,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         result = await self.request("POST", "/items", body, 201)
         item = (await self.request("GET", f"/items/{result['id']}?locale=en"))["item"]
         self.assertEqual(item["status"], "active")
-        self.assertEqual(item["sku"], "FULL-CREATE")
+        self.assertEqual(item["sku"], "full-create")
         self.assertEqual(item["price_specification"]["regular_price"], "123.456789")
         self.assertEqual(
             Decimal(item["price_specification"]["sale_price"]), Decimal("100")
@@ -1032,7 +1053,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await count(), 1)
         await self.request("POST", "/items", body, 409)
-        body["sku"] = "REJECTED-SCHEMA"
+        body["inventory_item"]["sku"] = "REJECTED-SCHEMA"
         body["translations"]["ru"]["expected_schema_version"] = 999
         await self.request("POST", "/items", body, 409)
         self.assertEqual(await count(), 1)
@@ -1042,7 +1063,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await count(), 1)
 
         files.ensure_images.side_effect = None
-        body["sku"] = "CONCURRENT-CREATE"
+        body["inventory_item"]["sku"] = "CONCURRENT-CREATE"
         fresh_image = str(uuid4())
         body["galleries"]["en"]["images"][0]["id"] = fresh_image
         body["galleries"]["en"]["primary_image_id"] = fresh_image

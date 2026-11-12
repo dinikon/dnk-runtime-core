@@ -1,3 +1,4 @@
+from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.catalog.infrastructure.persistence.models.catalog_item import (
@@ -6,17 +7,16 @@ from src.modules.catalog.infrastructure.persistence.models.catalog_item import (
 
 
 class SqlAlchemyCatalogItemSku:
-    """Читает уникальность SKU всех видов товаров у владельца Catalog."""
+    """Читает только собственные связи Catalog, включая варианты и архив."""
 
     def __init__(self, session: AsyncSession) -> None:
-        """Использует сессию внешнего tenant UoW."""
-        self.session = session
+        """Принимает сессию внешнего tenant UoW."""
+        self._session = session
 
-    async def in_use(self, sku: str) -> bool:
-        """Возвращает наличие точного кода без восстановления агрегатов."""
-        return (
-            await self.session.scalar(
-                select(CatalogItemModel.id).where(CatalogItemModel.sku == sku).limit(1)
-            )
-            is not None
+    async def owner(self, inventory_item_id: UUID) -> UUID | None:
+        """Не фильтрует связи по статусу или роли карточки."""
+        return await self._session.scalar(
+            select(CatalogItemModel.id)
+            .where(CatalogItemModel.inventory_item_id == inventory_item_id)
+            .limit(1)
         )
