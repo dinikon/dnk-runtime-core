@@ -5,9 +5,6 @@ from src.modules.inventory.application.inventory_item.command.update_inventory_i
     UpdatedInventoryItemBarcodeDTO,
     UpdateInventoryItemResultDTO,
 )
-from src.modules.inventory.application.inventory_item.command.update_inventory_item.error import (
-    InvalidInventoryItemUpdateError,
-)
 from src.modules.inventory.domain.inventory_item.entity.item_barcode import ItemBarcode
 from src.modules.inventory.domain.inventory_item.error import InventoryItemNotFoundError
 from src.modules.inventory.domain.inventory_item.repository import (
@@ -39,31 +36,11 @@ class UpdateInventoryItemHandler:
         self, command: UpdateInventoryItemCommand
     ) -> UpdateInventoryItemResultDTO:
         """Загружает под блокировкой и делегирует согласованный переход Domain."""
-        values = {
-            "sku": command.sku,
-            "base_uom": command.base_uom,
-            "quantity_rules": command.quantity_step,
-            "tracking_mode": command.tracking_mode,
-            "expiration_mode": command.expiration_mode,
-            "barcodes": command.barcodes,
-        }
-        if (
-            not isinstance(command.fields, frozenset)
-            or not command.fields
-            or not command.fields <= values.keys()
-            or any(values[name] is None for name in command.fields)
-            or (
-                "barcodes" in command.fields and not isinstance(command.barcodes, tuple)
-            )
-        ):
-            raise InvalidInventoryItemUpdateError(
-                "Нужен непустой набор известных полей без null."
-            )
         item = await self._repository.get_for_update(command.inventory_item_id)
         if item is None:
             raise InventoryItemNotFoundError("Складская позиция не найдена.")
         barcodes = item.barcodes
-        if "barcodes" in command.fields:
+        if "barcodes" in command.fields and command.barcodes is not None:
             existing = {child.barcode: child for child in item.barcodes}
             requested = tuple(BarcodeVO(value) for value in command.barcodes)
             barcodes = tuple(
@@ -80,25 +57,32 @@ class UpdateInventoryItemHandler:
                 for code in requested
             )
         updated = item.revise(
-            sku=SkuVO(command.sku) if "sku" in command.fields else item.sku,
+            sku=(
+                SkuVO(command.sku)
+                if "sku" in command.fields and command.sku is not None
+                else item.sku
+            ),
             base_uom=(
                 UomCodeVO(command.base_uom)
-                if "base_uom" in command.fields
+                if "base_uom" in command.fields and command.base_uom is not None
                 else item.base_uom
             ),
             quantity_rules=(
                 QuantityRulesVO(command.quantity_step)
                 if "quantity_rules" in command.fields
+                and command.quantity_step is not None
                 else item.quantity_rules
             ),
             tracking_mode=(
                 command.tracking_mode
                 if "tracking_mode" in command.fields
+                and command.tracking_mode is not None
                 else item.tracking_mode
             ),
             expiration_mode=(
                 command.expiration_mode
                 if "expiration_mode" in command.fields
+                and command.expiration_mode is not None
                 else item.expiration_mode
             ),
             barcodes=barcodes,

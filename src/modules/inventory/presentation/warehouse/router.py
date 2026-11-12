@@ -1,5 +1,18 @@
 from fastapi import APIRouter, Depends
 
+from src.modules.inventory.presentation.warehouse.http.controller.put_warehouse import (
+    put_warehouse,
+)
+from src.modules.inventory.presentation.warehouse.http.controller.patch_warehouse import (
+    patch_warehouse,
+)
+from src.modules.inventory.presentation.warehouse.http.response.put_warehouse import (
+    PutWarehouseResponse,
+)
+from src.modules.inventory.presentation.warehouse.http.response.patch_warehouse import (
+    PatchWarehouseResponse,
+)
+
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
 )
@@ -24,6 +37,26 @@ from src.modules.inventory.presentation.warehouse.http.response.list_warehouses 
 )
 
 router = APIRouter(prefix="/inventory/warehouses", tags=["inventory-warehouses"])
+router.add_api_route(
+    "/{warehouse_id}",
+    put_warehouse,
+    methods=["PUT"],
+    response_model=PutWarehouseResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{warehouse_id}",
+    patch_warehouse,
+    methods=["PATCH"],
+    response_model=PatchWarehouseResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
 router.add_api_route(
     "",
     create_warehouse,

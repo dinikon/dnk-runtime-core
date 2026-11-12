@@ -1,7 +1,5 @@
-import type {
-  InventoryItemsListParams,
-  InventoryScope,
-} from "./inventory-item.types.ts";
+import type { InventoryItemsListParams } from "./inventory-item.types.ts";
+import type { InventoryScope } from "./inventory-scope.types.ts";
 
 type InventoryRootKey = readonly ["inventory", ...InventoryScope];
 type InventoryListKey = readonly [

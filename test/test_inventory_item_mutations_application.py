@@ -18,9 +18,6 @@ from src.modules.inventory.application.inventory_item.command.update_inventory_i
 from src.modules.inventory.application.inventory_item.command.update_inventory_item.handler import (
     UpdateInventoryItemHandler,
 )
-from src.modules.inventory.application.inventory_item.command.update_inventory_item.error import (
-    InvalidInventoryItemUpdateError,
-)
 from src.modules.inventory.application.inventory_item.command.delete_inventory_item.command import (
     DeleteInventoryItemCommand,
 )
@@ -144,19 +141,8 @@ class InventoryItemMutationsApplicationTests(unittest.IsolatedAsyncioTestCase):
             (result.base_uom, result.quantity_step), ("KG", Decimal("0.001"))
         )
 
-    async def test_invalid_commands_do_not_write(self) -> None:
-        """Проверяет контракт команды вне HTTP и доменные ошибки состава."""
-        for changes in (
-            {"fields": frozenset()},
-            {"fields": frozenset({"unknown"})},
-            {"sku": None},
-            {"fields": frozenset({"barcodes"}), "barcodes": None},
-        ):
-            with (
-                self.subTest(changes=changes),
-                self.assertRaises(InvalidInventoryItemUpdateError),
-            ):
-                await self.update.execute(replace(self.command, **changes))
+    async def test_duplicate_barcodes_do_not_write(self) -> None:
+        """Делегирует проверку уникальности штрихкодов Domain без записи при отказе."""
         with self.assertRaises(InventoryError):
             await self.update.execute(
                 replace(

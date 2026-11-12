@@ -16,6 +16,9 @@ from src.modules.inventory.application.warehouse.port.query_repository import (
 from src.modules.inventory.application.warehouse.command.create_warehouse.handler import (
     CreateWarehouseHandler,
 )
+from src.modules.inventory.application.warehouse.command.update_warehouse.handler import (
+    UpdateWarehouseHandler,
+)
 from src.modules.inventory.application.warehouse.query.get_warehouse.handler import (
     GetWarehouseHandler,
 )
@@ -40,6 +43,18 @@ def get_warehouse_repository(uow: UoWDep) -> WarehouseRepositoryProtocol:
 
 WarehouseRepositoryDep = Annotated[
     WarehouseRepositoryProtocol, Depends(get_warehouse_repository)
+]
+
+
+def get_update_warehouse_handler(
+    repository: WarehouseRepositoryDep,
+) -> UpdateWarehouseHandler:
+    """Собирает редактирование на write-порте общего внешнего UoW."""
+    return UpdateWarehouseHandler(repository)
+
+
+UpdateWarehouseHandlerDep = Annotated[
+    UpdateWarehouseHandler, Depends(get_update_warehouse_handler)
 ]
 
 

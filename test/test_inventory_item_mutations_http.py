@@ -5,7 +5,7 @@ from decimal import Decimal, localcontext
 from types import SimpleNamespace
 from typing import Any
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
 from httpx import ASGITransport, AsyncClient
@@ -16,6 +16,9 @@ from sqlalchemy.exc import IntegrityError
 from src.config import dnk_config
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
+from src.modules.inventory.application.inventory_item.command.update_inventory_item.handler import (
+    UpdateInventoryItemHandler,
+)
 from src.modules.inventory.infrastructure.persistence.models.inventory_item import (
     InventoryItemModel,
 )
@@ -216,6 +219,43 @@ class InventoryItemMutationsHttpTests(unittest.IsolatedAsyncioTestCase):
                     )
                     self.assertEqual(response.status_code, 422, response.text)
                     self.assertFalse(any(context.flags.values()))
+
+    async def test_request_schema_rejects_invalid_payload_before_handler(self) -> None:
+        """Проверяет структуру PUT/PATCH в Presentation без вызова Application."""
+        invalid = [
+            {"unknown": "value"},
+            {"sku": 123},
+            {"base_uom": False},
+            {"quantity_rules": {}},
+            {"quantity_rules": {"step": 1}},
+            {"tracking_mode": "unknown"},
+            {"expiration_mode": "unknown"},
+            {"barcodes": "code"},
+            {"barcodes": [123]},
+            *({field: None} for field in self.put),
+        ]
+        with patch.object(
+            UpdateInventoryItemHandler, "execute", new_callable=AsyncMock
+        ) as execute:
+            for method in ("PUT", "PATCH"):
+                payloads = [
+                    values if method == "PATCH" else {**self.put, **values}
+                    for values in invalid
+                ]
+                payloads.append({})
+                if method == "PUT":
+                    payloads.extend(
+                        {key: value for key, value in self.put.items() if key != field}
+                        for field in self.put
+                    )
+                for payload in payloads:
+                    with self.subTest(method=method, payload=payload):
+                        response = await self.client.request(
+                            method, self.url, headers=self.headers, json=payload
+                        )
+                        self.assertEqual(response.status_code, 422, response.text)
+            execute.assert_not_awaited()
+        self.session.execute.assert_not_awaited()
 
     async def test_missing_items_return_404(self) -> None:
         """Все операции различают отсутствующую позицию и неправильный запрос."""

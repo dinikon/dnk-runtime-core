@@ -29,5 +29,3 @@ export interface InventoryItemsPageParams {
   page: number;
   limit: number;
 }
-
-export type InventoryScope = readonly [string | null, string | null, string];

@@ -411,7 +411,18 @@ class WarehouseRoutingTests(unittest.TestCase):
         self.assertEqual(
             set(paths["/api/console/inventory/warehouses"]), {"post", "get"}
         )
-        self.assertIn("get", paths["/api/console/inventory/warehouses/{warehouse_id}"])
+        self.assertEqual(
+            set(paths["/api/console/inventory/warehouses/{warehouse_id}"]),
+            {"get", "put", "patch"},
+        )
+        self.assertIn(
+            "PutWarehouseResponse",
+            str(paths["/api/console/inventory/warehouses/{warehouse_id}"]["put"]),
+        )
+        self.assertIn(
+            "PatchWarehouseResponse",
+            str(paths["/api/console/inventory/warehouses/{warehouse_id}"]["patch"]),
+        )
         self.assertIn(
             "CreateWarehouseResponse",
             str(paths["/api/console/inventory/warehouses"]["post"]),

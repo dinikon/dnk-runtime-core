@@ -3,8 +3,9 @@ import test from "node:test";
 import { createRenderer, h, nextTick, ref } from "vue";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { inventoryItemKeys } from "../src/modules/inventory/model/inventory-item.query-keys.ts";
+import { warehouseKeys } from "../src/modules/inventory/model/warehouse.query-keys.ts";
 import { useScopedQueryCache } from "../src/shared/model/use-scoped-query-cache.ts";
-import type { InventoryScope } from "../src/modules/inventory/model/inventory-item.types.ts";
+import type { InventoryScope } from "../src/modules/inventory/model/inventory-scope.types.ts";
 
 test("inventory query keys snapshot all request parameters and identity fields", () => {
   const scope: InventoryScope = ["tenant-a", "user-a", "1"];
@@ -84,11 +85,18 @@ test("scope transition cancels old reads and removes old cache while retaining t
   }
 });
 
-test("detail and UOM keys isolate identity and clear together with pending mutations", async () => {
+test("inventory item, UOM and warehouse caches clear together with pending mutations", async () => {
   const client = new QueryClient();
   const scope = ref<InventoryScope>(["tenant-a", "user-a", "1"]);
   const oldDetail = inventoryItemKeys.detail(scope.value, "item-a");
   const oldUoms = inventoryItemKeys.uoms(scope.value);
+  const oldWarehouse = warehouseKeys.detail(scope.value, "warehouse-a");
+  const oldWarehouses = warehouseKeys.list(scope.value, {
+    search: "",
+    isActive: false,
+    offset: 0,
+    limit: 50,
+  });
   assert.notDeepEqual(
     oldDetail,
     inventoryItemKeys.detail(scope.value, "item-b"),
@@ -116,21 +124,32 @@ test("detail and UOM keys isolate identity and clear together with pending mutat
   try {
     client.setQueryData(oldDetail, { sku: "old sku" });
     client.setQueryData(oldUoms, [{ code: "PCS" }]);
-    client
-      .getMutationCache()
-      .build(client, {
-        mutationKey: inventoryItemKeys.settings(scope.value),
-        mutationFn: async () => "saved",
-      });
+    client.setQueryData(oldWarehouse, { code: "old warehouse" });
+    client.setQueryData(oldWarehouses, { items: ["old warehouse"] });
+    client.getMutationCache().build(client, {
+      mutationKey: inventoryItemKeys.settings(scope.value),
+      mutationFn: async () => "saved",
+    });
+    client.getMutationCache().build(client, {
+      mutationKey: warehouseKeys.update(scope.value),
+      mutationFn: async () => "saved warehouse",
+    });
     const next: InventoryScope = ["tenant-a", "user-a", "2"];
     const newDetail = inventoryItemKeys.detail(next, "item-a");
+    const newWarehouse = warehouseKeys.detail(next, "warehouse-a");
     client.setQueryData(newDetail, { sku: "new sku" });
+    client.setQueryData(newWarehouse, { code: "new warehouse" });
     scope.value = next;
     await nextTick();
     assert.equal(client.getQueryData(oldDetail), undefined);
     assert.equal(client.getQueryData(oldUoms), undefined);
+    assert.equal(client.getQueryData(oldWarehouse), undefined);
+    assert.equal(client.getQueryData(oldWarehouses), undefined);
     assert.equal(client.getMutationCache().getAll().length, 0);
     assert.deepEqual(client.getQueryData(newDetail), { sku: "new sku" });
+    assert.deepEqual(client.getQueryData(newWarehouse), {
+      code: "new warehouse",
+    });
   } finally {
     app.unmount();
     client.clear();

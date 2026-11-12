@@ -16,8 +16,8 @@ import {
 import type {
   InventoryItemsListParams,
   InventoryItemsPageParams,
-  InventoryScope,
 } from "./inventory-item.types.ts";
+import type { InventoryScope } from "./inventory-scope.types.ts";
 
 interface InventoryItemsPageState {
   params: ComputedRef<InventoryItemsPageParams>;

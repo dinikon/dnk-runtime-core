@@ -2,7 +2,7 @@ import { computed, type ComputedRef } from "vue";
 import { useTenantStore } from "@/app/stores/tenant";
 import { useUserStore } from "@/app/stores/user";
 import { useScopedQueryCache } from "@/shared/model/use-scoped-query-cache";
-import type { InventoryScope } from "./inventory-item.types";
+import type { InventoryScope } from "./inventory-scope.types";
 
 export interface InventoryScopeState {
   key: ComputedRef<InventoryScope>;

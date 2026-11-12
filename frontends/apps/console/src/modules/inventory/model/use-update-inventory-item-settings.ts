@@ -10,7 +10,7 @@ import type {
   InventoryItemDetails,
   InventoryItemSettings,
 } from "./inventory-item-settings.types";
-import type { InventoryScope } from "./inventory-item.types";
+import type { InventoryScope } from "./inventory-scope.types";
 import type { InventoryScopeState } from "./use-inventory-scope";
 
 export interface UpdateInventoryItemSettingsInput {

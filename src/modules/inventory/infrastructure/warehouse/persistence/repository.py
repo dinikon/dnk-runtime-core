@@ -1,8 +1,9 @@
-from sqlalchemy import insert, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.inventory.domain.warehouse.aggregate import Warehouse
+from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
 from src.modules.inventory.domain.warehouse.error import (
     WarehouseCodeAlreadyExistsError,
     WarehouseNotFoundError,
@@ -21,6 +22,17 @@ class SqlAlchemyWarehouseRepository:
     def __init__(self, session: AsyncSession) -> None:
         """Принимает общую tenant-сессию без владения транзакцией."""
         self._session = session
+
+    async def get_for_update(self, identifier: WarehouseIdVO) -> Warehouse | None:
+        """Блокирует строку и перечитывает модель поверх кеша текущей сессии."""
+        statement = (
+            select(WarehouseModel)
+            .where(WarehouseModel.id == identifier.uuid)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return WarehouseMapper.to_domain(model) if model is not None else None
 
     async def add(self, warehouse: Warehouse) -> None:
         """Добавляет карточку и переводит известный конфликт канонического кода."""

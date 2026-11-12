@@ -1,10 +1,34 @@
 from typing import Any
 
 from src.modules.inventory.domain.warehouse.aggregate import Warehouse
+from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
+from src.modules.inventory.domain.warehouse.value_object.code import WarehouseCodeVO
+from src.modules.inventory.domain.warehouse.value_object.name import WarehouseNameVO
+from src.modules.inventory.domain.stock_location.value_object.identifier import (
+    StockLocationIdVO,
+)
+from src.modules.inventory.infrastructure.persistence.models.warehouse import (
+    WarehouseModel,
+)
 
 
 class WarehouseMapper:
-    """Извлекает состояние склада для DML без SQL и бизнес-решений."""
+    """Преобразует состояние склада без SQL и бизнес-решений."""
+
+    @staticmethod
+    def to_domain(model: WarehouseModel) -> Warehouse:
+        """Восстанавливает полный агрегат с сохранённой основной ссылкой."""
+        return Warehouse.restore(
+            identifier=WarehouseIdVO.from_value(model.id),
+            code=WarehouseCodeVO(model.code),
+            name=WarehouseNameVO(model.name),
+            is_active=model.is_active,
+            default_storage_location_id=(
+                StockLocationIdVO.from_value(model.default_storage_location_id)
+                if model.default_storage_location_id is not None
+                else None
+            ),
+        )
 
     @staticmethod
     def to_insert_values(warehouse: Warehouse) -> dict[str, Any]:

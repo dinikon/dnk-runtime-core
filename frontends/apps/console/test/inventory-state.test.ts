@@ -9,7 +9,7 @@ import {
   parseInventoryItemsParams,
 } from "../src/modules/inventory/model/inventory-items-page-state.ts";
 import { useInventoryItemsPageState } from "../src/modules/inventory/model/use-inventory-items-page-state.ts";
-import type { InventoryScope } from "../src/modules/inventory/model/inventory-item.types.ts";
+import type { InventoryScope } from "../src/modules/inventory/model/inventory-scope.types.ts";
 
 test("inventory URL values are bounded, scalar and canonical", () => {
   for (const value of [undefined, "NaN", "Infinity", "", "-5", ["2"], null]) {

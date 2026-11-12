@@ -1964,6 +1964,12 @@ mapping application errors → transport errors
 
 Presentation не содержит бизнес-правил.
 
+Структуру входящего HTTP-запроса проверяет его Pydantic request schema:
+обязательность и типы полей, неизвестные поля, допустимость `null` и непустой PATCH.
+Эти проверки не дублируются в Application handler отдельной ошибкой валидации
+команды. Application получает корректно сформированную Command, а бизнес-инварианты
+значений и переходов состояния по-прежнему проверяет Domain.
+
 ### Потоки Command и Query
 
 #### Полный путь Command

@@ -7,9 +7,6 @@ from src.modules.identity.presentation.auth.depends import (
 from src.modules.inventory.application.inventory_item.command.update_inventory_item.command import (
     UpdateInventoryItemCommand,
 )
-from src.modules.inventory.application.inventory_item.command.update_inventory_item.error import (
-    InvalidInventoryItemUpdateError,
-)
 from src.modules.inventory.domain.error import InventoryError
 from src.modules.inventory.domain.inventory_item.error import (
     InventoryItemNotFoundError,
@@ -68,6 +65,6 @@ async def put_inventory_item(
         InventoryItemBarcodeAlreadyExistsError,
     ) as exc:
         raise HTTPException(409, str(exc)) from exc
-    except (InventoryError, InvalidInventoryItemUpdateError) as exc:
+    except InventoryError as exc:
         raise HTTPException(422, str(exc)) from exc
     return PutInventoryItemResponse.from_dto(result)

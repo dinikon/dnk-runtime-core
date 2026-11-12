@@ -7,7 +7,7 @@ import {
 import { createInventoryItem } from "../api/inventory-item-create.api";
 import type { CreateInventoryItemValues } from "./inventory-item-create.types";
 import type { InventoryItemDetails } from "./inventory-item-settings.types";
-import type { InventoryScope } from "./inventory-item.types";
+import type { InventoryScope } from "./inventory-scope.types";
 import type { InventoryScopeState } from "./use-inventory-scope";
 import { inventoryItemKeys } from "./inventory-item.query-keys";
 import { InventoryItemCreateError } from "./inventory-item-create.errors";
