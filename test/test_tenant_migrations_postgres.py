@@ -158,8 +158,28 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Отказ необратимого отката сохраняет текущий tenant, соседние схемы и public."""
         first, second = await self.new_schema(), await self.new_schema()
         async with self.engine.begin() as connection:
+            original_path = await connection.scalar(text("SHOW search_path"))
+            inventory_id = uuid4()
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{first}".inventory_items '
+                    "(id, sku, base_uom, quantity_step, tracking_mode, expiration_mode) "
+                    "VALUES (:id, 'retained', 'PCS', 1, 'NONE', 'NONE')"
+                ),
+                {"id": inventory_id},
+            )
             with self.assertRaisesRegex(RuntimeError, "необратима"):
                 await self.migrator.downgrade(connection, first, "base")
+            self.assertEqual(
+                await connection.scalar(text("SHOW search_path")), original_path
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT sku FROM "{first}".inventory_items WHERE id=:id'),
+                    {"id": inventory_id},
+                ),
+                "retained",
+            )
             self.assertEqual(
                 await self.migrator.current(connection, first), (self.migrator.head(),)
             )

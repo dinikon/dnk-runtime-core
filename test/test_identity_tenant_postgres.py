@@ -89,6 +89,7 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection imp
 from src.modules.tenancy.presentation.tenant.http.tenant_gate import (
     TenantAdmissionMiddleware,
 )
+from test.tenant_migrations_support import tenant_migrations_through
 
 TEST_URL = os.environ.get("TEST_POSTGRES_URL")
 
@@ -165,13 +166,15 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await self.engine.dispose()
 
-    async def new_tenant_schema(self):
+    async def new_tenant_schema(self, *, upgrade: bool = True) -> EntityIdVO:
+        """Создаёт собственную схему, при необходимости оставляя её без таблиц."""
         tenant_id = EntityIdVO.from_value(uuid4())
         schema = self.naming.schema_name(tenant_id)
         self.schemas.add(schema)
         async with self.engine.begin() as connection:
             await connection.execute(CreateSchema(schema))
-            await self.migrator.upgrade(connection, schema)
+            if upgrade:
+                await self.migrator.upgrade(connection, schema)
         return tenant_id
 
     def make_user(self, tenant_id, *, user_id=None, email_id=None, name="Alice"):
@@ -375,16 +378,20 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                     )
 
     async def test_identity_baseline_downgrade_and_upgrade(self) -> None:
-        tenant_id = await self.new_tenant_schema()
+        """Проверяет обратимость Identity baseline и последующий переход на текущий head."""
+        tenant_id = await self.new_tenant_schema(upgrade=False)
         schema = self.naming.schema_name(tenant_id)
         async with self.engine.begin() as connection:
-            await self.migrator.downgrade(connection, schema, "base")
-            self.assertEqual(await self.migrator.current(connection, schema), ())
-            self.assertFalse(
-                await connection.run_sync(
-                    lambda conn: inspect(conn).has_table("users", schema=schema)
+            with tenant_migrations_through("0001_tenant_baseline") as baseline:
+                await baseline.upgrade(connection, schema)
+                await baseline.downgrade(connection, schema, "base")
+                self.assertEqual(await baseline.current(connection, schema), ())
+                self.assertFalse(
+                    await connection.run_sync(
+                        lambda conn: inspect(conn).has_table("users", schema=schema)
+                    )
                 )
-            )
+                await baseline.upgrade(connection, schema)
             await self.migrator.upgrade(connection, schema)
             await self.migrator.upgrade(connection, schema)
             self.assertEqual(
@@ -404,13 +411,12 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_missing_schema_and_missing_tables_fail_without_fallback(self):
+    async def test_missing_schema_and_missing_tables_fail_without_fallback(
+        self,
+    ) -> None:
+        """Проверяет отсутствующую и пустую схемы без отката актуальных миграций."""
         missing = EntityIdVO.from_value(uuid4())
-        empty = await self.new_tenant_schema()
-        async with self.engine.begin() as connection:
-            await self.migrator.downgrade(
-                connection, self.naming.schema_name(empty), "base"
-            )
+        empty = await self.new_tenant_schema(upgrade=False)
         for tenant_id in (missing, empty):
             with self.assertRaises(ProgrammingError) as raised:
                 async with self.tenant_uow(tenant_id) as uow:

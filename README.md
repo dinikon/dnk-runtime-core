@@ -33,6 +33,7 @@ Dynamic object modules are removed. Their earlier documentation is in [history](
 - Run: `uv run fastapi dev src/app.py`.
 - Tests: `uv run python -m unittest discover -s test -p 'test_*.py' -v`.
 - For PostgreSQL integration tests set `TEST_POSTGRES_URL` to a **disposable** PostgreSQL database URL using `postgresql+asyncpg://`.
+- Use UTF-8 and a Unicode-aware `LC_CTYPE` such as `en_US.UTF-8` for that database: the Files search tests exercise non-ASCII case-insensitive matching. A database initialized with `LC_CTYPE=C` does not provide that behavior.
 - Format: `make format`; check without changing files: `make format-check`.
 - Docker: copy `temaplate.env` to `.env`, then `docker compose up --build`.
 

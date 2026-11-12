@@ -101,21 +101,18 @@ from src.modules.tenancy.infrastructure.tenant_currency_settings.persistence.que
     SqlAlchemyTenantCurrencySettingsQueryRepository,
 )
 from src.modules.tenancy.presentation.http.router import router
+from test.tenant_migrations_support import tenant_migrations_through
 
 
 async def apply_currency_migration(
     connection: AsyncConnection, schema: str, *, downgrade: bool = False
 ) -> None:
-    """Применяет tenant baseline в тестовой схеме во внешней транзакции."""
-    from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
-        TenantMigrator,
-    )
-
-    migrator = TenantMigrator()
-    if downgrade:
-        await migrator.downgrade(connection, schema, "base")
-    else:
-        await migrator.upgrade(connection, schema)
+    """Проверяет историческую baseline без последующих необратимых ревизий."""
+    with tenant_migrations_through("0001_tenant_baseline") as migrator:
+        if downgrade:
+            await migrator.downgrade(connection, schema, "base")
+        else:
+            await migrator.upgrade(connection, schema)
 
 
 class CurrencySliceOnePostgresTests(unittest.IsolatedAsyncioTestCase):
