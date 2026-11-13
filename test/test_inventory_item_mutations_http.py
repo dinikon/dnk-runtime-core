@@ -91,11 +91,14 @@ class InventoryItemMutationsHttpTests(unittest.IsolatedAsyncioTestCase):
             table = statement.get_final_froms()[0]
             model = InventoryItemModel(**self.row) if self.row is not None else None
             result.scalars.return_value.one_or_none.return_value = model
-            result.scalars.return_value.all.return_value = (
-                [ItemBarcodeModel(**row) for row in self.barcodes]
-                if table.name == "inventory_item_barcodes"
-                else [model]
-            )
+            if table.name == "inventory_item_barcodes":
+                result.scalars.return_value.all.return_value = [
+                    ItemBarcodeModel(**row) for row in self.barcodes
+                ]
+            elif table.name == "inventory_item_packagings":
+                result.scalars.return_value.all.return_value = []
+            else:
+                result.scalars.return_value.all.return_value = [model]
         else:
             result.scalar_one_or_none.return_value = self.row["id"]
         return result

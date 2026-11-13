@@ -18,6 +18,27 @@ from src.modules.inventory.application.inventory_item.command.delete_inventory_i
 
 from fastapi import Depends
 
+from src.modules.inventory.application.inventory_item.command.update_item_packaging.handler import (
+    UpdateItemPackagingHandler,
+)
+from src.modules.inventory.application.inventory_item.command.add_item_packaging.handler import (
+    AddItemPackagingHandler,
+)
+from src.modules.inventory.application.inventory_item.query.get_item_packaging.handler import (
+    GetItemPackagingHandler,
+)
+from src.modules.inventory.application.inventory_item.query.list_item_packagings.handler import (
+    ListItemPackagingsHandler,
+)
+from src.modules.inventory.application.inventory_item.port.item_packaging_query_repository import (
+    ItemPackagingQueryRepositoryProtocol,
+)
+from src.modules.inventory.infrastructure.inventory_item.persistence.item_packaging_query_repository import (
+    SqlAlchemyItemPackagingQueryRepository,
+)
+from src.modules.inventory.presentation.packaging_type.depends import (
+    PackagingTypeRepositoryDep,
+)
 from src.modules.inventory.application.inventory_item.command.create_inventory_item.handler import (
     CreateInventoryItemHandler,
 )
@@ -125,4 +146,66 @@ def get_delete_inventory_item_handler(
 
 DeleteInventoryItemHandlerDep = Annotated[
     DeleteInventoryItemHandler, Depends(get_delete_inventory_item_handler)
+]
+
+
+def get_item_packaging_query_repository(
+    uow: UoWDep,
+) -> ItemPackagingQueryRepositoryProtocol:
+    """Собирает чтение упаковок на общей сессии внешнего tenant-UoW."""
+    return SqlAlchemyItemPackagingQueryRepository(uow.session)
+
+
+ItemPackagingQueryRepositoryDep = Annotated[
+    ItemPackagingQueryRepositoryProtocol, Depends(get_item_packaging_query_repository)
+]
+
+
+def get_add_item_packaging_handler(
+    items: InventoryItemRepositoryDep,
+    types: PackagingTypeRepositoryDep,
+    uuid_generator: UuidDep,
+) -> AddItemPackagingHandler:
+    """Подключает оба write-порта к одной зависимости общего UoW."""
+    return AddItemPackagingHandler(items, types, uuid_generator)
+
+
+AddItemPackagingHandlerDep = Annotated[
+    AddItemPackagingHandler, Depends(get_add_item_packaging_handler)
+]
+
+
+def get_get_item_packaging_handler(
+    repository: ItemPackagingQueryRepositoryDep,
+) -> GetItemPackagingHandler:
+    """Собирает сценарий карточки упаковки из read-порта."""
+    return GetItemPackagingHandler(repository)
+
+
+GetItemPackagingHandlerDep = Annotated[
+    GetItemPackagingHandler, Depends(get_get_item_packaging_handler)
+]
+
+
+def get_list_item_packagings_handler(
+    repository: ItemPackagingQueryRepositoryDep,
+) -> ListItemPackagingsHandler:
+    """Собирает сценарий списка упаковок из read-порта."""
+    return ListItemPackagingsHandler(repository)
+
+
+ListItemPackagingsHandlerDep = Annotated[
+    ListItemPackagingsHandler, Depends(get_list_item_packagings_handler)
+]
+
+
+def get_update_item_packaging_handler(
+    items: InventoryItemRepositoryDep, types: PackagingTypeRepositoryDep
+) -> UpdateItemPackagingHandler:
+    """Собирает изменение упаковки на двух write-портах общего внешнего UoW."""
+    return UpdateItemPackagingHandler(items, types)
+
+
+UpdateItemPackagingHandlerDep = Annotated[
+    UpdateItemPackagingHandler, Depends(get_update_item_packaging_handler)
 ]

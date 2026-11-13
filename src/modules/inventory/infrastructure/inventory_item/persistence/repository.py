@@ -9,6 +9,7 @@ from src.modules.inventory.domain.inventory_item.error import (
     InventoryItemNotFoundError,
     InventoryItemSkuAlreadyExistsError,
     InventoryItemInUseError,
+    InventoryItemConflictError,
 )
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
     InventoryItemIdVO,
@@ -23,6 +24,9 @@ from src.modules.inventory.infrastructure.persistence.models.inventory_item impo
 from src.modules.inventory.infrastructure.persistence.models.item_barcode import (
     ItemBarcodeModel,
 )
+from src.modules.inventory.infrastructure.persistence.models.item_packaging import (
+    ItemPackagingModel,
+)
 
 
 class SqlAlchemyInventoryItemRepository:
@@ -33,8 +37,7 @@ class SqlAlchemyInventoryItemRepository:
         self._session = session
 
     async def add(self, item: InventoryItem) -> None:
-        """Вставляет корень и штрихкоды, переводя только известные unique-конфликты."""
-        self._ensure_supported(item)
+        """Вставляет корень, упаковки и штрихкоды, переводя только известные unique-конфликты."""
         try:
             await self._session.execute(
                 insert(InventoryItemModel).values(
@@ -44,13 +47,15 @@ class SqlAlchemyInventoryItemRepository:
             barcodes = InventoryItemMapper.to_barcode_insert_values(item)
             if barcodes:
                 await self._session.execute(insert(ItemBarcodeModel), barcodes)
+            packagings = InventoryItemMapper.to_packaging_insert_values(item)
+            if packagings:
+                await self._session.execute(insert(ItemPackagingModel), packagings)
         except IntegrityError as exc:
             self._raise_unique_conflict(exc)
             raise
 
     async def add_if_absent(self, item: InventoryItem) -> bool:
         """Сохраняет агрегат один раз без ошибки транзакции при гонке канонического SKU."""
-        self._ensure_supported(item)
         statement = (
             pg_insert(InventoryItemModel)
             .values(InventoryItemMapper.to_insert_values(item))
@@ -64,6 +69,9 @@ class SqlAlchemyInventoryItemRepository:
             barcodes = InventoryItemMapper.to_barcode_insert_values(item)
             if barcodes:
                 await self._session.execute(insert(ItemBarcodeModel), barcodes)
+            packagings = InventoryItemMapper.to_packaging_insert_values(item)
+            if packagings:
+                await self._session.execute(insert(ItemPackagingModel), packagings)
             return True
         except IntegrityError as exc:
             self._raise_unique_conflict(exc)
@@ -83,7 +91,7 @@ class SqlAlchemyInventoryItemRepository:
     async def get_for_update(
         self, identifier: InventoryItemIdVO
     ) -> InventoryItem | None:
-        """Блокирует и перечитывает корень, затем читает штрихкоды в сохранённом порядке."""
+        """Блокирует и перечитывает корень, затем читает обе дочерние коллекции в сохранённом порядке."""
         statement = (
             select(InventoryItemModel)
             .where(InventoryItemModel.id == identifier.uuid)
@@ -104,11 +112,17 @@ class SqlAlchemyInventoryItemRepository:
             .execution_options(populate_existing=True)
         )
         children = (await self._session.scalars(statement)).all()
-        return InventoryItemMapper.to_domain(model, children)
+        statement = (
+            select(ItemPackagingModel)
+            .where(ItemPackagingModel.inventory_item_id == model.id)
+            .order_by(ItemPackagingModel.position, ItemPackagingModel.id)
+            .execution_options(populate_existing=True)
+        )
+        packagings = (await self._session.scalars(statement)).all()
+        return InventoryItemMapper.to_domain(model, children, packagings)
 
     async def save(self, item: InventoryItem) -> None:
         """Обновляет корень по ID и атомарно заменяет дочерний состав с прежними ID."""
-        self._ensure_supported(item)
         statement = (
             update(InventoryItemModel)
             .where(InventoryItemModel.id == item.id.uuid)
@@ -127,12 +141,20 @@ class SqlAlchemyInventoryItemRepository:
             children = InventoryItemMapper.to_barcode_insert_values(item)
             if children:
                 await self._session.execute(insert(ItemBarcodeModel), children)
+            await self._session.execute(
+                delete(ItemPackagingModel).where(
+                    ItemPackagingModel.inventory_item_id == item.id.uuid
+                )
+            )
+            packagings = InventoryItemMapper.to_packaging_insert_values(item)
+            if packagings:
+                await self._session.execute(insert(ItemPackagingModel), packagings)
         except IntegrityError as exc:
             self._raise_unique_conflict(exc)
             raise
 
     async def delete(self, item: InventoryItem) -> None:
-        """Удаляет корень по ID; CASCADE затрагивает только собственные штрихкоды."""
+        """Удаляет корень по ID; CASCADE затрагивает собственные упаковки и штрихкоды."""
         statement = (
             delete(InventoryItemModel)
             .where(InventoryItemModel.id == item.id.uuid)
@@ -157,12 +179,6 @@ class SqlAlchemyInventoryItemRepository:
             raise InventoryItemNotFoundError("Складская позиция не найдена.")
 
     @staticmethod
-    def _ensure_supported(item: InventoryItem) -> None:
-        """Не допускает потери пока неподдерживаемых при хранении упаковок."""
-        if item.packagings:
-            raise RuntimeError("Хранение непустых упаковок пока не поддерживается.")
-
-    @staticmethod
     def _sqlstate(error: IntegrityError) -> str | None:
         """Извлекает SQLSTATE из DBAPI-обёртки либо причины asyncpg."""
         cause = getattr(error.orig, "__cause__", None)
@@ -184,4 +200,8 @@ class SqlAlchemyInventoryItemRepository:
         if constraint == "uq_inventory_item_barcodes_barcode":
             raise InventoryItemBarcodeAlreadyExistsError(
                 "Штрихкод уже принадлежит складской позиции."
+            ) from error
+        if constraint == "uq_item_packagings_code":
+            raise InventoryItemConflictError(
+                "Код упаковки уже занят внутри товара."
             ) from error

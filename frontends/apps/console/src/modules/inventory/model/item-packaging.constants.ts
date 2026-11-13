@@ -1,0 +1,4 @@
+export const ITEM_PACKAGING_PAGE_SIZE = 50;
+export const ITEM_PACKAGING_PAGE_SIZES = [20, 50, 100] as const;
+export const ITEM_PACKAGING_SEARCH_DELAY = 300;
+export const ITEM_PACKAGING_MAX_OFFSET = 2_147_483_647;

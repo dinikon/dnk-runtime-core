@@ -11,6 +11,7 @@ import { useWarehousesPageState } from "../model/use-warehouses-page-state";
 import { useWarehousesQuery } from "../model/use-warehouses-query";
 import { useCreateWarehouse } from "../model/use-create-warehouse";
 import { warehouseEditLocation } from "../model/warehouse-navigation";
+import { stockLocationsLocation } from "../model/stock-location-navigation";
 import { validateWarehouse } from "../model/warehouse-form.validation";
 import { WarehouseRequestError } from "../model/warehouse.errors";
 import type {
@@ -67,6 +68,9 @@ function change(valuesAfter: WarehouseCreateValues): void {
 }
 function edit(id: string): void {
   void router.push(warehouseEditLocation(id, route.fullPath));
+}
+function locations(id: string): void {
+  void router.push(stockLocationsLocation(id, route.fullPath));
 }
 function refresh(): void {
   if (scope.ready.value) void query.refetch();
@@ -176,6 +180,7 @@ const outOfRange = computed(
       :out-of-range="outOfRange"
       @retry="refresh"
       @edit="edit"
+      @locations="locations"
       @clear="state.clearFilters"
       @first-page="state.firstPage"
     />

@@ -1,5 +1,11 @@
 from fastapi import APIRouter, Depends
 
+from src.modules.inventory.presentation.warehouse.http.controller.set_default_storage_location import (
+    set_default_storage_location,
+)
+from src.modules.inventory.presentation.warehouse.http.response.set_default_storage_location import (
+    SetDefaultStorageLocationResponse,
+)
 from src.modules.inventory.presentation.warehouse.http.controller.put_warehouse import (
     put_warehouse,
 )
@@ -37,6 +43,16 @@ from src.modules.inventory.presentation.warehouse.http.response.list_warehouses 
 )
 
 router = APIRouter(prefix="/inventory/warehouses", tags=["inventory-warehouses"])
+router.add_api_route(
+    "/{warehouse_id}/default-storage-location",
+    set_default_storage_location,
+    methods=["PUT"],
+    response_model=SetDefaultStorageLocationResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
 router.add_api_route(
     "/{warehouse_id}",
     put_warehouse,

@@ -20,6 +20,7 @@ const props = defineProps<{
   pending: boolean;
   disabled: boolean;
   dirty: boolean;
+  saveBlocked?: boolean;
 }>();
 const emit = defineEmits<{
   change: [values: WarehouseEditValues];
@@ -87,13 +88,14 @@ function change(field: "code" | "name", value: string | number): void {
       </Field>
     </FieldGroup>
     <div class="flex flex-wrap gap-2">
-      <Button type="submit" :disabled="disabled || pending || !dirty">{{
-        pending ? "Сохранение…" : "Сохранить"
-      }}</Button
+      <Button
+        type="submit"
+        :disabled="disabled || pending || saveBlocked || !dirty"
+        >{{ pending ? "Сохранение…" : "Сохранить" }}</Button
       ><Button
         type="button"
         variant="outline"
-        :disabled="disabled || pending || !dirty"
+        :disabled="disabled || pending || saveBlocked || !dirty"
         @click="emit('reset')"
         >Сбросить изменения</Button
       >

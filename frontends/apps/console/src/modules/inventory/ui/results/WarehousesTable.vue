@@ -11,7 +11,7 @@ import {
 import type { Warehouse } from "../../model/warehouse.types";
 import { warehousesColumns } from "./warehouses.columns";
 defineProps<{ items: readonly Warehouse[] }>();
-const emit = defineEmits<{ edit: [id: string] }>();
+const emit = defineEmits<{ edit: [id: string]; locations: [id: string] }>();
 </script>
 <template>
   <TooltipProvider :delay-duration="200">
@@ -47,15 +47,24 @@ const emit = defineEmits<{ edit: [id: string] }>();
           :variant="row.isActive ? 'secondary' : 'outline'"
           >{{ row.isActive ? "Активен" : "Неактивен" }}</Badge
         >
-        <Button
-          v-else-if="column.key === 'actions'"
-          type="button"
-          variant="outline"
-          size="sm"
-          :aria-label="`Настройки склада ${row.code}`"
-          @click="emit('edit', row.id)"
-          >Редактировать</Button
-        >
+        <div v-else-if="column.key === 'actions'" class="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            :aria-label="`Настройки склада ${row.code}`"
+            @click="emit('edit', row.id)"
+            >Редактировать</Button
+          >
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            :aria-label="`Локации склада ${row.code}`"
+            @click="emit('locations', row.id)"
+            >Локации</Button
+          >
+        </div>
       </template>
     </DataTable>
   </TooltipProvider>

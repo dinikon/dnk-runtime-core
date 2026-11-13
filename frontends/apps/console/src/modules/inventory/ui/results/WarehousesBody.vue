@@ -22,6 +22,7 @@ const emit = defineEmits<{
   clear: [];
   firstPage: [];
   edit: [id: string];
+  locations: [id: string];
 }>();
 </script>
 
@@ -57,6 +58,7 @@ const emit = defineEmits<{
       v-if="items.length"
       :items="items"
       @edit="emit('edit', $event)"
+      @locations="emit('locations', $event)"
     />
     <div
       v-else-if="loading"

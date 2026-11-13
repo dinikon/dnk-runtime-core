@@ -19,6 +19,9 @@ from src.modules.inventory.application.warehouse.command.create_warehouse.handle
 from src.modules.inventory.application.warehouse.command.update_warehouse.handler import (
     UpdateWarehouseHandler,
 )
+from src.modules.inventory.application.warehouse.command.set_default_storage_location.handler import (
+    SetDefaultStorageLocationHandler,
+)
 from src.modules.inventory.application.warehouse.query.get_warehouse.handler import (
     GetWarehouseHandler,
 )
@@ -65,6 +68,19 @@ def get_stock_location_repository(uow: UoWDep) -> StockLocationRepositoryProtoco
 
 StockLocationRepositoryDep = Annotated[
     StockLocationRepositoryProtocol, Depends(get_stock_location_repository)
+]
+
+
+def get_set_default_storage_location_handler(
+    warehouses: WarehouseRepositoryDep,
+    locations: StockLocationRepositoryDep,
+) -> SetDefaultStorageLocationHandler:
+    """Собирает назначение из двух write-портов общего внешнего UoW."""
+    return SetDefaultStorageLocationHandler(warehouses, locations)
+
+
+SetDefaultStorageLocationHandlerDep = Annotated[
+    SetDefaultStorageLocationHandler, Depends(get_set_default_storage_location_handler)
 ]
 
 

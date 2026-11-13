@@ -5,6 +5,7 @@ import {
   Users,
   Plug,
   Warehouse,
+  Package,
 } from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
@@ -24,6 +25,11 @@ export const workspaceNavigation: WorkspaceNavigation = {
       items: [
         { title: "Номенклатура", url: "/inventory/items", icon: Warehouse },
         { title: "Склады", url: "/inventory/warehouses", icon: Building2 },
+        {
+          title: "Типы тары",
+          url: "/inventory/packaging-types",
+          icon: Package,
+        },
       ],
     },
     {

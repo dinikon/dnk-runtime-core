@@ -5,6 +5,7 @@ import {
   type UseMutationReturnType,
 } from "@tanstack/vue-query";
 import { patchInventoryItemSettings } from "../api/inventory-item-settings.api";
+import { itemPackagingKeys } from "./item-packaging.query-keys";
 import { inventoryItemKeys } from "./inventory-item.query-keys";
 import type {
   InventoryItemDetails,
@@ -53,9 +54,10 @@ export function useUpdateInventoryItemSettings(
         inventoryItemKeys.detail(input.scope, input.id),
         result,
       );
-      await cache.invalidateQueries({
-        queryKey: inventoryItemKeys.lists(input.scope),
-      });
+      await Promise.all([
+        cache.invalidateQueries({queryKey: inventoryItemKeys.lists(input.scope)}),
+        cache.invalidateQueries({queryKey: itemPackagingKeys.root(input.scope, input.id)}),
+      ]);
     },
   });
 }

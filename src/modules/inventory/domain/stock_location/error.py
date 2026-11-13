@@ -5,6 +5,14 @@ class StockLocationError(InventoryError):
     """Базовая ошибка адреса хранения."""
 
 
+class StockLocationNotFoundError(StockLocationError):
+    """Сообщает об отсутствии запрошенной локации в текущем контексте."""
+
+
+class StockLocationCodeAlreadyExistsError(StockLocationError):
+    """Сообщает о занятом каноническом коде локации внутри склада."""
+
+
 class InvalidStockLocationValueError(StockLocationError):
     """Сообщает о некорректных типах собственного состояния локации."""
 

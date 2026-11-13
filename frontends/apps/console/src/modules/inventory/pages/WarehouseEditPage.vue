@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, reactive, ref, watch, onBeforeUnmount } from "vue";
 import {
   useRoute,
   useRouter,
@@ -22,6 +22,7 @@ import { warehouseSnapshot } from "../model/warehouse-draft";
 import { validateWarehouse } from "../model/warehouse-form.validation";
 import { WarehouseRequestError } from "../model/warehouse.errors";
 import { warehouseReturnPath } from "../model/warehouse-navigation";
+import { stockLocationsLocation } from "../model/stock-location-navigation";
 import type {
   WarehouseEditValues,
   WarehouseFieldErrors,
@@ -29,17 +30,33 @@ import type {
 import WarehouseEditHeader from "../ui/page/WarehouseEditHeader.vue";
 import WarehouseEditBody from "../ui/results/WarehouseEditBody.vue";
 import WarehouseForm from "../ui/forms/WarehouseForm.vue";
+import { useStockLocationQuery } from "../model/use-stock-location-query";
+import { useDefaultStorageLocationSearch } from "../model/use-default-storage-location-search";
+import { useSetWarehouseDefaultStorage } from "../model/use-set-warehouse-default-storage";
+import {
+  DefaultStorageLocationDraft,
+  isDefaultStorageCandidate,
+} from "../model/default-storage-location-draft";
+import { WarehouseDefaultStorageRequestError } from "../model/warehouse-default-storage.errors";
+import WarehouseDefaultStorageCard from "../ui/results/WarehouseDefaultStorageCard.vue";
+import SetWarehouseDefaultStorageDialog from "../ui/forms/SetWarehouseDefaultStorageDialog.vue";
+import DefaultStorageLocationPicker from "../ui/forms/DefaultStorageLocationPicker.vue";
 
 const route = useRoute(),
   router = useRouter(),
   scope = useInventoryScope();
-const id = computed(() => String(route.params.warehouseId ?? ""));
+const id = computed(() => String(route.params.warehouseId ?? "").toLowerCase());
 const identity = computed(() =>
   JSON.stringify([...scope.key.value, scope.ready.value, id.value]),
 );
 const item = useWarehouseQuery(id, scope);
 const mutation = useUpdateWarehouse(scope);
 const saving = ref(false);
+const assigning = ref(false);
+const checkingAssignment = ref(false);
+const busy = computed(
+  () => saving.value || assigning.value || checkingAssignment.value,
+);
 const missing = computed(
   () =>
     item.error.value instanceof WarehouseRequestError &&
@@ -50,6 +67,149 @@ const currentItem = computed(() =>
     ? item.data.value
     : undefined,
 );
+const assignment = useSetWarehouseDefaultStorage(id, scope);
+const assignmentOpen = ref(false);
+const assignmentDraft = reactive(new DefaultStorageLocationDraft());
+const assignmentError = ref("");
+const assignmentFieldError = ref("");
+const assignmentUncertain = ref(false);
+const assignmentSaved = ref(false);
+const currentLocationId = computed(
+  () => currentItem.value?.defaultStorageLocationId ?? null,
+);
+const currentLocation = useStockLocationQuery(id, currentLocationId, scope);
+const selectedLocationId = computed(() =>
+  assignmentOpen.value ? assignmentDraft.selectedId : null,
+);
+const selectedLocation = useStockLocationQuery(id, selectedLocationId, scope);
+const candidates = useDefaultStorageLocationSearch(
+  id,
+  assignmentOpen,
+  scope,
+  identity,
+);
+let assignmentRequest: AbortController | null = null;
+const canSetDefault = computed(
+  () =>
+    scope.ready.value &&
+    !!currentItem.value &&
+    !item.error.value &&
+    !busy.value,
+);
+const canAssign = computed(
+  () =>
+    canSetDefault.value &&
+    !assignmentUncertain.value &&
+    !!assignmentDraft.selectedId &&
+    assignmentDraft.selectedId !== currentLocationId.value &&
+    !selectedLocation.error.value &&
+    selectedLocation.data.value?.id === assignmentDraft.selectedId &&
+    isDefaultStorageCandidate(selectedLocation.data.value, id.value),
+);
+watch(currentLocationId, (value) => {
+  if (assignmentOpen.value && !assigning.value) assignmentDraft.receive(value);
+});
+function clearAssignment(): void {
+  assignmentRequest?.abort();
+  assignmentRequest = null;
+  assignmentOpen.value = false;
+  assigning.value = false;
+  checkingAssignment.value = false;
+  assignmentDraft.reset(null);
+  assignmentError.value = "";
+  assignmentFieldError.value = "";
+  assignmentUncertain.value = false;
+  assignmentSaved.value = false;
+  assignment.reset();
+  candidates.reset();
+}
+function openAssignment(): void {
+  if (!canSetDefault.value) return;
+  clearAssignment();
+  assignmentDraft.reset(currentLocationId.value);
+  assignmentOpen.value = true;
+}
+function closeAssignment(): void {
+  if (!assigning.value && !checkingAssignment.value) clearAssignment();
+}
+function selectLocation(value: string): void {
+  if (busy.value || assignmentUncertain.value) return;
+  assignmentDraft.change(value);
+  assignmentFieldError.value = "";
+  assignmentError.value = "";
+}
+function retryCurrentLocation(): void {
+  if (scope.ready.value && currentLocationId.value && !busy.value)
+    void currentLocation.refetch();
+}
+function retrySelectedLocation(): void {
+  if (scope.ready.value && selectedLocationId.value && !busy.value)
+    void selectedLocation.refetch();
+}
+async function checkAssignment(): Promise<void> {
+  if (!assignmentOpen.value || !scope.ready.value || busy.value) return;
+  const captured = identity.value;
+  checkingAssignment.value = true;
+  try {
+    const result = await item.refetch();
+    if (captured !== identity.value || !assignmentOpen.value) return;
+    if (result.error) {
+      assignmentError.value = result.error.message;
+      return;
+    }
+    assignmentUncertain.value = false;
+    assignmentError.value = "";
+    if (selectedLocationId.value) void selectedLocation.refetch();
+    candidates.retry();
+  } finally {
+    if (captured === identity.value) checkingAssignment.value = false;
+  }
+}
+async function assignDefault(): Promise<void> {
+  if (!assignmentOpen.value || !canAssign.value || !assignmentDraft.selectedId)
+    return;
+  const captured = identity.value;
+  const controller = new AbortController();
+  assignmentRequest = controller;
+  assigning.value = true;
+  assignmentError.value = "";
+  assignmentFieldError.value = "";
+  try {
+    await assignment.mutateAsync({
+      warehouseId: id.value,
+      scope: [...scope.key.value],
+      values: { locationId: assignmentDraft.selectedId },
+      signal: controller.signal,
+    });
+    if (captured !== identity.value || controller.signal.aborted) return;
+    assignmentOpen.value = false;
+    assignmentSaved.value = true;
+  } catch (cause: unknown) {
+    if (captured !== identity.value || controller.signal.aborted) return;
+    assignmentUncertain.value =
+      !(cause instanceof WarehouseDefaultStorageRequestError) ||
+      cause.uncertain;
+    assignmentError.value = assignmentUncertain.value
+      ? "Результат назначения не подтверждён. Проверьте текущее назначение перед повторной попыткой."
+      : cause instanceof Error
+        ? cause.message
+        : "Не удалось назначить локацию.";
+    assignmentFieldError.value =
+      cause instanceof WarehouseDefaultStorageRequestError
+        ? (cause.fields.locationId ?? "")
+        : "";
+    if (!assignmentUncertain.value) {
+      void item.refetch();
+      void selectedLocation.refetch();
+      candidates.retry();
+    }
+  } finally {
+    if (assignmentRequest === controller) {
+      assignmentRequest = null;
+      assigning.value = false;
+    }
+  }
+}
 let request: AbortController | null = null;
 const errors = ref<WarehouseFieldErrors>({}),
   saveError = ref(""),
@@ -67,10 +227,11 @@ watch(
     mutation.reset();
     saving.value = false;
     clearSave();
+    clearAssignment();
   },
   { flush: "sync" },
 );
-const draft = useWarehouseDraft(() => currentItem.value, identity, saving);
+const draft = useWarehouseDraft(() => currentItem.value, identity, busy);
 const readError = computed(
   () => scope.error.value || item.error.value?.message || "",
 );
@@ -83,7 +244,7 @@ function change(value: WarehouseEditValues): void {
   clearSave();
 }
 function reset(): void {
-  if (!saving.value) {
+  if (!busy.value) {
     draft.reset();
     clearSave();
   }
@@ -91,7 +252,7 @@ function reset(): void {
 async function save(): Promise<void> {
   if (
     unavailable.value ||
-    saving.value ||
+    busy.value ||
     !draft.dirty.value ||
     !draft.values.value
   )
@@ -134,13 +295,13 @@ async function save(): Promise<void> {
   }
 }
 function retry(): void {
-  if (!scope.ready.value || saving.value) return;
+  if (!scope.ready.value || busy.value) return;
   void item.refetch();
 }
 function canLeave(): boolean {
-  if (saving.value) return false;
+  if (busy.value) return false;
   return (
-    !draft.dirty.value ||
+    (!draft.dirty.value && !(assignmentOpen.value && assignmentDraft.dirty)) ||
     window.confirm(
       "Есть несохранённые изменения склада. Отказаться от изменений?",
     )
@@ -151,7 +312,11 @@ onBeforeRouteUpdate(
   (to, from) => to.params.warehouseId === from.params.warehouseId || canLeave(),
 );
 function beforeUnload(event: BeforeUnloadEvent): void {
-  if (draft.dirty.value || saving.value) {
+  if (
+    draft.dirty.value ||
+    (assignmentOpen.value && assignmentDraft.dirty) ||
+    busy.value
+  ) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -159,10 +324,14 @@ function beforeUnload(event: BeforeUnloadEvent): void {
 window.addEventListener("beforeunload", beforeUnload);
 onBeforeUnmount(() => {
   request?.abort();
+  assignmentRequest?.abort();
   window.removeEventListener("beforeunload", beforeUnload);
 });
 function back(): void {
   void router.push(warehouseReturnPath(route.query.returnTo));
+}
+function locations(): void {
+  void router.push(stockLocationsLocation(id.value, route.fullPath));
 }
 </script>
 
@@ -173,23 +342,22 @@ function back(): void {
   >
     <WarehouseEditHeader
       :code="currentItem?.code"
-      :pending="saving"
+      :pending="busy"
+      :locations-disabled="!currentItem"
       @back="back"
+      @locations="locations"
     />
     <Card class="w-full max-w-4xl shrink-0">
       <CardHeader>
         <CardTitle>Параметры склада</CardTitle>
-        <CardDescription
-          >Код, название и активность склада. Основная зона хранения
-          сохраняется.</CardDescription
-        >
+        <CardDescription>Код, название и активность склада.</CardDescription>
       </CardHeader>
       <CardContent>
         <WarehouseEditBody
           :loading="loading"
           :error="readError"
           :can-retry="scope.ready.value && !missing"
-          :retry-pending="item.isFetching.value || saving"
+          :retry-pending="item.isFetching.value || busy"
           :refreshing="!!currentItem && item.isFetching.value"
           @retry="retry"
         >
@@ -209,6 +377,7 @@ function back(): void {
             :errors="errors"
             :dirty="draft.dirty.value"
             :pending="saving"
+            :save-blocked="assigning || checkingAssignment"
             :disabled="unavailable"
             @change="change"
             @submit="save"
@@ -217,5 +386,49 @@ function back(): void {
         </WarehouseEditBody>
       </CardContent>
     </Card>
+    <WarehouseDefaultStorageCard
+      v-if="currentItem"
+      :location-id="currentLocationId"
+      :location="currentLocation.data.value"
+      :loading="currentLocation.isFetching.value"
+      :error="currentLocation.error.value?.message || ''"
+      :disabled="!canSetDefault"
+      :saved="assignmentSaved"
+      @change="openAssignment"
+      @retry="retryCurrentLocation"
+    />
+    <SetWarehouseDefaultStorageDialog
+      :open="assignmentOpen"
+      :pending="assigning"
+      :can-submit="canAssign"
+      :error="assignmentError"
+      :field-error="assignmentFieldError"
+      :uncertain="assignmentUncertain"
+      :checking="checkingAssignment"
+      @close="closeAssignment"
+      @submit="assignDefault"
+      @check="checkAssignment"
+    >
+      <DefaultStorageLocationPicker
+        :search="candidates.search.value"
+        :options="candidates.options.value"
+        :total="candidates.total.value"
+        :loading="candidates.loading.value"
+        :fetching-more="candidates.fetchingMore.value"
+        :has-more="candidates.hasMore.value"
+        :error="candidates.error.value"
+        :selected-id="assignmentDraft.selectedId"
+        :selected="selectedLocation.data.value"
+        :selected-loading="selectedLocation.isFetching.value"
+        :selected-error="selectedLocation.error.value?.message || ''"
+        :disabled="busy || assignmentUncertain"
+        :invalid="!!assignmentFieldError"
+        @search="candidates.search.value = $event"
+        @select="selectLocation"
+        @more="candidates.more"
+        @retry="candidates.retry"
+        @retry-selected="retrySelectedLocation"
+      />
+    </SetWarehouseDefaultStorageDialog>
   </section>
 </template>

@@ -1,4 +1,34 @@
 from fastapi import APIRouter, Depends, Response
+from src.modules.inventory.presentation.inventory_item.http.controller.put_item_packaging import (
+    put_item_packaging,
+)
+from src.modules.inventory.presentation.inventory_item.http.controller.patch_item_packaging import (
+    patch_item_packaging,
+)
+from src.modules.inventory.presentation.inventory_item.http.response.put_item_packaging import (
+    PutItemPackagingResponse,
+)
+from src.modules.inventory.presentation.inventory_item.http.response.patch_item_packaging import (
+    PatchItemPackagingResponse,
+)
+from src.modules.inventory.presentation.inventory_item.http.controller.add_item_packaging import (
+    add_item_packaging,
+)
+from src.modules.inventory.presentation.inventory_item.http.controller.get_item_packaging import (
+    get_item_packaging,
+)
+from src.modules.inventory.presentation.inventory_item.http.controller.list_item_packagings import (
+    list_item_packagings,
+)
+from src.modules.inventory.presentation.inventory_item.http.response.add_item_packaging import (
+    AddItemPackagingResponse,
+)
+from src.modules.inventory.presentation.inventory_item.http.response.get_item_packaging import (
+    GetItemPackagingResponse,
+)
+from src.modules.inventory.presentation.inventory_item.http.response.list_item_packagings import (
+    ListItemPackagingsResponse,
+)
 from src.modules.inventory.presentation.inventory_item.http.controller.get_inventory_item import (
     get_inventory_item,
 )
@@ -90,6 +120,54 @@ router.add_api_route(
     methods=["DELETE"],
     status_code=204,
     response_class=Response,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+router.add_api_route(
+    "/{inventory_item_id}/packagings",
+    add_item_packaging,
+    methods=["POST"],
+    status_code=201,
+    response_model=AddItemPackagingResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/{inventory_item_id}/packagings",
+    list_item_packagings,
+    methods=["GET"],
+    response_model=ListItemPackagingsResponse,
+    dependencies=[Depends(require_authenticated_request_context)],
+)
+router.add_api_route(
+    "/{inventory_item_id}/packagings/{packaging_id}",
+    get_item_packaging,
+    methods=["GET"],
+    response_model=GetItemPackagingResponse,
+    dependencies=[Depends(require_authenticated_request_context)],
+)
+
+router.add_api_route(
+    "/{inventory_item_id}/packagings/{packaging_id}",
+    put_item_packaging,
+    methods=["PUT"],
+    response_model=PutItemPackagingResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+router.add_api_route(
+    "/{inventory_item_id}/packagings/{packaging_id}",
+    patch_item_packaging,
+    methods=["PATCH"],
+    response_model=PatchItemPackagingResponse,
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),

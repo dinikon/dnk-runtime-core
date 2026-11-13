@@ -2,6 +2,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.inventory.domain.stock_location.error import StockLocationNotFoundError
 from src.modules.inventory.domain.warehouse.aggregate import Warehouse
 from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
 from src.modules.inventory.domain.warehouse.error import (
@@ -23,6 +24,17 @@ class SqlAlchemyWarehouseRepository:
         """Принимает общую tenant-сессию без владения транзакцией."""
         self._session = session
 
+    async def get_for_share(self, identifier: WarehouseIdVO) -> Warehouse | None:
+        """Согласует создание локаций с изменением склада, сохраняя параллельность чтений."""
+        statement = (
+            select(WarehouseModel)
+            .where(WarehouseModel.id == identifier.uuid)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return WarehouseMapper.to_domain(model) if model is not None else None
+
     async def get_for_update(self, identifier: WarehouseIdVO) -> Warehouse | None:
         """Блокирует строку и перечитывает модель поверх кеша текущей сессии."""
         statement = (
@@ -43,7 +55,7 @@ class SqlAlchemyWarehouseRepository:
                 )
             )
         except IntegrityError as exc:
-            self._raise_code_conflict(exc)
+            self._raise_known_conflict(exc)
             raise
 
     async def save(self, warehouse: Warehouse) -> None:
@@ -57,14 +69,14 @@ class SqlAlchemyWarehouseRepository:
         try:
             identifier = await self._session.scalar(statement)
         except IntegrityError as exc:
-            self._raise_code_conflict(exc)
+            self._raise_known_conflict(exc)
             raise
         if identifier is None:
             raise WarehouseNotFoundError("Склад не найден.")
 
     @staticmethod
-    def _raise_code_conflict(error: IntegrityError) -> None:
-        """Переводит только известный UNIQUE кода; остальные ошибки остаются техническими."""
+    def _raise_known_conflict(error: IntegrityError) -> None:
+        """Переводит известные UNIQUE и FK основной локации, сохраняя неизвестные ошибки."""
         cause = getattr(error.orig, "__cause__", None)
         sqlstate = getattr(error.orig, "sqlstate", None) or getattr(
             cause, "sqlstate", None
@@ -75,4 +87,11 @@ class SqlAlchemyWarehouseRepository:
         if sqlstate == "23505" and constraint == "uq_warehouses_code":
             raise WarehouseCodeAlreadyExistsError(
                 "Код склада уже занят в текущем tenant."
+            ) from error
+        if (
+            sqlstate == "23503"
+            and constraint == "fk_warehouses_default_storage_location"
+        ):
+            raise StockLocationNotFoundError(
+                "Основная локация не найдена в указанном складе."
             ) from error

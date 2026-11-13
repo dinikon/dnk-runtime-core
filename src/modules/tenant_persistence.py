@@ -3,8 +3,10 @@
 import src.modules.crm.infrastructure.persistence.models.company  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.inventory_item  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.item_barcode  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.item_packaging  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.warehouse  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.stock_location  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.packaging_type  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact_company  # noqa: F401
 import src.modules.contact_points.infrastructure.persistence.models.contact_point  # noqa: F401
@@ -67,8 +69,10 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "invitations",
         "inventory_items",
         "inventory_item_barcodes",
+        "inventory_item_packagings",
         "warehouses",
         "stock_locations",
+        "packaging_types",
         "tenant_currency_settings",
         "user_emails",
         "users",

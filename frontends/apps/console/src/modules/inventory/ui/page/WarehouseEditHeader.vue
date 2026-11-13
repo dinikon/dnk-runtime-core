@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ArrowLeft } from "@lucide/vue";
+import { ArrowLeft, MapPin } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
-defineProps<{ code?: string; pending: boolean }>();
-const emit = defineEmits<{ back: [] }>();
+defineProps<{ code?: string; pending: boolean; locationsDisabled: boolean }>();
+const emit = defineEmits<{ back: []; locations: [] }>();
 </script>
 <template>
   <header class="flex min-w-0 flex-wrap items-start gap-4">
@@ -20,5 +20,12 @@ const emit = defineEmits<{ back: [] }>();
         Код, название и административная активность склада.
       </p>
     </div>
+    <Button
+      type="button"
+      variant="outline"
+      :disabled="pending || locationsDisabled"
+      @click="emit('locations')"
+      ><MapPin data-icon="inline-start" />Локации</Button
+    >
   </header>
 </template>

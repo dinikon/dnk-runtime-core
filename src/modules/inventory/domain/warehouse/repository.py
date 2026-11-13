@@ -7,6 +7,10 @@ from src.modules.inventory.domain.warehouse.value_object.identifier import Wareh
 class WarehouseRepositoryProtocol(Protocol):
     """Определяет запись склада в общей tenant-транзакции."""
 
+    async def get_for_share(self, identifier: WarehouseIdVO) -> Warehouse | None:
+        """Читает актуальный склад с совместимой блокировкой против его изменения."""
+        ...
+
     async def get_for_update(self, identifier: WarehouseIdVO) -> Warehouse | None:
         """Блокирует и восстанавливает актуальную карточку либо возвращает None."""
         ...

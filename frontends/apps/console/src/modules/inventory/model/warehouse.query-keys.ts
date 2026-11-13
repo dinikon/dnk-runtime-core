@@ -30,4 +30,12 @@ export const warehouseKeys = {
     ...warehouseKeys.root(scope),
     "update",
   ],
+  setDefaultStorage: (
+    scope: InventoryScope,
+    warehouseId: string,
+  ): readonly [...Root, "set-default-storage", string] => [
+    ...warehouseKeys.root(scope),
+    "set-default-storage",
+    warehouseId,
+  ],
 };
