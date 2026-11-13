@@ -9,7 +9,10 @@ import {
 import { useInfiniteQuery } from "@tanstack/vue-query";
 import { listPackagingTypes } from "../api/packaging-type.api";
 import { packagingTypeKeys } from "./packaging-type.query-keys";
-import { retryPackagingTypes } from "./packaging-type.errors";
+import {
+  PackagingTypeRequestError,
+  retryPackagingTypes,
+} from "./packaging-type.errors";
 import {
   PACKAGING_TYPE_MAX_OFFSET,
   PACKAGING_TYPE_SEARCH_DELAY,
@@ -66,29 +69,26 @@ export function usePackagingTypeSearch(
   onScopeDispose(cancel);
   const query = useInfiniteQuery({
     queryKey: computed(() =>
-      packagingTypeKeys.candidates(
-        scope.key.value,
-        committed.value,
-      ),
+      packagingTypeKeys.candidates(scope.key.value, committed.value),
     ),
     initialPageParam: 0,
     queryFn: ({ queryKey, pageParam, signal }) =>
-      listPackagingTypes(
-        { ...queryKey[6], offset: pageParam },
-        signal,
-      ),
+      listPackagingTypes({ ...queryKey[6], offset: pageParam }, signal),
     getNextPageParam: (last) => {
       const offset = last.offset + last.limit;
       return offset < last.total && offset <= PACKAGING_TYPE_MAX_OFFSET
         ? offset
         : undefined;
     },
-    enabled: computed(
-      () => enabled.value && scope.ready.value,
-    ),
+    enabled: computed(() => enabled.value && scope.ready.value),
     staleTime: 30_000,
     retry: retryPackagingTypes,
   });
+  const forbidden = computed(
+    () =>
+      query.error.value instanceof PackagingTypeRequestError &&
+      [403, 404].includes(query.error.value.status ?? 0),
+  );
   const loading = computed(
     () =>
       enabled.value &&
@@ -97,7 +97,7 @@ export function usePackagingTypeSearch(
   return {
     search,
     options: computed(() =>
-      loading.value
+      loading.value || forbidden.value
         ? []
         : [
             ...new Map(
@@ -107,10 +107,12 @@ export function usePackagingTypeSearch(
             ).values(),
           ],
     ),
-    total: computed(() => query.data.value?.pages[0]?.total ?? 0),
+    total: computed(() =>
+      forbidden.value ? 0 : (query.data.value?.pages[0]?.total ?? 0),
+    ),
     loading,
     fetchingMore: computed(() => query.isFetching.value && !loading.value),
-    hasMore: computed(() => !!query.hasNextPage.value),
+    hasMore: computed(() => !forbidden.value && !!query.hasNextPage.value),
     error: computed(() => query.error.value?.message || ""),
     reset,
     retry: () => {

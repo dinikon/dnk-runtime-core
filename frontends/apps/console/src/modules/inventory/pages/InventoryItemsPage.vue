@@ -6,6 +6,7 @@ import {
   onBeforeRouteLeave,
   onBeforeRouteUpdate,
 } from "vue-router";
+import { itemPackagingsLocation } from "../model/item-packaging-navigation";
 import { inventoryItemEditLocation } from "../model/inventory-item-navigation";
 import { useInventoryScope } from "../model/use-inventory-scope";
 import { useInventoryItemsPageState } from "../model/use-inventory-items-page-state";
@@ -21,6 +22,9 @@ import { InventoryItemCreateError } from "../model/inventory-item-create.errors"
 const scope = useInventoryScope();
 const route = useRoute(),
   router = useRouter();
+function packagings(id: string): void {
+  void router.push(itemPackagingsLocation(id, route.fullPath));
+}
 function edit(id: string): void {
   void router.push(inventoryItemEditLocation(id, route.fullPath));
 }
@@ -179,6 +183,7 @@ function refresh(): void {
       :out-of-range="outOfRange"
       @retry="refresh"
       @edit="edit"
+      @packagings="packagings"
       @clear="state.clearSearch"
       @first-page="state.firstPage"
     />

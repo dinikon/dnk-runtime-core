@@ -285,7 +285,8 @@ FK к товару с CASCADE, FK к типу с RESTRICT, именованны�
 Проверки: `test/test_inventory_item_packaging_application.py`,
 `test/test_inventory_item_packaging_http.py`, `test/test_inventory_item_packaging_postgres.py`.
 Редактирование вариантов реализовано PUT/PATCH, описанными ниже.
-Удаление и Vue-интерфейс остаются последующими срезами.
+Удаление остаётся последующим срезом. Список, создание и редактор упаковок в Vue
+описаны в [документации Console](../frontends/console.md#упаковки-sku).
 
 ### PUT и PATCH ItemPackaging
 

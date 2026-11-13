@@ -55,8 +55,12 @@ export function useUpdateInventoryItemSettings(
         result,
       );
       await Promise.all([
-        cache.invalidateQueries({queryKey: inventoryItemKeys.lists(input.scope)}),
-        cache.invalidateQueries({queryKey: itemPackagingKeys.root(input.scope, input.id)}),
+        cache.invalidateQueries({
+          queryKey: inventoryItemKeys.lists(input.scope),
+        }),
+        cache.invalidateQueries({
+          queryKey: itemPackagingKeys.root(input.scope, input.id),
+        }),
       ]);
     },
   });

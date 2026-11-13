@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ArrowLeft } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
-defineProps<{ sku?: string; pending: boolean }>();
-const emit = defineEmits<{ back: [] }>();
+defineProps<{ sku?: string; pending: boolean; packagingsDisabled: boolean }>();
+const emit = defineEmits<{ back: []; packagings: [] }>();
 </script>
 <template>
   <header class="flex min-w-0 flex-wrap items-start gap-4">
@@ -20,5 +20,12 @@ const emit = defineEmits<{ back: [] }>();
         Единица измерения, шаг количества и правила складского учёта.
       </p>
     </div>
+    <Button
+      type="button"
+      variant="outline"
+      :disabled="pending || packagingsDisabled"
+      @click="emit('packagings')"
+      >Упаковки</Button
+    >
   </header>
 </template>

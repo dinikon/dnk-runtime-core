@@ -20,5 +20,5 @@ export const inventoryItemsColumns: readonly DataTableColumn<InventoryItemColumn
     },
     { key: "trackingMode", label: "Прослеживаемость", width: 230, grow: true },
     { key: "expirationMode", label: "Учёт срока годности", width: 240 },
-    { key: "actions", label: "Действия", width: 170 },
+    { key: "actions", label: "Действия", width: 290 },
   ];

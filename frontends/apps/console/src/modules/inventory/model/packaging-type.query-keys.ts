@@ -26,8 +26,18 @@ export const packagingTypeKeys = {
     "detail",
     id,
   ],
-  candidates: (scope: InventoryScope, search: string): readonly [...Root, "candidates", PackagingTypesListParams] => [
-    ...packagingTypeKeys.root(scope), "candidates", {search,isActive:true,offset:0,limit:20},
+  candidateSearches: (
+    scope: InventoryScope,
+  ): readonly [...Root, "candidates"] => [
+    ...packagingTypeKeys.root(scope),
+    "candidates",
+  ],
+  candidates: (
+    scope: InventoryScope,
+    search: string,
+  ): readonly [...Root, "candidates", PackagingTypesListParams] => [
+    ...packagingTypeKeys.candidateSearches(scope),
+    { search, isActive: true, offset: 0, limit: 20 },
   ],
   create: (scope: InventoryScope): readonly [...Root, "create"] => [
     ...packagingTypeKeys.root(scope),

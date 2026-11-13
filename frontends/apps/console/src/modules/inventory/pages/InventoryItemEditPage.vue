@@ -24,6 +24,7 @@ import { useInventoryItemSettingsDraft } from "../model/use-inventory-item-setti
 import { inventorySettingsSnapshot } from "../model/inventory-item-settings-draft";
 import { validateInventorySettings } from "../model/inventory-item-settings.validation";
 import { InventorySettingsRequestError } from "../model/inventory-item-settings.errors";
+import { itemPackagingsLocation } from "../model/item-packaging-navigation";
 import { inventoryItemReturnPath } from "../model/inventory-item-navigation";
 import type {
   InventoryItemSettings,
@@ -182,6 +183,10 @@ onBeforeUnmount(() => {
   request?.abort();
   window.removeEventListener("beforeunload", beforeUnload);
 });
+function packagings(): void {
+  if (!unavailable.value && !saving.value)
+    void router.push(itemPackagingsLocation(id.value, route.fullPath));
+}
 function back(): void {
   void router.push(inventoryItemReturnPath(route.query.returnTo));
 }
@@ -195,7 +200,9 @@ function back(): void {
     <InventoryItemEditHeader
       :sku="currentItem?.sku"
       :pending="saving"
+      :packagings-disabled="unavailable"
       @back="back"
+      @packagings="packagings"
     />
     <Card class="w-full max-w-4xl shrink-0">
       <CardHeader>

@@ -54,9 +54,14 @@ export function useUpdatePackagingType(
         packagingTypeKeys.detail(input.scope, result.id),
         result,
       );
-      await cache.invalidateQueries({
-        queryKey: packagingTypeKeys.lists(input.scope),
-      });
+      await Promise.all([
+        cache.invalidateQueries({
+          queryKey: packagingTypeKeys.lists(input.scope),
+        }),
+        cache.invalidateQueries({
+          queryKey: packagingTypeKeys.candidateSearches(input.scope),
+        }),
+      ]);
     },
   });
 }

@@ -16,7 +16,7 @@ import type { InventoryItemListRow } from "../../model/inventory-item.types";
 import { inventoryItemsColumns } from "./inventory-items.columns";
 
 defineProps<{ items: readonly InventoryItemListRow[] }>();
-const emit = defineEmits<{ edit: [id: string] }>();
+const emit = defineEmits<{ edit: [id: string]; packagings: [id: string] }>();
 </script>
 
 <template>
@@ -53,15 +53,24 @@ const emit = defineEmits<{ edit: [id: string] }>();
             }}</TooltipContent
           >
         </Tooltip>
-        <Button
-          v-else-if="column.key === 'actions'"
-          type="button"
-          variant="outline"
-          size="sm"
-          :aria-label="`Редактировать ${row.sku}`"
-          @click="emit('edit', row.id)"
-          >Редактировать</Button
-        >
+        <div v-else-if="column.key === 'actions'" class="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            :aria-label="`Редактировать ${row.sku}`"
+            @click="emit('edit', row.id)"
+            >Редактировать</Button
+          >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            :aria-label="`Упаковки SKU ${row.sku}`"
+            @click="emit('packagings', row.id)"
+            >Упаковки</Button
+          >
+        </div>
         <span v-else-if="column.key === 'baseUom'" class="font-mono text-sm">{{
           row.baseUom
         }}</span>

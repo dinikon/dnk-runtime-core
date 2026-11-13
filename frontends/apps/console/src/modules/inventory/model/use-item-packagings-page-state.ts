@@ -95,7 +95,15 @@ export function useItemPackagingsPageState(
     },
     { flush: "sync" },
   );
-  watch(itemId, () => { cancelSearch(); searchText.value=""; navigate({...params.value,search:"",page:1}); }, {flush:"sync"});
+  watch(
+    itemId,
+    () => {
+      cancelSearch();
+      searchText.value = "";
+      navigate({ ...params.value, search: "", page: 1 });
+    },
+    { flush: "sync" },
+  );
   onScopeDispose(cancelSearch);
   return {
     params,
