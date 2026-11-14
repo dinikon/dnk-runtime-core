@@ -35,6 +35,24 @@ export const inventoryItemKeys = {
     ...inventoryItemKeys.root(scope),
     "uoms",
   ],
+  update: (
+    scope: InventoryScope,
+    id: string,
+  ): readonly [...InventoryRootKey, "items", "update", string] => [
+    ...inventoryItemKeys.root(scope),
+    "items",
+    "update",
+    id,
+  ],
+  delete: (
+    scope: InventoryScope,
+    id: string,
+  ): readonly [...InventoryRootKey, "items", "delete", string] => [
+    ...inventoryItemKeys.root(scope),
+    "items",
+    "delete",
+    id,
+  ],
   settings: (
     scope: InventoryScope,
   ): readonly [...InventoryRootKey, "settings"] => [

@@ -7,7 +7,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 
-defineProps<{ search: string; total?: number }>();
+defineProps<{ search: string; total?: number; disabled?: boolean }>();
 const emit = defineEmits<{ search: [value: string]; submit: []; clear: [] }>();
 </script>
 
@@ -21,6 +21,7 @@ const emit = defineEmits<{ search: [value: string]; submit: []; clear: [] }>();
     >
       <InputGroup>
         <InputGroupInput
+          :disabled="disabled"
           :model-value="search"
           type="search"
           aria-label="Поиск по SKU"
@@ -33,6 +34,7 @@ const emit = defineEmits<{ search: [value: string]; submit: []; clear: [] }>();
             type="button"
             size="icon-xs"
             aria-label="Очистить поиск"
+            :disabled="disabled"
             @click="emit('clear')"
             ><X aria-hidden="true"
           /></InputGroupButton>

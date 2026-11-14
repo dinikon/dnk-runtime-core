@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { effectScope, ref, nextTick } from "vue";
+import { inventoryItemChangesToDto } from "../src/modules/inventory/api/inventory-item-edit.mapper.ts";
 import {
   inventoryItemDetailsFromDto,
-  inventoryItemSettingsToDto,
   inventoryUomsFromDto,
 } from "../src/modules/inventory/api/inventory-item-settings.mapper.ts";
-import { InventorySettingsDraft } from "../src/modules/inventory/model/inventory-item-settings-draft.ts";
-import { useInventoryItemSettingsDraft } from "../src/modules/inventory/model/use-inventory-item-settings-draft.ts";
 import { validateInventorySettings } from "../src/modules/inventory/model/inventory-item-settings.validation.ts";
 import {
   inventoryItemReturnPath,
@@ -36,7 +33,7 @@ test("detail mapping and settings PATCH retain exact decimals and omit unrelated
     expiration_mode: "REQUIRED",
     barcodes: [{ id: "barcode-id", barcode: "000a" }],
   });
-  const payload = inventoryItemSettingsToDto(value);
+  const payload = inventoryItemChangesToDto({ baseUom: value.baseUom, quantityStep: value.quantityStep, trackingMode: value.trackingMode, expirationMode: value.expirationMode });
   assert.deepEqual(payload, {
     base_uom: "KG",
     quantity_rules: { step: "1.234567890123456789E-40" },
@@ -124,55 +121,6 @@ test("coupled tracking, unit, step and expiration rules match Domain", () => {
     validateInventorySettings({ ...defaults, baseUom: "UNKNOWN" }, uoms)
       .baseUom,
   );
-});
-
-test("draft ignores background refetch and acknowledges only submitted fields", () => {
-  const draft = new InventorySettingsDraft();
-  draft.receive(defaults);
-  const sent = { ...defaults, baseUom: "KG", quantityStep: "0.001" };
-  draft.change(sent);
-  draft.receive({ ...defaults, quantityStep: "2" });
-  assert.deepEqual(draft.values, sent);
-  // A newer edit can even revert a field to its initial value during the request.
-  draft.change({ ...sent, quantityStep: "1" });
-  draft.acknowledge(sent, { ...sent, quantityStep: "0.0010" });
-  assert.equal(draft.values?.quantityStep, "1");
-  assert.equal(draft.dirty, true);
-  draft.reset({ ...sent, quantityStep: "0.0010" });
-  assert.equal(draft.dirty, false);
-  draft.clear();
-  assert.equal(draft.values, null);
-});
-
-test("draft context reset clears input and blocks refetch until request acknowledgement", async () => {
-  const effects = effectScope(),
-    identity = ref("tenant-a:item"),
-    pending = ref(false);
-  const data = ref<InventoryItemSettings | undefined>(defaults);
-  const draft = effects.run(() =>
-    useInventoryItemSettingsDraft(() => data.value, identity, pending),
-  )!;
-  try {
-    const sent = { ...defaults, quantityStep: "2" };
-    draft.change(sent);
-    pending.value = true;
-    draft.change(defaults);
-    data.value = sent;
-    assert.deepEqual(draft.values.value, defaults);
-    draft.acknowledge(sent, sent);
-    pending.value = false;
-    assert.deepEqual(draft.values.value, defaults);
-    assert.equal(draft.dirty.value, true);
-    identity.value = "tenant-b:item";
-    data.value = undefined;
-    await nextTick();
-    assert.equal(draft.values.value, null);
-    data.value = { ...defaults, quantityStep: "3" };
-    await nextTick();
-    assert.equal(draft.values.value?.quantityStep, "3");
-  } finally {
-    effects.stop();
-  }
 });
 
 test("editor navigation preserves origin parameters and rejects external destinations", () => {

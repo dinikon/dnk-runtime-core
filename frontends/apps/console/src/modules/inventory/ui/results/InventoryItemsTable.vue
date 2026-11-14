@@ -15,8 +15,12 @@ import {
 import type { InventoryItemListRow } from "../../model/inventory-item.types";
 import { inventoryItemsColumns } from "./inventory-items.columns";
 
-defineProps<{ items: readonly InventoryItemListRow[] }>();
-const emit = defineEmits<{ edit: [id: string]; packagings: [id: string] }>();
+defineProps<{ items: readonly InventoryItemListRow[]; disabled?: boolean }>();
+const emit = defineEmits<{
+  edit: [id: string];
+  packagings: [id: string];
+  delete: [item: InventoryItemListRow];
+}>();
 </script>
 
 <template>
@@ -34,6 +38,7 @@ const emit = defineEmits<{ edit: [id: string]; packagings: [id: string] }>();
               v-if="column.key === 'sku'"
               type="button"
               class="block max-w-full truncate text-left font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :disabled="disabled"
               :aria-label="`Редактировать SKU ${row.sku}`"
               @click="emit('edit', row.id)"
             >
@@ -58,6 +63,7 @@ const emit = defineEmits<{ edit: [id: string]; packagings: [id: string] }>();
             type="button"
             variant="outline"
             size="sm"
+            :disabled="disabled"
             :aria-label="`Редактировать ${row.sku}`"
             @click="emit('edit', row.id)"
             >Редактировать</Button
@@ -66,9 +72,19 @@ const emit = defineEmits<{ edit: [id: string]; packagings: [id: string] }>();
             type="button"
             variant="outline"
             size="sm"
+            :disabled="disabled"
             :aria-label="`Упаковки SKU ${row.sku}`"
             @click="emit('packagings', row.id)"
             >Упаковки</Button
+          >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            :disabled="disabled"
+            :aria-label="`Удалить SKU ${row.sku}`"
+            @click="emit('delete', row)"
+            >Удалить</Button
           >
         </div>
         <span v-else-if="column.key === 'baseUom'" class="font-mono text-sm">{{

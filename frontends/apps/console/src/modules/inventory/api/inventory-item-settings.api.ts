@@ -7,18 +7,15 @@ import {
 import { InventorySettingsRequestError } from "../model/inventory-item-settings.errors";
 import type {
   InventoryItemDetails,
-  InventoryItemSettings,
   InventoryUom,
   InventorySettingsErrors,
 } from "../model/inventory-item-settings.types";
 import type {
   GetInventoryItemResponseDTO,
-  PatchInventoryItemSettingsResponseDTO,
   ListInventoryUomsResponseDTO,
 } from "./inventory-item-settings.dto";
 import {
   inventoryItemDetailsFromDto,
-  inventoryItemSettingsToDto,
   inventoryUomsFromDto,
 } from "./inventory-item-settings.mapper";
 
@@ -80,26 +77,5 @@ export async function listInventoryUoms(
     return inventoryUomsFromDto(data);
   } catch (cause: unknown) {
     return requestError(cause, "Не удалось загрузить единицы измерения.");
-  }
-}
-
-export async function patchInventoryItemSettings(
-  id: string,
-  settings: InventoryItemSettings,
-  signal?: AbortSignal,
-): Promise<InventoryItemDetails> {
-  try {
-    const { data } =
-      await httpClient.patch<PatchInventoryItemSettingsResponseDTO>(
-        `/console/inventory/items/${encodeURIComponent(id)}`,
-        inventoryItemSettingsToDto(settings),
-        { signal },
-      );
-    return inventoryItemDetailsFromDto(data);
-  } catch (cause: unknown) {
-    return requestError(
-      cause,
-      "Не удалось сохранить настройки. Ваш ввод сохранён.",
-    );
   }
 }

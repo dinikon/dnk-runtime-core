@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { ArrowLeft } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
-defineProps<{ sku?: string; pending: boolean; packagingsDisabled: boolean }>();
-const emit = defineEmits<{ back: []; packagings: [] }>();
+defineProps<{
+  sku?: string;
+  pending: boolean;
+  packagingsDisabled: boolean;
+  deleteDisabled?: boolean;
+}>();
+const emit = defineEmits<{ back: []; packagings: []; delete: [] }>();
 </script>
 <template>
   <header class="flex min-w-0 flex-wrap items-start gap-4">
@@ -17,7 +22,7 @@ const emit = defineEmits<{ back: []; packagings: [] }>();
       <h1 class="text-xl font-semibold">Настройки SKU</h1>
       <p v-if="sku" class="break-all font-mono text-sm">{{ sku }}</p>
       <p class="text-sm text-muted-foreground">
-        Единица измерения, шаг количества и правила складского учёта.
+        Код SKU, штрихкоды и параметры складского учёта.
       </p>
     </div>
     <Button
@@ -26,6 +31,13 @@ const emit = defineEmits<{ back: []; packagings: [] }>();
       :disabled="pending || packagingsDisabled"
       @click="emit('packagings')"
       >Упаковки</Button
+    >
+    <Button
+      type="button"
+      variant="destructive"
+      :disabled="pending || deleteDisabled"
+      @click="emit('delete')"
+      >Удалить позицию</Button
     >
   </header>
 </template>

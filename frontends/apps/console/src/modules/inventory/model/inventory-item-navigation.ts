@@ -19,3 +19,11 @@ export function inventoryItemReturnPath(value: unknown): string {
     ? value
     : "/inventory/items";
 }
+
+export function inventoryItemListReturnPath(value: unknown): string {
+  return typeof value === "string" &&
+    /^\/inventory\/items(?:\?|#|$)/.test(value) &&
+    !/[\\\u0000-\u001f]/.test(value)
+    ? value
+    : "/inventory/items";
+}

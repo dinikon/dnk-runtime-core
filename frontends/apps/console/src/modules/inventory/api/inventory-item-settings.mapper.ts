@@ -1,17 +1,15 @@
 import type {
   InventoryItemDetails,
-  InventoryItemSettings,
   InventoryUom,
 } from "../model/inventory-item-settings.types.ts";
 import type {
   GetInventoryItemResponseDTO,
-  PatchInventoryItemSettingsRequestDTO,
-  PatchInventoryItemSettingsResponseDTO,
+  PatchInventoryItemResponseDTO,
   ListInventoryUomsResponseDTO,
 } from "./inventory-item-settings.dto.ts";
 
 export function inventoryItemDetailsFromDto(
-  dto: GetInventoryItemResponseDTO | PatchInventoryItemSettingsResponseDTO,
+  dto: GetInventoryItemResponseDTO | PatchInventoryItemResponseDTO,
 ): InventoryItemDetails {
   return {
     id: dto.id,
@@ -21,17 +19,6 @@ export function inventoryItemDetailsFromDto(
     trackingMode: dto.tracking_mode,
     expirationMode: dto.expiration_mode,
     barcodes: dto.barcodes.map((value) => ({ ...value })),
-  };
-}
-
-export function inventoryItemSettingsToDto(
-  value: InventoryItemSettings,
-): PatchInventoryItemSettingsRequestDTO {
-  return {
-    base_uom: value.baseUom,
-    quantity_rules: { step: value.quantityStep.trim() },
-    tracking_mode: value.trackingMode,
-    expiration_mode: value.expirationMode,
   };
 }
 
