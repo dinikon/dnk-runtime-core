@@ -18,6 +18,9 @@ from src.modules.inventory.application.inventory_item.command.delete_inventory_i
 
 from fastapi import Depends
 
+from src.modules.inventory.application.inventory_item.command.delete_item_packaging.handler import (
+    DeleteItemPackagingHandler,
+)
 from src.modules.inventory.application.inventory_item.command.update_item_packaging.handler import (
     UpdateItemPackagingHandler,
 )
@@ -208,4 +211,16 @@ def get_update_item_packaging_handler(
 
 UpdateItemPackagingHandlerDep = Annotated[
     UpdateItemPackagingHandler, Depends(get_update_item_packaging_handler)
+]
+
+
+def get_delete_item_packaging_handler(
+    repository: InventoryItemRepositoryDep,
+) -> DeleteItemPackagingHandler:
+    """Собирает удаление дочерней Entity на write-порте общего tenant-UoW."""
+    return DeleteItemPackagingHandler(repository)
+
+
+DeleteItemPackagingHandlerDep = Annotated[
+    DeleteItemPackagingHandler, Depends(get_delete_item_packaging_handler)
 ]

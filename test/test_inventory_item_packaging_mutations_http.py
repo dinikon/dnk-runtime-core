@@ -81,7 +81,7 @@ class ItemPackagingMutationsHttpTests(unittest.IsolatedAsyncioTestCase):
             "/api/console/inventory/items/{inventory_item_id}/packagings/{packaging_id}"
         )
         schema = self.app.openapi()
-        self.assertEqual(set(schema["paths"][path]), {"get", "put", "patch"})
+        self.assertEqual(set(schema["paths"][path]), {"get", "put", "patch", "delete"})
         for method, name in [
             ("put", "PutItemPackagingResponse"),
             ("patch", "PatchItemPackagingResponse"),

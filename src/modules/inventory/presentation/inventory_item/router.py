@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Depends, Response
+from src.modules.inventory.presentation.inventory_item.http.controller.delete_item_packaging import (
+    delete_item_packaging,
+)
 from src.modules.inventory.presentation.inventory_item.http.controller.put_item_packaging import (
     put_item_packaging,
 )
@@ -168,6 +171,19 @@ router.add_api_route(
     patch_item_packaging,
     methods=["PATCH"],
     response_model=PatchItemPackagingResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+
+router.add_api_route(
+    "/{inventory_item_id}/packagings/{packaging_id}",
+    delete_item_packaging,
+    methods=["DELETE"],
+    status_code=204,
+    response_class=Response,
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),
