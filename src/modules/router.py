@@ -1,3 +1,6 @@
+from src.modules.inventory.presentation.stock_lot.router import (
+    router as inventory_stock_lots_router,
+)
 from src.modules.catalog.presentation.router import router as catalog_router
 from src.modules.inventory.presentation.uom.router import (
     router as inventory_uoms_router,
@@ -61,3 +64,5 @@ router.include_router(funnel_router)
 from src.modules.channels.presentation.router import router as channels_router
 
 router.include_router(channels_router)
+
+router.include_router(inventory_stock_lots_router)

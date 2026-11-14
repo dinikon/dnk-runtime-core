@@ -42,6 +42,7 @@ import type {
   InventoryItemEditValues,
   InventoryItemEditErrors,
 } from "../model/inventory-item-editor.types";
+import { stockLotsLocation } from "../model/stock-lot-navigation";
 import InventoryItemEditHeader from "../ui/page/InventoryItemEditHeader.vue";
 import InventoryItemEditBody from "../ui/results/InventoryItemEditBody.vue";
 import InventoryItemEditorForm from "../ui/forms/InventoryItemEditorForm.vue";
@@ -297,6 +298,10 @@ function packagings(): void {
   if (!unavailable.value && !busy.value)
     void router.push(itemPackagingsLocation(id.value, route.fullPath));
 }
+function lots(): void {
+  if (!unavailable.value && !busy.value)
+    void router.push(stockLotsLocation(id.value, route.fullPath));
+}
 function back(): void {
   void router.push(inventoryItemReturnPath(route.query.returnTo));
 }
@@ -313,6 +318,7 @@ function back(): void {
       :delete-disabled="!currentItem || uncertain"
       @back="back"
       @packagings="packagings"
+      @lots="lots"
       @delete="showDelete"
     />
     <DeleteInventoryItemDialog

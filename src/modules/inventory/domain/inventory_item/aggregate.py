@@ -82,10 +82,15 @@ class InventoryItem:
     barcodes: tuple[ItemBarcode, ...]
 
     def ensure_can_delete(self, usage: InventoryItemDeletionUsage) -> None:
-        """Запрещает удаление при любой сохранённой связи с каталогом."""
+        """Запрещает удаление при сохранённых связях с каталогом или партиями."""
         if usage.has_catalog_items:
             raise InventoryItemInUseError(
                 "Нельзя удалить складскую позицию: она связана с элементом каталога."
+            )
+
+        if usage.has_stock_lots:
+            raise InventoryItemInUseError(
+                "Нельзя удалить складскую позицию: у неё есть партии."
             )
 
     @classmethod

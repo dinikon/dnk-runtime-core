@@ -1,3 +1,6 @@
+from src.modules.inventory.infrastructure.inventory_item.persistence.usage import (
+    SqlAlchemyInventoryItemUsage,
+)
 from typing import Annotated
 from src.modules.inventory.application.inventory_item.query.get_inventory_item.handler import (
     GetInventoryItemHandler,
@@ -141,8 +144,11 @@ def get_delete_inventory_item_handler(
     """Собирает удаление без передачи транзакции во внутренние слои."""
     return DeleteInventoryItemHandler(
         repository,
-        CatalogInventoryItemUsage(
-            FindInventoryItemUsageHandler(SqlAlchemyCatalogItemSku(uow.session))
+        SqlAlchemyInventoryItemUsage(
+            uow.session,
+            CatalogInventoryItemUsage(
+                FindInventoryItemUsageHandler(SqlAlchemyCatalogItemSku(uow.session))
+            ),
         ),
     )
 

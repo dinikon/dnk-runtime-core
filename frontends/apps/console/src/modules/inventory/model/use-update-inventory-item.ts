@@ -1,3 +1,4 @@
+import { stockLotKeys } from "./stock-lot.query-keys";
 import { computed, type Ref } from "vue";
 import {
   useMutation,
@@ -74,6 +75,9 @@ export function useUpdateInventoryItem(
         }),
         cache.invalidateQueries({
           queryKey: itemPackagingKeys.root(input.scope, input.id),
+        }),
+        cache.invalidateQueries({
+          queryKey: stockLotKeys.root(input.scope, input.id),
         }),
       ]);
     },

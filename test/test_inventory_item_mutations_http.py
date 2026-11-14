@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.sql.dml import Insert, Update
-from sqlalchemy.sql.selectable import Select
+from sqlalchemy.sql.selectable import Exists, Select
 from sqlalchemy.exc import IntegrityError
 
 from src.config import dnk_config
@@ -88,6 +88,9 @@ class InventoryItemMutationsHttpTests(unittest.IsolatedAsyncioTestCase):
             raise self.failure
         result = Mock()
         if isinstance(statement, Select):
+            if any(isinstance(column, Exists) for column in statement.selected_columns):
+                result.scalar_one.return_value = False
+                return result
             table = statement.get_final_froms()[0]
             model = InventoryItemModel(**self.row) if self.row is not None else None
             result.scalars.return_value.one_or_none.return_value = model

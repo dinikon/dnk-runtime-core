@@ -1,3 +1,4 @@
+import { stockLotKeys } from "./stock-lot.query-keys.ts";
 import type { QueryClient } from "@tanstack/vue-query";
 import { inventoryItemKeys } from "./inventory-item.query-keys.ts";
 import { itemPackagingKeys } from "./item-packaging.query-keys.ts";
@@ -22,15 +23,18 @@ export async function forgetInventoryItem(
   if (!relevant()) return;
   const detail = inventoryItemKeys.detail(input.scope, input.id),
     lists = inventoryItemKeys.lists(input.scope),
-    packaging = itemPackagingKeys.root(input.scope, input.id);
+    packaging = itemPackagingKeys.root(input.scope, input.id),
+    lots = stockLotKeys.root(input.scope, input.id);
   await Promise.all([
     cache.cancelQueries({ queryKey: detail, exact: true }),
     cache.cancelQueries({ queryKey: lists }),
     cache.cancelQueries({ queryKey: packaging }),
+    cache.cancelQueries({ queryKey: lots }),
   ]);
   if (!relevant()) return;
   cache.removeQueries({ queryKey: detail, exact: true });
   cache.removeQueries({ queryKey: packaging });
+  cache.removeQueries({ queryKey: lots });
   cache.setQueriesData<InventoryItemsPage>({ queryKey: lists }, (page) =>
     withoutInventoryItem(page, input.id),
   );
@@ -44,14 +48,17 @@ export async function discardInaccessibleInventoryItem(
   if (!relevant()) return;
   const detail = inventoryItemKeys.detail(input.scope, input.id),
     lists = inventoryItemKeys.lists(input.scope),
-    packaging = itemPackagingKeys.root(input.scope, input.id);
+    packaging = itemPackagingKeys.root(input.scope, input.id),
+    lots = stockLotKeys.root(input.scope, input.id);
   await Promise.all([
     cache.cancelQueries({ queryKey: detail, exact: true }),
     cache.cancelQueries({ queryKey: lists }),
     cache.cancelQueries({ queryKey: packaging }),
+    cache.cancelQueries({ queryKey: lots }),
   ]);
   if (!relevant()) return;
   cache.removeQueries({ queryKey: detail, exact: true });
   cache.removeQueries({ queryKey: lists });
   cache.removeQueries({ queryKey: packaging });
+  cache.removeQueries({ queryKey: lots });
 }

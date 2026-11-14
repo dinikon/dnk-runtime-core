@@ -23,3 +23,11 @@ class StockLotItemMismatchError(StockLotError):
 
 class InvalidStockLotSnapshotError(StockLotError):
     """Сообщает о некорректном снимке идентичности и дат партии."""
+
+
+class StockLotNotFoundError(StockLotError):
+    """Сообщает об отсутствующей партии в выбранном SKU."""
+
+
+class StockLotNumberAlreadyExistsError(StockLotError):
+    """Сообщает о занятом точном номере партии внутри SKU текущего tenant."""

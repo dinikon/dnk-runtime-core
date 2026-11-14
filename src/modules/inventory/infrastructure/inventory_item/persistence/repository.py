@@ -174,6 +174,13 @@ class SqlAlchemyInventoryItemRepository:
                 raise InventoryItemInUseError(
                     "Нельзя удалить складскую позицию: она связана с элементом каталога."
                 ) from exc
+            if (
+                self._sqlstate(exc) in {"23503", "23001"}
+                and constraint == "fk_stock_lots_item"
+            ):
+                raise InventoryItemInUseError(
+                    "Нельзя удалить складскую позицию: у неё есть партии."
+                ) from exc
             raise
         if identifier is None:
             raise InventoryItemNotFoundError("Складская позиция не найдена.")
