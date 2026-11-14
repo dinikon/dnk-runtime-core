@@ -1,3 +1,6 @@
+import type { PatchStockLotResponseDTO } from "./stock-lot.dto";
+import { stockLotDatesPatchToDto } from "./stock-lot.mapper";
+import type { StockLotDatesChanges } from "../model/stock-lot.types";
 import { isAxiosError, isCancel } from "axios";
 import {
   httpClient,
@@ -103,5 +106,26 @@ export async function createStockLot(
     return stockLotFromDto(data);
   } catch (error: unknown) {
     return requestError(error, "Не удалось создать партию. Ваш ввод сохранён.");
+  }
+}
+
+export async function patchStockLotDates(
+  itemId: string,
+  lotId: string,
+  changes: StockLotDatesChanges,
+  signal?: AbortSignal,
+): Promise<StockLot> {
+  try {
+    const { data } = await httpClient.patch<PatchStockLotResponseDTO>(
+      `${base(itemId)}/${encodeURIComponent(lotId)}`,
+      stockLotDatesPatchToDto(changes),
+      { signal },
+    );
+    return stockLotFromDto(data);
+  } catch (error: unknown) {
+    return requestError(
+      error,
+      "Не удалось сохранить даты партии. Ваш ввод сохранён.",
+    );
   }
 }

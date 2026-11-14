@@ -125,3 +125,5 @@ import src.modules.channels.infrastructure.persistence.models.connection  # noqa
 import src.modules.crm.infrastructure.persistence.models.position_history  # noqa: F401
 
 import src.modules.inventory.infrastructure.persistence.models.stock_lot  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_serial  # noqa: F401

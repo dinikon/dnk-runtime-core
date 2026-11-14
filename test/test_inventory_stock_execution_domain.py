@@ -29,9 +29,6 @@ from src.modules.inventory.domain.inventory_item.value_object.sku import SkuVO
 from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import (
     TrackingMode,
 )
-from src.modules.inventory.domain.policy.quantity_arithmetic import (
-    QuantityArithmeticPolicy,
-)
 from src.modules.inventory.domain.stock_document.aggregate import StockDocument
 from src.modules.inventory.domain.stock_document.entity.stock_document_line import (
     StockDocumentLine,
@@ -70,9 +67,6 @@ from src.modules.inventory.domain.stock_execution.error import (
     InvalidStockExecutionRouteError,
     InvalidStockExecutionValueError,
     StockExecutionTimeError,
-)
-from src.modules.inventory.domain.stock_execution.value_object.document_line_quantity import (
-    ExecutedDocumentLineQuantityVO,
 )
 from src.modules.inventory.domain.stock_execution.value_object.identifier import (
     StockExecutionIdVO,
@@ -210,9 +204,6 @@ class StockExecutionDomainTests(unittest.TestCase):
                 inventory_item_id=self.item.id,
                 number=SerialNumberVO("SN"),
                 lot_id=self.lot.id if self.lot else None,
-                dates=(
-                    None if self.lot else (StockDatesVO() if dates is None else dates)
-                ),
             )
             if mode.requires_serial
             else None
@@ -307,7 +298,7 @@ class StockExecutionDomainTests(unittest.TestCase):
                     inventory_items=(self.item.execution_snapshot(),),
                     locations=locations,
                     lots=(self.lot.snapshot(),) if self.lot else (),
-                    serials=(self.serial.execution_snapshot(),) if self.serial else (),
+                    serials=(self.serial.snapshot(),) if self.serial else (),
                 )
                 | changes
             )
@@ -774,7 +765,6 @@ class StockExecutionDomainTests(unittest.TestCase):
         """Требует срок партии или собственный срок серии перед приёмкой REQUIRED."""
         for mode in (
             TrackingMode.LOT,
-            TrackingMode.SERIAL,
             TrackingMode.LOT_AND_SERIAL,
         ):
             self.prepare(mode=mode, expiration=ExpirationMode.REQUIRED)
@@ -828,7 +818,7 @@ class StockExecutionDomainTests(unittest.TestCase):
                 dict(
                     serials=(
                         replace(
-                            self.serial.execution_snapshot(),
+                            self.serial.snapshot(),
                             lot_id=StockLotIdVO(uuid4()),
                         ),
                     )
@@ -842,13 +832,13 @@ class StockExecutionDomainTests(unittest.TestCase):
             (
                 dict(
                     serials=(
-                        self.serial.execution_snapshot(),
-                        self.serial.execution_snapshot(),
+                        self.serial.snapshot(),
+                        self.serial.snapshot(),
                     )
                 ),
                 InvalidStockExecutionContextError,
             ),
-            (dict(serials=(self.serial.snapshot(),)), InvalidStockSerialSnapshotError),
+            (dict(serials=(self.serial,)), InvalidStockSerialSnapshotError),
             (dict(lots=(None,)), InvalidStockLotSnapshotError),
         ):
             with self.subTest(changes=changes), self.assertRaises(error):
@@ -887,9 +877,8 @@ class StockExecutionDomainTests(unittest.TestCase):
                 inventory_item_id=self.item.id,
                 number=SerialNumberVO(str(index)),
                 lot_id=None,
-                dates=StockDatesVO(),
             )
-            serials.append(serial.execution_snapshot())
+            serials.append(serial.snapshot())
             lines.append(
                 self.line(
                     route=ReceiptExecutionRouteVO(
@@ -936,19 +925,17 @@ class StockExecutionDomainTests(unittest.TestCase):
         with self.assertRaises(InvalidTrackingConfigurationError):
             replace(item, expiration_mode=ExpirationMode.REQUIRED).ensure_valid()
         self.prepare(mode=TrackingMode.SERIAL)
-        snapshot = self.serial.execution_snapshot()
-        self.assertIsNotNone(snapshot.dates)
+        snapshot = self.serial.snapshot()
+        self.assertFalse(hasattr(snapshot, "dates"))
         self.assertEqual(
             set(self.serial.snapshot().__dataclass_fields__),
             {"id", "inventory_item_id", "lot_id"},
         )
         with self.assertRaises(InvalidStockSerialSnapshotError):
-            replace(snapshot, dates=None).ensure_valid()
+            replace(snapshot, inventory_item_id=uuid4()).ensure_valid()
         self.prepare(mode=TrackingMode.LOT_AND_SERIAL)
         with self.assertRaises(InvalidStockSerialSnapshotError):
-            replace(
-                self.serial.execution_snapshot(), dates=StockDatesVO()
-            ).ensure_valid()
+            replace(self.serial.snapshot(), lot_id="LOT").ensure_valid()
 
     def test_line_ids_and_summary_ids_are_unique_and_typed(self) -> None:
         """Разрешает повтор плановой строки, но запрещает повтор фактического ID и повтор итоговой строки."""

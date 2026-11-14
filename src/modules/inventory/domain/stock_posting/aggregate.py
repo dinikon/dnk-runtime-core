@@ -2,6 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
+from src.modules.inventory.domain.inventory_item.snapshot import (
+    InventoryItemTrackingSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_posting_tracking import (
+    StockPostingTrackingPolicy,
+)
 from src.modules.inventory.domain.policy.stock_receipt_valuation import (
     StockReceiptValuationPolicy,
 )
@@ -32,7 +38,6 @@ from src.modules.inventory.domain.stock_posting.issue_valuation_snapshot import 
 from src.modules.inventory.domain.stock_posting.receipt_valuation_snapshot import (
     StockReceiptValuationSnapshot,
 )
-
 from src.modules.inventory.domain.error import StockAdjustmentError
 from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
     InventoryCountAdjustmentSourceSnapshot,
@@ -70,7 +75,6 @@ from src.modules.inventory.domain.stock_serial.presence_snapshot import (
 )
 from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
 from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
-
 from src.modules.inventory.domain.policy.stock_execution_posting import (
     StockExecutionPostingPolicy,
 )
@@ -135,6 +139,9 @@ class StockPosting:
         posted_at: datetime,
         entries: tuple[StockLedgerEntry, ...],
         positions: tuple[StockPositionSnapshot, ...],
+        inventory_items: tuple[InventoryItemTrackingSnapshot, ...] = (),
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
         locations: tuple[StockLocationSnapshot, ...] = (),
     ) -> Self:
         """Создаёт завершённое обычное проведение по снимкам позиций и системному пересчёту."""
@@ -153,6 +160,13 @@ class StockPosting:
         for entry in posting.entries:
             entry.ensure_current_conversion()
         posting._ensure_context(positions=positions, locations=locations)
+        StockPostingTrackingPolicy.ensure_compatible(
+            operation_type=operation_type,
+            positions=positions,
+            inventory_items=inventory_items,
+            lots=lots,
+            serials=serials,
+        )
         return posting
 
     @classmethod
@@ -163,6 +177,9 @@ class StockPosting:
         execution: StockExecutionPostingSnapshot,
         posted_at: datetime,
         positions: tuple[StockPositionSnapshot, ...],
+        inventory_items: tuple[InventoryItemTrackingSnapshot, ...] = (),
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
         locations: tuple[StockLocationSnapshot, ...],
         entry_bindings: tuple[StockPostingEntryBindingVO, ...],
     ) -> Self:
@@ -190,6 +207,9 @@ class StockPosting:
             posted_at=normalized,
             entries=entries,
             positions=positions,
+            inventory_items=inventory_items,
+            lots=lots,
+            serials=serials,
             locations=(
                 locations
                 if execution.operation_type is StockOperationType.INTERNAL_MOVE

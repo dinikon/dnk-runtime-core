@@ -42,6 +42,7 @@ import type {
   InventoryItemEditValues,
   InventoryItemEditErrors,
 } from "../model/inventory-item-editor.types";
+import { stockSerialsLocation } from "../model/stock-serial-navigation";
 import { stockLotsLocation } from "../model/stock-lot-navigation";
 import InventoryItemEditHeader from "../ui/page/InventoryItemEditHeader.vue";
 import InventoryItemEditBody from "../ui/results/InventoryItemEditBody.vue";
@@ -298,6 +299,10 @@ function packagings(): void {
   if (!unavailable.value && !busy.value)
     void router.push(itemPackagingsLocation(id.value, route.fullPath));
 }
+function serials(): void {
+  if (!unavailable.value && !busy.value)
+    void router.push(stockSerialsLocation(id.value, route.fullPath));
+}
 function lots(): void {
   if (!unavailable.value && !busy.value)
     void router.push(stockLotsLocation(id.value, route.fullPath));
@@ -319,6 +324,7 @@ function back(): void {
       @back="back"
       @packagings="packagings"
       @lots="lots"
+      @serials="serials"
       @delete="showDelete"
     />
     <DeleteInventoryItemDialog

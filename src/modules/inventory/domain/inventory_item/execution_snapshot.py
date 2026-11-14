@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
+from src.modules.inventory.domain.policy.inventory_tracking import (
+    InventoryTrackingPolicy,
+)
 from src.modules.inventory.domain.inventory_item.error import (
     InvalidInventoryItemExecutionSnapshotError,
-    InvalidTrackingConfigurationError,
 )
 from src.modules.inventory.domain.inventory_item.snapshot import (
     InventoryItemTrackingSnapshot,
@@ -51,13 +53,9 @@ class InventoryItemExecutionSnapshot:
             self.quantity_rules,
             self.tracking_mode,
         ).ensure_valid()
-        if (
-            self.tracking_mode is TrackingMode.NONE
-            and self.expiration_mode.controls_expiration
-        ):
-            raise InvalidTrackingConfigurationError(
-                "Обязательный срок требует партий или серий."
-            )
+        InventoryTrackingPolicy.ensure_compatible(
+            tracking_mode=self.tracking_mode, expiration_mode=self.expiration_mode
+        )
 
     def stock_snapshot(self) -> InventoryItemStockSnapshot:
         """Предоставляет минимальный существующий контракт проверки физических измерений."""
@@ -70,7 +68,7 @@ class InventoryItemExecutionSnapshot:
         )
 
     def tracking_snapshot(self) -> InventoryItemTrackingSnapshot:
-        """Предоставляет существующий контракт выбора источника дат партии или серии."""
+        """Предоставляет настройки прослеживаемости и контроля срока партии."""
         self.ensure_valid()
         return InventoryItemTrackingSnapshot(
             self.inventory_item_id, self.tracking_mode, self.expiration_mode

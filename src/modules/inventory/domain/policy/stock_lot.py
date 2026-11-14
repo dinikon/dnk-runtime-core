@@ -41,6 +41,7 @@ class StockLotPolicy:
             raise InvalidInventoryItemTrackingSnapshotError(
                 "Нужен типизированный снимок прослеживаемости товара."
             )
+        inventory_item.ensure_valid()
         if inventory_item_id != inventory_item.inventory_item_id:
             raise StockLotItemMismatchError("Партия принадлежит другому товару.")
         if inventory_item.tracking_mode not in (

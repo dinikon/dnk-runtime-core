@@ -27,25 +27,22 @@ from src.modules.inventory.domain.value_object.stock_dates import StockDatesVO
 
 
 class StockSerialPolicy:
-    """Проверяет серийный режим и принадлежность, выбирая единственный источник дат."""
+    """Проверяет серийный режим, принадлежность товару и связь с партией."""
 
     @staticmethod
-    def resolve_dates(
+    def ensure_compatible(
         *,
         inventory_item_id: InventoryItemIdVO,
         inventory_item: InventoryItemTrackingSnapshot,
         lot_id: StockLotIdVO | None,
-        dates: StockDatesVO | None,
         lot: StockLotSnapshot | None = None,
-    ) -> StockDatesVO:
-        """Возвращает собственные даты SERIAL или даты соответствующей партии LOT_AND_SERIAL."""
-        if (
-            not isinstance(inventory_item_id, InventoryItemIdVO)
-            or (lot_id is not None and not isinstance(lot_id, StockLotIdVO))
-            or (dates is not None and not isinstance(dates, StockDatesVO))
+    ) -> None:
+        """Разрешает SERIAL без партии или LOT_AND_SERIAL с партией того же товара."""
+        if not isinstance(inventory_item_id, InventoryItemIdVO) or (
+            lot_id is not None and not isinstance(lot_id, StockLotIdVO)
         ):
             raise InvalidStockSerialValueError(
-                "Нужны типизированные ID и даты экземпляра."
+                "Нужны типизированные ID экземпляра и партии."
             )
         if (
             not isinstance(inventory_item, InventoryItemTrackingSnapshot)
@@ -56,6 +53,7 @@ class StockSerialPolicy:
             raise InvalidInventoryItemTrackingSnapshotError(
                 "Нужен типизированный снимок прослеживаемости товара."
             )
+        inventory_item.ensure_valid()
         if inventory_item_id != inventory_item.inventory_item_id:
             raise StockSerialItemMismatchError("Экземпляр принадлежит другому товару.")
         if not inventory_item.tracking_mode.requires_serial:
@@ -63,14 +61,14 @@ class StockSerialPolicy:
                 "Экземпляр допустим только при SERIAL или LOT_AND_SERIAL."
             )
         if inventory_item.tracking_mode is TrackingMode.SERIAL:
-            if lot_id is not None or lot is not None or dates is None:
+            if lot_id is not None or lot is not None:
                 raise InvalidSerialConfigurationError(
-                    "Режим SERIAL требует собственные даты без ссылки или снимка партии."
+                    "Режим SERIAL не допускает ссылку или снимок партии."
                 )
-            return dates
-        if lot_id is None or dates is not None:
+            return
+        if lot_id is None:
             raise InvalidSerialConfigurationError(
-                "Режим LOT_AND_SERIAL требует партию без собственных дат экземпляра."
+                "Режим LOT_AND_SERIAL требует связанную партию."
             )
         if (
             not isinstance(lot, StockLotSnapshot)
@@ -85,4 +83,3 @@ class StockSerialPolicy:
             raise StockSerialLotMismatchError(
                 "Снимок должен относиться к связанной партии того же товара."
             )
-        return lot.dates

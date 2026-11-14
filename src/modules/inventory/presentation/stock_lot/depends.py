@@ -5,6 +5,9 @@ from fastapi import Depends
 from src.modules.inventory.application.stock_lot.command.create_stock_lot.handler import (
     CreateStockLotHandler,
 )
+from src.modules.inventory.application.stock_lot.command.update_stock_lot.handler import (
+    UpdateStockLotHandler,
+)
 from src.modules.inventory.application.stock_lot.port.query_repository import (
     StockLotQueryRepositoryProtocol,
 )
@@ -83,4 +86,16 @@ def get_list_stock_lots_handler(
 
 ListStockLotsHandlerDep = Annotated[
     ListStockLotsHandler, Depends(get_list_stock_lots_handler)
+]
+
+
+def get_update_stock_lot_handler(
+    items: InventoryItemRepositoryDep, lots: StockLotRepositoryDep
+) -> UpdateStockLotHandler:
+    """Подключает обновление к write-портам одной общей tenant-транзакции."""
+    return UpdateStockLotHandler(items, lots)
+
+
+UpdateStockLotHandlerDep = Annotated[
+    UpdateStockLotHandler, Depends(get_update_stock_lot_handler)
 ]

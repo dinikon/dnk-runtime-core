@@ -1,5 +1,3 @@
-"""Построение журнала из фактических маршрутов с точной агрегацией по физическим позициям."""
-
 import unittest
 from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime, timedelta, timezone
@@ -8,6 +6,7 @@ from itertools import permutations
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
+from test.inventory_tracking_fixtures import posting_tracking_context
 from src.modules.inventory.domain.error import (
     IncompatibleUomError,
     NegativeStockQuantityError,
@@ -233,6 +232,9 @@ class ExecutionPostingDomainTests(unittest.TestCase):
                     positions=(self.a.snapshot(),),
                     locations=(self.locations[0],),
                     entry_bindings=(self.bindings[0],),
+                )
+                | posting_tracking_context(
+                    changes.get("positions", (self.a.snapshot(),))
                 )
                 | changes
             )
@@ -492,6 +494,9 @@ class ExecutionPostingDomainTests(unittest.TestCase):
 
     def test_distinct_items_lots_statuses_and_locations_are_not_merged(self) -> None:
         """Агрегация выполняется по полному ключу позиции, а не только по товару или адресу."""
+        lot_item = replace(
+            self.item, id=InventoryItemIdVO(uuid4()), tracking_mode=TrackingMode.LOT
+        )
         other_item = replace(self.item, id=InventoryItemIdVO(uuid4()))
         positions = (
             self.a,
@@ -499,7 +504,11 @@ class ExecutionPostingDomainTests(unittest.TestCase):
                 dimensions=replace(self.a.dimensions, inventory_item_id=other_item.id)
             ),
             self.position(
-                dimensions=replace(self.a.dimensions, lot_id=StockLotIdVO(uuid4()))
+                dimensions=replace(
+                    self.a.dimensions,
+                    inventory_item_id=lot_item.id,
+                    lot_id=StockLotIdVO(uuid4()),
+                )
             ),
             self.position(
                 dimensions=replace(
@@ -512,7 +521,11 @@ class ExecutionPostingDomainTests(unittest.TestCase):
             self.line(
                 str(index + 1),
                 position,
-                item=other_item if index == 1 else self.item,
+                item=(
+                    other_item
+                    if index == 1
+                    else (lot_item if index == 2 else self.item)
+                ),
                 document_line_id=StockDocumentLineIdVO(uuid4()),
             )
             for index, position in enumerate(positions)

@@ -134,7 +134,6 @@ class StockAvailabilityDomainTests(unittest.TestCase):
                 inventory_item_id=self.item.id,
                 number=SerialNumberVO("SN"),
                 lot_id=self.lot.id if self.lot else None,
-                dates=None if self.lot else dates,
             )
             if mode.requires_serial
             else None
@@ -175,7 +174,7 @@ class StockAvailabilityDomainTests(unittest.TestCase):
                 positions=(self.position.availability_snapshot(),),
                 locations=(self.location,),
                 lots=(self.lot.snapshot(),) if self.lot else (),
-                serials=(self.serial.availability_snapshot(),) if self.serial else (),
+                serials=(self.serial.snapshot(),) if self.serial else (),
             )
             | changes
         )
@@ -186,7 +185,7 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         if self.lot is not None:
             self.lot = replace(self.lot, dates=dates)
         else:
-            self.serial = replace(self.serial, dates=dates)
+            raise AssertionError("Даты существуют только у партии.")
 
     def test_snapshot_getters_are_minimal_frozen_and_validate_originals(self) -> None:
         """Три геттера не раскрывают коллекции или версии и проверяют исходное состояние корней."""
@@ -207,8 +206,8 @@ class StockAvailabilityDomainTests(unittest.TestCase):
                 {"id", "dimensions", "base_uom", "on_hand_qty"},
             ),
             (
-                self.serial.availability_snapshot(),
-                {"id", "inventory_item_id", "lot_id", "dates"},
+                self.serial.snapshot(),
+                {"id", "inventory_item_id", "lot_id"},
             ),
         ):
             self.assertEqual(set(snapshot.__dataclass_fields__), fields)
@@ -221,7 +220,7 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         with self.assertRaises(InvalidStockPositionValueError):
             replace(self.position, version=True).availability_snapshot()
         with self.assertRaises(InvalidStockSerialValueError):
-            replace(self.serial, number="SN").availability_snapshot()
+            replace(self.serial, number="SN").snapshot()
 
     def test_empty_input_returns_typed_zero(self) -> None:
         """Пустой корректный набор даёт ноль даже для неактивного склада."""
@@ -235,10 +234,13 @@ class StockAvailabilityDomainTests(unittest.TestCase):
             self.assertEqual(result.value, Decimal(0))
 
     def test_every_tracking_and_expiration_configuration(self) -> None:
-        """Все одиннадцать допустимых сочетаний используют текущую матрицу прослеживаемости."""
+        """Все десять допустимых сочетаний используют текущую матрицу прослеживаемости."""
         for mode in TrackingMode:
             for expiration in ExpirationMode:
-                if mode is TrackingMode.NONE and expiration.controls_expiration:
+                if (
+                    mode in (TrackingMode.NONE, TrackingMode.SERIAL)
+                    and expiration.controls_expiration
+                ):
                     continue
                 with self.subTest(mode=mode, expiration=expiration):
                     self.configure(mode, expiration)
@@ -330,7 +332,6 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         """Вчера исключается, сегодня и завтра разрешены для партии и самостоятельного экземпляра."""
         for mode in (
             TrackingMode.LOT,
-            TrackingMode.SERIAL,
             TrackingMode.LOT_AND_SERIAL,
         ):
             self.configure(mode, ExpirationMode.REQUIRED)
@@ -348,7 +349,6 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         """OPTIONAL допускает отсутствие срока и прошедшую дату-заметку без ограничений."""
         for mode in (
             TrackingMode.LOT,
-            TrackingMode.SERIAL,
             TrackingMode.LOT_AND_SERIAL,
         ):
             self.configure(mode, ExpirationMode.OPTIONAL)
@@ -375,7 +375,6 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         """Отсутствие обязательного срока не скрывается фильтрами состояния или активности."""
         for mode in (
             TrackingMode.LOT,
-            TrackingMode.SERIAL,
             TrackingMode.LOT_AND_SERIAL,
         ):
             self.configure(mode, ExpirationMode.REQUIRED)
@@ -405,7 +404,6 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         """Нулевой остаток допускает неполную карточку, сохраняя обязательные ссылки."""
         for mode in (
             TrackingMode.LOT,
-            TrackingMode.SERIAL,
             TrackingMode.LOT_AND_SERIAL,
         ):
             self.configure(mode, ExpirationMode.REQUIRED)
@@ -499,7 +497,7 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         """Отсутствующие, повторные и лишние снимки прослеживаемости не допускаются."""
         self.configure(TrackingMode.LOT_AND_SERIAL)
         lot = self.lot.snapshot()
-        serial = self.serial.availability_snapshot()
+        serial = self.serial.snapshot()
         for field, values, error in (
             ("lots", (), InvalidStockLotSnapshotError),
             ("serials", (), InvalidStockSerialSnapshotError),
@@ -640,7 +638,7 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         with self.assertRaises(InvalidStockLotSnapshotError):
             self.calculate(lots=(self.lot,))
         with self.assertRaises(InvalidStockSerialSnapshotError):
-            self.calculate(serials=(self.serial.execution_snapshot(),))
+            self.calculate(serials=(self.serial,))
 
     def test_malformed_snapshots_are_revalidated_by_consumer(self) -> None:
         """Ручной dataclass-конструктор не позволяет обойти типы и совместимость снимков."""
@@ -677,15 +675,11 @@ class StockAvailabilityDomainTests(unittest.TestCase):
         with self.assertRaises(InvalidStockLotSnapshotError):
             self.calculate(lots=(replace(self.lot.snapshot(), dates=None),))
         with self.assertRaises(InvalidStockSerialSnapshotError):
-            self.calculate(
-                serials=(
-                    replace(self.serial.availability_snapshot(), dates=StockDatesVO()),
-                )
-            )
+            self.calculate(serials=(replace(self.serial.snapshot(), lot_id="LOT"),))
         self.configure(TrackingMode.SERIAL)
         with self.assertRaises(InvalidStockSerialSnapshotError):
             self.calculate(
-                serials=(replace(self.serial.availability_snapshot(), dates=None),)
+                serials=(replace(self.serial.snapshot(), inventory_item_id=uuid4()),)
             )
 
     def test_exact_sum_is_independent_of_order_and_external_decimal_context(

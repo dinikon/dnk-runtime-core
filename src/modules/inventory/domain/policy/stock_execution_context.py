@@ -7,15 +7,14 @@ from src.modules.inventory.domain.inventory_item.execution_snapshot import (
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
     InventoryItemIdVO,
 )
-from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import (
-    TrackingMode,
-)
 from src.modules.inventory.domain.policy.location_availability import (
     LocationAvailabilityPolicy,
 )
 from src.modules.inventory.domain.policy.stock_dimensions import StockDimensionsPolicy
 from src.modules.inventory.domain.policy.stock_expiration import StockExpirationPolicy
-from src.modules.inventory.domain.policy.stock_serial import StockSerialPolicy
+from src.modules.inventory.domain.policy.stock_tracking_dates import (
+    StockTrackingDatesPolicy,
+)
 from src.modules.inventory.domain.stock_execution.entity.stock_execution_line import (
     StockExecutionLine,
 )
@@ -35,8 +34,8 @@ from src.modules.inventory.domain.stock_posting.value_object.operation_type impo
 from src.modules.inventory.domain.stock_serial.error import (
     InvalidStockSerialSnapshotError,
 )
-from src.modules.inventory.domain.stock_serial.execution_snapshot import (
-    StockSerialExecutionSnapshot,
+from src.modules.inventory.domain.stock_serial.snapshot import (
+    StockSerialSnapshot,
 )
 from src.modules.inventory.domain.value_object.stock_dates import StockDatesVO
 from src.modules.inventory.domain.warehouse.error import InvalidWarehouseSnapshotError
@@ -57,7 +56,7 @@ class StockExecutionContextPolicy:
         inventory_items: tuple[InventoryItemExecutionSnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...],
-        serials: tuple[StockSerialExecutionSnapshot, ...],
+        serials: tuple[StockSerialSnapshot, ...],
     ) -> None:
         """Требует ровно участвующие снимки, активные адреса и обязательную дату поступления."""
         if not isinstance(operation_type, StockOperationType) or not isinstance(
@@ -130,9 +129,9 @@ class StockExecutionContextPolicy:
             by_lot[lot.id] = lot
         by_serial = {}
         for serial in serials:
-            if not isinstance(serial, StockSerialExecutionSnapshot):
+            if not isinstance(serial, StockSerialSnapshot):
                 raise InvalidStockSerialSnapshotError(
-                    "Нужны снимки экземпляров с источником дат."
+                    "Нужны снимки идентичности экземпляров."
                 )
             serial.ensure_valid()
             if serial.id in by_serial:
@@ -157,8 +156,16 @@ class StockExecutionContextPolicy:
                         "Отсутствует снимок фактической локации."
                     )
                 used_locations.add(location.id)
-                lot = by_lot.get(dimensions.lot_id)
-                serial = by_serial.get(dimensions.serial_id)
+                lot = (
+                    by_lot.get(dimensions.lot_id)
+                    if dimensions.lot_id is not None
+                    else None
+                )
+                serial = (
+                    by_serial.get(dimensions.serial_id)
+                    if dimensions.serial_id is not None
+                    else None
+                )
                 if dimensions.lot_id is not None:
                     used_lots.add(dimensions.lot_id)
                 if dimensions.serial_id is not None:
@@ -172,27 +179,20 @@ class StockExecutionContextPolicy:
                     location=location,
                     warehouse=warehouse,
                     lot=lot,
-                    serial=serial.identity_snapshot() if serial is not None else None,
+                    serial=serial,
                 )
-                dates = None
-                if item.tracking_mode.requires_serial:
-                    dates = StockSerialPolicy.resolve_dates(
-                        inventory_item_id=item.inventory_item_id,
-                        inventory_item=item.tracking_snapshot(),
-                        lot_id=serial.lot_id,
-                        dates=serial.dates,
-                        lot=lot,
-                    )
-                elif item.tracking_mode is TrackingMode.LOT:
-                    dates = lot.dates
-                if dates is not None:
-                    StockExpirationPolicy.ensure_dates_allowed(
-                        dates=dates, expiration_mode=item.expiration_mode
-                    )
-                    if operation_type is StockOperationType.RECEIPT:
-                        StockExpirationPolicy.ensure_ready_for_receipt(
-                            dates=dates, expiration_mode=item.expiration_mode
-                        )
+                dates = StockTrackingDatesPolicy.resolve(
+                    inventory_item=item.tracking_snapshot(),
+                    lot_id=dimensions.lot_id,
+                    lot=lot,
+                    serial=serial,
+                )
+                StockExpirationPolicy.ensure_operation_allowed(
+                    dates=dates,
+                    expiration_mode=item.expiration_mode,
+                    operation_type=operation_type,
+                )
+
         if (
             used_items != set(by_item)
             or used_locations != set(by_location)

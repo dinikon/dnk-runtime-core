@@ -1,0 +1,4 @@
+export const STOCK_SERIAL_PAGE_SIZE = 50;
+export const STOCK_SERIAL_PAGE_SIZES = [20, 50, 100] as const;
+export const STOCK_SERIAL_MAX_OFFSET = 2147483647;
+export const STOCK_SERIAL_SEARCH_DELAY = 300;

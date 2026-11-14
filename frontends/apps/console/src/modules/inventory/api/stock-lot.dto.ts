@@ -31,3 +31,15 @@ export interface ListStockLotsResponseDTO {
   offset: number;
   limit: number;
 }
+
+export interface PatchStockLotRequestDTO {
+  manufactured_on?: string | null;
+  expires_on?: string | null;
+}
+export interface PatchStockLotResponseDTO {
+  id: string;
+  inventory_item_id: string;
+  number: string;
+  manufactured_on: string | null;
+  expires_on: string | null;
+}

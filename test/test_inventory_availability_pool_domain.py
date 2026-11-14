@@ -139,7 +139,6 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
                 inventory_item_id=self.item.id,
                 number=SerialNumberVO("SN"),
                 lot_id=self.lot.id if self.lot else None,
-                dates=None if self.lot else dates,
             )
             if mode.requires_serial
             else None
@@ -169,7 +168,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
             positions=(self.position.availability_snapshot(),),
             locations=(self.location,),
             lots=(self.lot.snapshot(),) if self.lot else (),
-            serials=(self.serial.availability_snapshot(),) if self.serial else (),
+            serials=(self.serial.snapshot(),) if self.serial else (),
         )
 
     def create(self, **changes: object) -> AvailabilityPool:
@@ -720,7 +719,7 @@ class AvailabilityPoolDomainTests(unittest.TestCase):
                 positions=tuple(
                     position.availability_snapshot() for position in positions
                 ),
-                serials=tuple(serial.availability_snapshot() for serial in serials),
+                serials=tuple(serial.snapshot() for serial in serials),
             )
             pool = self.create(**context)
             reserved = self.reserve(pool, "7", **context)

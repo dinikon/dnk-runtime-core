@@ -127,7 +127,6 @@ class StockPositionDomainTests(unittest.TestCase):
                 inventory_item_id=item.id,
                 number=SerialNumberVO("SN"),
                 lot_id=lot.id if lot is not None else None,
-                dates=None if lot is not None else StockDatesVO(),
             )
             if mode.requires_serial
             else None
@@ -587,7 +586,6 @@ class StockPositionDomainTests(unittest.TestCase):
             identifier=StockSerialIdVO(uuid4()),
             inventory_item=item.tracking_snapshot(),
             number=SerialNumberVO("SN"),
-            dates=StockDatesVO(),
         )
         self.assertIs(serial.snapshot().id, serial.id)
         self.assertIs(serial.snapshot().inventory_item_id, item.id)

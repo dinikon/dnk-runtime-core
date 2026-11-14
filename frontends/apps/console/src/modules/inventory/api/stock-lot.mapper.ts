@@ -1,3 +1,5 @@
+import type { PatchStockLotRequestDTO } from "./stock-lot.dto.ts";
+import type { StockLotDatesChanges } from "../model/stock-lot.types.ts";
 import type {
   GetStockLotResponseDTO,
   CreateStockLotRequestDTO,
@@ -47,4 +49,15 @@ export function stockLotsParamsToDto(params: StockLotsListParams): {
     offset: params.offset,
     limit: params.limit,
   };
+}
+
+export function stockLotDatesPatchToDto(
+  changes: StockLotDatesChanges,
+): PatchStockLotRequestDTO {
+  const payload: PatchStockLotRequestDTO = {};
+  if (changes.manufacturedOn !== undefined)
+    payload.manufactured_on = changes.manufacturedOn || null;
+  if (changes.expiresOn !== undefined)
+    payload.expires_on = changes.expiresOn || null;
+  return payload;
 }

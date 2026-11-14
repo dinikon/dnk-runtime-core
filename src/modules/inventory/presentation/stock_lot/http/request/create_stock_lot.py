@@ -1,26 +1,17 @@
 from datetime import date
-import re
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, StrictStr
+
+from src.modules.inventory.presentation.stock_lot.http.request.calendar_date import (
+    parse_calendar_date,
+)
 
 
 class CreateStockLotRequest(BaseModel):
-    """Принимает ручной строковый номер и календарные даты ISO без времени и coercion."""
+    """Принимает ручной строковый номер и необязательные даты ISO без времени."""
 
     model_config = ConfigDict(extra="forbid")
     number: StrictStr
-    manufactured_on: date | None = None
-    expires_on: date | None = None
-
-    @field_validator("manufactured_on", "expires_on", mode="before")
-    @classmethod
-    def calendar_date(cls, value: object) -> date | None:
-        """Разрешает только null либо строку YYYY-MM-DD, отклоняя datetime и числа."""
-        if value is None:
-            return None
-        if (
-            not isinstance(value, str)
-            or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None
-        ):
-            raise ValueError("Укажите календарную дату YYYY-MM-DD без времени.")
-        return date.fromisoformat(value)
+    manufactured_on: Annotated[date | None, BeforeValidator(parse_calendar_date)] = None
+    expires_on: Annotated[date | None, BeforeValidator(parse_calendar_date)] = None

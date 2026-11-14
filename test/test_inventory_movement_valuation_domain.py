@@ -80,7 +80,7 @@ class MovementValuationDomainTests(unittest.TestCase):
     def groups(
         self, **dimension_changes: object
     ) -> tuple[StockPosting, StockPosition, StockPosition]:
-        """Создаёт две корректные независимые группы по пять KG для проверки явного сопоставления сторон."""
+        """Восстанавливает две исторические независимые группы по пять KG для проверки явного сопоставления сторон."""
         dimensions = replace(
             self.f.dimensions,
             **(dimension_changes or dict(owner_id=StockOwnerIdVO(uuid4()))),
@@ -89,13 +89,13 @@ class MovementValuationDomainTests(unittest.TestCase):
         b = self.f.position(
             dimensions=replace(dimensions, location_id=self.f.second_location.id)
         )
-        posting = self.f.movement(
+        posting = self.f.restore(
+            self.posting,
             entries=(
                 *self.posting.entries,
                 self.f.entry("-5", a),
                 self.f.entry("5", b),
             ),
-            positions=(*self.positions, a.snapshot(), b.snapshot()),
         )
         return posting, a, b
 

@@ -1,3 +1,6 @@
+from src.modules.inventory.infrastructure.persistence.models.stock_serial import (
+    StockSerialModel,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +19,7 @@ from src.modules.inventory.infrastructure.persistence.models.stock_lot import (
 
 
 class SqlAlchemyInventoryItemUsage:
-    """Дополняет публичное чтение Catalog локальным фактом существования партий."""
+    """Дополняет публичное чтение Catalog локальным фактами существования партий и экземпляров."""
 
     def __init__(self, session: AsyncSession, catalog: InventoryItemUsagePort) -> None:
         """Принимает общий tenant-UoW и адаптер Catalog на той же транзакции."""
@@ -29,10 +32,15 @@ class SqlAlchemyInventoryItemUsage:
         statement = select(
             select(StockLotModel.id)
             .where(StockLotModel.inventory_item_id == identifier.uuid)
-            .exists()
+            .exists(),
+            select(StockSerialModel.id)
+            .where(StockSerialModel.inventory_item_id == identifier.uuid)
+            .exists(),
         )
         result = await self._session.execute(statement)
+        lots, serials = result.one()
         return InventoryItemDeletionUsage(
             has_catalog_items=catalog.has_catalog_items,
-            has_stock_lots=result.scalar_one(),
+            has_stock_lots=lots,
+            has_stock_serials=serials,
         )

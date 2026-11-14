@@ -138,7 +138,6 @@ class PostingApplicationDomainTests(unittest.TestCase):
                 inventory_item_id=self.item.id,
                 number=SerialNumberVO("SN"),
                 lot_id=self.lot.id if self.lot else None,
-                dates=None if self.lot else StockDatesVO(),
             )
             if mode.requires_serial
             else None
@@ -226,6 +225,9 @@ class PostingApplicationDomainTests(unittest.TestCase):
             operation_type=kind,
             posted_at=self.time,
             entries=entries,
+            inventory_items=(self.item.tracking_snapshot(),),
+            lots=(self.lot.snapshot(),) if self.lot else (),
+            serials=(self.serial.snapshot(),) if self.serial else (),
             positions=tuple(position.snapshot() for position in positions),
             locations=(
                 (self.location_a, self.location_b)

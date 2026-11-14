@@ -276,8 +276,8 @@ class InventoryItemPostgresTests(unittest.IsolatedAsyncioTestCase):
             ("mass", {"base_uom": "KG"}, ("KG", Decimal("1"), "NONE", "NONE")),
             (
                 "serial",
-                {"tracking_mode": "SERIAL", "expiration_mode": "REQUIRED"},
-                ("PCS", Decimal("1"), "SERIAL", "REQUIRED"),
+                {"tracking_mode": "LOT_AND_SERIAL", "expiration_mode": "REQUIRED"},
+                ("PCS", Decimal("1"), "LOT_AND_SERIAL", "REQUIRED"),
             ),
         ):
             response = await self.client.post(

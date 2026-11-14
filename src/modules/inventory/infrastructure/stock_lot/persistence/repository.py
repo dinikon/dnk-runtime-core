@@ -1,11 +1,16 @@
-from sqlalchemy import insert
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.inventory.domain.inventory_item.value_object.identifier import (
+    InventoryItemIdVO,
+)
 from src.modules.inventory.domain.stock_lot.aggregate import StockLot
 from src.modules.inventory.domain.stock_lot.error import (
     StockLotNumberAlreadyExistsError,
+    StockLotNotFoundError,
 )
+from src.modules.inventory.domain.stock_lot.value_object.identifier import StockLotIdVO
 from src.modules.inventory.infrastructure.persistence.models.stock_lot import (
     StockLotModel,
 )
@@ -40,3 +45,33 @@ class SqlAlchemyStockLotRepository:
                     "Номер партии уже занят внутри этого SKU."
                 ) from exc
             raise
+
+    async def get_for_update(
+        self, identifier: StockLotIdVO, *, inventory_item_id: InventoryItemIdVO
+    ) -> StockLot | None:
+        """Блокирует партию после корня SKU и перечитывает identity map после ожидания."""
+        statement = (
+            select(StockLotModel)
+            .where(
+                StockLotModel.id == identifier.uuid,
+                StockLotModel.inventory_item_id == inventory_item_id.uuid,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return StockLotMapper.to_domain(model) if model is not None else None
+
+    async def save(self, lot: StockLot) -> None:
+        """Обновляет только даты существующей партии с RETURNING без upsert и commit."""
+        statement = (
+            update(StockLotModel)
+            .where(
+                StockLotModel.id == lot.id.uuid,
+                StockLotModel.inventory_item_id == lot.inventory_item_id.uuid,
+            )
+            .values(StockLotMapper.to_update_values(lot))
+            .returning(StockLotModel.id)
+        )
+        if await self._session.scalar(statement) is None:
+            raise StockLotNotFoundError("Партия не найдена в указанном SKU.")

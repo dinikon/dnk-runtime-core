@@ -21,6 +21,7 @@ import type {
   StockLotValues,
   StockLotErrors,
 } from "../../model/stock-lot.types";
+import StockLotDatesFields from "./StockLotDatesFields.vue";
 const props = defineProps<{
   open: boolean;
   sku: string;
@@ -41,10 +42,6 @@ const emit = defineEmits<{
 }>();
 function change(key: keyof StockLotValues, value: string | number): void {
   emit("change", { ...props.values, [key]: String(value) });
-}
-function commitDate(key: "manufacturedOn" | "expiresOn", event: Event): void {
-  // Календарь может подтвердить значение через change без текстового input.
-  if (event.target instanceof HTMLInputElement) change(key, event.target.value);
 }
 </script>
 <template>
@@ -85,58 +82,13 @@ function commitDate(key: "manufacturedOn" | "expiresOn", event: Event): void {
               >Регистр и ведущие нули сохраняются.</FieldDescription
             ><FieldError id="lot-number-error" :errors="[errors.number]"
           /></Field>
-          <Field :data-invalid="!!errors.manufacturedOn"
-            ><FieldLabel for="lot-manufactured">Дата производства</FieldLabel
-            ><Input
-              id="lot-manufactured"
-              type="date"
-              min="0001-01-01"
-              max="9999-12-31"
-              :model-value="values.manufacturedOn"
-              :disabled="pending || disabled || uncertain"
-              :aria-invalid="!!errors.manufacturedOn"
-              aria-describedby="lot-manufactured-error"
-              @change="commitDate('manufacturedOn', $event)"
-              @update:model-value="
-                change('manufacturedOn', $event)
-              " /><FieldError
-              id="lot-manufactured-error"
-              :errors="[errors.manufacturedOn]"
-          /></Field>
-          <Field :data-invalid="!!errors.expiresOn"
-            ><FieldLabel for="lot-expires">Срок годности</FieldLabel
-            ><Input
-              id="lot-expires"
-              type="date"
-              min="0001-01-01"
-              max="9999-12-31"
-              :model-value="values.expiresOn"
-              :disabled="
-                pending || disabled || uncertain || expirationMode === 'NONE'
-              "
-              :aria-invalid="!!errors.expiresOn"
-              aria-describedby="lot-expires-hint lot-expires-error"
-              @change="commitDate('expiresOn', $event)"
-              @update:model-value="change('expiresOn', $event)"
-            /><FieldDescription id="lot-expires-hint">{{
-              expirationMode === "NONE"
-                ? "В настройках SKU срок годности отключён."
-                : expirationMode === "REQUIRED"
-                  ? "Срок понадобится перед поступлением. Сейчас поле необязательно."
-                  : "Необязательная дата-заметка."
-            }}</FieldDescription
-            ><FieldError
-              id="lot-expires-error"
-              :errors="[errors.expiresOn]"
-            /><Button
-              v-if="expirationMode === 'NONE' && values.expiresOn"
-              type="button"
-              variant="link"
-              :disabled="pending || uncertain"
-              @click="change('expiresOn', '')"
-              >Очистить срок</Button
-            ></Field
-          >
+          <StockLotDatesFields
+            :values="values"
+            :errors="errors"
+            :disabled="pending || disabled || uncertain"
+            :expiration-mode="expirationMode"
+            @change="emit('change', { ...values, ...$event })"
+          />
         </FieldGroup>
         <Alert v-if="error" variant="destructive"
           ><AlertDescription>{{ error }}</AlertDescription></Alert

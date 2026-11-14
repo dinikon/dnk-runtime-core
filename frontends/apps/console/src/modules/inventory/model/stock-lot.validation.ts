@@ -1,4 +1,9 @@
-import type { StockLotValues, StockLotErrors } from "./stock-lot.types.ts";
+import type {
+  StockLotValues,
+  StockLotErrors,
+  StockLotDatesValues,
+  StockLotDatesErrors,
+} from "./stock-lot.types.ts";
 import type { InventoryTrackingMode } from "./inventory-item.types.ts";
 export function allowsStockLots(mode: InventoryTrackingMode): boolean {
   return mode === "LOT" || mode === "LOT_AND_SERIAL";
@@ -23,6 +28,13 @@ export function validateStockLot(
   const errors: StockLotErrors = {};
   if (!values.number.trim() || /[\p{Cc}\p{Cf}]/u.test(values.number))
     errors.number = "Укажите номер партии без управляющих символов.";
+  return { ...validateStockLotDates(values, expirationMode), ...errors };
+}
+export function validateStockLotDates(
+  values: StockLotDatesValues,
+  expirationMode: string,
+): StockLotDatesErrors {
+  const errors: StockLotDatesErrors = {};
   for (const key of ["manufacturedOn", "expiresOn"] as const)
     if (values[key] && !validCalendarDate(values[key]))
       errors[key] = "Укажите календарную дату ГГГГ-ММ-ДД.";

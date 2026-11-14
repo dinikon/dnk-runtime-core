@@ -223,7 +223,7 @@ class StockLotDomainTests(unittest.TestCase):
         for tracking in TrackingMode:
             for expiration in ExpirationMode:
                 if (
-                    tracking is TrackingMode.NONE
+                    tracking in (TrackingMode.NONE, TrackingMode.SERIAL)
                     and expiration is ExpirationMode.REQUIRED
                 ):
                     continue
@@ -322,7 +322,11 @@ class StockLotDomainTests(unittest.TestCase):
         for mode in (TrackingMode.NONE, TrackingMode.SERIAL):
             with self.subTest(mode=mode), self.assertRaises(LotTrackingNotAllowedError):
                 restored.ensure_ready_for_receipt(
-                    inventory_item=replace(self.snapshot, tracking_mode=mode)
+                    inventory_item=replace(
+                        self.snapshot,
+                        tracking_mode=mode,
+                        expiration_mode=ExpirationMode.OPTIONAL,
+                    )
                 )
         self.assertEqual(restored.dates, dates)
 

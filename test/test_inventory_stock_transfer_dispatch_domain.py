@@ -8,7 +8,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from test import test_inventory_stock_transfer_domain as transfer_fixture
-
 from src.modules.inventory.domain.availability_pool.aggregate import AvailabilityPool
 from src.modules.inventory.domain.availability_pool.value_object.identifier import (
     AvailabilityPoolIdVO,
@@ -125,9 +124,6 @@ from src.modules.inventory.domain.stock_transfer.value_object.execution_binding 
     StockTransferExecutionBindingVO,
 )
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
-from src.modules.inventory.domain.value_object.quantity_conversion_snapshot import (
-    QuantityConversionSnapshotVO,
-)
 from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
 from src.modules.inventory.domain.value_object.stock_status import StockStatus
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
@@ -306,6 +302,7 @@ class StockTransferDispatchDomainTests(unittest.TestCase):
         return StockPosting.create_from_execution(
             identifier=StockPostingIdVO(uuid4()),
             execution=execution.posting_snapshot(),
+            inventory_items=(self.f.item.tracking_snapshot(),),
             posted_at=self.time,
             positions=(position.snapshot(),),
             locations=(location,),

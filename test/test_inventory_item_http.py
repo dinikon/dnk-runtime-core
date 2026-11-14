@@ -7,7 +7,6 @@ from typing import Any
 import unittest
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
-
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -134,8 +133,8 @@ class InventoryItemHttpTests(unittest.IsolatedAsyncioTestCase):
                 ("PCS", "1E-21", "NONE", "NONE"),
             ),
             (
-                {"tracking_mode": "SERIAL", "expiration_mode": "REQUIRED"},
-                ("PCS", "1", "SERIAL", "REQUIRED"),
+                {"tracking_mode": "LOT_AND_SERIAL", "expiration_mode": "REQUIRED"},
+                ("PCS", "1", "LOT_AND_SERIAL", "REQUIRED"),
             ),
             ({"expiration_mode": "OPTIONAL"}, ("PCS", "1", "NONE", "OPTIONAL")),
         ):
@@ -179,6 +178,11 @@ class InventoryItemHttpTests(unittest.IsolatedAsyncioTestCase):
                 {"sku": "manual", "quantity_rules": {"step": "0"}},
                 {"sku": "manual", "quantity_rules": {"step": 1}},
                 {"sku": "manual", "expiration_mode": "REQUIRED"},
+                {
+                    "sku": "manual",
+                    "tracking_mode": "SERIAL",
+                    "expiration_mode": "REQUIRED",
+                },
                 {"sku": "manual", "base_uom": "KG", "tracking_mode": "SERIAL"},
             ]
         )

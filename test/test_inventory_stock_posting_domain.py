@@ -1,11 +1,10 @@
-"""Неизменяемые проведения, баланс внутреннего перемещения и точная компенсация."""
-
 import unittest
 from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal, Inexact, Rounded, localcontext
 from uuid import uuid4
 
+from test.inventory_tracking_fixtures import posting_tracking_context
 from src.modules.inventory.domain.error import (
     NegativeStockQuantityError,
     QuantityConversionMismatchError,
@@ -38,7 +37,6 @@ from src.modules.inventory.domain.stock_position.error import (
     InvalidSerialStockQuantityError,
     InvalidStockPositionSnapshotError,
 )
-from src.modules.inventory.domain.stock_position.snapshot import StockPositionSnapshot
 from src.modules.inventory.domain.stock_position.value_object.dimensions import (
     StockDimensionsVO,
 )
@@ -172,6 +170,9 @@ class StockPostingDomainTests(unittest.TestCase):
                     posted_at=self.time,
                     entries=(self.entry(),),
                     positions=(self.first.snapshot(),),
+                )
+                | posting_tracking_context(
+                    changes.get("positions", (self.first.snapshot(),))
                 )
                 | changes
             )

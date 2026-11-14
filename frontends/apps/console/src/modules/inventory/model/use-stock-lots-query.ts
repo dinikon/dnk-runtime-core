@@ -1,3 +1,4 @@
+import { stockLotDateDependency } from "./stock-lot-date-dependencies";
 import { computed, type Ref } from "vue";
 import { useQuery, type UseQueryReturnType } from "@tanstack/vue-query";
 import { getStockLot, listStockLots } from "../api/stock-lot.api";
@@ -36,6 +37,7 @@ export function useStockLotQuery(
     ),
     queryFn: ({ queryKey, signal }) =>
       getStockLot(queryKey[5], queryKey[7], signal),
+    meta: computed(() => stockLotDateDependency(itemId.value, lotId.value)),
     enabled: computed(
       () => scope.ready.value && !!itemId.value && !!lotId.value,
     ),

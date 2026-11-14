@@ -18,9 +18,6 @@ from src.modules.inventory.domain.inventory_item.value_object.expiration_mode im
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
     InventoryItemIdVO,
 )
-from src.modules.inventory.domain.inventory_item.value_object.tracking_mode import (
-    TrackingMode,
-)
 from src.modules.inventory.domain.policy.quantity_arithmetic import (
     QuantityArithmeticPolicy,
 )
@@ -29,7 +26,9 @@ from src.modules.inventory.domain.policy.quantity_validation import (
 )
 from src.modules.inventory.domain.policy.stock_dimensions import StockDimensionsPolicy
 from src.modules.inventory.domain.policy.stock_expiration import StockExpirationPolicy
-from src.modules.inventory.domain.policy.stock_serial import StockSerialPolicy
+from src.modules.inventory.domain.policy.stock_tracking_dates import (
+    StockTrackingDatesPolicy,
+)
 from src.modules.inventory.domain.stock_location.error import (
     InvalidStockLocationSnapshotError,
 )
@@ -56,8 +55,8 @@ from src.modules.inventory.domain.stock_position.value_object.dimensions import 
 from src.modules.inventory.domain.stock_position.value_object.identifier import (
     StockPositionIdVO,
 )
-from src.modules.inventory.domain.stock_serial.availability_snapshot import (
-    StockSerialAvailabilitySnapshot,
+from src.modules.inventory.domain.stock_serial.snapshot import (
+    StockSerialSnapshot,
 )
 from src.modules.inventory.domain.stock_serial.error import (
     InvalidStockSerialSnapshotError,
@@ -86,7 +85,7 @@ class StockAvailabilityPolicy:
         positions: tuple[StockPositionAvailabilitySnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
-        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> QuantityVO:
         """Суммирует SELLABLE в активных STORAGE по явной календарной дате и одной области учёта."""
         if not isinstance(inventory_item, InventoryItemAvailabilitySnapshot):
@@ -131,9 +130,9 @@ class StockAvailabilityPolicy:
             if lot.id in by_lot:
                 raise InvalidStockAvailabilityContextError("Повтор снимка партии.")
             by_lot[lot.id] = lot
-        by_serial: dict[StockSerialIdVO, StockSerialAvailabilitySnapshot] = {}
+        by_serial: dict[StockSerialIdVO, StockSerialSnapshot] = {}
         for serial in serials:
-            if not isinstance(serial, StockSerialAvailabilitySnapshot):
+            if not isinstance(serial, StockSerialSnapshot):
                 raise InvalidStockSerialSnapshotError(
                     "Нужны снимки экземпляров для доступности."
                 )
@@ -174,8 +173,14 @@ class StockAvailabilityPolicy:
                     "Отсутствует снимок локации позиции."
                 )
             used_locations.add(location.id)
-            lot = by_lot.get(dimensions.lot_id)
-            serial = by_serial.get(dimensions.serial_id)
+            lot = (
+                by_lot.get(dimensions.lot_id) if dimensions.lot_id is not None else None
+            )
+            serial = (
+                by_serial.get(dimensions.serial_id)
+                if dimensions.serial_id is not None
+                else None
+            )
             if dimensions.lot_id is not None:
                 used_lots.add(dimensions.lot_id)
             if dimensions.serial_id is not None:
@@ -186,7 +191,7 @@ class StockAvailabilityPolicy:
                 location=location,
                 warehouse=warehouse,
                 lot=lot,
-                serial=serial.identity_snapshot() if serial is not None else None,
+                serial=serial,
             )
             if position.base_uom != inventory_item.base_uom:
                 raise StockPositionUomMismatchError(
@@ -205,17 +210,12 @@ class StockAvailabilityPolicy:
                     )
                 positive_serials.add(dimensions.serial_id)
 
-            dates = None
-            if serial is not None:
-                dates = StockSerialPolicy.resolve_dates(
-                    inventory_item_id=serial.inventory_item_id,
-                    inventory_item=tracking_item,
-                    lot_id=serial.lot_id,
-                    dates=serial.dates,
-                    lot=lot,
-                )
-            elif inventory_item.tracking_mode is TrackingMode.LOT:
-                dates = lot.dates
+            dates = StockTrackingDatesPolicy.resolve(
+                inventory_item=tracking_item,
+                lot_id=dimensions.lot_id,
+                lot=lot,
+                serial=serial,
+            )
             unexpired = StockAvailabilityPolicy._is_unexpired(
                 dates=dates,
                 expiration_mode=inventory_item.expiration_mode,

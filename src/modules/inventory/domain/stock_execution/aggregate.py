@@ -53,7 +53,6 @@ from src.modules.inventory.domain.stock_execution.shipment_snapshot import (
     StockExecutionShipmentLineSnapshot,
     StockExecutionShipmentSnapshot,
 )
-
 from src.modules.inventory.domain.stock_execution.reservation_snapshot import (
     StockExecutionReservationLineSnapshot,
     StockExecutionReservationSnapshot,
@@ -119,8 +118,8 @@ from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
 from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
     StockOperationType,
 )
-from src.modules.inventory.domain.stock_serial.execution_snapshot import (
-    StockSerialExecutionSnapshot,
+from src.modules.inventory.domain.stock_serial.snapshot import (
+    StockSerialSnapshot,
 )
 from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
 from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
@@ -152,7 +151,7 @@ class StockExecution:
         inventory_items: tuple[InventoryItemExecutionSnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
-        serials: tuple[StockSerialExecutionSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> Self:
         """Фиксирует исполнение после проверки текущего плана, активных адресов, количества и прослеживаемости."""
         if not isinstance(document, StockDocumentExecutionSnapshot):
@@ -370,13 +369,13 @@ class StockExecution:
         """Возвращает проверенные физические маршруты и исходные пересчёты без группировки по плану."""
         self._validate()
         self._ensure_ordinary_projection()
-        return StockExecutionPostingSnapshot(
-            self.id,
-            self.operation_type,
-            self.warehouse_id,
-            self.owner_id,
-            self.executed_at,
-            tuple(
+        lines: list[StockExecutionPostingLineSnapshot] = []
+        for line in self.lines:
+            if isinstance(line.route, StockAdjustmentExecutionRouteVO):
+                raise StockAdjustmentError(
+                    "Корректировка не предоставляет обычную проекцию проведения."
+                )
+            lines.append(
                 StockExecutionPostingLineSnapshot(
                     line.id,
                     line.inventory_item_id,
@@ -385,8 +384,14 @@ class StockExecution:
                     line.conversion,
                     line.route,
                 )
-                for line in self.lines
-            ),
+            )
+        return StockExecutionPostingSnapshot(
+            self.id,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(lines),
         )
 
     def snapshot_for_document(self) -> StockExecutionDocumentSnapshot:
@@ -420,6 +425,18 @@ class StockExecution:
         self._validate()
         if self.operation_type is not StockOperationType.ADJUSTMENT:
             raise StockAdjustmentError("Нужен факт ADJUSTMENT.")
+        lines: list[StockAdjustmentExecutionLineSnapshot] = []
+        for line in self.lines:
+            if not isinstance(line.route, StockAdjustmentExecutionRouteVO):
+                raise InvalidStockExecutionRouteError("Нужен маршрут корректировки.")
+            lines.append(
+                StockAdjustmentExecutionLineSnapshot(
+                    line.id,
+                    line.document_line_id,
+                    line.base_uom,
+                    line.route,
+                )
+            )
         snapshot = StockAdjustmentExecutionSnapshot(
             self.id,
             self.document_id,
@@ -427,12 +444,7 @@ class StockExecution:
             self.warehouse_id,
             self.owner_id,
             self.executed_at,
-            tuple(
-                StockAdjustmentExecutionLineSnapshot(
-                    line.id, line.document_line_id, line.base_uom, line.route
-                )
-                for line in self.lines
-            ),
+            tuple(lines),
         )
         snapshot.ensure_valid()
         return snapshot
@@ -514,9 +526,14 @@ class StockExecution:
                 )
             serials.update(line_serials)
         if self.operation_type is StockOperationType.ADJUSTMENT:
-            StockAdjustmentRoutesPolicy.ensure_valid(
-                tuple(line.route for line in self.lines)
-            )
+            routes: list[StockAdjustmentExecutionRouteVO] = []
+            for line in self.lines:
+                if not isinstance(line.route, StockAdjustmentExecutionRouteVO):
+                    raise InvalidStockExecutionRouteError(
+                        "Нужен маршрут корректировки."
+                    )
+                routes.append(line.route)
+            StockAdjustmentRoutesPolicy.ensure_valid(tuple(routes))
 
     @staticmethod
     def _normalize_time(value: datetime) -> datetime:

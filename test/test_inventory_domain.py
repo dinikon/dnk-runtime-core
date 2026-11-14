@@ -171,12 +171,12 @@ class InventoryItemDomainTests(unittest.TestCase):
         serial = InventoryItem.create(
             identifier=self.identifier,
             sku=SkuVO("serial"),
-            tracking_mode=TrackingMode.SERIAL,
+            tracking_mode=TrackingMode.LOT_AND_SERIAL,
             expiration_mode=ExpirationMode.REQUIRED,
         )
         self.assertEqual(serial.base_uom, self.pcs)
         self.assertEqual(serial.quantity_rules.step, Decimal("1"))
-        self.assertEqual(serial.tracking_mode, TrackingMode.SERIAL)
+        self.assertEqual(serial.tracking_mode, TrackingMode.LOT_AND_SERIAL)
         self.assertEqual(serial.expiration_mode, ExpirationMode.REQUIRED)
         with self.assertRaises(InvalidTrackingConfigurationError):
             InventoryItem.create(
@@ -233,7 +233,7 @@ class InventoryItemDomainTests(unittest.TestCase):
                         factory=factory, tracking=tracking, expiration=expiration
                     ):
                         if (
-                            tracking is TrackingMode.NONE
+                            tracking in (TrackingMode.NONE, TrackingMode.SERIAL)
                             and expiration is ExpirationMode.REQUIRED
                         ):
                             with self.assertRaises(InvalidTrackingConfigurationError):
@@ -268,7 +268,7 @@ class InventoryItemDomainTests(unittest.TestCase):
                             )
                             with self.subTest(factory=factory, **values):
                                 if (
-                                    tracking is TrackingMode.NONE
+                                    tracking in (TrackingMode.NONE, TrackingMode.SERIAL)
                                     and expiration is ExpirationMode.REQUIRED
                                 ):
                                     allowed = False
@@ -308,7 +308,9 @@ class InventoryItemDomainTests(unittest.TestCase):
     def test_serial_item_accepts_only_integral_quantities_including_zero(self) -> None:
         """Серийный товар принимает целое количество экземпляров без дробных штук и округления."""
         for tracking in (TrackingMode.SERIAL, TrackingMode.LOT_AND_SERIAL):
-            item = self.make_item(tracking_mode=tracking)
+            item = self.make_item(
+                tracking_mode=tracking, expiration_mode=ExpirationMode.OPTIONAL
+            )
             self.assertEqual(
                 tuple(unit.code for unit in item.available_uoms), (self.pcs,)
             )

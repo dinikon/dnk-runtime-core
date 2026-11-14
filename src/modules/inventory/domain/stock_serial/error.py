@@ -14,7 +14,7 @@ class InvalidSerialNumberError(StockSerialError):
 
 
 class InvalidSerialConfigurationError(StockSerialError):
-    """Сообщает о несовместимых источнике дат, партии или режиме экземпляра."""
+    """Сообщает о несовместимых партии или режиме экземпляра."""
 
 
 class SerialTrackingNotAllowedError(StockSerialError):
@@ -31,3 +31,11 @@ class StockSerialLotMismatchError(StockSerialError):
 
 class InvalidStockSerialSnapshotError(StockSerialError):
     """Сообщает о некорректном снимке идентичности серийного экземпляра."""
+
+
+class StockSerialNotFoundError(StockSerialError):
+    """Сообщает об отсутствии экземпляра в выбранном SKU."""
+
+
+class StockSerialNumberAlreadyExistsError(StockSerialError):
+    """Сообщает о занятом точном серийном номере внутри SKU текущего tenant."""

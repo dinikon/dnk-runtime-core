@@ -202,7 +202,7 @@ class StockLotPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Создание применяет актуальные политики Domain, REQUIRED допускает неполную карточку."""
         for tracking in ("NONE", "LOT", "SERIAL", "LOT_AND_SERIAL"):
             for expiration in ("NONE", "OPTIONAL", "REQUIRED"):
-                if tracking == "NONE" and expiration == "REQUIRED":
+                if tracking in ("NONE", "SERIAL") and expiration == "REQUIRED":
                     continue
                 item = await self.create_item(
                     f"{tracking}-{expiration}", tracking, expiration

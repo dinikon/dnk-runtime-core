@@ -90,6 +90,7 @@ class InventoryItemMutationsHttpTests(unittest.IsolatedAsyncioTestCase):
         if isinstance(statement, Select):
             if any(isinstance(column, Exists) for column in statement.selected_columns):
                 result.scalar_one.return_value = False
+                result.one.return_value = (False, False)
                 return result
             table = statement.get_final_froms()[0]
             model = InventoryItemModel(**self.row) if self.row is not None else None

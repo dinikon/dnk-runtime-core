@@ -22,7 +22,8 @@ const emit = defineEmits<{ retry: [] }>();
         ></AlertDescription
       ></Alert
     >
-    <StockLotCard v-if="lot" :lot="lot" /><Skeleton
+    <slot v-if="lot" :lot="lot"><StockLotCard :lot="lot" /></slot
+    ><Skeleton
       v-else-if="loading"
       class="h-48 w-full"
       aria-label="Загрузка партии"

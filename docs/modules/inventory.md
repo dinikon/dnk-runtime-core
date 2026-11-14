@@ -690,7 +690,7 @@ NONE и LOT не накладывают дополнительных огран�
 | `REQUIRED` | Дата обязательна до проведения поступления; контроль срока включен |
 
 `controls_expiration` истинно только у `REQUIRED`. `NONE` и `OPTIONAL`
-совместимы с любым TrackingMode; `REQUIRED` требует `LOT`, `SERIAL`
+совместимы с любым TrackingMode; `REQUIRED` требует `LOT`
 или `LOT_AND_SERIAL`. Учёт партии сам по себе не включает контроль срока.
 Фактические даты партии находятся в StockLot. В текущем срезе
 StockExpirationPolicy проверяет допустимость заполнения и обязательность даты.
@@ -849,90 +849,149 @@ Vue-маршруты `/inventory/items/:inventoryItemId/lots` и `…/lots/:lotI
 подробности — в [Console](../frontends/console.md#партии-sku).
 Проверки: `test/test_inventory_stock_lot_application.py`,
 `test/test_inventory_stock_lot_postgres.py`, frontend `test/inventory-stock-lots.test.ts`.
-Редактирование и удаление партий остаются следующими срезами.
+Редактирование дат реализовано отдельным сценарием ниже; удаление партий остаётся
+следующим срезом.
+
+### PUT и PATCH дат StockLot
+
+`PUT /api/console/inventory/items/{inventory_item_id}/lots/{lot_id}` требует оба
+поля `manufactured_on` и `expires_on`. PATCH того же URL принимает минимум одно
+из них. В обоих методах явный null очищает дату; пропущенное поле PATCH сохраняется.
+Строки принимаются только в формате YYYY-MM-DD, без времени и timezone. Пустые
+строки, числа, ручные ID, `number`, владелец и неизвестные поля запрещены.
+Общий транспортный parser календарной даты используется также при создании;
+каждый метод сохраняет собственные request/response schemas и controller.
+
+UpdateStockLotHandler блокирует сначала InventoryItem, затем партию внутри него.
+Он объединяет переданные поля с перечитанными датами, получает актуальный
+tracking_snapshot SKU и вызывает существующий StockLot.change_dates. Domain
+проверяет LOT/LOT_AND_SERIAL, допустимость срока в текущем ExpirationMode и порядок
+дат. REQUIRED разрешает неполную карточку, включая очищение срока: готовность к
+поступлению здесь не проверяется. Domain вызывается и для no-op, без лишнего UPDATE.
+Несовместимые текущие настройки не скрывают карточку, но запрещают её изменение.
+
+Write repository восстанавливает партию через StockLot.restore после FOR UPDATE
+с populate_existing. Сохранение использует UPDATE RETURNING по паре ID и меняет
+только даты, без upsert. Номер, ID и принадлежность SKU неизменяемы. Оба порта
+подключены к одной сессии внешнего tenant-UoW; ошибка записи или commit откатывает
+изменение и не возвращает успешный 200. Ожидающий PATCH сохраняет актуальное
+значение пропущенной даты, PUT полностью заменяет обе даты. Версии и новая миграция
+не добавляются; существующий CHECK остаётся защитой порядка дат.
+
+Оба метода возвращают полную карточку с 200, требуют auth/tenant и Origin/CSRF.
+Отсутствующий или чужой SKU/партия — 404, нарушение контракта или Domain — 422.
+Неизвестные ошибки БД передаются внешнему UoW.
+
+Vue-карточка партии содержит редактор дат с PATCH только изменённых полей.
+Номер отображается без редактирования, пустые даты передаются null. Черновик
+сохраняется при refetch и ошибках, подтверждение не стирает более новый ввод.
+Для неоднозначной записи предусмотрено свежее чтение с сохранением локальных
+правок, без автоматического повторного PATCH. После успеха обновляется detail-кеш,
+инвалидируются списки и зарегистрированные зависимые проекции.
+
+StockSerial реализован в Domain, хранении, HTTP и консоли. Даты экземпляра партии не копируются:
+он использует новый StockLotSnapshot. Для запросов серий во frontend
+добавлен контракт `stockLotDateDependency(inventoryItemId, lotId?)`: metadata
+`inventoryStockLotDates` описывает зависимость от партии либо от всех партий SKU.
+Инвалидация проверяет tenant/user/sessionRevision и владельца; фиктивные HTTP-запросы
+или пустой модуль серий не создаются. Применение контракта к зависимым проекциям
+проверяется на тестовом кеше.
+
+Проверки: `test/test_inventory_stock_lot_mutations_application.py`,
+`test/test_inventory_stock_lot_mutations_postgres.py`,
+frontend `test/inventory-stock-lot-dates.test.ts` и регрессия создания/чтения.
+Контроль исправлений после проведённых операций остаётся отдельным срезом.
 
 ## Серийный экземпляр товара
 
 `StockSerial` — самостоятельный Aggregate Root, идентифицирующий один физический
-экземпляр. У него нет дочерних Entity, количества, остатков и текущей локации.
-InventoryItem и StockLot не владеют коллекциями серийных экземпляров.
-
-| Поле | Назначение |
-| --- | --- |
-| `id` | Постоянный `StockSerialIdVO` |
-| `inventory_item_id` | Принадлежность конкретному товару |
-| `number` | Обязательный `SerialNumberVO` |
-| `lot_id` | `StockLotIdVO` для экземпляра партии либо None |
-| `dates` | Собственный `StockDatesVO` для самостоятельного экземпляра либо None |
+экземпляр. Поля: `id: StockSerialIdVO`, `inventory_item_id: InventoryItemIdVO`,
+`number: SerialNumberVO`, `lot_id: StockLotIdVO | None`. Количества, остатков,
+локации и собственных дат у экземпляра нет. InventoryItem и StockLot не владеют
+коллекциями экземпляров.
 
 SerialNumberVO применяет trim, запрещает пустоту и управляющие/форматирующие
 символы Unicode, сохраняет регистр и ведущие нули. `000SN-a` и `000SN-A` — разные
-номера. Уникальность `(inventory_item_id, number)` в tenant-схеме не зависит от
-склада и относится к будущему атомарному ограничению БД. Domain не проверяет
-другие экземпляры. Серийный номер не является ItemBarcode.
+номера. Уникальность `(inventory_item_id, number)` внутри tenant относится к
+будущему атомарному ограничению БД. Серийный номер не является ItemBarcode.
 
 | TrackingMode | Создание экземпляра | Партия | Даты |
 | --- | --- | --- | --- |
 | `NONE`, `LOT` | Запрещено | — | — |
-| `SERIAL` | Разрешено | Отсутствует | Собственный StockDatesVO, в том числе пустой |
-| `LOT_AND_SERIAL` | Разрешено | Обязательна | Только из снимка партии; собственное поле dates равно None |
+| `SERIAL` | Разрешено | Отсутствует | Источника дат нет |
+| `LOT_AND_SERIAL` | Разрешено | Обязательна, того же SKU | Только из StockLotSnapshot |
 
-Чистая `StockSerialPolicy.resolve_dates` проверяет типы снимков и собственного
-состояния, серийный режим, принадлежность товару и возвращает выбранный StockDatesVO.
-Для экземпляра партии снимок обязан совпадать с сохранённым lot_id и относиться
-к тому же InventoryItem. Передача партии в режиме SERIAL отклоняется.
-StockExpirationPolicy проверяет выбранные даты: NONE запрещает срок,
-OPTIONAL допускает заметку, REQUIRED требует срок только перед поступлением.
+`create(identifier=..., inventory_item=..., number=..., lot=...)` проверяет
+актуальный снимок настроек и выводит ID товара/партии из снимков.
+`restore(identifier=..., inventory_item_id=..., number=..., lot_id=...)` проверяет
+собственные типы без текущих настроек. `snapshot()` возвращает общий минимальный
+StockSerialSnapshot: ID экземпляра, ID товара и lot_id. Отдельных снимков
+исполнения/доступности, поля dates, change_dates и ensure_ready_for_receipt у
+StockSerial больше нет.
 
-Фабрики и методы:
+StockSerialPolicy.ensure_compatible проверяет серийный режим, принадлежность SKU
+и связь с партией. StockTrackingDatesPolicy.resolve проверяет снимки и возвращает
+даты партии для LOT/LOT_AND_SERIAL либо None для NONE/SERIAL. Отсутствие источника
+не подменяется пустым StockDatesVO. Полные агрегаты в политики не передаются;
+актуальность переданных снимков обеспечивает будущий Application.
 
-- `create(identifier=..., inventory_item=..., number=..., dates=..., lot=...)`
-  получает InventoryItemTrackingSnapshot и необязательный StockLotSnapshot.
-  ID товара и партии выводятся из снимков. Параметр dates обязателен:
-  для SERIAL передаётся StockDatesVO, для LOT_AND_SERIAL — None.
-  Пустой срок REQUIRED разрешён при создании обоих вариантов.
-- `restore(identifier=..., inventory_item_id=..., number=..., lot_id=..., dates=...)`
-  проверяет собственные типы и наличие ровно одного источника: либо собственных дат,
-  либо ссылки на партию. Снимки при восстановлении не требуются; ID сохраняются.
-- `change_dates(dates, inventory_item=...)` доступен только самостоятельному SERIAL.
-  Возвращает новый экземпляр с прежними ID и номером; отказ сохраняет исходный.
-  Даты LOT_AND_SERIAL изменяются через StockLot.
-- `ensure_ready_for_receipt(inventory_item=..., lot=...) -> None` проверяет
-  текущую совместимость и полноту даты. Для LOT_AND_SERIAL снимок партии обязателен
-  при каждом вызове; отсутствие или некорректный снимок отклоняется.
+InventoryTrackingPolicy единообразно требует LOT или LOT_AND_SERIAL при REQUIRED.
+SERIAL + REQUIRED и NONE + REQUIRED отклоняются без автоматического изменения
+режима или создания технической партии. Требования PCS и шага 1 сохраняются.
 
-Источник дат не копируется из партии в экземпляр. Новый снимок партии отражает
-её текущие даты; старые снимки неизменяемы. Application должен передавать
-актуальные снимки; Domain самостоятельно данные не загружает.
-Проверка готовности по-прежнему не определяет допустимость приёмки просрочки.
+Даты производства и окончания срока принадлежат только StockLot. Изменение даты
+партии учитывается при следующем расчёте по свежему снимку без изменения Serial.
+Пустые даты партии REQUIRED разрешены до поступления; полнота проверяется
+StockExpirationPolicy при исполнении и новом проведении поступления.
 
-Например, для товара `item` с LOT_AND_SERIAL и уже созданной партии `lot`:
+Номер и связь с партией неизменяемы в текущем срезе. Создание, список и карточка
+StockSerial реализованы на backend и в Vue. Рефакторинг Domain не выполняет миграцию ранее
+сохранённых настроек товаров SERIAL + REQUIRED.
 
-```python
-from uuid import uuid4
+### StockSerial: создание, список и карточка
 
-from src.modules.inventory.domain.stock_serial.aggregate import StockSerial
-from src.modules.inventory.domain.stock_serial.value_object.identifier import StockSerialIdVO
-from src.modules.inventory.domain.stock_serial.value_object.serial_number import SerialNumberVO
+Tenant-миграция `0023_inventory_stock_serials` создаёт `stock_serials` с UUID,
+`inventory_item_id`, точным Text/C `number` и nullable `lot_id`. Собственных дат нет.
+UNIQUE `(inventory_item_id, number)` сохраняет регистр и ведущие нули. Составной FK
+`(inventory_item_id, lot_id)` ссылается на новый UNIQUE `(inventory_item_id, id)`
+партии и запрещает чужой SKU. FK на SKU и партию имеют RESTRICT.
 
-serial = StockSerial.create(
-    identifier=StockSerialIdVO(uuid4()),
-    inventory_item=item.tracking_snapshot(),
-    number=SerialNumberVO("000SN-a"),
-    lot=lot.snapshot(),
-    dates=None,
-)
-serial.ensure_ready_for_receipt(
-    inventory_item=item.tracking_snapshot(),
-    lot=lot.snapshot(),
-)
-# Для REQUIRED дата должна быть заполнена в lot.
-```
+HTTP-сценарии:
 
-Номер и принадлежность партии неизменяемы в текущем срезе. Исправления после
-проведения, проверка использования, соответствие серийных ID количеству операции
-и защита от одновременного учёта одного экземпляра в разных позициях относятся
-к последующим складским сценариям. SQL, API и проведение движений не реализуются.
+- `POST /api/console/inventory/items/{inventory_item_id}/serials` принимает только
+  строковый number и nullable lot_id. Неизвестные поля, включая даты, запрещены.
+  SERIAL не допускает партию; LOT_AND_SERIAL требует партию того же SKU.
+- `GET` того же URL принимает search, offset и limit 1–100. Поиск буквальный,
+  регистронезависимый, порядок `(number, id)` стабилен; total и страница имеют
+  одинаковые фильтры. Отсутствующий SKU даёт 404, существующий без экземпляров — 200.
+- `GET …/serials/{serial_id}` ограничен парой SKU/Serial и возвращает 404 для
+  чужого или отсутствующего экземпляра. Чтение не зависит от текущего TrackingMode.
+
+Создание блокирует InventoryItem, затем при необходимости StockLot; порядок
+совпадает с изменением дат партии. Application передаёт снимки в StockSerial.create
+и сохраняет агрегат на общей сессии внешнего UoW. Неполная партия REQUIRED
+допустима; готовность к поступлению здесь не проверяется. Уникальный конфликт —
+409, отсутствующий SKU/партия — 404, нарушение Domain — 422. Аутентификация и CSRF
+подключены стандартными dependencies. Репозиторий переводит только известный UNIQUE.
+
+Отдельные DTO каждого сценария возвращают id, inventory_item_id, number, lot_id,
+lot_number, date_source (`NONE`/`LOT`), manufactured_on и expires_on. Даты являются
+проекцией текущего StockLot, не копией в Serial. При отсутствии партии даты null;
+у неполной партии источник всё равно LOT. Query Repository читает typed LEFT JOIN
+без восстановления агрегатов. Стандартный InventoryItem deletion usage дополнен
+наличием Serial: бизнес-проверка запрещает удаление SKU и дополняется защитным FK.
+
+Vue-маршруты `…/items/:inventoryItemId/serials` и `…/serials/:serialId` находятся в
+существующем модуле Inventory. Выбор партии использует серверный поиск и отдельный
+infinite-query cache; выбранная партия загружается по ID независимо от поисковой
+страницы. Карточка явно показывает источник дат и ссылку на Lot. Списки и карточки
+Serial зарегистрированы как зависимые от дат партий SKU; после PATCH Lot они
+обновляются вместе с кандидатами выбора. Собственных полей дат в форме Serial нет.
+
+Проверки: `test/test_inventory_stock_serial_application.py`,
+`test/test_inventory_stock_serial_postgres.py`, frontend
+`test/inventory-stock-serials.test.ts`. Редактирование, удаление Serial и смена
+связи с партией остаются последующими срезами.
 
 ## Application, хранение и HTTP Warehouse
 
@@ -1824,9 +1883,9 @@ StockExecution.create() принимает документный снимок, 
   StockDocumentLineExecutionSnapshot: ID строки, товар, единица, план, исполнение.
 - InventoryItem.execution_snapshot() возвращает InventoryItemExecutionSnapshot:
   ID, base_uom, quantity_rules, tracking_mode и expiration_mode, без SKU/коллекций.
-- StockSerial.execution_snapshot() возвращает StockSerialExecutionSnapshot с ID,
-  товаром, lot_id и собственными dates. SERIAL имеет собственные StockDatesVO;
-  LOT_AND_SERIAL — ссылку на партию без копии дат. Старый snapshot() остаётся минимальным.
+- StockSerial.snapshot() возвращает StockSerialSnapshot с ID,
+  товаром и lot_id без собственных дат. SERIAL не имеет источника дат;
+  LOT_AND_SERIAL содержит ссылку на партию без копии дат.
 - Снимки склада, локаций и партий используются повторно. Лишние, отсутствующие
   и повторные снимки отклоняются; один снимок может обслуживать несколько строк.
 
@@ -1843,7 +1902,7 @@ LOT требует партию; SERIAL — экземпляр без парти
 соответствующей партии того же товара.
 
 Для RECEIPT используется StockExpirationPolicy.ensure_ready_for_receipt(): REQUIRED
-требует дату партии или самостоятельного экземпляра. OPTIONAL остаётся заметкой
+требует дату партии. SERIAL + REQUIRED запрещён настройками товара. OPTIONAL остаётся заметкой
 и не фильтрует операции по дате. Правила приёмки просрочки, продаж по срокам,
 FEFO и ограничения назначения зон в этот срез не добавлены; наличие даты не означает
 проверку её относительно текущего дня. Исполнение также не доказывает наличие
@@ -2154,13 +2213,14 @@ StockAvailabilityPolicy.calculate_eligible_quantity() — чистый расч�
 не используются вместо календарной даты. Выбор календарного дня склада относится
 к вызывающему сценарию. Пустые positions/locations/lots/serials дают QuantityVO(0).
 
-Три специализированных immutable-снимка получаются через availability_snapshot():
+Снимки товара и позиции получаются через availability_snapshot(),
+снимок экземпляра — через StockSerial.snapshot():
 
 | Снимок | Поля |
 | --- | --- |
 | InventoryItemAvailabilitySnapshot | inventory_item_id, base_uom, quantity_rules, tracking_mode, expiration_mode |
 | StockPositionAvailabilitySnapshot | id, dimensions, base_uom, on_hand_qty |
-| StockSerialAvailabilitySnapshot | id, inventory_item_id, lot_id, dates |
+| StockSerialSnapshot | id, inventory_item_id, lot_id |
 
 Геттеры проверяют исходный агрегат; Policy повторно проверяет снимки через
 ensure_valid(). Полные корни, учётный StockPositionSnapshot без количества и
@@ -2186,8 +2246,8 @@ InvalidStockPositionAvailabilitySnapshotError.
 
 Срок проверяется только при REQUIRED: expires_on >= as_of разрешено,
 expires_on < as_of исключает позицию. Последний день считается допустимым.
-LOT и LOT_AND_SERIAL используют даты партии, SERIAL — собственные даты экземпляра
-без копии партийных дат. Отсутствующий срок у положительного остатка даёт
+LOT и LOT_AND_SERIAL используют только даты партии. SERIAL не имеет источника
+дат и не допускает REQUIRED. Отсутствующий срок у положительного остатка даёт
 ExpirationDateRequiredError даже при DAMAGED или неактивном адресе/складе.
 Нулевая позиция может иметь неполную карточку, но её ссылки всё равно обязательны.
 OPTIONAL не фильтрует по сроку, включая прошедшие даты-заметки. NONE не оценивает
@@ -8309,3 +8369,23 @@ NONE/NONE и пустые дочерние коллекции. Существу�
 получают сессию внешнего UoW Catalog; ошибки карточки откатывают новый InventoryItem.
 Текстовый код не является FK: Catalog хранит inventory_item_id и показывает
 актуальный sku через публичное batch-чтение. См. [Catalog](catalog.md).
+
+## Domain: проверка партий при новом проведении
+
+StockPosting.create и create_from_execution получают текущие снимки настроек
+товаров InventoryItemTrackingSnapshot, партий StockLotSnapshot и экземпляров
+StockSerialSnapshot. StockPostingTrackingPolicy требует ровно участвующий набор,
+проверяет ссылки SKU/LOT/SERIAL через StockTrackingDatesPolicy и повторно применяет
+StockExpirationPolicy.ensure_operation_allowed. Отсутствие контекста не позволяет
+обойти проверки: новое обычное проведение отклоняется.
+
+RECEIPT + REQUIRED требует заполненный expires_on партии. При исполнении и
+проведении используется одна политика. ISSUE и INTERNAL_MOVE не получают общего
+запрета учёта просрочки; пригодность для резерва оценивается отдельно по as_of.
+Дата производства не является фильтром доступности. OPTIONAL не контролирует
+срок, NONE сохраняет запрет заполненного expires_on.
+
+Историческое restore, точное сторно и специальные инвентаризационные корректировки
+сохраняют существующие контракты. Текущие даты партии не копируются в Ledger,
+Serial или исторический состав проводки. Новое правило отказа при приёмке
+просроченного товара этим срезом не вводится.

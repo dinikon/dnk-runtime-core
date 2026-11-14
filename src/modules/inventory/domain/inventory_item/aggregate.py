@@ -2,6 +2,9 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Self
 
+from src.modules.inventory.domain.policy.inventory_tracking import (
+    InventoryTrackingPolicy,
+)
 from src.modules.inventory.domain.inventory_item.availability_snapshot import (
     InventoryItemAvailabilitySnapshot,
 )
@@ -82,7 +85,7 @@ class InventoryItem:
     barcodes: tuple[ItemBarcode, ...]
 
     def ensure_can_delete(self, usage: InventoryItemDeletionUsage) -> None:
-        """Запрещает удаление при сохранённых связях с каталогом или партиями."""
+        """Запрещает удаление при сохранённых связях с каталогом, партиями или экземплярами."""
         if usage.has_catalog_items:
             raise InventoryItemInUseError(
                 "Нельзя удалить складскую позицию: она связана с элементом каталога."
@@ -91,6 +94,11 @@ class InventoryItem:
         if usage.has_stock_lots:
             raise InventoryItemInUseError(
                 "Нельзя удалить складскую позицию: у неё есть партии."
+            )
+
+        if usage.has_stock_serials:
+            raise InventoryItemInUseError(
+                "Нельзя удалить складскую позицию: у неё есть серийные экземпляры."
             )
 
     @classmethod
@@ -336,13 +344,9 @@ class InventoryItem:
             raise InvalidInventoryItemValueError(
                 "Нужны типизированные значения и неизменяемые коллекции позиции."
             )
-        if (
-            self.tracking_mode is TrackingMode.NONE
-            and self.expiration_mode.controls_expiration
-        ):
-            raise InvalidTrackingConfigurationError(
-                "Обязательный срок годности требует учёта по партиям или сериям."
-            )
+        InventoryTrackingPolicy.ensure_compatible(
+            tracking_mode=self.tracking_mode, expiration_mode=self.expiration_mode
+        )
         get_uom(self.base_uom)
         if self.tracking_mode.requires_serial and (
             self.base_uom != UomCodeVO("PCS")

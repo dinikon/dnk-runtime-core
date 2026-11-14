@@ -710,7 +710,10 @@ class StockReservationDomainTests(unittest.TestCase):
         """Срок обязательства применим и при выключенном учёте дат товара; серии требуют целого шага."""
         for mode in TrackingMode:
             for expiration in ExpirationMode:
-                if mode is TrackingMode.NONE and expiration.controls_expiration:
+                if (
+                    mode in (TrackingMode.NONE, TrackingMode.SERIAL)
+                    and expiration.controls_expiration
+                ):
                     continue
                 item = InventoryItem.create(
                     identifier=InventoryItemIdVO(uuid4()),

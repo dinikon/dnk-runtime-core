@@ -55,8 +55,8 @@ from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
 from src.modules.inventory.domain.stock_position.availability_snapshot import (
     StockPositionAvailabilitySnapshot,
 )
-from src.modules.inventory.domain.stock_serial.availability_snapshot import (
-    StockSerialAvailabilitySnapshot,
+from src.modules.inventory.domain.stock_serial.snapshot import (
+    StockSerialSnapshot,
 )
 from src.modules.inventory.domain.uom_catalog import get_uom
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
@@ -90,7 +90,7 @@ class AvailabilityPool:
         positions: tuple[StockPositionAvailabilitySnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
-        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> Self:
         """Создаёт пул версии 0 с рассчитанным пригодным запасом и нулевым резервом."""
         if not isinstance(inventory_item, InventoryItemAvailabilitySnapshot):
@@ -166,7 +166,7 @@ class AvailabilityPool:
         positions: tuple[StockPositionAvailabilitySnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
-        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> Self:
         """Пересчитывает пригодность по текущим снимкам, сохраняя весь действующий резерв."""
         self._ensure_version(expected_version)
@@ -194,7 +194,7 @@ class AvailabilityPool:
         positions: tuple[StockPositionAvailabilitySnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
-        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> Self:
         """Повторно оценивает запас и резервирует всё запрошенное количество либо отклоняет переход."""
         self._ensure_version(expected_version)
@@ -249,7 +249,7 @@ class AvailabilityPool:
         positions: tuple[StockPositionAvailabilitySnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
-        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> Self:
         """Уменьшает общий резерв и пересчитывает пригодность по физическим снимкам после расхода."""
         self._ensure_version(expected_version)
@@ -284,7 +284,7 @@ class AvailabilityPool:
         positions: tuple[StockPositionAvailabilitySnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
-        serials: tuple[StockSerialAvailabilitySnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
     ) -> Self:
         """Применяет уникальные погашения одного исполнения к своему пулу одной следующей версией."""
         self._ensure_version(expected_version)
@@ -349,7 +349,7 @@ class AvailabilityPool:
         positions: tuple[StockPositionAvailabilitySnapshot, ...],
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...],
-        serials: tuple[StockSerialAvailabilitySnapshot, ...],
+        serials: tuple[StockSerialSnapshot, ...],
     ) -> QuantityVO:
         """Проверяет область, единицу и неубывающую дату перед существующим расчётом пригодности."""
         if type(as_of) is not date or as_of < self.assessed_on:

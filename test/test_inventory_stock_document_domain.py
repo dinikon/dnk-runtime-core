@@ -15,9 +15,6 @@ from src.modules.inventory.domain.error import (
     UnknownUomError,
 )
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
-from src.modules.inventory.domain.inventory_item.document_snapshot import (
-    InventoryItemDocumentSnapshot,
-)
 from src.modules.inventory.domain.inventory_item.error import (
     InvalidInventoryItemDocumentSnapshotError,
     InvalidInventoryItemValueError,
@@ -83,7 +80,6 @@ from src.modules.inventory.domain.warehouse.error import (
     InvalidWarehouseSnapshotError,
     WarehouseInactiveError,
 )
-from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
 from src.modules.inventory.domain.warehouse.value_object.code import WarehouseCodeVO
 from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
 from src.modules.inventory.domain.warehouse.value_object.name import WarehouseNameVO
@@ -363,7 +359,11 @@ class StockDocumentDomainTests(unittest.TestCase):
                 base_uom=UomCodeVO("PCS"),
                 quantity_rules=QuantityRulesVO(Decimal(1)),
                 tracking_mode=mode,
-                expiration_mode=ExpirationMode.REQUIRED,
+                expiration_mode=(
+                    ExpirationMode.REQUIRED
+                    if mode is TrackingMode.LOT_AND_SERIAL
+                    else ExpirationMode.OPTIONAL
+                ),
             )
             line = self.create_line(
                 item, quantity=QuantityVO(Decimal(12)), uom=UomCodeVO("PCS")

@@ -20,6 +20,7 @@ class StockLotModel(TenantBase):
             name="fk_stock_lots_item",
             ondelete="RESTRICT",
         ),
+        sa.UniqueConstraint("inventory_item_id", "id", name="uq_stock_lots_item_id"),
         sa.UniqueConstraint(
             "inventory_item_id", "number", name="uq_stock_lots_item_number"
         ),

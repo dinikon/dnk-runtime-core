@@ -6,7 +6,7 @@ from src.modules.inventory.domain.error import InvalidStockDatesError
 
 @dataclass(frozen=True, slots=True)
 class StockDatesVO:
-    """Необязательные календарные даты партии или экземпляра без оценки просрочки."""
+    """Необязательные календарные даты партии без оценки просрочки."""
 
     manufactured_on: date | None = None
     expires_on: date | None = None

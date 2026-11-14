@@ -7,7 +7,13 @@ defineProps<{
   packagingsDisabled: boolean;
   deleteDisabled?: boolean;
 }>();
-const emit = defineEmits<{ back: []; packagings: []; lots: []; delete: [] }>();
+const emit = defineEmits<{
+  back: [];
+  packagings: [];
+  lots: [];
+  serials: [];
+  delete: [];
+}>();
 </script>
 <template>
   <header
@@ -41,6 +47,13 @@ const emit = defineEmits<{ back: []; packagings: []; lots: []; delete: [] }>();
         :disabled="pending || packagingsDisabled"
         @click="emit('lots')"
         >Партии</Button
+      >
+      <Button
+        type="button"
+        variant="outline"
+        :disabled="pending || packagingsDisabled"
+        @click="emit('serials')"
+        >Серийные экземпляры</Button
       >
       <Button
         type="button"

@@ -5,11 +5,17 @@ export interface StockLot {
   manufacturedOn: string | null;
   expiresOn: string | null;
 }
-export interface StockLotValues {
-  number: string;
+export interface StockLotDatesValues {
   manufacturedOn: string;
   expiresOn: string;
 }
+export interface StockLotValues extends StockLotDatesValues {
+  number: string;
+}
+export type StockLotDatesChanges = Partial<StockLotDatesValues>;
+export type StockLotDatesErrors = Partial<
+  Record<keyof StockLotDatesValues, string>
+>;
 export type StockLotErrors = Partial<Record<keyof StockLotValues, string>>;
 export interface StockLotsListParams {
   search: string;
