@@ -1,3 +1,6 @@
+import type { StockSerialChanges } from "../model/stock-serial.types";
+import type { PatchStockSerialResponseDTO } from "./stock-serial.dto";
+import { stockSerialPatchToDto } from "./stock-serial.mapper";
 import { isAxiosError, isCancel } from "axios";
 import {
   httpClient,
@@ -103,6 +106,27 @@ export async function createStockSerial(
     return requestError(
       error,
       "Не удалось создать экземпляр. Ваш ввод сохранён.",
+    );
+  }
+}
+
+export async function patchStockSerial(
+  itemId: string,
+  serialId: string,
+  changes: StockSerialChanges,
+  signal?: AbortSignal,
+): Promise<StockSerial> {
+  try {
+    const { data } = await httpClient.patch<PatchStockSerialResponseDTO>(
+      `${base(itemId)}/${encodeURIComponent(serialId)}`,
+      stockSerialPatchToDto(changes),
+      { signal },
+    );
+    return stockSerialFromDto(data);
+  } catch (error: unknown) {
+    return requestError(
+      error,
+      "Не удалось подтвердить сохранение экземпляра. Ваш ввод сохранён.",
     );
   }
 }

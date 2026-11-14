@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Self
 
 from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
@@ -80,6 +80,31 @@ class StockSerial:
         serial = cls(identifier, inventory_item_id, number, lot_id)
         serial._validate()
         return serial
+
+    def change_identification(
+        self,
+        number: SerialNumberVO,
+        *,
+        inventory_item: InventoryItemTrackingSnapshot,
+        lot: StockLotSnapshot | None,
+    ) -> Self:
+        """Атомарно исправляет номер и партию, сохраняя ID и SKU до начала складского учёта."""
+        self._validate()
+        if lot is not None and not isinstance(lot, StockLotSnapshot):
+            raise InvalidStockLotSnapshotError(
+                "Ожидался снимок партии StockLotSnapshot."
+            )
+        candidate = replace(
+            self, number=number, lot_id=lot.id if lot is not None else None
+        )
+        candidate._validate()
+        StockSerialPolicy.ensure_compatible(
+            inventory_item_id=self.inventory_item_id,
+            inventory_item=inventory_item,
+            lot_id=candidate.lot_id,
+            lot=lot,
+        )
+        return self if candidate == self else candidate
 
     def snapshot(self) -> StockSerialSnapshot:
         """Возвращает проверенную идентичность и связь с партией без передачи корня."""

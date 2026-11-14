@@ -1,5 +1,17 @@
 from fastapi import APIRouter, Depends
 
+from src.modules.inventory.presentation.stock_serial.http.controller.patch_stock_serial import (
+    patch_stock_serial,
+)
+from src.modules.inventory.presentation.stock_serial.http.response.patch_stock_serial import (
+    PatchStockSerialResponse,
+)
+from src.modules.inventory.presentation.stock_serial.http.controller.put_stock_serial import (
+    put_stock_serial,
+)
+from src.modules.inventory.presentation.stock_serial.http.response.put_stock_serial import (
+    PutStockSerialResponse,
+)
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
 )
@@ -51,4 +63,26 @@ router.add_api_route(
     methods=["GET"],
     response_model=GetStockSerialResponse,
     dependencies=[Depends(require_authenticated_request_context)],
+)
+
+router.add_api_route(
+    "/{serial_id}",
+    put_stock_serial,
+    methods=["PUT"],
+    response_model=PutStockSerialResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+
+router.add_api_route(
+    "/{serial_id}",
+    patch_stock_serial,
+    methods=["PATCH"],
+    response_model=PatchStockSerialResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
 )

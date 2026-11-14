@@ -38,3 +38,32 @@ export interface ListStockSerialsResponseDTO {
   offset: number;
   limit: number;
 }
+
+export interface PatchStockSerialRequestDTO {
+  number?: string;
+  lot_id?: string | null;
+}
+export interface PutStockSerialRequestDTO {
+  number: string;
+  lot_id: string | null;
+}
+export interface PatchStockSerialResponseDTO {
+  id: string;
+  inventory_item_id: string;
+  number: string;
+  lot_id: string | null;
+  lot_number: string | null;
+  date_source: "NONE" | "LOT";
+  manufactured_on: string | null;
+  expires_on: string | null;
+}
+export interface PutStockSerialResponseDTO {
+  id: string;
+  inventory_item_id: string;
+  number: string;
+  lot_id: string | null;
+  lot_number: string | null;
+  date_source: "NONE" | "LOT";
+  manufactured_on: string | null;
+  expires_on: string | null;
+}

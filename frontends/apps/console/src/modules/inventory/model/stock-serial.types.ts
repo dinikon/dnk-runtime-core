@@ -31,3 +31,5 @@ export interface StockSerialsPage {
   offset: number;
   limit: number;
 }
+
+export type StockSerialChanges = Partial<StockSerialValues>;

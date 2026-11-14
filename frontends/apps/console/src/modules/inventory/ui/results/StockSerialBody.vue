@@ -25,11 +25,9 @@ const emit = defineEmits<{ retry: []; lot: [id: string] }>();
     <p v-if="refreshing" role="status" class="text-sm text-muted-foreground">
       Обновление экземпляра…
     </p>
-    <StockSerialCard
-      v-if="serial"
-      :serial="serial"
-      @lot="emit('lot', $event)"
-    /><Skeleton
+    <slot v-if="serial" :serial="serial"
+      ><StockSerialCard :serial="serial" @lot="emit('lot', $event)" /></slot
+    ><Skeleton
       v-else-if="loading"
       class="h-48 w-full"
       aria-label="Загрузка экземпляра"

@@ -1,3 +1,5 @@
+import type { StockSerialChanges } from "../model/stock-serial.types.ts";
+import type { PatchStockSerialRequestDTO } from "./stock-serial.dto.ts";
 import type {
   GetStockSerialResponseDTO,
   CreateStockSerialRequestDTO,
@@ -51,4 +53,13 @@ export function stockSerialsParamsToDto(params: StockSerialsListParams): {
     offset: params.offset,
     limit: params.limit,
   };
+}
+
+export function stockSerialPatchToDto(
+  changes: StockSerialChanges,
+): PatchStockSerialRequestDTO {
+  const payload: PatchStockSerialRequestDTO = {};
+  if (changes.number !== undefined) payload.number = changes.number;
+  if (changes.lotId !== undefined) payload.lot_id = changes.lotId || null;
+  return payload;
 }

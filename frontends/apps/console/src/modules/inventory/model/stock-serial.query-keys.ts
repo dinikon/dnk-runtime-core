@@ -18,6 +18,12 @@ export const stockSerialKeys = {
     serialId: string,
   ): readonly [...Root, "detail", string] =>
     [...stockSerialKeys.root(scope, itemId), "detail", serialId] as const,
+  update: (
+    scope: InventoryScope,
+    itemId: string,
+    serialId: string,
+  ): readonly [...Root, "update", string] =>
+    [...stockSerialKeys.root(scope, itemId), "update", serialId] as const,
   create: (
     scope: InventoryScope,
     itemId: string,

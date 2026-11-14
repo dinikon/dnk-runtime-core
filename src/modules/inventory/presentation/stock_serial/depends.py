@@ -1,6 +1,9 @@
 from typing import Annotated
 from fastapi import Depends
 
+from src.modules.inventory.application.stock_serial.command.update_stock_serial.handler import (
+    UpdateStockSerialHandler,
+)
 from src.modules.inventory.presentation.stock_lot.depends import StockLotRepositoryDep
 from src.modules.inventory.application.stock_serial.command.create_stock_serial.handler import (
     CreateStockSerialHandler,
@@ -88,4 +91,18 @@ def get_list_stock_serials_handler(
 
 ListStockSerialsHandlerDep = Annotated[
     ListStockSerialsHandler, Depends(get_list_stock_serials_handler)
+]
+
+
+def get_update_stock_serial_handler(
+    items: InventoryItemRepositoryDep,
+    lots: StockLotRepositoryDep,
+    serials: StockSerialRepositoryDep,
+) -> UpdateStockSerialHandler:
+    """Собирает изменение номера и партии на одной сессии внешнего UoW."""
+    return UpdateStockSerialHandler(items, lots, serials)
+
+
+UpdateStockSerialHandlerDep = Annotated[
+    UpdateStockSerialHandler, Depends(get_update_stock_serial_handler)
 ]

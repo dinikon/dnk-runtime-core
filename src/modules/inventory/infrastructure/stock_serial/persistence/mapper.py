@@ -42,3 +42,11 @@ class StockSerialMapper:
             number=serial.number.value,
             lot_id=serial.lot_id.uuid if serial.lot_id is not None else None,
         )
+
+    @staticmethod
+    def to_update_values(serial: StockSerial) -> dict[str, Any]:
+        """Извлекает только изменяемые номер и ссылку на партию, сохраняя владельца."""
+        return dict(
+            number=serial.number.value,
+            lot_id=serial.lot_id.uuid if serial.lot_id is not None else None,
+        )
