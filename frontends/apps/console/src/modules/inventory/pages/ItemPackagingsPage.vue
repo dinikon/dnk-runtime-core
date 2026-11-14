@@ -6,6 +6,9 @@ import {
   onBeforeRouteLeave,
   onBeforeRouteUpdate,
 } from "vue-router";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useItemPackagingDeletion } from "../model/use-item-packaging-deletion";
+import DeleteItemPackagingDialog from "../ui/forms/DeleteItemPackagingDialog.vue";
 import { useInventoryScope } from "../model/use-inventory-scope";
 import { useItemPackagingsPageState } from "../model/use-item-packagings-page-state";
 import { useItemPackagingsQuery } from "../model/use-item-packagings-query";
@@ -18,6 +21,7 @@ import {
 import { validateItemPackaging } from "../model/item-packaging.validation";
 import { ItemPackagingRequestError } from "../model/item-packaging.errors";
 import type {
+  ItemPackaging,
   ItemPackagingValues,
   ItemPackagingErrors,
 } from "../model/item-packaging.types";
@@ -53,6 +57,72 @@ const pending = ref(false),
   uncertain = ref(false),
   createError = ref(""),
   typeOpen = ref(false);
+const notice = ref("");
+const reloading = ref(false),
+  reconcilePath = ref("");
+const deletion = useItemPackagingDeletion(
+  itemId,
+  identity,
+  scope,
+  afterRemoval,
+);
+const busy = computed(
+  () => pending.value || deletion.pending.value || reloading.value,
+);
+function afterRemoval(alreadyGone: boolean): void {
+  notice.value = alreadyGone ? "Упаковка уже удалена." : "Упаковка удалена.";
+  reconcilePath.value = route.fullPath;
+  void readList();
+}
+async function readList(): Promise<void> {
+  const captured = identity.value,
+    path = route.fullPath;
+  const reconcile = reconcilePath.value === path;
+  if (reconcile) reloading.value = true;
+  try {
+    const result = await query.refetch({ throwOnError: false });
+    if (
+      captured === identity.value &&
+      path === route.fullPath &&
+      reconcile &&
+      result.isSuccess &&
+      result.data
+    ) {
+      reconcilePath.value = "";
+      reloading.value = false;
+      state.reconcilePage(result.data.total);
+    }
+  } finally {
+    if (captured === identity.value && reconcile) reloading.value = false;
+  }
+}
+function showDelete(value: ItemPackaging): void {
+  if (
+    busy.value ||
+    createOpen.value ||
+    forbidden.value ||
+    !context.currentParent.value
+  )
+    return;
+  state.cancelSearch();
+  deletion.open(value);
+}
+watch(
+  identity,
+  () => {
+    notice.value = "";
+    reloading.value = false;
+    reconcilePath.value = "";
+  },
+  { flush: "sync" },
+);
+watch(
+  () => route.fullPath,
+  () => {
+    reconcilePath.value = "";
+  },
+  { flush: "sync" },
+);
 const typeId = computed(() => values.value.packagingTypeId);
 const context = useItemPackagingFormContext(
   itemId,
@@ -64,6 +134,7 @@ const context = useItemPackagingFormContext(
 const forbidden = computed(
   () =>
     !scope.ready.value ||
+    deletion.blocked.value ||
     context.parentMissing.value ||
     (query.error.value instanceof ItemPackagingRequestError &&
       [403, 404].includes(query.error.value.status ?? 0)),
@@ -84,7 +155,13 @@ function clearCreation(): void {
 }
 watch(identity, clearCreation, { flush: "sync" });
 function showCreate(): void {
-  if (!context.ready.value || pending.value || forbidden.value) return;
+  if (
+    !context.ready.value ||
+    busy.value ||
+    !!deletion.target.value ||
+    forbidden.value
+  )
+    return;
   clearCreation();
   values.value = {
     ...empty(),
@@ -102,6 +179,7 @@ function change(value: ItemPackagingValues): void {
   createError.value = "";
 }
 function edit(id: string): void {
+  if (busy.value || deletion.target.value) return;
   void router.push(itemPackagingEditLocation(itemId.value, id, route.fullPath));
 }
 function back(): void {
@@ -110,15 +188,16 @@ function back(): void {
   );
 }
 function refresh(): void {
-  if (!scope.ready.value || pending.value) return;
-  void query.refetch();
+  if (!scope.ready.value || busy.value) return;
+  void readList();
   context.retry();
 }
 async function create(): Promise<void> {
   if (
     !createOpen.value ||
     !context.canSubmit.value ||
-    pending.value ||
+    busy.value ||
+    !!deletion.target.value ||
     uncertain.value ||
     forbidden.value
   )
@@ -178,10 +257,10 @@ function checkCreated(): void {
   closeCreate();
   state.searchAll(code);
 }
-onBeforeRouteLeave(() => !pending.value);
-onBeforeRouteUpdate(() => !pending.value);
+onBeforeRouteLeave(() => !busy.value);
+onBeforeRouteUpdate(() => !busy.value);
 function beforeUnload(event: BeforeUnloadEvent): void {
-  if (pending.value) {
+  if (busy.value) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -210,26 +289,35 @@ const outOfRange = computed(
   >
     <ItemPackagingsHeader
       :refreshing="query.isFetching.value"
-      :disabled="query.isFetching.value || !scope.ready.value"
-      :create-disabled="!context.ready.value || pending || forbidden"
-      :pending="pending"
+      :disabled="query.isFetching.value || !scope.ready.value || busy"
+      :create-disabled="
+        !context.ready.value || busy || !!deletion.target.value || forbidden
+      "
+      :pending="busy"
       @back="back"
       @refresh="refresh"
       @create="showCreate"
     />
+    <p v-if="notice" role="status" class="text-sm text-muted-foreground">
+      {{ notice }}
+    </p>
+    <Alert v-if="deletion.blocked.value" variant="destructive"
+      ><AlertDescription>{{ deletion.error.value }}</AlertDescription></Alert
+    >
     <ItemPackagingContext
-      :item="context.currentParent.value"
+      :item="deletion.blocked.value ? undefined : context.currentParent.value"
       :loading="context.parent.isPending.value"
       :error="context.error.value"
       :pending="
         context.parent.isFetching.value ||
         context.units.isFetching.value ||
-        pending
+        busy
       "
-      :can-retry="scope.ready.value"
+      :can-retry="scope.ready.value && !busy"
       @retry="context.retry"
     />
     <ItemPackagingsToolbar
+      :disabled="busy || !!deletion.target.value"
       :search="state.searchText.value"
       :total="forbidden ? undefined : query.data.value?.total"
       @search="state.setSearch"
@@ -237,16 +325,20 @@ const outOfRange = computed(
       @clear="state.clearSearch"
     />
     <ItemPackagingsBody
+      :disabled="
+        busy || !!deletion.target.value || !context.currentParent.value
+      "
       :items="forbidden ? [] : (query.data.value?.items ?? [])"
       :loading="loading"
       :refreshing="refreshing"
       :error="context.error.value ? '' : (query.error.value?.message ?? '')"
       :can-retry="scope.ready.value"
-      :retry-pending="query.isFetching.value"
+      :retry-pending="query.isFetching.value || busy"
       :filtered="!!state.params.value.search"
       :out-of-range="outOfRange"
       @retry="refresh"
       @edit="edit"
+      @delete="showDelete"
       @clear="state.clearFilters"
       @first-page="state.firstPage"
     />
@@ -255,8 +347,19 @@ const outOfRange = computed(
       :page="state.params.value.page"
       :limit="state.params.value.limit"
       :total="query.data.value.total"
-      :disabled="query.isFetching.value"
+      :disabled="query.isFetching.value || busy || !!deletion.target.value"
       @change="state.setPagination"
+    />
+    <DeleteItemPackagingDialog
+      v-if="deletion.target.value"
+      :item="deletion.target.value"
+      :sku="context.currentParent.value?.sku"
+      :pending="deletion.pending.value"
+      :uncertain="deletion.uncertain.value"
+      :error="deletion.error.value"
+      @close="deletion.close"
+      @confirm="deletion.confirm"
+      @check="deletion.check"
     />
     <CreateItemPackagingDialog
       :open="createOpen"

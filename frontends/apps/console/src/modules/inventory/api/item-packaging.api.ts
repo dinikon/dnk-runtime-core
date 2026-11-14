@@ -131,3 +131,18 @@ export async function patchItemPackaging(
     );
   }
 }
+
+export async function deleteItemPackaging(
+  itemId: string,
+  id: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    await httpClient.delete<void>(
+      `${collection(itemId)}/${encodeURIComponent(id)}`,
+      { signal },
+    );
+  } catch (error: unknown) {
+    requestError(error, "Не удалось удалить упаковку.");
+  }
+}

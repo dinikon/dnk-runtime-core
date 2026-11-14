@@ -12,5 +12,5 @@ export const itemPackagingsColumns: readonly DataTableColumn<ItemPackagingColumn
       align: "right",
     },
     { key: "contentUom", label: "Единица", width: 130 },
-    { key: "actions", label: "Действия", width: 170 },
+    { key: "actions", label: "Действия", width: 270 },
   ];

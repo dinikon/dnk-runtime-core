@@ -9,8 +9,11 @@ import {
 } from "@/components/ui/tooltip";
 import type { ItemPackaging } from "../../model/item-packaging.types";
 import { itemPackagingsColumns } from "./item-packagings.columns";
-defineProps<{ items: readonly ItemPackaging[] }>();
-const emit = defineEmits<{ edit: [id: string] }>();
+defineProps<{ items: readonly ItemPackaging[]; disabled?: boolean }>();
+const emit = defineEmits<{
+  edit: [id: string];
+  delete: [item: ItemPackaging];
+}>();
 </script>
 <template>
   <TooltipProvider :delay-duration="200"
@@ -27,6 +30,7 @@ const emit = defineEmits<{ edit: [id: string] }>();
               v-if="column.key === 'code'"
               type="button"
               class="block max-w-full truncate text-left font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :disabled="disabled"
               :aria-label="`Редактировать упаковку ${row.code}`"
               @click="emit('edit', row.id)"
             >
@@ -40,15 +44,26 @@ const emit = defineEmits<{ edit: [id: string] }>();
             >{{ row[column.key] }}</TooltipContent
           ></Tooltip
         >
-        <Button
-          v-else
-          type="button"
-          variant="outline"
-          size="sm"
-          :aria-label="`Настройки упаковки ${row.code}`"
-          @click="emit('edit', row.id)"
-          >Редактировать</Button
-        >
+        <div v-else class="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            :disabled="disabled"
+            :aria-label="`Настройки упаковки ${row.code}`"
+            @click="emit('edit', row.id)"
+            >Редактировать</Button
+          >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            :disabled="disabled"
+            :aria-label="`Удалить упаковку ${row.code}`"
+            @click="emit('delete', row)"
+            >Удалить</Button
+          >
+        </div>
       </template>
     </DataTable></TooltipProvider
   >

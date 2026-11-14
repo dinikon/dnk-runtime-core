@@ -30,6 +30,8 @@ interface ItemPackagingsPageState {
   searchAll(value: string): void;
   setPagination(value: { page: number; limit: number }): void;
   firstPage(): void;
+  cancelSearch(): void;
+  reconcilePage(total: number): void;
 }
 
 export function useItemPackagingsPageState(
@@ -141,5 +143,13 @@ export function useItemPackagingsPageState(
       navigate(next, false);
     },
     firstPage: () => navigate({ ...params.value, page: 1 }),
+    cancelSearch,
+    reconcilePage: (total) => {
+      const page = Math.min(
+        params.value.page,
+        Math.max(1, Math.ceil(total / params.value.limit)),
+      );
+      if (page !== params.value.page) navigate({ ...params.value, page });
+    },
   };
 }

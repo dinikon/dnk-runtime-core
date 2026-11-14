@@ -14,6 +14,9 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
+import { toast } from "vue-sonner";
+import { useItemPackagingDeletion } from "../model/use-item-packaging-deletion";
+import DeleteItemPackagingDialog from "../ui/forms/DeleteItemPackagingDialog.vue";
 import { useInventoryScope } from "../model/use-inventory-scope";
 import { useItemPackagingQuery } from "../model/use-item-packaging-query";
 import { useUpdateItemPackaging } from "../model/use-update-item-packaging";
@@ -50,6 +53,30 @@ const item = useItemPackagingQuery(itemId, id, scope),
   mutation = useUpdateItemPackaging(itemId, id, scope),
   saving = ref(false),
   typeOpen = ref(false);
+const deletion = useItemPackagingDeletion(
+  itemId,
+  identity,
+  scope,
+  afterRemoval,
+);
+const busy = computed(() => saving.value || deletion.pending.value);
+function afterRemoval(alreadyGone: boolean): void {
+  draft.clear();
+  clearSave();
+  toast.success(alreadyGone ? "Упаковка уже удалена." : "Упаковка удалена.");
+  back();
+}
+function showDelete(): void {
+  if (
+    busy.value ||
+    !currentItem.value ||
+    !context.currentParent.value ||
+    context.parentMissing.value ||
+    deletion.blocked.value
+  )
+    return;
+  deletion.open(currentItem.value);
+}
 const missing = computed(
   () =>
     item.error.value instanceof ItemPackagingRequestError &&
@@ -58,6 +85,8 @@ const missing = computed(
 const currentItem = computed(() =>
   scope.ready.value &&
   !missing.value &&
+  !deletion.blocked.value &&
+  deletion.removedId.value !== id.value &&
   item.data.value?.id === id.value &&
   item.data.value.inventoryItemId === itemId.value
     ? item.data.value
@@ -84,7 +113,7 @@ watch(
   },
   { flush: "sync" },
 );
-const draft = useItemPackagingDraft(() => currentItem.value, identity, saving);
+const draft = useItemPackagingDraft(() => currentItem.value, identity, busy);
 const typeId = computed(() => draft.values.value?.packagingTypeId ?? "");
 const context = useItemPackagingFormContext(
   itemId,
@@ -95,21 +124,30 @@ const context = useItemPackagingFormContext(
 );
 const unavailable = computed(
   () =>
+    !!deletion.target.value ||
     !context.ready.value ||
     !currentItem.value ||
     missing.value ||
     context.parentMissing.value,
 );
-const readError = computed(
-  () => scope.error.value || item.error.value?.message || "",
+const readError = computed(() =>
+  deletion.blocked.value
+    ? deletion.error.value
+    : scope.error.value || item.error.value?.message || "",
 );
-const loading = computed(() => !readError.value && !currentItem.value);
+const loading = computed(
+  () =>
+    !readError.value &&
+    !currentItem.value &&
+    deletion.removedId.value !== id.value,
+);
 function change(value: ItemPackagingValues): void {
+  if (deletion.target.value || deletion.removedId.value === id.value) return;
   draft.change(value);
   clearSave();
 }
 function reset(): void {
-  if (!saving.value) {
+  if (!busy.value && !deletion.target.value) {
     draft.reset();
     clearSave();
   }
@@ -118,7 +156,8 @@ async function save(): Promise<void> {
   if (
     unavailable.value ||
     !context.canSubmit.value ||
-    saving.value ||
+    busy.value ||
+    !!deletion.target.value ||
     !draft.dirty.value ||
     !draft.values.value
   )
@@ -178,14 +217,14 @@ async function save(): Promise<void> {
   }
 }
 function retry(): void {
-  if (!scope.ready.value || saving.value) return;
+  if (!scope.ready.value || busy.value) return;
   void item.refetch();
   context.retry();
   context.retrySelected();
 }
 function canLeave(): boolean {
   return (
-    !saving.value &&
+    !busy.value &&
     (!draft.dirty.value ||
       window.confirm(
         "Есть несохранённые изменения упаковки. Отказаться от изменений?",
@@ -195,12 +234,13 @@ function canLeave(): boolean {
 onBeforeRouteLeave(canLeave);
 onBeforeRouteUpdate(
   (to, from) =>
-    (to.params.inventoryItemId === from.params.inventoryItemId &&
+    !busy.value &&
+    ((to.params.inventoryItemId === from.params.inventoryItemId &&
       to.params.packagingId === from.params.packagingId) ||
-    canLeave(),
+      canLeave()),
 );
 function beforeUnload(event: BeforeUnloadEvent): void {
-  if (draft.dirty.value || saving.value) {
+  if (draft.dirty.value || busy.value) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -221,20 +261,39 @@ function back(): void {
   >
     <ItemPackagingEditHeader
       :code="currentItem?.code"
-      :pending="saving"
+      :pending="busy"
+      :delete-disabled="
+        !currentItem ||
+        !context.currentParent.value ||
+        context.parentMissing.value ||
+        deletion.blocked.value
+      "
+      @delete="showDelete"
       @back="back"
     />
     <ItemPackagingContext
-      :item="context.currentParent.value"
+      :item="deletion.blocked.value ? undefined : context.currentParent.value"
       :loading="context.parent.isPending.value"
       :error="context.error.value"
       :pending="
         context.parent.isFetching.value ||
         context.units.isFetching.value ||
-        saving
+        busy
       "
-      :can-retry="scope.ready.value"
+      :can-retry="scope.ready.value && !busy"
       @retry="context.retry"
+    />
+    <DeleteItemPackagingDialog
+      v-if="deletion.target.value"
+      :item="deletion.target.value"
+      :sku="context.currentParent.value?.sku"
+      :dirty="draft.dirty.value"
+      :pending="deletion.pending.value"
+      :uncertain="deletion.uncertain.value"
+      :error="deletion.error.value"
+      @close="deletion.close"
+      @confirm="deletion.confirm"
+      @check="deletion.check"
     />
     <Card class="w-full max-w-4xl shrink-0"
       ><CardHeader
@@ -247,8 +306,10 @@ function back(): void {
         <ItemPackagingEditBody
           :loading="loading"
           :error="readError"
-          :can-retry="scope.ready.value && !missing"
-          :retry-pending="item.isFetching.value || saving"
+          :can-retry="
+            scope.ready.value && !missing && !deletion.blocked.value && !busy
+          "
+          :retry-pending="item.isFetching.value || busy"
           :refreshing="!!currentItem && item.isFetching.value"
           @retry="retry"
         >

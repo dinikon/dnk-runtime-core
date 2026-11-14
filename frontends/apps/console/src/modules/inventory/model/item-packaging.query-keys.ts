@@ -44,6 +44,15 @@ export const itemPackagingKeys = {
     ...itemPackagingKeys.root(scope, itemId),
     "create",
   ],
+  delete: (
+    scope: InventoryScope,
+    itemId: string,
+    id: string,
+  ): readonly [...Root, "delete", string] => [
+    ...itemPackagingKeys.root(scope, itemId),
+    "delete",
+    id,
+  ],
   update: (
     scope: InventoryScope,
     itemId: string,

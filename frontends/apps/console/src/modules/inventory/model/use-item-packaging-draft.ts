@@ -10,6 +10,7 @@ export interface ItemPackagingDraftState {
   changes: ComputedRef<ItemPackagingChanges>;
   change(value: ItemPackagingValues): void;
   reset(): void;
+  clear(): void;
   acknowledge(sent: ItemPackagingValues, result: ItemPackagingValues): void;
 }
 export function useItemPackagingDraft(
@@ -35,6 +36,7 @@ export function useItemPackagingDraft(
       const value = source();
       if (value) draft.reset(value);
     },
+    clear: () => draft.clear(),
     acknowledge: (sent, result) => draft.acknowledge(sent, result),
   };
 }

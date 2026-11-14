@@ -16,12 +16,14 @@ defineProps<{
   retryPending: boolean;
   filtered: boolean;
   outOfRange: boolean;
+  disabled?: boolean;
 }>();
 const emit = defineEmits<{
   retry: [];
   clear: [];
   firstPage: [];
   edit: [id: string];
+  delete: [item: ItemPackaging];
 }>();
 </script>
 
@@ -56,6 +58,8 @@ const emit = defineEmits<{
     <ItemPackagingsTable
       v-if="items.length"
       :items="items"
+      :disabled="disabled"
+      @delete="emit('delete', $event)"
       @edit="emit('edit', $event)"
     />
     <div

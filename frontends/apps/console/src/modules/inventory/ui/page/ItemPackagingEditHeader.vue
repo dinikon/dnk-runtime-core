@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ArrowLeft } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
-defineProps<{ code?: string; pending: boolean }>();
-const emit = defineEmits<{ back: [] }>();
+defineProps<{ code?: string; pending: boolean; deleteDisabled?: boolean }>();
+const emit = defineEmits<{ back: []; delete: [] }>();
 </script>
 <template>
   <header class="flex min-w-0 flex-wrap items-start gap-4">
@@ -20,5 +20,12 @@ const emit = defineEmits<{ back: [] }>();
         Тип тары, код, название, количество и единица содержимого.
       </p>
     </div>
+    <Button
+      type="button"
+      variant="destructive"
+      :disabled="pending || deleteDisabled"
+      @click="emit('delete')"
+      >Удалить упаковку</Button
+    >
   </header>
 </template>
