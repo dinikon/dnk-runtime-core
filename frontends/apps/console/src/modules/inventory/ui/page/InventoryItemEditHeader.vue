@@ -10,7 +10,9 @@ defineProps<{
 const emit = defineEmits<{ back: []; packagings: []; delete: [] }>();
 </script>
 <template>
-  <header class="flex min-w-0 flex-wrap items-start gap-4">
+  <header
+    class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-4 sm:flex sm:flex-wrap"
+  >
     <Button
       type="button"
       variant="outline"
@@ -25,19 +27,21 @@ const emit = defineEmits<{ back: []; packagings: []; delete: [] }>();
         Код SKU, штрихкоды и параметры складского учёта.
       </p>
     </div>
-    <Button
-      type="button"
-      variant="outline"
-      :disabled="pending || packagingsDisabled"
-      @click="emit('packagings')"
-      >Упаковки</Button
-    >
-    <Button
-      type="button"
-      variant="destructive"
-      :disabled="pending || deleteDisabled"
-      @click="emit('delete')"
-      >Удалить позицию</Button
-    >
+    <div class="col-span-2 flex flex-wrap gap-2 sm:ml-auto">
+      <Button
+        type="button"
+        variant="outline"
+        :disabled="pending || packagingsDisabled"
+        @click="emit('packagings')"
+        >Упаковки</Button
+      >
+      <Button
+        type="button"
+        variant="destructive"
+        :disabled="pending || deleteDisabled"
+        @click="emit('delete')"
+        >Удалить позицию</Button
+      >
+    </div>
   </header>
 </template>

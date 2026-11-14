@@ -15,3 +15,7 @@ class PackagingTypeNotFoundError(PackagingTypeError):
 
 class PackagingTypeCodeAlreadyExistsError(PackagingTypeError):
     """Сообщает о занятом точном коде типа тары в текущем tenant."""
+
+
+class PackagingTypeInUseError(PackagingTypeError):
+    """Запрещает удаление типа тары, используемого хотя бы одной упаковкой товара."""

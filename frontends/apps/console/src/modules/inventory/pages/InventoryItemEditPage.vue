@@ -350,7 +350,7 @@ function back(): void {
           :refreshing="!!currentItem && item.isFetching.value"
           @retry="retry"
         >
-          <Alert v-if="saveError" variant="destructive"
+          <Alert v-if="saveError && !writeBlocked" variant="destructive"
             ><AlertDescription
               class="flex flex-wrap items-center justify-between gap-3"
               ><span>{{ saveError }}</span

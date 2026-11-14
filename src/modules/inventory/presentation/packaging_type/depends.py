@@ -13,6 +13,9 @@ from src.modules.inventory.application.packaging_type.port.query_repository impo
 from src.modules.inventory.application.packaging_type.command.create_packaging_type.handler import (
     CreatePackagingTypeHandler,
 )
+from src.modules.inventory.application.packaging_type.command.delete_packaging_type.handler import (
+    DeletePackagingTypeHandler,
+)
 from src.modules.inventory.application.packaging_type.command.update_packaging_type.handler import (
     UpdatePackagingTypeHandler,
 )
@@ -27,6 +30,13 @@ from src.modules.inventory.infrastructure.packaging_type.persistence.repository 
 )
 from src.modules.inventory.infrastructure.packaging_type.persistence.query_repository import (
     SqlAlchemyPackagingTypeQueryRepository,
+)
+
+from src.modules.inventory.application.packaging_type.port.usage import (
+    PackagingTypeUsagePort,
+)
+from src.modules.inventory.infrastructure.packaging_type.persistence.usage import (
+    SqlAlchemyPackagingTypeUsage,
 )
 
 
@@ -97,4 +107,26 @@ def get_list_packaging_types_handler(
 
 ListPackagingTypesHandlerDep = Annotated[
     ListPackagingTypesHandler, Depends(get_list_packaging_types_handler)
+]
+
+
+def get_packaging_type_usage(uow: UoWDep) -> PackagingTypeUsagePort:
+    """Собирает чтение использования на той же сессии внешнего tenant-UoW."""
+    return SqlAlchemyPackagingTypeUsage(uow.session)
+
+
+PackagingTypeUsageDep = Annotated[
+    PackagingTypeUsagePort, Depends(get_packaging_type_usage)
+]
+
+
+def get_delete_packaging_type_handler(
+    repository: PackagingTypeRepositoryDep, usage: PackagingTypeUsageDep
+) -> DeletePackagingTypeHandler:
+    """Собирает удаление и проверку ссылок из портов одной общей транзакции."""
+    return DeletePackagingTypeHandler(repository, usage)
+
+
+DeletePackagingTypeHandlerDep = Annotated[
+    DeletePackagingTypeHandler, Depends(get_delete_packaging_type_handler)
 ]

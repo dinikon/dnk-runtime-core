@@ -22,3 +22,7 @@ class PackagingTypeRepositoryProtocol(Protocol):
     async def save(self, packaging_type: PackagingType) -> None:
         """Обновляет существующий агрегат по ID без upsert и самостоятельного commit."""
         ...
+
+    async def delete(self, packaging_type: PackagingType) -> None:
+        """Удаляет существующий агрегат по ID без самостоятельного commit."""
+        ...

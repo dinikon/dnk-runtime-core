@@ -98,9 +98,15 @@ write-адаптер сохраняет и восстанавливает обе
 ## PUT, PATCH и DELETE
 
 Консоль предоставляет [редактор настроек SKU](../frontends/console.md#редактирование-настроек-sku):
-один PATCH меняет `base_uom`, `quantity_rules`, `tracking_mode`, `expiration_mode`.
-Пропущенные SKU/штрихкоды остаются прежними; FK Catalog ссылается на тот же UUID.
-Связанный с Catalog InventoryItem можно редактировать, удаление по-прежнему запрещено.
+единый черновик содержит `sku`, штрихкоды и параметры складского учёта.
+PATCH отправляет только изменённые поля; пропущенные значения остаются прежними,
+FK Catalog ссылается на тот же UUID. Ответ подтверждает отправленный снимок,
+сохраняя более новый ввод. Удаление из таблицы и карточки требует подтверждения.
+Связанный с Catalog InventoryItem можно редактировать, удаление по-прежнему запрещено
+и показывается в диалоге как 409. Кеш Inventory, упаковок и проекции Catalog
+обновляются через разделённые мутации и публичную интеграцию сборки приложения.
+Неоднозначный результат PATCH/DELETE требует свежей проверки без автоматической
+повторной записи. Подробности состояний и навигации описаны в Console.
 
 PUT требует все поля редактируемого представления: `sku`, `base_uom`,
 `quantity_rules`, `tracking_mode`, `expiration_mode`, `barcodes`.
@@ -419,7 +425,7 @@ UNIQUE точного кода и проверками непустых кода
 Проверки: `test/test_inventory_packaging_type_application.py`,
 `test/test_inventory_packaging_type_http.py`, `test/test_inventory_packaging_type_postgres.py`
 и существующий `test/test_inventory_packaging_domain.py`.
-Удаление PackagingType остаётся последующим срезом.
+Backend удаления неиспользуемого PackagingType реализован отдельным сценарием ниже.
 Vue-консоль предоставляет список, создание и редактор PackagingType;
 подробности — в [документации Console](../frontends/console.md#типы-тары).
 Write-адаптер InventoryItem сохраняет варианты упаковки как дочернюю коллекцию агрегата.
@@ -456,6 +462,41 @@ PUT/PATCH требуют auth, tenant и CSRF. Отсутствующий или
 Проверки: `test/test_inventory_packaging_type_mutations_application.py`,
 `test/test_inventory_packaging_type_mutations_http.py`,
 `test/test_inventory_packaging_type_mutations_postgres.py` и регрессия создания/чтения.
+
+### DELETE PackagingType
+
+`DELETE /api/console/inventory/packaging-types/{packaging_type_id}` удаляет
+неиспользуемый тип тары независимо от активности. Успешный ответ — `204` без тела;
+отсутствующий, уже удалённый или чужой tenant-ID — `404`. Метод требует auth,
+tenant-контекст и Origin/CSRF; некорректный UUID возвращает `422`. Фиктивные
+request/response schemas и пустой DTO не создаются, handler возвращает `None`.
+
+Если хотя бы один ItemPackaging ссылается на тип, удаление запрещено с `409`.
+Деактивация используемого типа разрешена и сохраняет существующие упаковки.
+Правило принадлежит `PackagingType.ensure_can_delete`, которому передаётся
+неизменяемый `PackagingTypeDeletionUsage`. Application-порт использования
+возвращает снимок, Infrastructure читает его типизированным SQL `EXISTS`.
+
+DeletePackagingTypeHandler сначала блокирует и перечитывает корень через
+`get_for_update`, затем получает использование, вызывает Domain и удаляет корень.
+Все адаптеры используют одну сессию внешнего tenant-UoW. Удаление не блокирует
+InventoryItem: создание и переназначение упаковок уже блокируют сначала товар,
+затем назначаемый тип. Такой порядок сериализует назначение с удалением без
+обратного захвата корней. Репозиторий использует `DELETE ... RETURNING id`;
+ошибка записи или commit откатывает удаление и не возвращает успешный `204`.
+
+Защитный `fk_item_packagings_type` с `ON DELETE RESTRICT` и индекс
+`ix_item_packagings_type` уже созданы tenant-миграцией `0021_inventory_item_packagings`.
+Новая миграция не нужна. Репозиторий дополнительно переводит только нарушение
+этого FK с SQLSTATE `23503` или `23001` в PackagingTypeInUseError, сохраняя причину.
+Неизвестные ограничения и ошибки БД пробрасываются внешнему UoW.
+
+Проверки: `test/test_inventory_packaging_type_delete_application.py`,
+`test/test_inventory_packaging_type_delete_http.py`,
+`test/test_inventory_packaging_type_delete_postgres.py`. Покрыты бизнес-запрет,
+реальный защитный FK, освобождение типа после удаления/переназначения упаковок,
+tenant isolation, конкурентное назначение/изменение/удаление и rollback.
+Удаление PackagingType в Vue остаётся последующим срезом.
 
 ### Вариант упаковки товара
 

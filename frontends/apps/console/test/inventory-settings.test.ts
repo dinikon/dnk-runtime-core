@@ -33,7 +33,12 @@ test("detail mapping and settings PATCH retain exact decimals and omit unrelated
     expiration_mode: "REQUIRED",
     barcodes: [{ id: "barcode-id", barcode: "000a" }],
   });
-  const payload = inventoryItemChangesToDto({ baseUom: value.baseUom, quantityStep: value.quantityStep, trackingMode: value.trackingMode, expirationMode: value.expirationMode });
+  const payload = inventoryItemChangesToDto({
+    baseUom: value.baseUom,
+    quantityStep: value.quantityStep,
+    trackingMode: value.trackingMode,
+    expirationMode: value.expirationMode,
+  });
   assert.deepEqual(payload, {
     base_uom: "KG",
     quantity_rules: { step: "1.234567890123456789E-40" },

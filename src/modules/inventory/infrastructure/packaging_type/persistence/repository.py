@@ -1,4 +1,4 @@
-from sqlalchemy import insert, select, update
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +6,7 @@ from src.modules.inventory.domain.packaging_type.aggregate import PackagingType
 from src.modules.inventory.domain.packaging_type.error import (
     PackagingTypeCodeAlreadyExistsError,
     PackagingTypeNotFoundError,
+    PackagingTypeInUseError,
 )
 from src.modules.inventory.domain.packaging_type.value_object.identifier import (
     PackagingTypeIdVO,
@@ -62,6 +63,36 @@ class SqlAlchemyPackagingTypeRepository:
             identifier = await self._session.scalar(statement)
         except IntegrityError as exc:
             self._raise_code_conflict(exc)
+            raise
+        if identifier is None:
+            raise PackagingTypeNotFoundError("Тип тары не найден.")
+
+    async def delete(self, packaging_type: PackagingType) -> None:
+        """Удаляет корень с RETURNING; защитный FK дополняет доменную проверку использования."""
+        statement = (
+            delete(PackagingTypeModel)
+            .where(PackagingTypeModel.id == packaging_type.id.uuid)
+            .returning(PackagingTypeModel.id)
+        )
+        try:
+            identifier = await self._session.scalar(statement)
+        except IntegrityError as exc:
+            cause = getattr(exc.orig, "__cause__", None)
+            sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(
+                cause, "sqlstate", None
+            )
+            constraint = getattr(exc.orig, "constraint_name", None) or getattr(
+                cause, "constraint_name", None
+            )
+            # RESTRICT может сообщаться отдельным SQLSTATE 23001.
+            if (
+                sqlstate in {"23503", "23001"}
+                and constraint == "fk_item_packagings_type"
+            ):
+                raise PackagingTypeInUseError(
+                    "Нельзя удалить тип тары: он используется в упаковках товаров. "
+                    "Используемый тип можно деактивировать."
+                ) from exc
             raise
         if identifier is None:
             raise PackagingTypeNotFoundError("Тип тары не найден.")

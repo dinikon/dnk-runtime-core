@@ -143,7 +143,13 @@ function clearCreation(): void {
 }
 watch(creationIdentity, clearCreation, { flush: "sync" });
 function showCreate(): void {
-  if (!scope.ready.value || busy.value || !!deletion.target.value || forbidden.value) return;
+  if (
+    !scope.ready.value ||
+    busy.value ||
+    !!deletion.target.value ||
+    forbidden.value
+  )
+    return;
   clearCreation();
   createOpen.value = true;
 }

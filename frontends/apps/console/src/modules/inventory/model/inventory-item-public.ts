@@ -5,6 +5,10 @@ export function inventoryItemUpdateTenant(
 ): string | null {
   if (
     !key ||
+    key.length !== 7 ||
+    typeof key[2] !== "string" ||
+    typeof key[3] !== "string" ||
+    typeof key[6] !== "string" ||
     key[0] !== "inventory" ||
     key[4] !== "items" ||
     key[5] !== "update" ||

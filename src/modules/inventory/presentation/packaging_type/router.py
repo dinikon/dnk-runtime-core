@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from src.modules.inventory.presentation.packaging_type.http.controller.put_packaging_type import (
     put_packaging_type,
@@ -18,6 +18,9 @@ from src.modules.identity.presentation.auth.depends import (
 from src.modules.identity.presentation.auth.http.csrf import require_csrf
 from src.modules.inventory.presentation.packaging_type.http.controller.create_packaging_type import (
     create_packaging_type,
+)
+from src.modules.inventory.presentation.packaging_type.http.controller.delete_packaging_type import (
+    delete_packaging_type,
 )
 from src.modules.inventory.presentation.packaging_type.http.controller.get_packaging_type import (
     get_packaging_type,
@@ -82,4 +85,16 @@ router.add_api_route(
     methods=["GET"],
     response_model=GetPackagingTypeResponse,
     dependencies=[Depends(require_authenticated_request_context)],
+)
+
+router.add_api_route(
+    "/{packaging_type_id}",
+    delete_packaging_type,
+    methods=["DELETE"],
+    status_code=204,
+    response_class=Response,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
 )

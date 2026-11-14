@@ -1,7 +1,13 @@
 from dataclasses import dataclass, replace
 from typing import Self
 
-from src.modules.inventory.domain.packaging_type.error import InvalidPackagingTypeError
+from src.modules.inventory.domain.packaging_type.error import (
+    InvalidPackagingTypeError,
+    PackagingTypeInUseError,
+)
+from src.modules.inventory.domain.packaging_type.deletion_usage import (
+    PackagingTypeDeletionUsage,
+)
 from src.modules.inventory.domain.packaging_type.snapshot import PackagingTypeSnapshot
 from src.modules.inventory.domain.packaging_type.value_object.identifier import (
     PackagingTypeIdVO,
@@ -64,6 +70,14 @@ class PackagingType:
     def deactivate(self) -> Self:
         """Запрещает новые назначения, сохраняя идентичность исторических ссылок."""
         return self._with_changes(is_active=False)
+
+    def ensure_can_delete(self, usage: PackagingTypeDeletionUsage) -> None:
+        """Запрещает удаление при любой ссылке из ItemPackaging независимо от активности."""
+        if usage.has_item_packagings:
+            raise PackagingTypeInUseError(
+                "Нельзя удалить тип тары: он используется в упаковках товаров. "
+                "Используемый тип можно деактивировать."
+            )
 
     def snapshot(self) -> PackagingTypeSnapshot:
         """Возвращает настройки без передачи другого корня агрегата в InventoryItem."""
