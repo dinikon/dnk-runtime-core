@@ -1,3 +1,6 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
 from dataclasses import dataclass
 
 from src.modules.supplier_sourcing.domain.supplier_offer.error import (
@@ -12,7 +15,6 @@ from src.modules.supplier_sourcing.domain.supplier_offer.value_object.uom_code i
 from src.modules.supplier_sourcing.domain.supplier_source.value_object.identifier import (
     SupplierSourceIdVO,
 )
-from src.modules.supplier_sourcing.domain.value_object.supplier_id import SupplierIdVO
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +22,7 @@ class SupplierOfferAvailabilitySnapshot:
     """Передаёт принадлежность предложения, ограничение по источнику и базовую единицу."""
 
     id: SupplierOfferIdVO
-    supplier_id: SupplierIdVO
+    supplier: SupplierReferenceVO
     source_id: SupplierSourceIdVO | None
     base_uom: SupplierOfferUomCodeVO
 
@@ -28,7 +30,7 @@ class SupplierOfferAvailabilitySnapshot:
         """Проверяет типизированные поля, необходимые для учёта наличия."""
         if (
             not isinstance(self.id, SupplierOfferIdVO)
-            or not isinstance(self.supplier_id, SupplierIdVO)
+            or not isinstance(self.supplier, SupplierReferenceVO)
             or (
                 self.source_id is not None
                 and not isinstance(self.source_id, SupplierSourceIdVO)

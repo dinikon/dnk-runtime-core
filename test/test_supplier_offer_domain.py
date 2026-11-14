@@ -1,3 +1,7 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
+
 """Предложение поставщика, проверка источника и коммерческие условия заказа."""
 
 import unittest
@@ -67,7 +71,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
 
     def setUp(self) -> None:
         """Готовит предложение с минимумом 10 PCS и кратностью 6 PCS."""
-        self.supplier_id = SupplierIdVO(uuid4())
+        self.supplier = SupplierReferenceVO.from_value("crm.company", uuid4())
         self.item = SupplierOfferItemSnapshot(
             SupplierInventoryItemIdVO(uuid4()), SupplierOfferUomCodeVO("PCS")
         )
@@ -79,7 +83,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
             **(
                 dict(
                     identifier=SupplierOfferIdVO(uuid4()),
-                    supplier_id=self.supplier_id,
+                    supplier=self.supplier,
                     item=self.item,
                     supplier_sku=SupplierSkuVO(" 001-AbC "),
                     purchase_price=MoneyVO(Decimal("120.05"), CurrencyVO("UAH")),
@@ -92,11 +96,11 @@ class SupplierOfferDomainTests(unittest.TestCase):
             )
         )
 
-    def source(self, supplier_id: SupplierIdVO) -> SupplierSource:
+    def source(self, supplier: SupplierReferenceVO) -> SupplierSource:
         """Создаёт действительный источник, из которого предложение получит снимок."""
         return SupplierSource.create(
             identifier=SupplierSourceIdVO(uuid4()),
-            supplier_id=supplier_id,
+            supplier=supplier,
             name=SupplierSourceNameVO("Киев"),
             fulfillment_modes=frozenset({SupplierFulfillmentMode.DROPSHIP}),
             stock_update_policy=SupplierStockUpdatePolicyVO(
@@ -116,7 +120,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
     def test_two_suppliers_can_offer_same_item_with_separate_terms(self) -> None:
         """Цена, валюта, условия и исходный SKU принадлежат конкретному предложению."""
         second = self.create(
-            supplier_id=SupplierIdVO(uuid4()),
+            supplier=SupplierReferenceVO.from_value("crm.company", uuid4()),
             supplier_sku=SupplierSkuVO("001-abc"),
             purchase_price=MoneyVO(Decimal("3.25"), CurrencyVO("USD")),
             min_order_qty=SupplierOrderQuantityVO(Decimal(4)),
@@ -125,7 +129,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
         self.assertEqual(self.offer.inventory_item_id, second.inventory_item_id)
         self.assertEqual(self.offer.base_uom, self.item.base_uom)
         self.assertEqual(second.base_uom, self.item.base_uom)
-        self.assertNotEqual(self.offer.supplier_id, second.supplier_id)
+        self.assertNotEqual(self.offer.supplier, second.supplier)
         self.assertNotEqual(
             self.offer.purchase_price.currency, second.purchase_price.currency
         )
@@ -136,7 +140,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
 
     def test_optional_source_must_belong_to_supplier(self) -> None:
         """При наличии источника фабрика проверяет его принадлежность по снимку."""
-        source = self.source(self.supplier_id)
+        source = self.source(self.supplier)
         price_list_id = SupplierPriceListIdVO(uuid4())
         offer = self.create(
             source=source.identity_snapshot(), price_list_id=price_list_id
@@ -145,7 +149,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
         self.assertEqual(offer.price_list_id, price_list_id)
         self.assertIsNone(self.offer.source_id)
         self.assertIsNone(self.offer.price_list_id)
-        foreign = self.source(SupplierIdVO(uuid4()))
+        foreign = self.source(SupplierReferenceVO.from_value("crm.company", uuid4()))
         with self.assertRaises(SupplierOfferSourceMismatchError):
             self.create(source=foreign.identity_snapshot())
         with self.assertRaises(InvalidSupplierOfferValueError):
@@ -209,7 +213,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
 
     def test_price_and_terms_change_without_altering_previous_conditions(self) -> None:
         """Новая цена и условия сохраняют идентичность и исходное сопоставление."""
-        source = self.source(self.supplier_id)
+        source = self.source(self.supplier)
         original = self.create(source=source.identity_snapshot())
         free_price = MoneyVO(Decimal(0), CurrencyVO("UAH"))
         updated = original.change_purchase_price(free_price).configure_order_terms(
@@ -245,7 +249,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
 
     def test_restores_inactive_offer_and_allows_reactivation(self) -> None:
         """Восстановление сохраняет блокировку, цену и все ссылки предложения."""
-        source = self.source(self.supplier_id)
+        source = self.source(self.supplier)
         original = self.create(
             source=source.identity_snapshot(),
             price_list_id=SupplierPriceListIdVO(uuid4()),
@@ -266,7 +270,7 @@ class SupplierOfferDomainTests(unittest.TestCase):
         """Идентификаторы, снимки, деньги и приоритет проверяются на границах фабрик."""
         for changes in (
             dict(item=self.item.inventory_item_id),
-            dict(item=replace(self.item, inventory_item_id=self.supplier_id)),
+            dict(item=replace(self.item, inventory_item_id=self.supplier)),
             dict(item=replace(self.item, base_uom="PCS")),
             dict(supplier_sku="001-AbC"),
             dict(price_list_id=self.offer.id),

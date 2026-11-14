@@ -1,3 +1,10 @@
+from datetime import UTC, datetime
+from src.modules.crm.domain.contact.aggregate import ContactEntity
+from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
+from src.modules.crm.domain.company.aggregate import CompanyEntity
+from src.modules.crm.domain.company.value_object.identifier import CompanyIdVO
+from src.modules.crm.presentation.company.depends import get_company_source_usage
+
 """CRM владеет target; ContactPoints обслуживает значения и связи."""
 
 from dataclasses import replace
@@ -119,10 +126,26 @@ class CrmContactPointsHttpTests(unittest.IsolatedAsyncioTestCase):
         self.app = contact_app(lambda: self.session, self.context)
         self.app.include_router(company_router, prefix="/api/console")
         self.contact_repo = Mock(
-            get_for_update=AsyncMock(return_value=object()), delete=AsyncMock()
+            get_for_update=AsyncMock(
+                return_value=ContactEntity.create(
+                    contact_id=ContactIdVO(self.contact_id),
+                    first_name="Test",
+                    actor_id=EntityIdVO(self.actor),
+                    now=datetime(2026, 11, 14, tzinfo=UTC),
+                )
+            ),
+            delete=AsyncMock(),
         )
         self.company_repo = Mock(
-            get_for_update=AsyncMock(return_value=object()), delete=AsyncMock()
+            get_for_update=AsyncMock(
+                return_value=CompanyEntity.create(
+                    company_id=CompanyIdVO(self.company_id),
+                    legal_name="Company",
+                    actor_id=EntityIdVO(self.actor),
+                    now=datetime(2026, 11, 14, tzinfo=UTC),
+                )
+            ),
+            delete=AsyncMock(),
         )
         self.contact_query = Mock(get_details=AsyncMock(return_value=object()))
         self.company_query = Mock(get_details=AsyncMock(return_value=object()))
@@ -159,6 +182,9 @@ class CrmContactPointsHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.app.dependency_overrides[get_company_contact_points] = (
             lambda: self.company_points
+        )
+        self.app.dependency_overrides[get_company_source_usage] = lambda: Mock(
+            is_used=AsyncMock(return_value=False)
         )
         scheme = "http" if dnk_config.AUTH.allow_insecure_http else "https"
         self.origin = f"{scheme}://tenant.example"

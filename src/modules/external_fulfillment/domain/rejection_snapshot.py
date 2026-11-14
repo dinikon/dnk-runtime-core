@@ -1,3 +1,6 @@
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import (
+    ExternalSupplierReferenceVO,
+)
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -13,9 +16,6 @@ from src.modules.external_fulfillment.domain.value_object.line_binding import (
 from src.modules.external_fulfillment.domain.value_object.plan_ref import (
     SupplierFulfillmentPlanRefVO,
 )
-from src.modules.external_fulfillment.domain.value_object.references import (
-    ExternalSupplierIdVO,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +24,7 @@ class SupplierFulfillmentRejectionSnapshot:
 
     order_id: SupplierFulfillmentOrderIdVO
     order_version: int
-    supplier_id: ExternalSupplierIdVO
+    supplier: ExternalSupplierReferenceVO
     plan_ref: SupplierFulfillmentPlanRefVO
     requested_at: datetime
     rejected_at: datetime

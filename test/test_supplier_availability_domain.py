@@ -1,3 +1,7 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
+
 """Наблюдения внешнего наличия, версии, хронология и актуальность по TTL."""
 
 import unittest
@@ -95,7 +99,7 @@ class SupplierAvailabilityDomainTests(unittest.TestCase):
         """Готовит наблюдение 15 PCS для предложения, ограниченного источником."""
         self.f = offer_fixture.SupplierOfferDomainTests()
         self.f.setUp()
-        self.source = self.f.source(self.f.supplier_id)
+        self.source = self.f.source(self.f.supplier)
         self.offer = self.f.create(source=self.source.identity_snapshot())
         self.received_at = datetime(2026, 11, 7, 12, tzinfo=UTC)
         self.source_updated_at = self.received_at - timedelta(minutes=10)
@@ -168,8 +172,10 @@ class SupplierAvailabilityDomainTests(unittest.TestCase):
         self,
     ) -> None:
         """Принадлежность поставщику проверяется для всех предложений, ограничение по ID — при его наличии."""
-        alternate = self.f.source(self.f.supplier_id).availability_snapshot()
-        foreign = self.f.source(SupplierIdVO(uuid4())).availability_snapshot()
+        alternate = self.f.source(self.f.supplier).availability_snapshot()
+        foreign = self.f.source(
+            SupplierReferenceVO.from_value("crm.company", uuid4())
+        ).availability_snapshot()
         unrestricted = self.f.offer.availability_snapshot()
         self.assertEqual(
             self.create(offer=unrestricted, source=alternate).supplier_source_id,
@@ -194,7 +200,7 @@ class SupplierAvailabilityDomainTests(unittest.TestCase):
 
     def test_update_rejects_other_offer_source_or_changed_unit(self) -> None:
         """Подходящий сам по себе контекст не может переназначить существующее наблюдение."""
-        alternate = self.f.source(self.f.supplier_id).availability_snapshot()
+        alternate = self.f.source(self.f.supplier).availability_snapshot()
         offer = self.offer.availability_snapshot()
         different_unit = SupplierOfferUomCodeVO("KG")
         for changes in (
@@ -335,7 +341,7 @@ class SupplierAvailabilityDomainTests(unittest.TestCase):
         with self.assertRaises(SupplierAvailabilityContextMismatchError):
             self.availability.evaluate(
                 as_of=self.received_at,
-                source=self.f.source(self.f.supplier_id).availability_snapshot(),
+                source=self.f.source(self.f.supplier).availability_snapshot(),
             )
         with self.assertRaises(SupplierAvailabilityTimeError):
             self.availability.evaluate(

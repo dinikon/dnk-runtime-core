@@ -2,7 +2,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
-from src.modules.crm.domain.contact.error import InvalidContactNameError
+from src.modules.crm.domain.contact.error import (
+    InvalidContactNameError,
+    ContactInUseError,
+)
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.domain.contact.value_object.name import ContactNameVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -59,3 +62,10 @@ class ContactEntity:
         self.updated_at = now
         self.updated_by = actor_id
         return True
+
+    def ensure_can_delete(self, *, used_by_supplier_sources: bool) -> None:
+        """Запрещает удаление контакта при наличии внешних источников поставки."""
+        if used_by_supplier_sources:
+            raise ContactInUseError(
+                "Контакт используется источниками поставки. Удаление запрещено."
+            )

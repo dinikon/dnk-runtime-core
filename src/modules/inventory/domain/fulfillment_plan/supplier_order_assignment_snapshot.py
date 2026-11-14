@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import (
+    FulfillmentSupplierReferenceVO,
+)
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -16,7 +19,6 @@ from src.modules.inventory.domain.fulfillment_plan.value_object.identifier impor
     FulfillmentPlanIdVO,
 )
 from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_identity import (
-    FulfillmentSupplierIdVO,
     FulfillmentSupplierOrderIdVO,
     FulfillmentSupplierOrderLineIdVO,
 )
@@ -46,7 +48,7 @@ class SupplierOrderDraftSnapshot:
 
     order_id: FulfillmentSupplierOrderIdVO
     order_version: int
-    supplier_id: FulfillmentSupplierIdVO
+    supplier: FulfillmentSupplierReferenceVO
     plan_id: FulfillmentPlanIdVO
     source_plan_version: int
     created_at: datetime
@@ -58,7 +60,7 @@ class SupplierOrderDraftSnapshot:
             not isinstance(self.order_id, FulfillmentSupplierOrderIdVO)
             or type(self.order_version) is not int
             or self.order_version != 0
-            or not isinstance(self.supplier_id, FulfillmentSupplierIdVO)
+            or not isinstance(self.supplier, FulfillmentSupplierReferenceVO)
             or not isinstance(self.plan_id, FulfillmentPlanIdVO)
             or type(self.source_plan_version) is not int
             or self.source_plan_version < 0
@@ -83,7 +85,7 @@ class SupplierOrderAssignmentSnapshot:
     plan_updated_at: datetime
     order_id: FulfillmentSupplierOrderIdVO
     order_version: int
-    supplier_id: FulfillmentSupplierIdVO
+    supplier: FulfillmentSupplierReferenceVO
     source_plan_version: int
     assigned_at: datetime
     lines: tuple[SupplierOrderDraftLineSnapshot, ...]
@@ -96,7 +98,7 @@ class SupplierOrderAssignmentSnapshot:
         if (
             not isinstance(self.plan_id, FulfillmentPlanIdVO)
             or not isinstance(self.order_id, FulfillmentSupplierOrderIdVO)
-            or not isinstance(self.supplier_id, FulfillmentSupplierIdVO)
+            or not isinstance(self.supplier, FulfillmentSupplierReferenceVO)
             or type(self.plan_version) is not int
             or type(self.source_plan_version) is not int
             or not 0 <= self.source_plan_version < self.plan_version
@@ -148,7 +150,7 @@ class SupplierOrderConfirmationSnapshot:
     """Передаёт подтверждение всей закреплённой группы по исходным условиям."""
 
     order_id: FulfillmentSupplierOrderIdVO
-    supplier_id: FulfillmentSupplierIdVO
+    supplier: FulfillmentSupplierReferenceVO
     plan_id: FulfillmentPlanIdVO
     source_plan_version: int
     confirmation: FulfillmentSupplierOrderConfirmationRefVO
@@ -161,7 +163,7 @@ class SupplierOrderConfirmationSnapshot:
         """Проверяет номинальные ссылки, исходную версию и полный состав снимка."""
         if (
             not isinstance(self.order_id, FulfillmentSupplierOrderIdVO)
-            or not isinstance(self.supplier_id, FulfillmentSupplierIdVO)
+            or not isinstance(self.supplier, FulfillmentSupplierReferenceVO)
             or not isinstance(self.plan_id, FulfillmentPlanIdVO)
             or type(self.source_plan_version) is not int
             or self.source_plan_version < 0
@@ -212,7 +214,7 @@ class SupplierOrderRejectionSnapshot:
     """Передаёт отказ по полному составу закреплённого заказа."""
 
     order_id: FulfillmentSupplierOrderIdVO
-    supplier_id: FulfillmentSupplierIdVO
+    supplier: FulfillmentSupplierReferenceVO
     plan_id: FulfillmentPlanIdVO
     source_plan_version: int
     rejection: FulfillmentSupplierOrderRejectionRefVO
@@ -222,7 +224,7 @@ class SupplierOrderRejectionSnapshot:
         """Проверяет ссылки отказа и уникальные строки одного источника."""
         if (
             not isinstance(self.order_id, FulfillmentSupplierOrderIdVO)
-            or not isinstance(self.supplier_id, FulfillmentSupplierIdVO)
+            or not isinstance(self.supplier, FulfillmentSupplierReferenceVO)
             or not isinstance(self.plan_id, FulfillmentPlanIdVO)
             or type(self.source_plan_version) is not int
             or self.source_plan_version < 0

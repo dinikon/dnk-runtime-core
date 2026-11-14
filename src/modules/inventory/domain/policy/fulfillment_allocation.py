@@ -47,7 +47,7 @@ class FulfillmentAllocationPolicy:
         option.ensure_valid()
         if (
             source != option.source
-            or option.source_supplier_id != option.offer_supplier_id
+            or option.source_supplier != option.offer_supplier
             or (
                 option.offer_source_id is not None
                 and option.offer_source_id != source.supplier_source_id

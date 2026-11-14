@@ -33,6 +33,16 @@ export const workspaceNavigation: WorkspaceNavigation = {
       ],
     },
     {
+      title: "Поставки",
+      items: [
+        {
+          title: "Источники поставщиков",
+          url: "/supplier-sourcing/sources",
+          icon: Building2,
+        },
+      ],
+    },
+    {
       title: "CRM",
       items: [
         { title: "Лиды", url: "/crm/leads", icon: Users },

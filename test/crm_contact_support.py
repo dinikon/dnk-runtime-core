@@ -1,3 +1,8 @@
+from unittest.mock import AsyncMock, Mock
+from src.modules.crm.presentation.depends.counterparty_source_usage import (
+    get_counterparty_source_usage,
+)
+
 """Изолированная HTTP-сборка CRM с настоящими authentication/CSRF dependencies."""
 
 from uuid import UUID
@@ -30,6 +35,11 @@ def contact_app(sessions, context, *, scoped_connection=False):
     app.dependency_overrides[get_optional_request_context] = (
         lambda: app.state.test_context
     )
+
+    if not scoped_connection:
+        app.dependency_overrides[get_counterparty_source_usage] = lambda: Mock(
+            is_used=AsyncMock(return_value=False)
+        )
 
     if scoped_connection:
 

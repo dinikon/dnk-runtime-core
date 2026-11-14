@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import (
+    FulfillmentSupplierReferenceVO,
+)
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -8,7 +11,6 @@ from src.modules.inventory.domain.fulfillment_plan.time import (
     normalize_fulfillment_time,
 )
 from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_identity import (
-    FulfillmentSupplierIdVO,
     FulfillmentSupplierOrderIdVO,
     FulfillmentSupplierOrderLineIdVO,
 )
@@ -23,7 +25,7 @@ class FulfillmentSupplierOrderAssignmentRefVO:
 
     order_id: FulfillmentSupplierOrderIdVO
     line_id: FulfillmentSupplierOrderLineIdVO
-    supplier_id: FulfillmentSupplierIdVO
+    supplier: FulfillmentSupplierReferenceVO
     order_version: int
     source_plan_version: int
     assigned_at: datetime
@@ -41,7 +43,7 @@ class FulfillmentSupplierOrderAssignmentRefVO:
         if (
             not isinstance(self.order_id, FulfillmentSupplierOrderIdVO)
             or not isinstance(self.line_id, FulfillmentSupplierOrderLineIdVO)
-            or not isinstance(self.supplier_id, FulfillmentSupplierIdVO)
+            or not isinstance(self.supplier, FulfillmentSupplierReferenceVO)
             or type(self.order_version) is not int
             or self.order_version < 0
             or type(self.source_plan_version) is not int

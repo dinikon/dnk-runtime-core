@@ -3,15 +3,99 @@
 `SupplierSource` описывает один внешний источник поставки, например склад или
 канал отгрузки. Один контрагент может иметь несколько источников с разными
 режимами, сроками и настройками актуальности. Карточкой контрагента владеет CRM.
-`SupplierIdVO` хранит его идентичность как ссылку в Supplier Sourcing. Проверка
-существования контрагента относится к будущему Application-сценарию создания.
+`SupplierReferenceVO` хранит составную ссылку: `SupplierModelKey`
+(`crm.company` / `crm.contact`) и номинальный `SupplierIdVO`. Компания и контакт
+с одинаковым UUID — разные поставщики. В Domain используется поле `supplier`;
+в HTTP и БД ссылка разложена на `supplier_model_key` и `supplier_id`.
+
+## Реализованный справочник SupplierSource
+
+Backend: `/api/console/supplier-sourcing/sources`.
+
+| Метод | URL относительно `/api/console/supplier-sourcing` | Результат |
+| --- | --- | --- |
+| POST | `/sources` | Создание активного источника, 201 |
+| GET | `/sources` | Страница источников |
+| GET | `/sources/{source_id}` | Карточка |
+| PUT | `/sources/{source_id}` | Полная замена изменяемых настроек |
+| PATCH | `/sources/{source_id}` | Изменение переданных полей |
+
+Создание принимает обязательные `supplier_model_key`, `supplier_id`, `name`,
+необязательный `external_warehouse_code`, непустой `fulfillment_modes`,
+`default_lead_time_seconds` и цельный объект `stock_update_policy`:
+`ttl_seconds`, `stale_behavior`, `missing_sku_behavior`. Поставщик проверяется
+через публичный `CounterpartyReferenceService` CRM в текущем tenant.
+Поиск другого типа при отсутствии выбранной записи не выполняется.
+Ответ содержит полную пару поставщика и актуальное `supplier_name`:
+юридическое название компании либо ФИО контакта.
+
+PUT требует все изменяемые поля, включая nullable внешний код и активность.
+Принадлежность источника неизменяема: PUT/PATCH не принимают ни тип, ни UUID
+поставщика. PATCH требует хотя бы одно поле: пропуск сохраняет значение,
+`null` очищает только внешний код, `false` и нулевой срок сохраняются явно.
+Набор режимов и политика актуальности заменяются целиком.
+
+Длительности передаются и хранятся целыми секундами: срок >= 0, TTL > 0,
+верхняя граница — 86 399 999 999 999 секунд. Булевы, дробные и строковые числа
+HTTP-контрактом не принимаются. Название и внешний код нормализуются Domain,
+регистр и ведущие нули сохраняются. Уникальность названия/кода не вводится.
+
+Список поддерживает `search`, `supplier_model_key`, `supplier_id`, `is_active`,
+`fulfillment_mode`, `offset >= 0`, `limit` 1–100. Фильтр UUID требует тип;
+один тип разрешает фильтровать все компании либо контакты. Порядок стабилен
+по `(name, id)`, фильтры страницы и total совпадают. Собственная карточка
+и режимы читаются одной согласованной проекцией; имена CRM читаются пакетом
+с ключом `(model_key, id)`, не более одного запроса на каждый тип.
+
+Выбор контрагента: `GET /api/console/crm/counterparty-references` с обязательным
+`model_key=crm.company|crm.contact`, `search`, `offset`, `limit` 1–100.
+Результат: `items[{model_key, id, display_name}], total, offset, limit`.
+Поиск буквальный; ФИО строится в порядке фамилия, имя, отчество.
+
+Не применявшаяся миграция `0024_supplier_sources` отредактирована на месте:
+корень `supplier_sources` содержит обязательный тип и UUID, CHECK допустимого
+типа и неуникальный индекс `(supplier_model_key, supplier_id)`.
+FK на CRM отсутствует. Один контрагент может иметь несколько источников.
+`supplier_source_fulfillment_modes` остаётся частью агрегата и его транзакции.
+
+Удаление Company и Contact запрещается их Domain-методами после проверки
+использования через публичный порт Supplier Sourcing. Учитываются также
+деактивированные источники. Проверка использования сопоставляет оба поля,
+поэтому источник контакта не блокирует компанию с тем же UUID, и наоборот.
+Создание удерживает FOR KEY SHARE выбранной записи CRM до commit внешнего
+UoW; удаление CRM блокирует её FOR UPDATE перед проверкой использования и
+удалением остальных связей. Если удаление завершается первым, создание
+после ожидания возвращает 404. Если первым фиксируется источник, удаление
+возвращает 409. Прямой SQL не получает защиту FK для этой ссылки.
+
+Все адаптеры работают на одной tenant-сессии внешнего UoW, не открывают
+собственные транзакции. Репозитории источников не читают ORM CRM.
+Доменная ссылка согласованно применяется также в SupplierOffer,
+SupplierAvailability и локальных снимках External Fulfillment / Inventory.
+
+Консоль: «Поставки → Источники поставщиков», маршруты
+`/supplier-sourcing/sources` и `/supplier-sourcing/sources/:sourceId`.
+Тип выбирается перед серверным поиском. Его переключение очищает выбранного
+контрагента, поиск и страницу выбора, сохраняя остальные поля формы.
+Кеши, URL-фильтры и ключи вариантов учитывают тип и UUID. Редактор показывает
+тип и имя без возможности смены принадлежности. Ошибка/refetch не стирают
+черновик; смена tenant/session отменяет запросы и очищает выбор.
+
+Срез сохраняет политики, не запускает импорт или пересчёт наличия.
+Изменение TTL действует при формировании новых наблюдений: сохранённые
+`expires_at` не пересчитываются. Пропущенный SKU относится только к
+успешному полному снимку. Удаление источника и SourceDeliveryRule — следующие срезы.
+
+Проверки: `test/test_supplier_source_application.py`,
+`test/test_supplier_source_postgres.py`, `test/test_supplier_polymorphic_domain.py`,
+`frontends/apps/console/test/supplier-sourcing.test.ts`.
 
 ## Карточка источника
 
 | Поле | Тип и правило |
 | --- | --- |
 | `id` | `SupplierSourceIdVO`, постоянный идентификатор источника |
-| `supplier_id` | `SupplierIdVO`, постоянная принадлежность поставщику |
+| `supplier` | `SupplierReferenceVO`, постоянная составная ссылка на компанию либо контакт |
 | `name` | `SupplierSourceNameVO`, непустое отображаемое название |
 | `external_warehouse_code` | `ExternalWarehouseCodeVO` или `None`, код в системе поставщика |
 | `fulfillment_modes` | Непустой `frozenset[SupplierFulfillmentMode]` |
@@ -37,7 +121,8 @@ TTL определяет длительность актуальности на�
 блокирует автоматическую продажу по устаревшим данным. `MissingSkuBehavior.KEEP_LAST`
 сохраняет последнее наблюдение, а `MARK_UNKNOWN` задаёт неизвестное наличие для SKU,
 который отсутствует в успешно полученном полном снимке. Настройки хранятся на
-источнике, а их применение относится к будущим срезам SupplierAvailability и импорта.
+источнике. Устаревание уже учитывается Domain-моделью SupplierAvailability;
+подключение хранения наблюдений и импорта относится к следующим срезам.
 
 ## Пример двух источников
 
@@ -45,6 +130,7 @@ TTL определяет длительность актуальности на�
 на наш склад из Львова за три дня.
 
 ```python
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import SupplierReferenceVO
 from datetime import timedelta
 from uuid import UUID
 
@@ -65,10 +151,10 @@ from src.modules.supplier_sourcing.domain.supplier_source.value_object.stock_upd
 from src.modules.supplier_sourcing.domain.value_object.lead_time import SupplierLeadTimeVO
 from src.modules.supplier_sourcing.domain.value_object.supplier_id import SupplierIdVO
 
-supplier = SupplierIdVO(UUID(int=100))
+supplier = SupplierReferenceVO.from_value("crm.company", UUID(int=100))
 kyiv = SupplierSource.create(
     identifier=SupplierSourceIdVO(UUID(int=101)),
-    supplier_id=supplier,
+    supplier=supplier,
     name=SupplierSourceNameVO("Склад Киев"),
     external_warehouse_code=ExternalWarehouseCodeVO("001-Kyiv"),
     fulfillment_modes=frozenset({SupplierFulfillmentMode.DROPSHIP}),
@@ -81,7 +167,7 @@ kyiv = SupplierSource.create(
 )
 lviv = SupplierSource.create(
     identifier=SupplierSourceIdVO(UUID(int=102)),
-    supplier_id=supplier,
+    supplier=supplier,
     name=SupplierSourceNameVO("Склад Львов"),
     fulfillment_modes=frozenset({SupplierFulfillmentMode.PURCHASE_TO_WAREHOUSE}),
     default_lead_time=SupplierLeadTimeVO(timedelta(days=3)),
@@ -109,7 +195,7 @@ kyiv_inactive = kyiv.deactivate()
 
 | Поле | Назначение |
 | --- | --- |
-| `id`, `supplier_id`, `inventory_item_id` | Идентичность предложения и ссылки на поставщика и товар |
+| `id`, `supplier`, `inventory_item_id` | Идентичность предложения и ссылки на поставщика и товар |
 | `supplier_sku` | Внешний SKU с сохранением регистра и ведущих нулей |
 | `base_uom` | Базовая единица товара из снимка создания |
 | `price_list_id`, `source_id` | Опциональные ссылки на прайс-лист и конкретный источник |
@@ -134,6 +220,7 @@ kyiv_inactive = kyiv.deactivate()
 примера. Снимок на границе модуля передаёт идентификатор и единицу из Inventory.
 
 ```python
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import SupplierReferenceVO
 from decimal import Decimal
 
 from src.modules.inventory.domain.inventory_item.aggregate import InventoryItem
@@ -164,7 +251,7 @@ item = SupplierOfferItemSnapshot(
 )
 first = SupplierOffer.create(
     identifier=SupplierOfferIdVO(UUID(int=201)),
-    supplier_id=supplier,
+    supplier=supplier,
     item=item,
     source=kyiv.identity_snapshot(),
     supplier_sku=SupplierSkuVO("001-Oil"),
@@ -176,7 +263,7 @@ first = SupplierOffer.create(
 )
 second = SupplierOffer.create(
     identifier=SupplierOfferIdVO(UUID(int=202)),
-    supplier_id=SupplierIdVO(UUID(int=203)),
+    supplier=SupplierReferenceVO.from_value("crm.company", UUID(int=203)),
     item=item,
     supplier_sku=SupplierSkuVO("OIL-1L-X"),
     purchase_price=MoneyVO(Decimal("3.25"), CurrencyVO("USD")),

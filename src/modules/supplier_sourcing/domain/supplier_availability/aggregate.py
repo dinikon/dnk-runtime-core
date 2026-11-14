@@ -215,7 +215,7 @@ class SupplierAvailability:
         offer.ensure_valid()
         cls._ensure_source_snapshot(source)
         if (
-            offer.supplier_id != source.identity.supplier_id
+            offer.supplier != source.identity.supplier
             or (offer.source_id is not None and offer.source_id != source.identity.id)
             or not isinstance(uom, SupplierOfferUomCodeVO)
             or uom != offer.base_uom

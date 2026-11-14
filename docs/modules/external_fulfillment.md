@@ -1,5 +1,13 @@
 # External Fulfillment
 
+Поставщик хранится как локальный `ExternalSupplierReferenceVO`: ключ модели
+`crm.company` / `crm.contact` и `ExternalSupplierIdVO`. Поле `supplier` во всех
+снимках, подтверждениях, отказах и назначениях содержит полную ссылку.
+Компания и контакт с одинаковым UUID различаются; проверки принадлежности
+и назначения сопоставляют оба компонента. Преобразования между контекстами
+передают `model_key.value` и `identifier.uuid`, без импорта чужих Domain-типов.
+
+
 `SupplierFulfillmentOrder` хранит черновик прямой поставки покупателю от одного
 поставщика и источника. `SupplierFulfillmentLine` соответствует одному целому
 распределению плана. Разные строки на один и тот же товар сохраняют отдельные
@@ -31,6 +39,7 @@
 Выбираем только внешние 4 PCS и переводим снимки в контракты External Fulfillment.
 
 ```python
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import ExternalSupplierReferenceVO
 from src.modules.external_fulfillment.domain.aggregate import SupplierFulfillmentOrder
 from src.modules.external_fulfillment.domain.draft_basis_snapshot import (
     SupplierFulfillmentAllocationSnapshot, SupplierFulfillmentOfferSnapshot,
@@ -66,11 +75,11 @@ basis = SupplierFulfillmentPlanBasisSnapshot(
     (row,),
 )
 source = SupplierFulfillmentSourceSnapshot(
-    row.supplier_source_id, ExternalSupplierIdVO(supplier_option.source_supplier_id.uuid),
+    row.supplier_source_id, ExternalSupplierReferenceVO.from_value(supplier_option.source_supplier.model_key.value, supplier_option.source_supplier.identifier.uuid),
     supplier_option.source_is_active, supplier_option.source_supports_dropship,
 )
 offer = SupplierFulfillmentOfferSnapshot(
-    row.supplier_offer_id, ExternalSupplierIdVO(supplier_option.offer_supplier_id.uuid),
+    row.supplier_offer_id, ExternalSupplierReferenceVO.from_value(supplier_option.offer_supplier.model_key.value, supplier_option.offer_supplier.identifier.uuid),
     ExternalSupplierSourceIdVO(supplier_option.offer_source_id.uuid),
     ExternalInventoryItemIdVO(supplier_option.inventory_item_id.uuid),
     SupplierFulfillmentUomCodeVO(supplier_option.base_uom.value), supplier_option.offer_is_active,
@@ -109,6 +118,8 @@ supplier_order = SupplierFulfillmentOrder.create_from_plan(
 переводим подтверждение закрепления на границе модулей и готовим запрос.
 
 ```python
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import FulfillmentSupplierReferenceVO
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import ExternalSupplierReferenceVO
 from src.modules.external_fulfillment.domain.assignment_snapshot import SupplierFulfillmentAssignmentSnapshot
 from src.modules.external_fulfillment.domain.value_object.quantity_terms import SupplierFulfillmentQuantityTermsVO
 from src.modules.inventory.domain.fulfillment_plan.supplier_order_assignment_snapshot import (
@@ -122,7 +133,7 @@ external_draft = supplier_order.draft_snapshot()
 inventory_draft = SupplierOrderDraftSnapshot(
     order_id=FulfillmentSupplierOrderIdVO(external_draft.order_id.uuid),
     order_version=external_draft.order_version,
-    supplier_id=FulfillmentSupplierIdVO(external_draft.supplier_id.uuid),
+    supplier=FulfillmentSupplierReferenceVO.from_value(external_draft.supplier.model_key.value, external_draft.supplier.identifier.uuid),
     plan_id=FulfillmentPlanIdVO(external_draft.plan_ref.plan_id.uuid),
     source_plan_version=external_draft.plan_ref.plan_version,
     created_at=external_draft.created_at,
@@ -150,7 +161,7 @@ assigned_row = SupplierFulfillmentAllocationSnapshot(
 proof = SupplierFulfillmentAssignmentSnapshot(
     order_id=SupplierFulfillmentOrderIdVO(assigned.order_id.uuid),
     order_version=assigned.order_version,
-    supplier_id=ExternalSupplierIdVO(assigned.supplier_id.uuid),
+    supplier=ExternalSupplierReferenceVO.from_value(assigned.supplier.model_key.value, assigned.supplier.identifier.uuid),
     source_plan_version=assigned.source_plan_version,
     assigned_at=assigned.assigned_at,
     basis=SupplierFulfillmentPlanBasisSnapshot(
@@ -194,6 +205,7 @@ commit. Снятие закрепления относится к следующ
 по 120.05 UAH за PCS.
 
 ```python
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import FulfillmentSupplierReferenceVO
 from src.modules.external_fulfillment.domain.value_object.line_confirmation import (
     SupplierFulfillmentLineConfirmationVO,
 )
@@ -241,7 +253,7 @@ def inventory_reply_lines(reply):
 def inventory_confirmation(reply):
     return SupplierOrderConfirmationSnapshot(
         order_id=FulfillmentSupplierOrderIdVO(reply.order_id.uuid),
-        supplier_id=FulfillmentSupplierIdVO(reply.supplier_id.uuid),
+        supplier=FulfillmentSupplierReferenceVO.from_value(reply.supplier.model_key.value, reply.supplier.identifier.uuid),
         plan_id=FulfillmentPlanIdVO(reply.plan_ref.plan_id.uuid),
         source_plan_version=reply.plan_ref.plan_version,
         confirmation=FulfillmentSupplierOrderConfirmationRefVO(
@@ -308,6 +320,7 @@ free_quantity = partial_plan.remaining_to_allocate(row_ref, demand=demand)
 В третьем варианте поставщик отказал по запросу на 4 PCS.
 
 ```python
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import FulfillmentSupplierReferenceVO
 from src.modules.inventory.domain.fulfillment_plan.supplier_order_assignment_snapshot import (
     SupplierOrderRejectionSnapshot,
 )
@@ -323,7 +336,7 @@ rejected_order = requested.reject(
 rejection = rejected_order.rejection_snapshot()
 inventory_rejection = SupplierOrderRejectionSnapshot(
     order_id=FulfillmentSupplierOrderIdVO(rejection.order_id.uuid),
-    supplier_id=FulfillmentSupplierIdVO(rejection.supplier_id.uuid),
+    supplier=FulfillmentSupplierReferenceVO.from_value(rejection.supplier.model_key.value, rejection.supplier.identifier.uuid),
     plan_id=FulfillmentPlanIdVO(rejection.plan_ref.plan_id.uuid),
     source_plan_version=rejection.plan_ref.plan_version,
     rejection=FulfillmentSupplierOrderRejectionRefVO(

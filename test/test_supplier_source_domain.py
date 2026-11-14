@@ -1,3 +1,7 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
+
 """Карточка источника поставщика, режимы, сроки и настройки наличия."""
 
 import unittest
@@ -108,7 +112,7 @@ class SupplierSourceDomainTests(unittest.TestCase):
     def setUp(self) -> None:
         """Готовит активный источник прямой поставки одного поставщика."""
         self.identifier = SupplierSourceIdVO(uuid4())
-        self.supplier_id = SupplierIdVO(uuid4())
+        self.supplier = SupplierReferenceVO.from_value("crm.company", uuid4())
         self.policy = SupplierStockUpdatePolicyVO(
             ttl=timedelta(hours=2),
             stale_behavior=StaleStockBehavior.MARK_UNKNOWN,
@@ -122,7 +126,7 @@ class SupplierSourceDomainTests(unittest.TestCase):
             **(
                 dict(
                     identifier=self.identifier,
-                    supplier_id=self.supplier_id,
+                    supplier=self.supplier,
                     name=SupplierSourceNameVO("Киев"),
                     fulfillment_modes=frozenset({SupplierFulfillmentMode.DROPSHIP}),
                     stock_update_policy=self.policy,
@@ -145,7 +149,7 @@ class SupplierSourceDomainTests(unittest.TestCase):
             ),
             default_lead_time=SupplierLeadTimeVO(timedelta(days=3)),
         )
-        self.assertEqual(self.source.supplier_id, second.supplier_id)
+        self.assertEqual(self.source.supplier, second.supplier)
         self.assertNotEqual(self.source.id, second.id)
         self.assertNotEqual(self.source.default_lead_time, second.default_lead_time)
         self.assertTrue(self.source.is_active)
@@ -163,7 +167,7 @@ class SupplierSourceDomainTests(unittest.TestCase):
         ).deactivate()
         arguments = dict(
             identifier=source.id,
-            supplier_id=source.supplier_id,
+            supplier=source.supplier,
             name=source.name,
             external_warehouse_code=source.external_warehouse_code,
             fulfillment_modes=source.fulfillment_modes,
@@ -185,9 +189,9 @@ class SupplierSourceDomainTests(unittest.TestCase):
     def test_invalid_identifiers_values_and_mode_collections_are_rejected(self) -> None:
         """Одинаковый UUID другого назначения и сырые настройки не проходят границу корня."""
         for changes in (
-            dict(identifier=self.supplier_id),
-            dict(supplier_id=self.identifier),
-            dict(supplier_id=self.supplier_id.uuid),
+            dict(identifier=self.supplier),
+            dict(supplier=self.identifier),
+            dict(supplier=self.supplier.identifier.uuid),
             dict(name="Киев"),
             dict(external_warehouse_code="Kyiv-01"),
             dict(stock_update_policy=timedelta(hours=2)),
@@ -225,7 +229,7 @@ class SupplierSourceDomainTests(unittest.TestCase):
             )
         )
         self.assertEqual(updated.id, self.source.id)
-        self.assertEqual(updated.supplier_id, self.source.supplier_id)
+        self.assertEqual(updated.supplier, self.source.supplier)
         self.assertEqual(updated.name.value, "Киев Центр")
         self.assertEqual(updated.stock_update_policy, policy)
         self.assertEqual(updated.default_lead_time.value, timedelta(0))
@@ -256,4 +260,6 @@ class SupplierSourceDomainTests(unittest.TestCase):
             )
         self.assertEqual(inactive, replace(self.source, is_active=False))
         with self.assertRaises(FrozenInstanceError):
-            self.source.supplier_id = SupplierIdVO(uuid4())
+            self.source.supplier = SupplierReferenceVO.from_value(
+                "crm.company", uuid4()
+            )

@@ -1,3 +1,13 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import (
+    ExternalSupplierReferenceVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import (
+    FulfillmentSupplierReferenceVO,
+)
+
 """Закрепление внешнего заказа и проверяемая подготовка запроса поставщику."""
 
 import unittest
@@ -141,7 +151,9 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         return SupplierOrderDraftSnapshot(
             order_id=FulfillmentSupplierOrderIdVO(draft.order_id.uuid),
             order_version=draft.order_version,
-            supplier_id=FulfillmentSupplierIdVO(draft.supplier_id.uuid),
+            supplier=FulfillmentSupplierReferenceVO.from_value(
+                draft.supplier.model_key.value, draft.supplier.identifier.uuid
+            ),
             plan_id=FulfillmentPlanIdVO(draft.plan_ref.plan_id.uuid),
             source_plan_version=draft.plan_ref.plan_version,
             created_at=draft.created_at,
@@ -206,7 +218,9 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         return SupplierFulfillmentAssignmentSnapshot(
             order_id=SupplierFulfillmentOrderIdVO(assignment.order_id.uuid),
             order_version=assignment.order_version,
-            supplier_id=ExternalSupplierIdVO(assignment.supplier_id.uuid),
+            supplier=ExternalSupplierReferenceVO.from_value(
+                assignment.supplier.model_key.value, assignment.supplier.identifier.uuid
+            ),
             source_plan_version=assignment.source_plan_version,
             assigned_at=assignment.assigned_at,
             basis=SupplierFulfillmentPlanBasisSnapshot(
@@ -409,7 +423,12 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         for changed in (
             replace(draft, plan_id=FulfillmentPlanIdVO(uuid4())),
             replace(draft, source_plan_version=self.plan.version + 1),
-            replace(draft, supplier_id=FulfillmentSupplierIdVO(uuid4())),
+            replace(
+                draft,
+                supplier=FulfillmentSupplierReferenceVO.from_value(
+                    "crm.company", uuid4()
+                ),
+            ),
             replace(
                 draft,
                 lines=(
@@ -467,7 +486,10 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         row = proof.basis.allocations[0]
         for changed in (
             replace(proof, order_id=SupplierFulfillmentOrderIdVO(uuid4())),
-            replace(proof, supplier_id=ExternalSupplierIdVO(uuid4())),
+            replace(
+                proof,
+                supplier=ExternalSupplierReferenceVO.from_value("crm.company", uuid4()),
+            ),
             replace(proof, order_version=1),
             replace(proof, source_plan_version=proof.source_plan_version - 1),
             replace(
@@ -531,7 +553,9 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
             ),
             replace(
                 second.supplier_order_assignment,
-                supplier_id=FulfillmentSupplierIdVO(uuid4()),
+                supplier=FulfillmentSupplierReferenceVO.from_value(
+                    "crm.company", uuid4()
+                ),
             ),
         ):
             with (
@@ -599,7 +623,9 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         """Переводит подтверждение поставщика в контракт принимающего модуля."""
         return SupplierOrderConfirmationSnapshot(
             order_id=FulfillmentSupplierOrderIdVO(snapshot.order_id.uuid),
-            supplier_id=FulfillmentSupplierIdVO(snapshot.supplier_id.uuid),
+            supplier=FulfillmentSupplierReferenceVO.from_value(
+                snapshot.supplier.model_key.value, snapshot.supplier.identifier.uuid
+            ),
             plan_id=FulfillmentPlanIdVO(snapshot.plan_ref.plan_id.uuid),
             source_plan_version=snapshot.plan_ref.plan_version,
             confirmation=FulfillmentSupplierOrderConfirmationRefVO(
@@ -830,7 +856,11 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         first, second = snapshot.lines
         for changes in (
             dict(order_id=FulfillmentSupplierOrderIdVO(uuid4())),
-            dict(supplier_id=FulfillmentSupplierIdVO(uuid4())),
+            dict(
+                supplier=FulfillmentSupplierReferenceVO.from_value(
+                    "crm.company", uuid4()
+                )
+            ),
             dict(plan_id=FulfillmentPlanIdVO(uuid4())),
             dict(source_plan_version=snapshot.source_plan_version + 1),
             dict(lines=(first,)),
@@ -1219,7 +1249,9 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         snapshot = order.rejection_snapshot()
         return SupplierOrderRejectionSnapshot(
             order_id=FulfillmentSupplierOrderIdVO(snapshot.order_id.uuid),
-            supplier_id=FulfillmentSupplierIdVO(snapshot.supplier_id.uuid),
+            supplier=FulfillmentSupplierReferenceVO.from_value(
+                snapshot.supplier.model_key.value, snapshot.supplier.identifier.uuid
+            ),
             plan_id=FulfillmentPlanIdVO(snapshot.plan_ref.plan_id.uuid),
             source_plan_version=snapshot.plan_ref.plan_version,
             rejection=FulfillmentSupplierOrderRejectionRefVO(
@@ -1428,7 +1460,11 @@ class SupplierFulfillmentRequestDomainTests(unittest.TestCase):
         first, second = evidence.lines
         for changes in (
             dict(order_id=FulfillmentSupplierOrderIdVO(uuid4())),
-            dict(supplier_id=FulfillmentSupplierIdVO(uuid4())),
+            dict(
+                supplier=FulfillmentSupplierReferenceVO.from_value(
+                    "crm.company", uuid4()
+                )
+            ),
             dict(plan_id=FulfillmentPlanIdVO(uuid4())),
             dict(source_plan_version=evidence.source_plan_version + 1),
             dict(lines=(first,)),

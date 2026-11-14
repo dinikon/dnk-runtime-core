@@ -1,3 +1,6 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
 from dataclasses import dataclass, replace
 from typing import Self
 
@@ -30,7 +33,6 @@ from src.modules.supplier_sourcing.domain.supplier_source.value_object.stock_upd
 from src.modules.supplier_sourcing.domain.value_object.lead_time import (
     SupplierLeadTimeVO,
 )
-from src.modules.supplier_sourcing.domain.value_object.supplier_id import SupplierIdVO
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +40,7 @@ class SupplierSource:
     """Описывает отдельный источник поставщика и правила его использования."""
 
     id: SupplierSourceIdVO
-    supplier_id: SupplierIdVO
+    supplier: SupplierReferenceVO
     name: SupplierSourceNameVO
     external_warehouse_code: ExternalWarehouseCodeVO | None
     fulfillment_modes: frozenset[SupplierFulfillmentMode]
@@ -51,7 +53,7 @@ class SupplierSource:
         cls,
         *,
         identifier: SupplierSourceIdVO,
-        supplier_id: SupplierIdVO,
+        supplier: SupplierReferenceVO,
         name: SupplierSourceNameVO,
         fulfillment_modes: frozenset[SupplierFulfillmentMode],
         stock_update_policy: SupplierStockUpdatePolicyVO,
@@ -61,7 +63,7 @@ class SupplierSource:
         """Создаёт активный источник с явно переданной идентичностью и настройками."""
         return cls.restore(
             identifier=identifier,
-            supplier_id=supplier_id,
+            supplier=supplier,
             name=name,
             external_warehouse_code=external_warehouse_code,
             fulfillment_modes=fulfillment_modes,
@@ -75,7 +77,7 @@ class SupplierSource:
         cls,
         *,
         identifier: SupplierSourceIdVO,
-        supplier_id: SupplierIdVO,
+        supplier: SupplierReferenceVO,
         name: SupplierSourceNameVO,
         external_warehouse_code: ExternalWarehouseCodeVO | None,
         fulfillment_modes: frozenset[SupplierFulfillmentMode],
@@ -86,7 +88,7 @@ class SupplierSource:
         """Восстанавливает полную карточку с прежней принадлежностью и активностью."""
         source = cls(
             id=identifier,
-            supplier_id=supplier_id,
+            supplier=supplier,
             name=name,
             external_warehouse_code=external_warehouse_code,
             fulfillment_modes=fulfillment_modes,
@@ -104,7 +106,7 @@ class SupplierSource:
     def identity_snapshot(self) -> SupplierSourceIdentitySnapshot:
         """Возвращает идентификатор источника и ссылку на его поставщика."""
         self._validate()
-        return SupplierSourceIdentitySnapshot(self.id, self.supplier_id)
+        return SupplierSourceIdentitySnapshot(self.id, self.supplier)
 
     def availability_snapshot(self) -> SupplierSourceAvailabilitySnapshot:
         """Возвращает идентичность и правила обработки наблюдений наличия."""
@@ -165,7 +167,7 @@ class SupplierSource:
         """Требует номинальные поля, явную активность и непустой набор режимов."""
         if (
             not isinstance(self.id, SupplierSourceIdVO)
-            or not isinstance(self.supplier_id, SupplierIdVO)
+            or not isinstance(self.supplier, SupplierReferenceVO)
             or not isinstance(self.name, SupplierSourceNameVO)
             or (
                 self.external_warehouse_code is not None

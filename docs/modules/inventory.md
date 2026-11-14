@@ -3090,6 +3090,7 @@ Application-сценарий собирает этот снимок из [Suppli
 планируем ещё 4 PCS у поставщика.
 
 ```python
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import FulfillmentSupplierReferenceVO
 from src.modules.inventory.domain.fulfillment_plan.supplier_dropship_option_snapshot import SupplierDropshipOptionSnapshot
 from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_dropship_source_ref import SupplierDropshipSourceRefVO
 from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_identity import (
@@ -3098,12 +3099,12 @@ from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_identit
 from src.modules.shared.domain.value_object.currency import CurrencyVO
 from src.modules.shared.domain.value_object.money import MoneyVO
 
-supplier_id = FulfillmentSupplierIdVO(UUID(int=721))
+supplier = FulfillmentSupplierReferenceVO.from_value("crm.company", UUID(int=721))
 supplier_source = SupplierDropshipSourceRefVO(
     FulfillmentSupplierSourceIdVO(UUID(int=722)), FulfillmentSupplierOfferIdVO(UUID(int=723)),
 )
 supplier_option = SupplierDropshipOptionSnapshot(
-    source=supplier_source, source_supplier_id=supplier_id, offer_supplier_id=supplier_id,
+    source=supplier_source, source_supplier=supplier, offer_supplier=supplier,
     offer_source_id=supplier_source.supplier_source_id,
     source_is_active=True, source_supports_dropship=True, offer_is_active=True,
     inventory_item_id=item.inventory_item_id, base_uom=item.base_uom,
@@ -8432,3 +8433,15 @@ Vue использует PATCH изменённых полей и редакто
 Проверки: `test/test_inventory_stock_serial_mutations_application.py`,
 `test/test_inventory_stock_serial_mutations_postgres.py`,
 frontend `test/inventory-stock-serial-edit.test.ts` и браузерная регрессия.
+
+
+### Составная ссылка поставщика в FulfillmentPlan
+
+`FulfillmentSupplierReferenceVO` содержит локальный ключ модели
+`crm.company` / `crm.contact` и `FulfillmentSupplierIdVO`. Снимок варианта
+исполнения использует `source_supplier` и `offer_supplier`; снимки заказов,
+назначений, ответов и ссылки закрепления — `supplier`. Сравнения, группировка
+заказов и проверки согласованности учитывают полную пару. Одинаковый UUID
+компании и контакта не означает одного поставщика. Маппинг в External Fulfillment
+сохраняет тип контрагента. Ссылки `supplier_source_id` и `supplier_offer_id`
+по-прежнему обозначают самостоятельные объекты соответствующих контекстов.

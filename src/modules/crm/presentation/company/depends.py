@@ -48,6 +48,29 @@ from src.modules.shared.presentation.uuid.depends import UuidDep
 from src.modules.crm.presentation.depends.contact_points import CompanyContactPointsDep
 
 
+from src.modules.crm.application.counterparty_reference.source_usage import (
+    CounterpartySourceUsagePort,
+)
+from src.modules.crm.infrastructure.counterparty_reference.source_usage import (
+    SupplierSourceCounterpartyUsageAdapter,
+)
+from src.modules.supplier_sourcing.infrastructure.supplier_source.persistence.supplier_usage import (
+    SqlAlchemySupplierSourceUsage,
+)
+
+
+def get_company_source_usage(uow: UoWDep) -> CounterpartySourceUsagePort:
+    """Собирает проверку ссылок через публичный порт Supplier Sourcing."""
+    return SupplierSourceCounterpartyUsageAdapter(
+        SqlAlchemySupplierSourceUsage(uow.session)
+    )
+
+
+CompanySourceUsageDep = Annotated[
+    CounterpartySourceUsagePort, Depends(get_company_source_usage)
+]
+
+
 def get_company_repository(uow: UoWDep) -> CompanyRepositoryProtocol:
     return SqlAlchemyCompanyRepository(uow.session)
 
@@ -111,8 +134,9 @@ UpdateCompanyHandlerDep = Annotated[
 def get_delete_company_handler(
     repository: CompanyRepositoryDep,
     points: CompanyContactPointsDep,
+    sources: CompanySourceUsageDep,
 ) -> DeleteCompanyHandler:
-    return DeleteCompanyHandler(repository, points)
+    return DeleteCompanyHandler(repository, points, sources)
 
 
 DeleteCompanyHandlerDep = Annotated[

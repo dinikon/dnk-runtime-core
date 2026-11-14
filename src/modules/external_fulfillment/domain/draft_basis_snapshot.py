@@ -1,3 +1,6 @@
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import (
+    ExternalSupplierReferenceVO,
+)
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -17,7 +20,6 @@ from src.modules.external_fulfillment.domain.value_object.quantity import (
 from src.modules.external_fulfillment.domain.value_object.references import (
     ExternalFulfillmentAllocationIdVO,
     ExternalInventoryItemIdVO,
-    ExternalSupplierIdVO,
     ExternalSupplierOfferIdVO,
     ExternalSupplierSourceIdVO,
 )
@@ -101,7 +103,7 @@ class SupplierFulfillmentSourceSnapshot:
     """Передаёт принадлежность и пригодность источника для прямой доставки."""
 
     id: ExternalSupplierSourceIdVO
-    supplier_id: ExternalSupplierIdVO
+    supplier: ExternalSupplierReferenceVO
     is_active: bool
     supports_dropship: bool
 
@@ -109,7 +111,7 @@ class SupplierFulfillmentSourceSnapshot:
         """Проверяет идентичность источника и явные признаки маршрута."""
         if (
             not isinstance(self.id, ExternalSupplierSourceIdVO)
-            or not isinstance(self.supplier_id, ExternalSupplierIdVO)
+            or not isinstance(self.supplier, ExternalSupplierReferenceVO)
             or type(self.is_active) is not bool
             or type(self.supports_dropship) is not bool
         ):
@@ -123,7 +125,7 @@ class SupplierFulfillmentOfferSnapshot:
     """Передаёт идентичность предложения, его область, товар и базовую единицу."""
 
     id: ExternalSupplierOfferIdVO
-    supplier_id: ExternalSupplierIdVO
+    supplier: ExternalSupplierReferenceVO
     source_id: ExternalSupplierSourceIdVO | None
     inventory_item_id: ExternalInventoryItemIdVO
     base_uom: SupplierFulfillmentUomCodeVO
@@ -133,7 +135,7 @@ class SupplierFulfillmentOfferSnapshot:
         """Проверяет номинальные ссылки, единицу и признак активности предложения."""
         if (
             not isinstance(self.id, ExternalSupplierOfferIdVO)
-            or not isinstance(self.supplier_id, ExternalSupplierIdVO)
+            or not isinstance(self.supplier, ExternalSupplierReferenceVO)
             or (
                 self.source_id is not None
                 and not isinstance(self.source_id, ExternalSupplierSourceIdVO)

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
+from src.modules.crm.domain.company.error import CompanyInUseError
 from src.modules.crm.domain.company.value_object.identifier import CompanyIdVO
 from src.modules.crm.domain.company.value_object.legal_name import CompanyLegalNameVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -45,3 +46,10 @@ class CompanyEntity:
         self.updated_at = now
         self.updated_by = actor_id
         return True
+
+    def ensure_can_delete(self, *, used_by_supplier_sources: bool) -> None:
+        """Запрещает удаление компании при наличии внешних источников поставки."""
+        if used_by_supplier_sources:
+            raise CompanyInUseError(
+                "Компания используется источниками поставки. Удаление запрещено."
+            )

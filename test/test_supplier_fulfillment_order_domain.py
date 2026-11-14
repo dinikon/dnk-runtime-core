@@ -1,3 +1,10 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import (
+    ExternalSupplierReferenceVO,
+)
+
 """Черновик прямой поставки на основании выбранных распределений FulfillmentPlan."""
 
 import unittest
@@ -88,7 +95,9 @@ class SupplierFulfillmentOrderDomainTests(unittest.TestCase):
         source = self.f.supplier_source
         self.source = SupplierFulfillmentSourceSnapshot(
             ExternalSupplierSourceIdVO(source.id.uuid),
-            ExternalSupplierIdVO(source.supplier_id.uuid),
+            ExternalSupplierReferenceVO.from_value(
+                source.supplier.model_key.value, source.supplier.identifier.uuid
+            ),
             source.is_active,
             SupplierFulfillmentMode.DROPSHIP in source.fulfillment_modes,
         )
@@ -131,7 +140,9 @@ class SupplierFulfillmentOrderDomainTests(unittest.TestCase):
         """Передаёт текущую идентичность предложения, сохраняя цену в основании плана."""
         return SupplierFulfillmentOfferSnapshot(
             id=ExternalSupplierOfferIdVO(offer.id.uuid),
-            supplier_id=ExternalSupplierIdVO(offer.supplier_id.uuid),
+            supplier=ExternalSupplierReferenceVO.from_value(
+                offer.supplier.model_key.value, offer.supplier.identifier.uuid
+            ),
             source_id=(
                 ExternalSupplierSourceIdVO(offer.source_id.uuid)
                 if offer.source_id
@@ -188,7 +199,7 @@ class SupplierFulfillmentOrderDomainTests(unittest.TestCase):
         self.assertIs(order.status, SupplierFulfillmentOrderStatus.DRAFT)
         self.assertEqual(order.version, 0)
         self.assertEqual(order.plan_ref, self.basis.plan_ref)
-        self.assertEqual(order.supplier_id, self.source.supplier_id)
+        self.assertEqual(order.supplier, self.source.supplier)
         self.assertEqual(order.supplier_source_id, self.source.id)
         self.assertEqual(order.delivery_address, self.address)
         self.assertEqual(len(order.lines), 1)
@@ -300,7 +311,9 @@ class SupplierFulfillmentOrderDomainTests(unittest.TestCase):
             ):
                 self.create(source=source)
         for changes in (
-            dict(supplier_id=ExternalSupplierIdVO(uuid4())),
+            dict(
+                supplier=ExternalSupplierReferenceVO.from_value("crm.company", uuid4())
+            ),
             dict(source_id=ExternalSupplierSourceIdVO(uuid4())),
             dict(is_active=False),
             dict(inventory_item_id=ExternalInventoryItemIdVO(uuid4())),

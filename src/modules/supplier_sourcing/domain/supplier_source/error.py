@@ -19,3 +19,11 @@ class SupplierSourceInactiveError(SupplierSourceError):
 
 class UnsupportedSupplierFulfillmentModeError(SupplierSourceError):
     """Сообщает, что источник не поддерживает выбранный режим поставки."""
+
+
+class SupplierSourceNotFoundError(SupplierSourceError):
+    """Источник отсутствует в текущем tenant."""
+
+
+class SupplierNotFoundError(SupplierSourceError):
+    """Контрагент выбранного типа отсутствует в текущем tenant."""

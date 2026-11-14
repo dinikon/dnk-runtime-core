@@ -1,3 +1,10 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import (
+    FulfillmentSupplierReferenceVO,
+)
+
 """Ручная прямая поставка и складское исполнение в смешанном плане."""
 
 import unittest
@@ -84,7 +91,7 @@ class FulfillmentSupplierDomainTests(unittest.TestCase):
         self.f = self.reservations.f
         supplier = supplier_fixture.SupplierOfferDomainTests()
         supplier.setUp()
-        source = supplier.source(supplier.supplier_id)
+        source = supplier.source(supplier.supplier)
         offer = supplier.create(
             item=SupplierOfferItemSnapshot(
                 SupplierInventoryItemIdVO(self.f.item.inventory_item_id.uuid),
@@ -100,8 +107,12 @@ class FulfillmentSupplierDomainTests(unittest.TestCase):
                 FulfillmentSupplierSourceIdVO(source.id.uuid),
                 FulfillmentSupplierOfferIdVO(offer.id.uuid),
             ),
-            source_supplier_id=FulfillmentSupplierIdVO(source.supplier_id.uuid),
-            offer_supplier_id=FulfillmentSupplierIdVO(offer.supplier_id.uuid),
+            source_supplier=FulfillmentSupplierReferenceVO.from_value(
+                source.supplier.model_key.value, source.supplier.identifier.uuid
+            ),
+            offer_supplier=FulfillmentSupplierReferenceVO.from_value(
+                offer.supplier.model_key.value, offer.supplier.identifier.uuid
+            ),
             offer_source_id=FulfillmentSupplierSourceIdVO(offer.source_id.uuid),
             source_is_active=source.is_active,
             source_supports_dropship=SupplierFulfillmentMode.DROPSHIP
@@ -196,7 +207,11 @@ class FulfillmentSupplierDomainTests(unittest.TestCase):
     ) -> None:
         """Типизированный снимок должен соответствовать активной прямой поставке этого товара."""
         for changes in (
-            dict(offer_supplier_id=FulfillmentSupplierIdVO(uuid4())),
+            dict(
+                offer_supplier=FulfillmentSupplierReferenceVO.from_value(
+                    "crm.company", uuid4()
+                )
+            ),
             dict(offer_source_id=FulfillmentSupplierSourceIdVO(uuid4())),
             dict(source_is_active=False),
             dict(offer_is_active=False),

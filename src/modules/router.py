@@ -70,3 +70,15 @@ router.include_router(channels_router)
 
 router.include_router(inventory_stock_lots_router)
 router.include_router(inventory_stock_serials_router)
+
+from src.modules.supplier_sourcing.presentation.supplier_source.router import (
+    router as supplier_sources_router,
+)
+
+router.include_router(supplier_sources_router)
+
+from src.modules.crm.presentation.counterparty_reference.router import (
+    router as counterparty_references_router,
+)
+
+router.include_router(counterparty_references_router)

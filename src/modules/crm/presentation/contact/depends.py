@@ -1,3 +1,6 @@
+from src.modules.crm.presentation.depends.counterparty_source_usage import (
+    CounterpartySourceUsageDep,
+)
 from typing import Annotated
 
 from fastapi import Depends
@@ -113,8 +116,9 @@ UpdateContactHandlerDep = Annotated[
 def get_delete_contact_handler(
     repository: ContactRepositoryDep,
     points: ContactContactPointsDep,
+    sources: CounterpartySourceUsageDep,
 ) -> DeleteContactHandler:
-    return DeleteContactHandler(repository, points)
+    return DeleteContactHandler(repository, points, sources)
 
 
 DeleteContactHandlerDep = Annotated[

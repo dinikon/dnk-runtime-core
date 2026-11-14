@@ -78,7 +78,7 @@ class SupplierFulfillmentDraftPolicy:
             offer = by_offer[row.supplier_offer_id]
             if (
                 row.supplier_source_id != source.id
-                or offer.supplier_id != source.supplier_id
+                or offer.supplier != source.supplier
                 or (offer.source_id is not None and offer.source_id != source.id)
                 or not offer.is_active
                 or offer.inventory_item_id != row.inventory_item_id

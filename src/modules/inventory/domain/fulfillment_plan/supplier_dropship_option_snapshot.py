@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import (
+    FulfillmentSupplierReferenceVO,
+)
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -8,7 +11,6 @@ from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_dropshi
     SupplierDropshipSourceRefVO,
 )
 from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_identity import (
-    FulfillmentSupplierIdVO,
     FulfillmentSupplierSourceIdVO,
 )
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
@@ -24,8 +26,8 @@ class SupplierDropshipOptionSnapshot:
     """Передаёт свойства выбранного источника и предложения для ручного планирования."""
 
     source: SupplierDropshipSourceRefVO
-    source_supplier_id: FulfillmentSupplierIdVO
-    offer_supplier_id: FulfillmentSupplierIdVO
+    source_supplier: FulfillmentSupplierReferenceVO
+    offer_supplier: FulfillmentSupplierReferenceVO
     offer_source_id: FulfillmentSupplierSourceIdVO | None
     source_is_active: bool
     source_supports_dropship: bool
@@ -40,8 +42,8 @@ class SupplierDropshipOptionSnapshot:
         """Проверяет типизированные поля предложения, источника и коммерческих условий."""
         if (
             not isinstance(self.source, SupplierDropshipSourceRefVO)
-            or not isinstance(self.source_supplier_id, FulfillmentSupplierIdVO)
-            or not isinstance(self.offer_supplier_id, FulfillmentSupplierIdVO)
+            or not isinstance(self.source_supplier, FulfillmentSupplierReferenceVO)
+            or not isinstance(self.offer_supplier, FulfillmentSupplierReferenceVO)
             or (
                 self.offer_source_id is not None
                 and not isinstance(self.offer_source_id, FulfillmentSupplierSourceIdVO)

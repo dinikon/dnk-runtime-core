@@ -5,7 +5,7 @@ from fastapi import HTTPException, Response
 from src.modules.crm.application.contact.command.delete_contact.command import (
     DeleteContactCommand,
 )
-from src.modules.crm.domain.contact.error import ContactNotFoundError
+from src.modules.crm.domain.contact.error import ContactNotFoundError, ContactInUseError
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.presentation.contact.depends import DeleteContactHandlerDep
 from src.modules.identity.presentation.auth.depends import (
@@ -32,4 +32,6 @@ async def delete_contact(
         )
     except ContactNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except ContactInUseError as exc:
+        raise HTTPException(409, str(exc)) from exc
     return Response(status_code=204)

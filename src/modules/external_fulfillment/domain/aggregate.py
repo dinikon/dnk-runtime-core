@@ -1,3 +1,6 @@
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import (
+    ExternalSupplierReferenceVO,
+)
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Self
@@ -53,7 +56,6 @@ from src.modules.external_fulfillment.domain.value_object.plan_ref import (
     SupplierFulfillmentPlanRefVO,
 )
 from src.modules.external_fulfillment.domain.value_object.references import (
-    ExternalSupplierIdVO,
     ExternalSupplierSourceIdVO,
 )
 from src.modules.external_fulfillment.domain.value_object.shipment import (
@@ -73,7 +75,7 @@ class SupplierFulfillmentOrder:
     """Хранит заявку на прямую поставку от одного поставщика и источника."""
 
     id: SupplierFulfillmentOrderIdVO
-    supplier_id: ExternalSupplierIdVO
+    supplier: ExternalSupplierReferenceVO
     supplier_source_id: ExternalSupplierSourceIdVO
     plan_ref: SupplierFulfillmentPlanRefVO
     delivery_address: SupplierDeliveryAddressVO
@@ -110,7 +112,7 @@ class SupplierFulfillmentOrder:
             )
         return cls.restore(
             identifier=identifier,
-            supplier_id=source.supplier_id,
+            supplier=source.supplier,
             supplier_source_id=source.id,
             plan_ref=basis.plan_ref,
             delivery_address=delivery_address,
@@ -125,7 +127,7 @@ class SupplierFulfillmentOrder:
         cls,
         *,
         identifier: SupplierFulfillmentOrderIdVO,
-        supplier_id: ExternalSupplierIdVO,
+        supplier: ExternalSupplierReferenceVO,
         supplier_source_id: ExternalSupplierSourceIdVO,
         plan_ref: SupplierFulfillmentPlanRefVO,
         delivery_address: SupplierDeliveryAddressVO,
@@ -142,7 +144,7 @@ class SupplierFulfillmentOrder:
         """Восстанавливает заказ и сохранённый ответ поставщика."""
         order = cls(
             identifier,
-            supplier_id,
+            supplier,
             supplier_source_id,
             plan_ref,
             delivery_address,
@@ -181,7 +183,7 @@ class SupplierFulfillmentOrder:
         return SupplierFulfillmentDraftSnapshot(
             self.id,
             self.version,
-            self.supplier_id,
+            self.supplier,
             self.plan_ref,
             self.created_at,
             self._allocation_snapshots(),
@@ -217,7 +219,7 @@ class SupplierFulfillmentOrder:
         if (
             assignment.order_id != self.id
             or assignment.order_version != self.version
-            or assignment.supplier_id != self.supplier_id
+            or assignment.supplier != self.supplier
             or assignment.basis.plan_ref.plan_id != self.plan_ref.plan_id
             or assignment.source_plan_version != self.plan_ref.plan_version
             or set(assignment.basis.allocations) != set(self._allocation_snapshots())
@@ -364,7 +366,7 @@ class SupplierFulfillmentOrder:
         return SupplierFulfillmentRejectionSnapshot(
             self.id,
             self.version,
-            self.supplier_id,
+            self.supplier,
             self.plan_ref,
             self.requested_at,
             self.rejected_at,
@@ -467,7 +469,7 @@ class SupplierFulfillmentOrder:
         return SupplierFulfillmentConfirmationSnapshot(
             self.id,
             _CONFIRMATION_VERSION,
-            self.supplier_id,
+            self.supplier,
             self.plan_ref,
             self.requested_at,
             self.confirmed_at,
@@ -525,7 +527,7 @@ class SupplierFulfillmentOrder:
         """Проверяет матрицу статуса и дат, уникальность строк и распределений."""
         if (
             not isinstance(self.id, SupplierFulfillmentOrderIdVO)
-            or not isinstance(self.supplier_id, ExternalSupplierIdVO)
+            or not isinstance(self.supplier, ExternalSupplierReferenceVO)
             or not isinstance(self.supplier_source_id, ExternalSupplierSourceIdVO)
             or not isinstance(self.plan_ref, SupplierFulfillmentPlanRefVO)
             or not isinstance(self.delivery_address, SupplierDeliveryAddressVO)

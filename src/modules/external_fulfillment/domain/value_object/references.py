@@ -2,7 +2,7 @@ from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 
 
 class ExternalSupplierIdVO(EntityIdVO):
-    """Ссылка внешнего исполнения на поставщика."""
+    """UUID контрагента внутри локальной составной ссылки внешнего исполнения."""
 
 
 class ExternalSupplierSourceIdVO(EntityIdVO):

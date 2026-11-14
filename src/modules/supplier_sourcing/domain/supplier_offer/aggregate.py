@@ -1,3 +1,6 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Self
@@ -43,7 +46,6 @@ from src.modules.supplier_sourcing.domain.value_object.inventory_item_id import 
 from src.modules.supplier_sourcing.domain.value_object.lead_time import (
     SupplierLeadTimeVO,
 )
-from src.modules.supplier_sourcing.domain.value_object.supplier_id import SupplierIdVO
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +53,7 @@ class SupplierOffer:
     """Связывает внешний SKU с товаром и фиксирует текущие условия закупки."""
 
     id: SupplierOfferIdVO
-    supplier_id: SupplierIdVO
+    supplier: SupplierReferenceVO
     inventory_item_id: SupplierInventoryItemIdVO
     supplier_sku: SupplierSkuVO
     base_uom: SupplierOfferUomCodeVO
@@ -69,7 +71,7 @@ class SupplierOffer:
         cls,
         *,
         identifier: SupplierOfferIdVO,
-        supplier_id: SupplierIdVO,
+        supplier: SupplierReferenceVO,
         item: SupplierOfferItemSnapshot,
         supplier_sku: SupplierSkuVO,
         purchase_price: MoneyVO,
@@ -91,14 +93,14 @@ class SupplierOffer:
                     "Нужен снимок идентичности источника."
                 )
             source.ensure_valid()
-            if source.supplier_id != supplier_id:
+            if source.supplier != supplier:
                 raise SupplierOfferSourceMismatchError(
                     "Источник предложения должен принадлежать тому же поставщику."
                 )
             source_id = source.id
         return cls.restore(
             identifier=identifier,
-            supplier_id=supplier_id,
+            supplier=supplier,
             inventory_item_id=item.inventory_item_id,
             supplier_sku=supplier_sku,
             base_uom=item.base_uom,
@@ -117,7 +119,7 @@ class SupplierOffer:
         cls,
         *,
         identifier: SupplierOfferIdVO,
-        supplier_id: SupplierIdVO,
+        supplier: SupplierReferenceVO,
         inventory_item_id: SupplierInventoryItemIdVO,
         supplier_sku: SupplierSkuVO,
         base_uom: SupplierOfferUomCodeVO,
@@ -133,7 +135,7 @@ class SupplierOffer:
         """Восстанавливает сохранённое предложение по его собственным полям."""
         offer = cls(
             id=identifier,
-            supplier_id=supplier_id,
+            supplier=supplier,
             inventory_item_id=inventory_item_id,
             supplier_sku=supplier_sku,
             base_uom=base_uom,
@@ -153,7 +155,7 @@ class SupplierOffer:
         """Возвращает контекст проверки наблюдений наличия предложения."""
         self._validate()
         return SupplierOfferAvailabilitySnapshot(
-            self.id, self.supplier_id, self.source_id, self.base_uom
+            self.id, self.supplier, self.source_id, self.base_uom
         )
 
     def change_purchase_price(self, purchase_price: MoneyVO) -> Self:
@@ -216,7 +218,7 @@ class SupplierOffer:
         """Проверяет типы собственных полей, цену, приоритет и активность."""
         if (
             not isinstance(self.id, SupplierOfferIdVO)
-            or not isinstance(self.supplier_id, SupplierIdVO)
+            or not isinstance(self.supplier, SupplierReferenceVO)
             or not isinstance(self.inventory_item_id, SupplierInventoryItemIdVO)
             or not isinstance(self.supplier_sku, SupplierSkuVO)
             or not isinstance(self.base_uom, SupplierOfferUomCodeVO)

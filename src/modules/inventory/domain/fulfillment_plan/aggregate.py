@@ -818,7 +818,7 @@ class FulfillmentPlan:
         confirmation = snapshot.confirmation
         if (
             snapshot.plan_id != self.id
-            or snapshot.supplier_id != assignment.supplier_id
+            or snapshot.supplier != assignment.supplier
             or snapshot.source_plan_version != assignment.source_plan_version
             or confirmation.order_version != assignment.order_version + 2
             or set(snapshot.lines) != set(assignment.lines)
@@ -933,7 +933,7 @@ class FulfillmentPlan:
         rejection = snapshot.rejection
         if (
             snapshot.plan_id != self.id
-            or snapshot.supplier_id != assignment.supplier_id
+            or snapshot.supplier != assignment.supplier
             or snapshot.source_plan_version != assignment.source_plan_version
             or rejection.order_version != assignment.order_version + 2
             or set(snapshot.lines) != set(assignment.lines)
@@ -991,7 +991,7 @@ class FulfillmentPlan:
             self.updated_at,
             assignment.order_id,
             assignment.order_version,
-            assignment.supplier_id,
+            assignment.supplier,
             assignment.source_plan_version,
             assignment.assigned_at,
             tuple(lines),
@@ -1318,9 +1318,13 @@ class FulfillmentPlan:
             supplier_confirmation = allocation.supplier_confirmation
             supplier_rejection = allocation.supplier_rejection
             if supplier_assignment is not None:
+                if not isinstance(allocation.source, SupplierDropshipSourceRefVO):
+                    raise FulfillmentSupplierOrderAssignmentError(
+                        "Внешний заказ требует источник поставщика."
+                    )
                 group = (
                     allocation.source.supplier_source_id,
-                    supplier_assignment.supplier_id,
+                    supplier_assignment.supplier,
                     supplier_assignment.order_version,
                     supplier_assignment.source_plan_version,
                     supplier_assignment.assigned_at,
@@ -1398,7 +1402,10 @@ class FulfillmentPlan:
             ids.add(allocation.id)
             if allocation.status is not FulfillmentAllocationStatus.CANCELLED:
                 pairs.add(pair)
-            elif not created <= allocation.cancelled_at <= updated:
+            elif (
+                allocation.cancelled_at is None
+                or not created <= allocation.cancelled_at <= updated
+            ):
                 raise FulfillmentPlanTimeError(
                     "Отмена распределения должна находиться внутри истории плана."
                 )
@@ -1436,6 +1443,10 @@ class FulfillmentPlan:
                 historical_reservations.add(identifier)
             assignment = allocation.shipment_assignment
             if assignment is not None:
+                if not isinstance(allocation.source, FulfillmentSourceRefVO):
+                    raise FulfillmentShipmentAssignmentConflictError(
+                        "Отправка требует складской источник."
+                    )
                 scope = (
                     assignment.shipment_id,
                     assignment.shipment_version,
@@ -1465,6 +1476,10 @@ class FulfillmentPlan:
                 ):
                     raise FulfillmentPlanTimeError(
                         "Контрольная точка должна быть внутри истории плана с более ранней версией основания."
+                    )
+                if not isinstance(allocation.source, FulfillmentSourceRefVO):
+                    raise FulfillmentShipmentProgressMismatchError(
+                        "Прогресс отправки требует складской источник."
                     )
                 warehouse_id = allocation.source.warehouse_id
                 shipment_scope = (

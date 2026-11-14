@@ -1,3 +1,6 @@
+from src.modules.external_fulfillment.domain.value_object.supplier_reference import (
+    ExternalSupplierReferenceVO,
+)
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -24,9 +27,6 @@ from src.modules.external_fulfillment.domain.value_object.plan_ref import (
 from src.modules.external_fulfillment.domain.value_object.quantity_terms import (
     SupplierFulfillmentQuantityTermsVO,
 )
-from src.modules.external_fulfillment.domain.value_object.references import (
-    ExternalSupplierIdVO,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +35,7 @@ class SupplierFulfillmentDraftSnapshot:
 
     order_id: SupplierFulfillmentOrderIdVO
     order_version: int
-    supplier_id: ExternalSupplierIdVO
+    supplier: ExternalSupplierReferenceVO
     plan_ref: SupplierFulfillmentPlanRefVO
     created_at: datetime
     allocations: tuple[SupplierFulfillmentAllocationSnapshot, ...]
@@ -48,7 +48,7 @@ class SupplierFulfillmentAssignmentSnapshot:
 
     order_id: SupplierFulfillmentOrderIdVO
     order_version: int
-    supplier_id: ExternalSupplierIdVO
+    supplier: ExternalSupplierReferenceVO
     source_plan_version: int
     assigned_at: datetime
     basis: SupplierFulfillmentPlanBasisSnapshot
@@ -61,7 +61,7 @@ class SupplierFulfillmentAssignmentSnapshot:
         """Проверяет версии, время и типизированное полное основание закрепления."""
         if (
             not isinstance(self.order_id, SupplierFulfillmentOrderIdVO)
-            or not isinstance(self.supplier_id, ExternalSupplierIdVO)
+            or not isinstance(self.supplier, ExternalSupplierReferenceVO)
             or type(self.order_version) is not int
             or self.order_version < 0
             or type(self.source_plan_version) is not int

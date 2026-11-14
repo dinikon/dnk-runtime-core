@@ -1,3 +1,10 @@
+from src.modules.supplier_sourcing.domain.value_object.supplier_reference import (
+    SupplierReferenceVO,
+)
+from src.modules.inventory.domain.fulfillment_plan.value_object.supplier_reference import (
+    FulfillmentSupplierReferenceVO,
+)
+
 """Полная отправка подтверждённого заказа и регистрация исполнения в плане."""
 
 import unittest
@@ -414,7 +421,10 @@ class SupplierFulfillmentShipmentDomainTests(unittest.TestCase):
             replace(
                 snapshot,
                 confirmation=replace(
-                    confirmation, supplier_id=FulfillmentSupplierIdVO(uuid4())
+                    confirmation,
+                    supplier=FulfillmentSupplierReferenceVO.from_value(
+                        "crm.company", uuid4()
+                    ),
                 ),
             ),
             replace(

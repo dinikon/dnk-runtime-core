@@ -137,13 +137,13 @@ class FulfillmentSupplierOrderAssignmentPolicy:
             if previous is not None and (
                 previous.order_id,
                 previous.line_id,
-                previous.supplier_id,
+                previous.supplier,
                 previous.order_version,
                 previous.source_plan_version,
             ) != (
                 draft.order_id,
                 line.line_id,
-                draft.supplier_id,
+                draft.supplier,
                 draft.order_version,
                 draft.source_plan_version,
             ):
@@ -151,7 +151,7 @@ class FulfillmentSupplierOrderAssignmentPolicy:
                     "Распределение уже закреплено за другой строкой или внешним заказом."
                 )
             option = options[basis.source]
-            if option.source_supplier_id != draft.supplier_id:
+            if option.source_supplier != draft.supplier:
                 raise FulfillmentSupplierOrderAssignmentError(
                     "Источник должен принадлежать поставщику черновика."
                 )
@@ -162,7 +162,7 @@ class FulfillmentSupplierOrderAssignmentPolicy:
                 or FulfillmentSupplierOrderAssignmentRefVO(
                     draft.order_id,
                     line.line_id,
-                    draft.supplier_id,
+                    draft.supplier,
                     draft.order_version,
                     draft.source_plan_version,
                     as_of,

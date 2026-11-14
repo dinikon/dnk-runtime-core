@@ -1,3 +1,7 @@
+from src.modules.crm.application.counterparty_reference.dto import CounterpartyModelKey
+from src.modules.crm.application.counterparty_reference.source_usage import (
+    CounterpartySourceUsagePort,
+)
 from src.modules.crm.application.contact.command.delete_contact.command import (
     DeleteContactCommand,
 )
@@ -10,14 +14,23 @@ class DeleteContactHandler:
     """Удаляет найденный агрегат в транзакции внешнего UoW."""
 
     def __init__(
-        self, repository: ContactRepositoryProtocol, points: ContactPointsPort
+        self,
+        repository: ContactRepositoryProtocol,
+        points: ContactPointsPort,
+        sources: CounterpartySourceUsagePort,
     ) -> None:
         self._repository = repository
         self._points = points
+        self._sources = sources
 
     async def execute(self, command: DeleteContactCommand) -> None:
         contact = await self._repository.get_for_update(command.contact_id)
         if contact is None:
             raise ContactNotFoundError("Contact not found.")
+        contact.ensure_can_delete(
+            used_by_supplier_sources=await self._sources.is_used(
+                CounterpartyModelKey.CONTACT, contact.id.uuid
+            )
+        )
         await self._points.remove(command.tenant_id, command.contact_id)
         await self._repository.delete(contact)

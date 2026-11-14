@@ -3860,7 +3860,8 @@ ValuationPosting ссылается на StockPosting, но не владеет 
 
 Ответственность: настройки внешних источников, коммерческие предложения,
 сопоставление SKU и последнее заявленное наличие поставщика.
-Поставщик остаётся контрагентом CRM / Parties, связанным по supplier_id.
+Поставщик остаётся компанией или контактом CRM / Parties, связанным составной
+ссылкой `(supplier_model_key, supplier_id)`.
 Его карточка не дублируется в новом модуле.
 
 #### Граница физического запаса и внешнего наличия
@@ -3883,7 +3884,7 @@ StockPosition, Stock Ledger или AvailabilityPool собственных ре�
 ```text
 SupplierSource
 ├── id
-├── supplier_id
+├── supplier [SupplierReferenceVO: model_key + identifier]
 ├── name
 ├── external_warehouse_code?
 ├── fulfillment_modes
@@ -3907,8 +3908,8 @@ SupplierSource
 
 - Неизменяемая карточка содержит все поля источника из схемы выше, кроме
   `SourceDeliveryRule`, который относится к отдельному срезу региональных правил.
-  `SupplierIdVO` представляет ссылку на контрагента. Преобразование ID компании и
-  проверка существования контрагента относятся к будущему Application.
+  `SupplierReferenceVO` представляет составную ссылку на компанию либо контакт.
+  Application проверяет полную пару через публичный контракт CRM.
 - `create()` создаёт активный источник, `restore()` проверяет собственные
   поля и сохраняет активность. Доменные методы меняют название, внешний код,
   срок, набор режимов и настройки актуальности. `activate()` и `deactivate()`
@@ -3923,12 +3924,24 @@ SupplierSource
 Пример двух источников и контракты описаны в
 [документации Supplier Sourcing](../modules/supplier_sourcing.md).
 
+Срез полноценного справочника реализован: создание, список, карточка, PUT/PATCH
+на backend и во Vue-модуле `supplier-sourcing`. Не применявшаяся миграция
+`0024_supplier_sources` отредактирована: tenant-хранение использует составную
+ссылку `(supplier_model_key, supplier_id)`, CHECK типа и неуникальный индекс,
+без FK на CRM. Проверка компании/контакта и защита их удаления реализованы
+через публичные контракты, Domain-методы и согласованные блокировки строк CRM.
+Консоль поддерживает выбор типа контрагента, серверный поиск, фильтры/пагинацию
+и сохранность черновика. Тип и UUID неизменяемы после создания. Составная
+идентичность также передаётся в связанных Domain-контрактах SupplierOffer,
+External Fulfillment и Inventory.FulfillmentPlan. Импорт и пересчёт ранее
+сохранённых наблюдений не входят в срез.
+
 #### Aggregate: SupplierOffer
 
 ```text
 SupplierOffer
 ├── id
-├── supplier_id
+├── supplier [SupplierReferenceVO: model_key + identifier]
 ├── inventory_item_id
 ├── supplier_sku
 ├── base_uom
@@ -4105,7 +4118,7 @@ status_only_quantity_cap и поведение при STALE. Например, �
 ```text
 SupplierFulfillmentOrder
 ├── id
-├── supplier_id
+├── supplier [ExternalSupplierReferenceVO: model_key + identifier]
 ├── supplier_source_id
 ├── fulfillment_plan_id
 ├── external_order_id?
