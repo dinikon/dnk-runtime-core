@@ -80,7 +80,6 @@ def fact_filters(filters: StockAccountingFilters) -> tuple[ColumnElement[bool], 
         values.append(T.posted_at < filters.posted_to)
     line_filters: list[ColumnElement[bool]] = []
     for field, value in (
-        (EL.location_id, filters.location_id),
         (EL.inventory_item_id, filters.inventory_item_id),
         (EL.lot_id, filters.lot_id),
         (EL.serial_id, filters.serial_id),
@@ -88,6 +87,13 @@ def fact_filters(filters: StockAccountingFilters) -> tuple[ColumnElement[bool], 
     ):
         if value is not None:
             line_filters.append(field == value)
+    if filters.location_id is not None:
+        line_filters.append(
+            or_(
+                EL.location_id == filters.location_id,
+                EL.destination_location_id == filters.location_id,
+            )
+        )
     if filters.position_id is not None:
         line_filters.append(
             select(Link.execution_line_id)

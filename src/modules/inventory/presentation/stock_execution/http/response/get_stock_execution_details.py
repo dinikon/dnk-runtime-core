@@ -32,6 +32,10 @@ class GetStockExecutionDetailsLineResponse(BaseModel):
     sku_at_receipt: str | None
     serial_number_at_receipt: str | None
     location_code_at_receipt: str | None
+    destination_location_id: UUID | None = None
+    destination_location_code: str | None = None
+    source_ledger_entry_id: UUID | None = None
+    destination_ledger_entry_id: UUID | None = None
 
 
 class GetStockExecutionDetailsEntryResponse(BaseModel):

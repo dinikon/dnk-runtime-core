@@ -20,9 +20,11 @@ export function accountingTarget(target: StockAccountingTarget): {
   const names = {
     position: "inventory-stock-position",
     document:
-      target.operationType === "ISSUE"
-        ? "inventory-issue-document"
-        : "inventory-receipt-document",
+      target.operationType === "INTERNAL_MOVE"
+        ? "inventory-internal-move-document"
+        : target.operationType === "ISSUE"
+          ? "inventory-issue-document"
+          : "inventory-receipt-document",
     execution: "inventory-stock-execution",
     posting: "inventory-stock-posting",
     item: "inventory-item-edit",

@@ -163,6 +163,10 @@ export interface GetStockExecutionDetailsLine {
   skuAtReceipt: string | null;
   serialNumberAtReceipt: string | null;
   locationCodeAtReceipt: string | null;
+  destinationLocationId: string | null;
+  destinationLocationCode: string | null;
+  sourceLedgerEntryId: string | null;
+  destinationLedgerEntryId: string | null;
 }
 export interface GetStockExecutionDetailsEntry {
   id: string;
@@ -227,6 +231,10 @@ export interface GetStockPostingDetailsLine {
   skuAtReceipt: string | null;
   serialNumberAtReceipt: string | null;
   locationCodeAtReceipt: string | null;
+  destinationLocationId: string | null;
+  destinationLocationCode: string | null;
+  sourceLedgerEntryId: string | null;
+  destinationLedgerEntryId: string | null;
 }
 export interface GetStockPostingDetailsEntry {
   id: string;

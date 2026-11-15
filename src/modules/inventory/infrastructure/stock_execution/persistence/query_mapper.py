@@ -73,6 +73,26 @@ class StockExecutionQueryMapper:
                     factor_to_base=line.factor_to_base,
                     location_id=line.location_id,
                     location_code=location.code,
+                    destination_location_id=line.destination_location_id,
+                    destination_location_code=destination.code if destination else None,
+                    source_ledger_entry_id=next(
+                        (
+                            link.ledger_entry_id
+                            for link in value.links
+                            if link.execution_line_id == line.id
+                            and link.role == "SOURCE"
+                        ),
+                        None,
+                    ),
+                    destination_ledger_entry_id=next(
+                        (
+                            link.ledger_entry_id
+                            for link in value.links
+                            if link.execution_line_id == line.id
+                            and link.role == "DESTINATION"
+                        ),
+                        None,
+                    ),
                     lot_id=line.lot_id,
                     lot_number=lot.number if lot else None,
                     serial_id=line.serial_id,
@@ -97,7 +117,7 @@ class StockExecutionQueryMapper:
                         else None
                     ),
                 )
-                for line, item, location, lot, serial, plan in value.lines
+                for line, item, location, lot, serial, plan, destination in value.lines
             ),
             ledger=tuple(
                 GetStockExecutionDetailsEntryDTO(

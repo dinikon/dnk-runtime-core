@@ -260,6 +260,10 @@ export function getStockExecutionDetailsLineFromDto(
     skuAtReceipt: dto.sku_at_receipt,
     serialNumberAtReceipt: dto.serial_number_at_receipt,
     locationCodeAtReceipt: dto.location_code_at_receipt,
+    destinationLocationId: dto.destination_location_id,
+    destinationLocationCode: dto.destination_location_code,
+    sourceLedgerEntryId: dto.source_ledger_entry_id,
+    destinationLedgerEntryId: dto.destination_ledger_entry_id,
   };
 }
 export function getStockExecutionDetailsEntryFromDto(
@@ -344,6 +348,10 @@ export function getStockPostingDetailsLineFromDto(
     skuAtReceipt: dto.sku_at_receipt,
     serialNumberAtReceipt: dto.serial_number_at_receipt,
     locationCodeAtReceipt: dto.location_code_at_receipt,
+    destinationLocationId: dto.destination_location_id,
+    destinationLocationCode: dto.destination_location_code,
+    sourceLedgerEntryId: dto.source_ledger_entry_id,
+    destinationLedgerEntryId: dto.destination_ledger_entry_id,
   };
 }
 export function getStockPostingDetailsEntryFromDto(

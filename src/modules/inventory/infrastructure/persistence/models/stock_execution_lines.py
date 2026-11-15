@@ -11,6 +11,7 @@ class StockExecutionLineModel(TenantBase):
 
     __tablename__ = "stock_execution_lines"
     __table_args__ = (
+        sa.Index("ix_execution_lines_destination_location", "destination_location_id"),
         sa.Index("ix_execution_lines_item", "inventory_item_id", "execution_id"),
         sa.PrimaryKeyConstraint("id", name="pk_stock_execution_lines"),
         sa.ForeignKeyConstraint(
@@ -35,6 +36,12 @@ class StockExecutionLineModel(TenantBase):
             ["location_id"],
             ["tenant.stock_locations.id"],
             name="fk_stock_execution_lines_location",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["destination_location_id"],
+            ["tenant.stock_locations.id"],
+            name="fk_execution_lines_destination_location",
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
@@ -71,3 +78,7 @@ class StockExecutionLineModel(TenantBase):
     lot_id: Mapped[UUID | None] = mapped_column(StringUUID, nullable=True)
     serial_id: Mapped[UUID | None] = mapped_column(StringUUID, nullable=True)
     stock_status: Mapped[str] = mapped_column(sa.Text(), nullable=False)
+
+    destination_location_id: Mapped[UUID | None] = mapped_column(
+        StringUUID, nullable=True
+    )

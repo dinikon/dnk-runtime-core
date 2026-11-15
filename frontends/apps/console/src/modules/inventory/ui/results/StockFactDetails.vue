@@ -113,7 +113,11 @@ const trackingColumns = ref({ lot: false, serial: false });
                 {{ line.quantity }} {{ line.baseUom }}
               </td>
               <td class="p-2">
-                {{ line.locationCode }} ·
+                {{ line.locationCode
+                }}<span v-if="line.destinationLocationCode">
+                  → {{ line.destinationLocationCode }}</span
+                >
+                ·
                 {{ stockStatusLabel(line.stockStatus) }}
               </td>
               <td v-if="trackingColumns.lot" class="p-2">
@@ -155,6 +159,12 @@ const trackingColumns = ref({ lot: false, serial: false });
                 >
               </td>
               <td class="p-2 text-xs">
+                <span
+                  v-if="line.destinationLocationCode"
+                  class="block break-all"
+                  >Расход: {{ line.sourceLedgerEntryId }}<br />Приход:
+                  {{ line.destinationLedgerEntryId }}</span
+                >
                 <span
                   class="block max-w-44 break-all"
                   v-for="id in line.ledgerEntryIds"

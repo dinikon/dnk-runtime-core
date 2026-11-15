@@ -17,6 +17,9 @@ import {
   stockReadLocation,
   type StockAccountingTarget,
 } from "../model/stock-accounting-navigation";
+import { useInternalMoveQuery } from "../model/use-internal-move-query";
+import { useInternalMoveExecutionResult } from "../model/use-internal-move-execution-result";
+import InternalMoveExecutionResult from "../ui/results/InternalMoveExecutionResult.vue";
 import { useIssueQuery } from "../model/use-issue-query";
 import { useReceiptQuery } from "../model/use-receipt-query";
 import { useIssueExecutionResult } from "../model/use-issue-execution-result";
@@ -99,8 +102,24 @@ const issueDocument = useIssueQuery(
   ),
   scope,
 );
+const internalMoveDocument = useInternalMoveQuery(
+  computed(() =>
+    fact.value?.operationType === "INTERNAL_MOVE" ? fact.value.documentId : "",
+  ),
+  scope,
+);
+const internalMoveResult = useInternalMoveExecutionResult(
+  computed(() =>
+    fact.value?.operationType === "INTERNAL_MOVE" ? fact.value.executionId : "",
+  ),
+  scope,
+);
 const currentDocument = computed(() =>
-  fact.value?.operationType === "ISSUE" ? issueDocument : receiptDocument,
+  fact.value?.operationType === "INTERNAL_MOVE"
+    ? internalMoveDocument
+    : fact.value?.operationType === "ISSUE"
+      ? issueDocument
+      : receiptDocument,
 );
 const canReceiveMore = computed(() => {
   const document = currentDocument.value.data.value;
@@ -134,12 +153,16 @@ function openMovements(): void {
       <h1 class="text-2xl font-semibold">
         {{
           kind === "execution"
-            ? fact?.operationType === "ISSUE"
-              ? "Исполнение расхода"
-              : "Исполнение поступления"
-            : fact?.operationType === "ISSUE"
-              ? "Проводка расхода"
-              : "Проводка поступления"
+            ? fact?.operationType === "INTERNAL_MOVE"
+              ? "Исполнение перемещения"
+              : fact?.operationType === "ISSUE"
+                ? "Исполнение расхода"
+                : "Исполнение поступления"
+            : fact?.operationType === "INTERNAL_MOVE"
+              ? "Проводка перемещения"
+              : fact?.operationType === "ISSUE"
+                ? "Проводка расхода"
+                : "Проводка поступления"
         }}
       </h1>
       <div class="flex flex-wrap gap-2">
@@ -149,16 +172,20 @@ function openMovements(): void {
           @click="
             router.push({
               name:
-                fact.operationType === 'ISSUE'
-                  ? 'inventory-issue-execute'
-                  : 'inventory-receipt-receive',
+                fact.operationType === 'INTERNAL_MOVE'
+                  ? 'inventory-internal-move-execute'
+                  : fact.operationType === 'ISSUE'
+                    ? 'inventory-issue-execute'
+                    : 'inventory-receipt-receive',
               params: { documentId: fact.documentId },
             })
           "
           >{{
-            fact.operationType === "ISSUE"
-              ? "Выдать остаток"
-              : "Принять остаток"
+            fact.operationType === "INTERNAL_MOVE"
+              ? "Переместить остаток"
+              : fact.operationType === "ISSUE"
+                ? "Выдать остаток"
+                : "Принять остаток"
           }}</Button
         >
         <Button
@@ -166,13 +193,19 @@ function openMovements(): void {
           @click="
             router.push({
               name:
-                fact?.operationType === 'ISSUE'
-                  ? 'inventory-issue-documents'
-                  : 'inventory-receipt-documents',
+                fact?.operationType === 'INTERNAL_MOVE'
+                  ? 'inventory-internal-move-documents'
+                  : fact?.operationType === 'ISSUE'
+                    ? 'inventory-issue-documents'
+                    : 'inventory-receipt-documents',
             })
           "
           >{{
-            fact?.operationType === "ISSUE" ? "К расходам" : "К поступлениям"
+            fact?.operationType === "INTERNAL_MOVE"
+              ? "К перемещениям"
+              : fact?.operationType === "ISSUE"
+                ? "К расходам"
+                : "К поступлениям"
           }}</Button
         ><Button
           variant="outline"
@@ -217,6 +250,36 @@ function openMovements(): void {
       @navigate="navigateAccounting"
       @movements="openMovements"
     />
+    <InternalMoveExecutionResult
+      v-if="
+        fact?.operationType === 'INTERNAL_MOVE' &&
+        internalMoveResult.data.value &&
+        scope.ready.value
+      "
+      :result="internalMoveResult.data.value"
+    />
+    <p
+      v-if="
+        fact?.operationType === 'INTERNAL_MOVE' &&
+        internalMoveResult.isPending.value
+      "
+      role="status"
+    >
+      Загрузка исходного результата перемещения…
+    </p>
+    <p
+      v-if="
+        fact?.operationType === 'INTERNAL_MOVE' &&
+        internalMoveResult.error.value
+      "
+      role="alert"
+      class="text-sm text-destructive"
+    >
+      {{ internalMoveResult.error.value.message
+      }}<Button variant="outline" @click="internalMoveResult.refetch()"
+        >Повторить чтение исходного результата</Button
+      >
+    </p>
     <IssueExecutionResult
       v-if="
         fact?.operationType === 'ISSUE' &&

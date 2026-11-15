@@ -1,5 +1,6 @@
 from sqlalchemy import select, Nullable
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from src.modules.inventory.infrastructure.persistence.models.stock_location import (
     StockLocationModel as L,
 )
@@ -64,7 +65,7 @@ class StockFactProjection:
     posting: T | None
     document: D
     warehouse: W
-    lines: Sequence[tuple[EL, I, L, Lot | None, S | None, DL]]
+    lines: Sequence[tuple[EL, I, L, Lot | None, S | None, DL, L | None]]
     entries: Sequence[Entry]
     links: Sequence[Link]
     costs: Sequence[Cost]
@@ -95,10 +96,17 @@ class StockFactProjectionReader:
         if header is None:
             return None
         execution, posted, document, warehouse = header
+        destination_location = aliased(L)
         line_statement = (
-            select(EL, I, L, Nullable(Lot), Nullable(S), DL)
+            select(
+                EL, I, L, Nullable(Lot), Nullable(S), DL, Nullable(destination_location)
+            )
             .join(I, I.id == EL.inventory_item_id)
             .join(L, L.id == EL.location_id)
+            .outerjoin(
+                destination_location,
+                destination_location.id == EL.destination_location_id,
+            )
             .outerjoin(Lot, Lot.id == EL.lot_id)
             .outerjoin(S, S.id == EL.serial_id)
             .join(DL, DL.id == EL.document_line_id)
@@ -150,8 +158,8 @@ class StockFactProjectionReader:
             document,
             warehouse,
             tuple(
-                (line, item, location, lot, serial, plan)
-                for line, item, location, lot, serial, plan in lines
+                (line, item, location, lot, serial, plan, destination)
+                for line, item, location, lot, serial, plan, destination in lines
             ),
             entries,
             links,

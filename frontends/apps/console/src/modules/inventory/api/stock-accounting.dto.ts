@@ -163,6 +163,10 @@ export interface GetStockExecutionDetailsLineDTO {
   sku_at_receipt: string | null;
   serial_number_at_receipt: string | null;
   location_code_at_receipt: string | null;
+  destination_location_id: string | null;
+  destination_location_code: string | null;
+  source_ledger_entry_id: string | null;
+  destination_ledger_entry_id: string | null;
 }
 export interface GetStockExecutionDetailsEntryDTO {
   id: string;
@@ -227,6 +231,10 @@ export interface GetStockPostingDetailsLineDTO {
   sku_at_receipt: string | null;
   serial_number_at_receipt: string | null;
   location_code_at_receipt: string | null;
+  destination_location_id: string | null;
+  destination_location_code: string | null;
+  source_ledger_entry_id: string | null;
+  destination_ledger_entry_id: string | null;
 }
 export interface GetStockPostingDetailsEntryDTO {
   id: string;

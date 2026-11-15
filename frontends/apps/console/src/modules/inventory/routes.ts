@@ -2,6 +2,26 @@ import type { RouteRecordRaw } from "vue-router";
 
 export const inventoryRoutes: RouteRecordRaw[] = [
   {
+    path: "inventory/stock-documents/internal-moves",
+    name: "inventory-internal-move-documents",
+    component: () => import("./pages/InternalMoveDocumentsPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/internal-moves/new",
+    name: "inventory-internal-move-create",
+    component: () => import("./pages/CreateInternalMoveDraftPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/internal-moves/:documentId/move",
+    name: "inventory-internal-move-execute",
+    component: () => import("./pages/InternalMoveStockDocumentPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/internal-moves/:documentId",
+    name: "inventory-internal-move-document",
+    component: () => import("./pages/InternalMoveDocumentPage.vue"),
+  },
+  {
     path: "inventory/stock-documents/issues",
     name: "inventory-issue-documents",
     component: () => import("./pages/IssueDocumentsPage.vue"),

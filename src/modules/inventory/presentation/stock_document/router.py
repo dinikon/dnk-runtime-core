@@ -63,6 +63,11 @@ from src.modules.inventory.presentation.stock_document.issue_router import (
     router as issue_router,
 )
 
+from src.modules.inventory.presentation.stock_document.internal_move_router import (
+    router as internal_move_router,
+)
+
+router.include_router(internal_move_router)
 router.include_router(issue_router)
 
 router.add_api_route(

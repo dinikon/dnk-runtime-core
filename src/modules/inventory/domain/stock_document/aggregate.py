@@ -466,6 +466,17 @@ class StockDocument:
                 "Действие доступно ручному документу расхода."
             )
 
+    def ensure_manual_internal_move(self) -> None:
+        """Ограничивает сценарий ручным перемещением без производного основания."""
+        self._validate()
+        if (
+            self.operation_type is not StockOperationType.INTERNAL_MOVE
+            or self.source is not None
+        ):
+            raise InvalidStockDocumentContextError(
+                "Действие доступно ручному документу внутреннего перемещения."
+            )
+
     def ensure_can_edit_lines(self) -> None:
         """Проверяет право изменить состав, даже если сохранён пустой или прежний план."""
         self._ensure_draft()

@@ -62,3 +62,17 @@ router.add_api_route(
     methods=["GET"],
     response_model=GetIssueExecutionResultResponse,
 )
+
+from src.modules.inventory.presentation.stock_execution.http.controller.get_internal_move_execution_result import (
+    get_internal_move_execution_result,
+)
+from src.modules.inventory.presentation.stock_execution.http.response.get_internal_move_execution_result import (
+    GetInternalMoveExecutionResultResponse,
+)
+
+router.add_api_route(
+    "/{identifier}/internal-move-result",
+    get_internal_move_execution_result,
+    methods=["GET"],
+    response_model=GetInternalMoveExecutionResultResponse,
+)

@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_execution.value_object.internal_move_route import (
+    InternalMoveExecutionRouteVO,
+)
 from src.modules.inventory.domain.stock_execution.value_object.issue_route import (
     IssueExecutionRouteVO,
 )
@@ -76,10 +79,11 @@ class StockExecutionMapper:
 
     @staticmethod
     def to_values(execution: StockExecution) -> dict[str, Any]:
-        """Хранит поддержанные RECEIPT и ISSUE без потери иных маршрутов."""
+        """Хранит RECEIPT, ISSUE и INTERNAL_MOVE без потери сторон маршрута."""
         if execution.operation_type not in (
             StockOperationType.RECEIPT,
             StockOperationType.ISSUE,
+            StockOperationType.INTERNAL_MOVE,
         ):
             raise NotImplementedError(
                 "Хранение иных маршрутов добавляется отдельным срезом."
@@ -103,6 +107,8 @@ class StockExecutionMapper:
                 dims = line.route.destination
             elif isinstance(line.route, IssueExecutionRouteVO):
                 dims = line.route.source
+            elif isinstance(line.route, InternalMoveExecutionRouteVO):
+                dims = line.route.source
             else:
                 raise NotImplementedError("Хранение маршрута не реализовано.")
             values.append(
@@ -118,6 +124,11 @@ class StockExecutionMapper:
                     source_uom=line.conversion.uom.value,
                     factor_to_base=line.conversion.factor_to_base,
                     location_id=dims.location_id.uuid,
+                    destination_location_id=(
+                        line.route.destination.location_id.uuid
+                        if isinstance(line.route, InternalMoveExecutionRouteVO)
+                        else None
+                    ),
                     lot_id=dims.lot_id.uuid if dims.lot_id else None,
                     serial_id=dims.serial_id.uuid if dims.serial_id else None,
                     stock_status=dims.stock_status.value,
@@ -162,7 +173,7 @@ class StockExecutionMapper:
         allocations: Sequence[ReceiptCostAllocationModel],
     ) -> StockExecution:
         """Восстанавливает полный факт без текущих дат, цен и справочников."""
-        if model.operation_type not in ("RECEIPT", "ISSUE"):
+        if model.operation_type not in ("RECEIPT", "ISSUE", "INTERNAL_MOVE"):
             raise NotImplementedError(
                 "Восстановление маршрута исполнения не реализовано."
             )
@@ -186,20 +197,7 @@ class StockExecutionMapper:
                         UomCodeVO(line.source_uom),
                         line.factor_to_base,
                     ),
-                    route=(
-                        ReceiptExecutionRouteVO
-                        if model.operation_type == "RECEIPT"
-                        else IssueExecutionRouteVO
-                    )(
-                        StockDimensionsVO(
-                            InventoryItemIdVO(line.inventory_item_id),
-                            StockLocationIdVO(line.location_id),
-                            StockOwnerIdVO(model.owner_id),
-                            StockLotIdVO(line.lot_id) if line.lot_id else None,
-                            StockSerialIdVO(line.serial_id) if line.serial_id else None,
-                            StockStatus(line.stock_status),
-                        )
-                    ),
+                    route=StockExecutionMapper._route(model, line),
                 )
                 for line in lines
             ),
@@ -221,4 +219,31 @@ class StockExecutionMapper:
                 )
                 for c in costs
             ),
+        )
+
+    @staticmethod
+    def _route(
+        model: StockExecutionModel, line: StockExecutionLineModel
+    ) -> ReceiptExecutionRouteVO | IssueExecutionRouteVO | InternalMoveExecutionRouteVO:
+        """Восстанавливает сохранённый тип маршрута без текущего физического контекста."""
+        source = StockDimensionsVO(
+            InventoryItemIdVO(line.inventory_item_id),
+            StockLocationIdVO(line.location_id),
+            StockOwnerIdVO(model.owner_id),
+            StockLotIdVO(line.lot_id) if line.lot_id else None,
+            StockSerialIdVO(line.serial_id) if line.serial_id else None,
+            StockStatus(line.stock_status),
+        )
+        if model.operation_type == "INTERNAL_MOVE":
+            if line.destination_location_id is None:
+                raise RuntimeError(
+                    "Сохранённый маршрут перемещения не содержит назначения."
+                )
+            return InternalMoveExecutionRouteVO.to_location(
+                source, StockLocationIdVO(line.destination_location_id)
+            )
+        return (
+            ReceiptExecutionRouteVO(source)
+            if model.operation_type == "RECEIPT"
+            else IssueExecutionRouteVO(source)
         )
