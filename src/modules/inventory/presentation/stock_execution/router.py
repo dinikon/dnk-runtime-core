@@ -48,3 +48,17 @@ router.add_api_route(
     methods=["GET"],
     response_model=GetStockExecutionDetailsResponse,
 )
+
+from src.modules.inventory.presentation.stock_execution.http.controller.get_issue_execution_result import (
+    get_issue_execution_result,
+)
+from src.modules.inventory.presentation.stock_execution.http.response.get_issue_execution_result import (
+    GetIssueExecutionResultResponse,
+)
+
+router.add_api_route(
+    "/{identifier}/issue-result",
+    get_issue_execution_result,
+    methods=["GET"],
+    response_model=GetIssueExecutionResultResponse,
+)

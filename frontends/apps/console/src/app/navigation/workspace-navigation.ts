@@ -23,11 +23,24 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Склад",
       items: [
-        {title:"Остатки",url:"/inventory/stock-positions",icon:Warehouse},
-        {title:"Движения",url:"/inventory/stock-movements",icon:Warehouse},
+        {
+          title: "Остатки",
+          url: "/inventory/stock-positions",
+          icon: Warehouse,
+        },
+        {
+          title: "Движения",
+          url: "/inventory/stock-movements",
+          icon: Warehouse,
+        },
         {
           title: "Поступления",
           url: "/inventory/stock-documents",
+          icon: Warehouse,
+        },
+        {
+          title: "Расходы",
+          url: "/inventory/stock-documents/issues",
           icon: Warehouse,
         },
         { title: "Номенклатура", url: "/inventory/items", icon: Warehouse },

@@ -59,6 +59,12 @@ router.add_api_route(
     methods=["GET"],
     response_model=ListReceiptDocumentsResponse,
 )
+from src.modules.inventory.presentation.stock_document.issue_router import (
+    router as issue_router,
+)
+
+router.include_router(issue_router)
+
 router.add_api_route(
     "/{document_id}",
     get_receipt_document,

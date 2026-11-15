@@ -45,7 +45,11 @@ const emit = defineEmits<{ navigate: [target: StockAccountingTarget] }>();
             <Button
               variant="link"
               @click="
-                emit('navigate', { kind: 'document', id: item.documentId })
+                emit('navigate', {
+                  kind: 'document',
+                  id: item.documentId,
+                  operationType: item.operationType,
+                })
               "
               >Документ</Button
             ><span class="block text-xs">{{

@@ -40,7 +40,13 @@ const trackingColumns = ref({ lot: false, serial: false });
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
-          @click="emit('navigate', { kind: 'document', id: fact.documentId })"
+          @click="
+            emit('navigate', {
+              kind: 'document',
+              id: fact.documentId,
+              operationType: fact.operationType,
+            })
+          "
           >Документ</Button
         ><span>→</span
         ><Button

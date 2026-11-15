@@ -11,6 +11,7 @@ export interface StockAccountingTarget {
     | "serial";
   id: string;
   itemId?: string;
+  operationType?: string;
 }
 export function accountingTarget(target: StockAccountingTarget): {
   name: string;
@@ -18,7 +19,10 @@ export function accountingTarget(target: StockAccountingTarget): {
 } {
   const names = {
     position: "inventory-stock-position",
-    document: "inventory-receipt-document",
+    document:
+      target.operationType === "ISSUE"
+        ? "inventory-issue-document"
+        : "inventory-receipt-document",
     execution: "inventory-stock-execution",
     posting: "inventory-stock-posting",
     item: "inventory-item-edit",

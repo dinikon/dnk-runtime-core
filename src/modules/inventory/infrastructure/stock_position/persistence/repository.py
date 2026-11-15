@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_position.value_object.identifier import (
+    StockPositionIdVO,
+)
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +32,29 @@ class SqlAlchemyStockPositionRepository:
     def __init__(self, session: AsyncSession) -> None:
         """Получает единственную сессию внешнего UoW."""
         self._session = session
+
+    async def get(self, identifier: StockPositionIdVO) -> StockPosition | None:
+        """Читает только существующий источник, не создавая фиктивного остатка."""
+        statement = (
+            select(Model)
+            .where(Model.id == identifier.uuid)
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return StockPositionMapper.to_domain(model) if model is not None else None
+
+    async def get_for_update(
+        self, identifier: StockPositionIdVO
+    ) -> StockPosition | None:
+        """Повторно читает количество после ожидания блокировки источника."""
+        statement = (
+            select(Model)
+            .where(Model.id == identifier.uuid)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return StockPositionMapper.to_domain(model) if model is not None else None
 
     async def get_or_add_for_update(self, zero: StockPosition) -> StockPosition:
         """Атомарно создаёт отсутствующий ноль по NULLS NOT DISTINCT и перечитывает позицию."""

@@ -1,11 +1,55 @@
 import type { RouteRecordRaw } from "vue-router";
 
 export const inventoryRoutes: RouteRecordRaw[] = [
-  {path:"/inventory/stock-positions",name:"inventory-stock-positions",component:()=>import("./pages/StockAccountingPage.vue"),props:{kind:"positions"}},
-  {path:"/inventory/stock-movements",name:"inventory-stock-movements",component:()=>import("./pages/StockAccountingPage.vue"),props:{kind:"movements"}},
-  {path:"/inventory/stock-executions",name:"inventory-stock-executions",component:()=>import("./pages/StockAccountingPage.vue"),props:{kind:"executions"}},
-  {path:"/inventory/stock-postings",name:"inventory-stock-postings",component:()=>import("./pages/StockAccountingPage.vue"),props:{kind:"postings"}},
-  {path:"/inventory/stock-positions/:positionId",name:"inventory-stock-position",component:()=>import("./pages/StockPositionPage.vue")},
+  {
+    path: "inventory/stock-documents/issues",
+    name: "inventory-issue-documents",
+    component: () => import("./pages/IssueDocumentsPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/issues/new",
+    name: "inventory-issue-create",
+    component: () => import("./pages/CreateIssueDraftPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/issues/:documentId/issue",
+    name: "inventory-issue-execute",
+    component: () => import("./pages/IssueStockDocumentPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/issues/:documentId",
+    name: "inventory-issue-document",
+    component: () => import("./pages/IssueDocumentPage.vue"),
+  },
+  {
+    path: "/inventory/stock-positions",
+    name: "inventory-stock-positions",
+    component: () => import("./pages/StockAccountingPage.vue"),
+    props: { kind: "positions" },
+  },
+  {
+    path: "/inventory/stock-movements",
+    name: "inventory-stock-movements",
+    component: () => import("./pages/StockAccountingPage.vue"),
+    props: { kind: "movements" },
+  },
+  {
+    path: "/inventory/stock-executions",
+    name: "inventory-stock-executions",
+    component: () => import("./pages/StockAccountingPage.vue"),
+    props: { kind: "executions" },
+  },
+  {
+    path: "/inventory/stock-postings",
+    name: "inventory-stock-postings",
+    component: () => import("./pages/StockAccountingPage.vue"),
+    props: { kind: "postings" },
+  },
+  {
+    path: "/inventory/stock-positions/:positionId",
+    name: "inventory-stock-position",
+    component: () => import("./pages/StockPositionPage.vue"),
+  },
   {
     path: "/inventory/stock-documents/:documentId/receive",
     name: "inventory-receipt-receive",

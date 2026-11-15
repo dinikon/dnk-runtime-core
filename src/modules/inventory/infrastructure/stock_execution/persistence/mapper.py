@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_execution.value_object.issue_route import (
+    IssueExecutionRouteVO,
+)
 from src.modules.inventory.domain.stock_execution.value_object.receipt_cost_evidence_id import (
     ReceiptCostEvidenceIdVO,
 )
@@ -73,8 +76,11 @@ class StockExecutionMapper:
 
     @staticmethod
     def to_values(execution: StockExecution) -> dict[str, Any]:
-        """Ограничивает реализованное хранение поступлением без потери иных маршрутов."""
-        if execution.operation_type is not StockOperationType.RECEIPT:
+        """Хранит поддержанные RECEIPT и ISSUE без потери иных маршрутов."""
+        if execution.operation_type not in (
+            StockOperationType.RECEIPT,
+            StockOperationType.ISSUE,
+        ):
             raise NotImplementedError(
                 "Хранение иных маршрутов добавляется отдельным срезом."
             )
@@ -93,9 +99,12 @@ class StockExecutionMapper:
         """Сохраняет порядок, исходный пересчёт и фактические измерения без новых ID."""
         values = []
         for position, line in enumerate(execution.lines):
-            if not isinstance(line.route, ReceiptExecutionRouteVO):
-                raise NotImplementedError("Ожидался маршрут поступления.")
-            dims = line.route.destination
+            if isinstance(line.route, ReceiptExecutionRouteVO):
+                dims = line.route.destination
+            elif isinstance(line.route, IssueExecutionRouteVO):
+                dims = line.route.source
+            else:
+                raise NotImplementedError("Хранение маршрута не реализовано.")
             values.append(
                 dict(
                     id=line.id.uuid,
@@ -153,6 +162,10 @@ class StockExecutionMapper:
         allocations: Sequence[ReceiptCostAllocationModel],
     ) -> StockExecution:
         """Восстанавливает полный факт без текущих дат, цен и справочников."""
+        if model.operation_type not in ("RECEIPT", "ISSUE"):
+            raise NotImplementedError(
+                "Восстановление маршрута исполнения не реализовано."
+            )
         return StockExecution.restore(
             identifier=StockExecutionIdVO(model.id),
             document_id=StockDocumentIdVO(model.document_id),
@@ -173,7 +186,11 @@ class StockExecutionMapper:
                         UomCodeVO(line.source_uom),
                         line.factor_to_base,
                     ),
-                    route=ReceiptExecutionRouteVO(
+                    route=(
+                        ReceiptExecutionRouteVO
+                        if model.operation_type == "RECEIPT"
+                        else IssueExecutionRouteVO
+                    )(
                         StockDimensionsVO(
                             InventoryItemIdVO(line.inventory_item_id),
                             StockLocationIdVO(line.location_id),

@@ -455,6 +455,17 @@ class StockDocument:
                 "Действие доступно ручному документу поступления."
             )
 
+    def ensure_manual_issue(self) -> None:
+        """Ограничивает ручной сценарий расходм без производного основания."""
+        self._validate()
+        if (
+            self.operation_type is not StockOperationType.ISSUE
+            or self.source is not None
+        ):
+            raise InvalidStockDocumentContextError(
+                "Действие доступно ручному документу расхода."
+            )
+
     def ensure_can_edit_lines(self) -> None:
         """Проверяет право изменить состав, даже если сохранён пустой или прежний план."""
         self._ensure_draft()

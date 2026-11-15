@@ -17,7 +17,10 @@ import {
   stockReadLocation,
   type StockAccountingTarget,
 } from "../model/stock-accounting-navigation";
+import { useIssueQuery } from "../model/use-issue-query";
 import { useReceiptQuery } from "../model/use-receipt-query";
+import { useIssueExecutionResult } from "../model/use-issue-execution-result";
+import IssueExecutionResult from "../ui/results/IssueExecutionResult.vue";
 import StockFactDetails from "../ui/results/StockFactDetails.vue";
 import ReceiptPostingResult from "../ui/results/ReceiptPostingResult.vue";
 const props = defineProps<{ kind: "execution" | "posting" }>(),
@@ -78,15 +81,32 @@ const query = computed(() =>
   loading = computed(
     () => query.value.isPending.value && !!fact.value?.hasReceiptResult,
   );
-const currentDocument = useReceiptQuery(
-  computed(() => (fact.value?.hasReceiptResult ? fact.value.documentId : "")),
+const issueResult = useIssueExecutionResult(
+  computed(() =>
+    fact.value?.operationType === "ISSUE" ? fact.value.executionId : "",
+  ),
   scope,
 );
+const receiptDocument = useReceiptQuery(
+  computed(() =>
+    fact.value?.operationType === "RECEIPT" ? fact.value.documentId : "",
+  ),
+  scope,
+);
+const issueDocument = useIssueQuery(
+  computed(() =>
+    fact.value?.operationType === "ISSUE" ? fact.value.documentId : "",
+  ),
+  scope,
+);
+const currentDocument = computed(() =>
+  fact.value?.operationType === "ISSUE" ? issueDocument : receiptDocument,
+);
 const canReceiveMore = computed(() => {
-  const document = currentDocument.data.value;
+  const document = currentDocument.value.data.value;
   return (
     scope.ready.value &&
-    !currentDocument.error.value &&
+    !currentDocument.value.error.value &&
     !!document &&
     document.id === fact.value?.documentId &&
     document.sourceSystem === null &&
@@ -114,8 +134,12 @@ function openMovements(): void {
       <h1 class="text-2xl font-semibold">
         {{
           kind === "execution"
-            ? "Исполнение поступления"
-            : "Проводка поступления"
+            ? fact?.operationType === "ISSUE"
+              ? "Исполнение расхода"
+              : "Исполнение поступления"
+            : fact?.operationType === "ISSUE"
+              ? "Проводка расхода"
+              : "Проводка поступления"
         }}
       </h1>
       <div class="flex flex-wrap gap-2">
@@ -124,16 +148,32 @@ function openMovements(): void {
           :disabled="currentDocument.isFetching.value"
           @click="
             router.push({
-              name: 'inventory-receipt-receive',
+              name:
+                fact.operationType === 'ISSUE'
+                  ? 'inventory-issue-execute'
+                  : 'inventory-receipt-receive',
               params: { documentId: fact.documentId },
             })
           "
-          >Принять остаток</Button
+          >{{
+            fact.operationType === "ISSUE"
+              ? "Выдать остаток"
+              : "Принять остаток"
+          }}</Button
         >
         <Button
           variant="outline"
-          @click="router.push({ name: 'inventory-receipt-documents' })"
-          >К поступлениям</Button
+          @click="
+            router.push({
+              name:
+                fact?.operationType === 'ISSUE'
+                  ? 'inventory-issue-documents'
+                  : 'inventory-receipt-documents',
+            })
+          "
+          >{{
+            fact?.operationType === "ISSUE" ? "К расходам" : "К поступлениям"
+          }}</Button
         ><Button
           variant="outline"
           :disabled="!scope.ready.value || query.isFetching.value"
@@ -177,6 +217,24 @@ function openMovements(): void {
       @navigate="navigateAccounting"
       @movements="openMovements"
     />
+    <IssueExecutionResult
+      v-if="
+        fact?.operationType === 'ISSUE' &&
+        issueResult.data.value &&
+        scope.ready.value
+      "
+      :result="issueResult.data.value"
+    />
+    <p
+      v-if="fact?.operationType === 'ISSUE' && issueResult.error.value"
+      role="alert"
+      class="text-sm text-destructive"
+    >
+      {{ issueResult.error.value.message
+      }}<Button variant="outline" @click="issueResult.refetch()"
+        >Повторить чтение исходного результата</Button
+      >
+    </p>
     <details
       v-if="fact?.hasReceiptResult && result && scope.ready.value"
       class="shrink-0 rounded-lg border p-4"

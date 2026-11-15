@@ -73,7 +73,11 @@ const emit = defineEmits<{ navigate: [target: StockAccountingTarget] }>();
                 variant="link"
                 class="h-auto p-0"
                 @click="
-                  emit('navigate', { kind: 'document', id: item.documentId })
+                  emit('navigate', {
+                    kind: 'document',
+                    id: item.documentId,
+                    operationType: item.operationType,
+                  })
                 "
                 >Документ</Button
               ><Button

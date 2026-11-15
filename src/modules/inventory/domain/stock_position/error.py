@@ -47,3 +47,7 @@ class StockPositionVersionConflictError(StockPositionError):
 
 class StockPostingPositionMismatchError(StockPositionError):
     """Запрещает применять запись Ledger к другой физической позиции."""
+
+
+class StockPositionNotFoundError(StockPositionError):
+    """Исходная позиция не найдена в текущем tenant."""

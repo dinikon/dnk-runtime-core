@@ -160,3 +160,10 @@ HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
         "stock_positions",
     }
 )
+
+import src.modules.inventory.infrastructure.persistence.models.stock_issue_creation_request  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_issue_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {"stock_issue_posting_requests"}
+)
