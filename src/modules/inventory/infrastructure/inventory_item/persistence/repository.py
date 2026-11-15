@@ -168,6 +168,13 @@ class SqlAlchemyInventoryItemRepository:
                 cause, "constraint_name", None
             )
             if (
+                self._sqlstate(exc) in {"23503", "23001"}
+                and constraint == "fk_stock_document_lines_item"
+            ):
+                raise InventoryItemInUseError(
+                    "SKU используется в складском документе."
+                ) from exc
+            if (
                 self._sqlstate(exc) == "23503"
                 and constraint == "fk_catalog_item_inventory_item"
             ):

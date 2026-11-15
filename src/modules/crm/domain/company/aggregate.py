@@ -47,8 +47,14 @@ class CompanyEntity:
         self.updated_by = actor_id
         return True
 
-    def ensure_can_delete(self, *, used_by_supplier_sources: bool) -> None:
-        """Запрещает удаление компании при наличии внешних источников поставки."""
+    def ensure_can_delete(
+        self, *, used_by_supplier_sources: bool, used_by_stock_documents: bool = False
+    ) -> None:
+        """Запрещает удаление компании, используемой источниками или складскими документами."""
+        if used_by_stock_documents:
+            raise CompanyInUseError(
+                "Компания является владельцем складского документа. Удаление запрещено."
+            )
         if used_by_supplier_sources:
             raise CompanyInUseError(
                 "Компания используется источниками поставки. Удаление запрещено."

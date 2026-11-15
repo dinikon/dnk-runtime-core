@@ -82,3 +82,9 @@ from src.modules.crm.presentation.counterparty_reference.router import (
 )
 
 router.include_router(counterparty_references_router)
+
+from src.modules.inventory.presentation.stock_document.router import (
+    router as stock_documents_router,
+)
+
+router.include_router(stock_documents_router)

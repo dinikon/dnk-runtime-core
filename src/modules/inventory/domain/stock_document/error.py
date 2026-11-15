@@ -147,3 +147,24 @@ class UnbalancedStockTransferReceiptDocumentsError(
     StockDocumentTransferReceiptMismatchError
 ):
     """Запрещает разные планы расхода T и прихода B по строкам перемещения."""
+
+
+class StockDocumentNotFoundError(StockDocumentError):
+    """Документ поступления отсутствует в текущем tenant."""
+
+
+class StockDocumentOwnerNotFoundError(StockDocumentError):
+    """Компания-владелец запаса отсутствует в текущем tenant."""
+
+
+class StockDocumentCreationConflictError(StockDocumentError):
+    """Ключ повторной отправки уже относится к другому составу документа."""
+
+
+class StockDocumentLineCreationError(StockDocumentError):
+    """Указывает позицию плановой строки, которую не удалось создать по доменным правилам."""
+
+    def __init__(self, position: int, message: str) -> None:
+        """Сохраняет порядок строки для отображения отказа вызывающим сценарием."""
+        super().__init__(message)
+        self.position = position

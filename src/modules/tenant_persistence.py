@@ -69,6 +69,9 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "files_providers",
         "files_registry",
         "invitations",
+        "stock_documents",
+        "stock_document_lines",
+        "stock_document_creation_requests",
         "inventory_items",
         "inventory_item_barcodes",
         "inventory_item_packagings",
@@ -132,3 +135,7 @@ import src.modules.inventory.infrastructure.persistence.models.stock_serial  # n
 
 import src.modules.supplier_sourcing.infrastructure.persistence.models.supplier_source  # noqa: F401
 import src.modules.supplier_sourcing.infrastructure.persistence.models.supplier_source_fulfillment_mode  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_document_line  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_document_creation_request  # noqa: F401

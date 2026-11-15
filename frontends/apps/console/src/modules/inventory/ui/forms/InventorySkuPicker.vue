@@ -22,6 +22,7 @@ const props = defineProps<{
   selectedId?: string | null;
   disabled?: boolean;
   pending?: boolean;
+  allowCreate?: boolean;
 }>();
 const emit = defineEmits<{
   search: [value: string];
@@ -34,6 +35,7 @@ const open = ref(false);
 const code = computed(() => props.search.trim());
 const canCreate = computed(
   () =>
+    props.allowCreate !== false &&
     !!code.value &&
     !props.loading &&
     !props.error &&
@@ -67,7 +69,9 @@ function choose(value: unknown): void {
           :id="id"
           :model-value="search"
           :disabled="disabled || pending"
-          placeholder="Найти или создать SKU"
+          :placeholder="
+            allowCreate === false ? 'Найти SKU' : 'Найти или создать SKU'
+          "
           aria-label="Поиск SKU"
           :aria-describedby="`${id}-hint`"
           @update:model-value="emit('search', String($event))"
@@ -148,8 +152,13 @@ function choose(value: unknown): void {
       /></Button>
     </div>
     <p :id="`${id}-hint`" class="text-xs text-muted-foreground">
-      Выберите складскую позицию или создайте код до 25 символов. Новая позиция:
-      PCS, шаг 1.
+      <template v-if="allowCreate === false"
+        >Выберите существующую складскую позицию.</template
+      >
+      <template v-else
+        >Выберите складскую позицию или создайте код до 25 символов. Новая
+        позиция: PCS, шаг 1.</template
+      >
     </p>
     <p v-if="pending" role="status" class="text-sm text-muted-foreground">
       Сохранение SKU…

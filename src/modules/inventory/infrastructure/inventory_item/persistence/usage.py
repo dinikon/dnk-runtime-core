@@ -1,3 +1,6 @@
+from src.modules.inventory.infrastructure.persistence.models.stock_document_line import (
+    StockDocumentLineModel,
+)
 from src.modules.inventory.infrastructure.persistence.models.stock_serial import (
     StockSerialModel,
 )
@@ -19,7 +22,7 @@ from src.modules.inventory.infrastructure.persistence.models.stock_lot import (
 
 
 class SqlAlchemyInventoryItemUsage:
-    """Дополняет публичное чтение Catalog локальным фактами существования партий и экземпляров."""
+    """Дополняет публичное чтение Catalog локальными фактами использования SKU."""
 
     def __init__(self, session: AsyncSession, catalog: InventoryItemUsagePort) -> None:
         """Принимает общий tenant-UoW и адаптер Catalog на той же транзакции."""
@@ -36,11 +39,15 @@ class SqlAlchemyInventoryItemUsage:
             select(StockSerialModel.id)
             .where(StockSerialModel.inventory_item_id == identifier.uuid)
             .exists(),
+            select(StockDocumentLineModel.id)
+            .where(StockDocumentLineModel.inventory_item_id == identifier.uuid)
+            .exists(),
         )
         result = await self._session.execute(statement)
-        lots, serials = result.one()
+        lots, serials, documents = result.one()
         return InventoryItemDeletionUsage(
             has_catalog_items=catalog.has_catalog_items,
             has_stock_lots=lots,
             has_stock_serials=serials,
+            has_stock_documents=documents,
         )

@@ -2,6 +2,21 @@ import type { RouteRecordRaw } from "vue-router";
 
 export const inventoryRoutes: RouteRecordRaw[] = [
   {
+    path: "inventory/stock-documents",
+    name: "inventory-receipt-documents",
+    component: () => import("./pages/ReceiptDocumentsPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/new",
+    name: "inventory-receipt-create",
+    component: () => import("./pages/CreateReceiptDraftPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/:documentId",
+    name: "inventory-receipt-document",
+    component: () => import("./pages/ReceiptDocumentPage.vue"),
+  },
+  {
     path: "inventory/items/:inventoryItemId/serials/:serialId",
     name: "inventory-stock-serial",
     component: () => import("./pages/StockSerialPage.vue"),

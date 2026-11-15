@@ -216,7 +216,10 @@ class SupplierSourceApplicationTests(unittest.IsolatedAsyncioTestCase):
         )
         points = Mock(remove=AsyncMock())
         handler = DeleteCompanyHandler(
-            repository, points, Mock(is_used=AsyncMock(return_value=True))
+            repository,
+            points,
+            Mock(is_used=AsyncMock(return_value=True)),
+            Mock(is_used=AsyncMock(return_value=False)),
         )
         with self.assertRaises(CompanyInUseError):
             await handler.execute(DeleteCompanyCommand(company.id, EntityIdVO(uuid4())))

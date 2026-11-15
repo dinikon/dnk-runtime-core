@@ -101,6 +101,11 @@ class InventoryItem:
                 "Нельзя удалить складскую позицию: у неё есть серийные экземпляры."
             )
 
+        if usage.has_stock_documents:
+            raise InventoryItemInUseError(
+                "Нельзя удалить SKU: он используется в складском документе."
+            )
+
     @classmethod
     def create(
         cls,
