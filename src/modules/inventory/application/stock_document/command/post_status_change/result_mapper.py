@@ -1,0 +1,104 @@
+from uuid import UUID
+from src.modules.inventory.domain.stock_document.status_change_posting import (
+    StatusChangePostingResult,
+)
+from src.modules.inventory.application.stock_document.command.post_status_change.command import (
+    PostStatusChangeCommand,
+)
+from src.modules.inventory.application.stock_document.query.get_status_change_document.dto import (
+    GetStatusChangeDocumentResultDTO,
+)
+from src.modules.inventory.application.stock_document.command.post_status_change.dto import (
+    PostStatusChangeLineDTO,
+    PostStatusChangePositionDTO,
+    PostStatusChangeEntryDTO,
+    PostStatusChangeResultDTO,
+)
+
+
+def status_change_result(
+    *,
+    command: PostStatusChangeCommand,
+    bundle: StatusChangePostingResult,
+    header: GetStatusChangeDocumentResultDTO,
+    location_codes: dict[UUID, str],
+    lot_numbers: dict[UUID, str],
+    serial_numbers: dict[UUID, str],
+) -> PostStatusChangeResultDTO:
+    """Фиксирует исходный результат операции, отличая остаток после неё от будущего текущего остатка."""
+    details = bundle.execution.status_change_details
+    if details is None:
+        raise RuntimeError("Исполнение не содержит параметров STATUS_CHANGE.")
+    after = {position.id: position for position in bundle.after}
+    position_by_dims = {position.dimensions: position for position in bundle.before}
+    entries = {entry.position_id: entry for entry in bundle.posting.entries}
+    doc_lines = {line.id: line for line in bundle.document.lines}
+    rows = []
+    for value, line in zip(command.lines, bundle.execution.lines, strict=True):
+        dims, destination = line.route.dimensions
+        position = position_by_dims[dims]
+        rows.append(
+            PostStatusChangeLineDTO(
+                line.id.uuid,
+                value.client_line_id,
+                line.document_line_id.uuid,
+                line.inventory_item_id.uuid,
+                doc_lines[line.document_line_id].sku.value,
+                line.base_uom.value,
+                line.quantity.value,
+                line.conversion.quantity.value,
+                line.conversion.uom.value,
+                line.conversion.factor_to_base,
+                dims.location_id.uuid,
+                location_codes[dims.location_id.uuid],
+                destination.location_id.uuid,
+                location_codes[destination.location_id.uuid],
+                dims.lot_id.uuid if dims.lot_id else None,
+                lot_numbers.get(dims.lot_id.uuid) if dims.lot_id else None,
+                dims.serial_id.uuid if dims.serial_id else None,
+                serial_numbers.get(dims.serial_id.uuid) if dims.serial_id else None,
+                dims.stock_status.value,
+                destination.stock_status.value,
+                position.id.uuid,
+                entries[position.id].id.uuid,
+                position_by_dims[destination].id.uuid,
+                entries[position_by_dims[destination].id].id.uuid,
+            )
+        )
+    return PostStatusChangeResultDTO(
+        document_id=bundle.document.id.uuid,
+        document_version_before=command.expected_version,
+        document_version_after=bundle.document.version,
+        document_status=bundle.document.status.value,
+        execution_id=bundle.execution.id.uuid,
+        posting_id=bundle.posting.id.uuid,
+        event_id=bundle.event.event_id.uuid,
+        actor_id=command.actor_id,
+        warehouse_id=bundle.document.warehouse_id.uuid,
+        warehouse_code=header.warehouse_code,
+        warehouse_name=header.warehouse_name,
+        owner_id=bundle.document.owner_id.uuid,
+        owner_name=header.owner_name,
+        reason=details.reason.value,
+        target_status=details.target_status.value,
+        posted_at=bundle.posting.posted_at,
+        lines=tuple(rows),
+        positions=tuple(
+            PostStatusChangePositionDTO(
+                value.id.uuid,
+                value.base_uom.value,
+                value.on_hand_qty.value,
+                entries[value.id].quantity_delta.value,
+                after[value.id].on_hand_qty.value,
+                value.version,
+                after[value.id].version,
+            )
+            for value in bundle.before
+        ),
+        ledger=tuple(
+            PostStatusChangeEntryDTO(
+                e.id.uuid, e.position_id.uuid, e.quantity_delta.value, e.base_uom.value
+            )
+            for e in bundle.posting.entries
+        ),
+    )

@@ -74,6 +74,13 @@ class StockPostingPolicy:
             raise InvalidStockPostingValueError(
                 "Сохранённое время проведения должно быть в UTC."
             )
+        if (
+            operation_type is StockOperationType.RETURN
+            and len({entry.quantity_delta.value.is_signed() for entry in entries}) != 1
+        ):
+            raise StockPostingSignError(
+                "Возврат содержит только одну физическую сторону."
+            )
         entry_ids = set()
         position_ids = set()
         for entry in entries:
@@ -94,7 +101,8 @@ class StockPostingPolicy:
                     and entry.quantity_delta.value.is_signed()
                 )
                 or (
-                    operation_type is StockOperationType.ISSUE
+                    operation_type
+                    in (StockOperationType.ISSUE, StockOperationType.WRITE_OFF)
                     and not entry.quantity_delta.value.is_signed()
                 )
             ):

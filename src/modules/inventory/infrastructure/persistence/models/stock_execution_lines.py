@@ -11,6 +11,10 @@ class StockExecutionLineModel(TenantBase):
 
     __tablename__ = "stock_execution_lines"
     __table_args__ = (
+        sa.CheckConstraint(
+            "destination_stock_status IS NULL OR destination_stock_status IN ('SELLABLE','QUARANTINE','DAMAGED','BLOCKED')",
+            name="ck_execution_lines_destination_stock_status",
+        ),
         sa.Index("ix_execution_lines_destination_location", "destination_location_id"),
         sa.Index("ix_execution_lines_item", "inventory_item_id", "execution_id"),
         sa.PrimaryKeyConstraint("id", name="pk_stock_execution_lines"),
@@ -81,4 +85,8 @@ class StockExecutionLineModel(TenantBase):
 
     destination_location_id: Mapped[UUID | None] = mapped_column(
         StringUUID, nullable=True
+    )
+
+    destination_stock_status: Mapped[str | None] = mapped_column(
+        sa.Text(), nullable=True
     )

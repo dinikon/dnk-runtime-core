@@ -22,6 +22,66 @@ export const inventoryRoutes: RouteRecordRaw[] = [
     component: () => import("./pages/InternalMoveDocumentPage.vue"),
   },
   {
+    path: "inventory/stock-documents/returns",
+    name: "inventory-return-documents",
+    component: () => import("./pages/ReturnDocumentsPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/returns/new",
+    name: "inventory-return-create",
+    component: () => import("./pages/CreateReturnDraftPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/returns/:documentId/return",
+    name: "inventory-return-execute",
+    component: () => import("./pages/ReturnStockDocumentPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/returns/:documentId",
+    name: "inventory-return-document",
+    component: () => import("./pages/ReturnDocumentPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/status-changes",
+    name: "inventory-status-change-documents",
+    component: () => import("./pages/StatusChangeDocumentsPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/status-changes/new",
+    name: "inventory-status-change-create",
+    component: () => import("./pages/CreateStatusChangeDraftPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/status-changes/:documentId/change-status",
+    name: "inventory-status-change-execute",
+    component: () => import("./pages/StatusChangeStockDocumentPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/status-changes/:documentId",
+    name: "inventory-status-change-document",
+    component: () => import("./pages/StatusChangeDocumentPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/write-offs",
+    name: "inventory-write-off-documents",
+    component: () => import("./pages/WriteOffDocumentsPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/write-offs/new",
+    name: "inventory-write-off-create",
+    component: () => import("./pages/CreateWriteOffDraftPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/write-offs/:documentId/write-off",
+    name: "inventory-write-off-execute",
+    component: () => import("./pages/WriteOffStockDocumentPage.vue"),
+  },
+  {
+    path: "inventory/stock-documents/write-offs/:documentId",
+    name: "inventory-write-off-document",
+    component: () => import("./pages/WriteOffDocumentPage.vue"),
+  },
+  {
     path: "inventory/stock-documents/issues",
     name: "inventory-issue-documents",
     component: () => import("./pages/IssueDocumentsPage.vue"),

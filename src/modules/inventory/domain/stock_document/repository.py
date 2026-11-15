@@ -21,3 +21,7 @@ class StockDocumentRepositoryProtocol(Protocol):
     async def save(self, document: StockDocument, *, expected_version: int) -> None:
         """Сохраняет существующий агрегат с защитой исходной версии без commit."""
         ...
+
+    async def get(self, identifier: StockDocumentIdVO) -> StockDocument | None:
+        """Читает без блокировки корень, затем читает его полный актуальный состав."""
+        ...

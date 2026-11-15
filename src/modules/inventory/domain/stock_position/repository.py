@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_position.value_object.dimensions import (
+    StockDimensionsVO,
+)
 from src.modules.inventory.domain.stock_position.value_object.identifier import (
     StockPositionIdVO,
 )
@@ -36,4 +39,16 @@ class StockPositionRepositoryProtocol(Protocol):
         self, identifiers: tuple[StockSerialIdVO, ...]
     ) -> tuple[StockSerialPresenceSnapshot, ...]:
         """Возвращает полное положительное присутствие каждого SERIAL во всём tenant."""
+        ...
+
+    async def read_serial_presence(
+        self, identifiers: tuple[StockSerialIdVO, ...]
+    ) -> tuple[StockSerialPresenceSnapshot, ...]:
+        """Возвращает полное положительное присутствие каждого SERIAL во всём tenant."""
+        ...
+
+    async def get_by_dimensions(
+        self, dimensions: StockDimensionsVO
+    ) -> StockPosition | None:
+        """Читает существующее назначение без создания и блокировки."""
         ...

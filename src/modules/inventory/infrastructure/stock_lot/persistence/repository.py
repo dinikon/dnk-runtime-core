@@ -75,3 +75,18 @@ class SqlAlchemyStockLotRepository:
         )
         if await self._session.scalar(statement) is None:
             raise StockLotNotFoundError("Партия не найдена в указанном SKU.")
+
+    async def get(
+        self, identifier: StockLotIdVO, *, inventory_item_id: InventoryItemIdVO
+    ) -> StockLot | None:
+        """Читает без блокировки партию после корня SKU и перечитывает identity map после ожидания."""
+        statement = (
+            select(StockLotModel)
+            .where(
+                StockLotModel.id == identifier.uuid,
+                StockLotModel.inventory_item_id == inventory_item_id.uuid,
+            )
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return StockLotMapper.to_domain(model) if model is not None else None

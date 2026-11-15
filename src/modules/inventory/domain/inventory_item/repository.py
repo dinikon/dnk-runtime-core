@@ -35,3 +35,7 @@ class InventoryItemRepositoryProtocol(Protocol):
     async def delete(self, item: InventoryItem) -> None:
         """Удаляет корень и принадлежащие ему штрихкоды без самостоятельного commit."""
         ...
+
+    async def get(self, identifier: InventoryItemIdVO) -> InventoryItem | None:
+        """Читает без блокировки корень и восстанавливает весь сохранённый агрегат либо возвращает None."""
+        ...

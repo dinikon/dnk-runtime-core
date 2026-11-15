@@ -42,6 +42,11 @@ class ListStockMovementsItemResponse(BaseModel):
     quantity_delta: Decimal
     execution_line_ids: tuple[UUID, ...]
     historical_skus: tuple[str, ...]
+    write_off_reason: str | None = None
+    operation_reason: str | None = None
+    return_direction: str | None = None
+    origin_execution_id: UUID | None = None
+    target_status: str | None = None
 
 
 class MovementPositionSnapshotResponse(BaseModel):

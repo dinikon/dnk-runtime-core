@@ -11,7 +11,10 @@ withDefaults(
   }>(),
   { columns: () => ({ lot: false, serial: false }) },
 );
-const emit = defineEmits<{ navigate: [target: StockAccountingTarget] }>();
+const emit = defineEmits<{
+  navigate: [target: StockAccountingTarget];
+  statusChange: [id: string];
+}>();
 </script>
 <template>
   <div class="min-w-0 overflow-x-auto rounded-md border">
@@ -96,6 +99,17 @@ const emit = defineEmits<{ navigate: [target: StockAccountingTarget] }>();
               size="sm"
               @click="emit('navigate', { kind: 'position', id: item.id })"
               >Открыть позицию</Button
+            ><Button
+              v-if="
+                /[1-9]/.test(item.onHandQty.split(/[eE]/)[0] ?? '') &&
+                item.warehouseIsActive &&
+                item.locationIsActive
+              "
+              variant="outline"
+              size="sm"
+              class="mt-2"
+              @click="emit('statusChange', item.id)"
+              >Изменить состояние</Button
             >
           </td>
         </tr>

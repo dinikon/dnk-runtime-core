@@ -51,3 +51,7 @@ class StockPostingPositionMismatchError(StockPositionError):
 
 class StockPositionNotFoundError(StockPositionError):
     """Исходная позиция не найдена в текущем tenant."""
+
+
+class StockPositionTransitionSerialPresenceError(InventoryError):
+    """Запрещает двухсторонний переход вне единственного положительного источника SERIAL."""

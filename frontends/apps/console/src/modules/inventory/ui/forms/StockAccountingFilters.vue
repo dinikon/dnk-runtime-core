@@ -104,6 +104,9 @@ function period(event: Event, key: "postedFrom" | "postedTo"): void {
             <option value="">Все</option>
             <option value="RECEIPT">Поступление</option>
             <option value="ISSUE">Расход</option>
+            <option value="WRITE_OFF">Списание</option>
+            <option value="RETURN">Возврат</option>
+            <option value="STATUS_CHANGE">Изменение состояния</option>
             <option value="INTERNAL_MOVE">Перемещение</option>
             <option value="ADJUSTMENT">Корректировка</option>
           </select></label

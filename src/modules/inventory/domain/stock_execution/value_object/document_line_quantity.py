@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_execution.value_object.line_id import (
+    StockExecutionLineIdVO,
+)
 from dataclasses import dataclass
 
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
@@ -22,6 +25,7 @@ class ExecutedDocumentLineQuantityVO:
     inventory_item_id: InventoryItemIdVO
     base_uom: UomCodeVO
     quantity: QuantityVO
+    return_origin_line_id: StockExecutionLineIdVO | None = None
 
     def __post_init__(self) -> None:
         """Требует типизированные ссылки, известную единицу и положительное количество."""

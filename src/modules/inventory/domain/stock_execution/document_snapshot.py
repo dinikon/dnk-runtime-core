@@ -1,3 +1,17 @@
+from src.modules.inventory.domain.stock_document.value_object.return_details import (
+    StockReturnDetailsVO,
+)
+from src.modules.inventory.domain.policy.return_details import ReturnDetailsPolicy
+from src.modules.inventory.domain.stock_document.value_object.status_change_details import (
+    StockStatusChangeDetailsVO,
+)
+from src.modules.inventory.domain.policy.status_change_details import (
+    StatusChangeDetailsPolicy,
+)
+from src.modules.inventory.domain.stock_document.value_object.write_off_reason import (
+    WriteOffReasonVO,
+)
+from src.modules.inventory.domain.policy.write_off_reason import WriteOffReasonPolicy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -33,8 +47,19 @@ class StockExecutionDocumentSnapshot:
     executed_at: datetime
     lines: tuple[ExecutedDocumentLineQuantityVO, ...]
 
+    write_off_reason: WriteOffReasonVO | None = None
+    status_change_details: StockStatusChangeDetailsVO | None = None
+    return_details: StockReturnDetailsVO | None = None
+
     def ensure_valid(self) -> None:
         """Проверяет собственные типы, UTC-время и уникальные непустые итоги строк."""
+        ReturnDetailsPolicy.ensure_compatible(self.operation_type, self.return_details)
+        StatusChangeDetailsPolicy.ensure_compatible(
+            self.operation_type, self.status_change_details
+        )
+        WriteOffReasonPolicy.ensure_compatible(
+            self.operation_type, self.write_off_reason
+        )
         if (
             not isinstance(self.id, StockExecutionIdVO)
             or not isinstance(self.document_id, StockDocumentIdVO)

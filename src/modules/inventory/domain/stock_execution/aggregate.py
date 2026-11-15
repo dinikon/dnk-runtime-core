@@ -1,3 +1,41 @@
+from src.modules.inventory.domain.stock_document.return_error import (
+    InvalidStockReturnError,
+)
+from src.modules.inventory.domain.stock_execution.return_origin_snapshot import (
+    StockReturnOriginSnapshot,
+    StockReturnUsageSnapshot,
+    StockReturnFactSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_return import StockReturnPolicy
+from src.modules.inventory.domain.stock_document.value_object.return_direction import (
+    ReturnDirection,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_issue_route import (
+    ReturnIssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_details import (
+    StockReturnDetailsVO,
+)
+from src.modules.inventory.domain.policy.return_details import ReturnDetailsPolicy
+from src.modules.inventory.domain.stock_execution.value_object.status_change_route import (
+    StatusChangeExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.status_change_details import (
+    StockStatusChangeDetailsVO,
+)
+from src.modules.inventory.domain.policy.status_change_details import (
+    StatusChangeDetailsPolicy,
+)
+from src.modules.inventory.domain.stock_execution.value_object.write_off_route import (
+    WriteOffExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.write_off_reason import (
+    WriteOffReasonVO,
+)
+from src.modules.inventory.domain.policy.write_off_reason import WriteOffReasonPolicy
 from src.modules.inventory.domain.stock_execution.entity.receipt_cost_evidence import (
     ReceiptCostEvidence,
 )
@@ -121,9 +159,6 @@ from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
 from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
     StockOperationType,
 )
-from src.modules.inventory.domain.stock_serial.snapshot import (
-    StockSerialSnapshot,
-)
 from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
 from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
 from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
@@ -142,6 +177,9 @@ class StockExecution:
     executed_at: datetime
     lines: tuple[StockExecutionLine, ...]
     receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = ()
+    write_off_reason: WriteOffReasonVO | None = None
+    status_change_details: StockStatusChangeDetailsVO | None = None
+    return_details: StockReturnDetailsVO | None = None
 
     @classmethod
     def create(
@@ -157,6 +195,8 @@ class StockExecution:
         lots: tuple[StockLotSnapshot, ...] = (),
         serials: tuple[StockSerialSnapshot, ...] = (),
         receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = (),
+        return_origin: StockReturnOriginSnapshot | None = None,
+        return_usage: tuple[StockReturnUsageSnapshot, ...] = (),
     ) -> Self:
         """Фиксирует исполнение после проверки текущего плана, активных адресов, количества и прослеживаемости."""
         if not isinstance(document, StockDocumentExecutionSnapshot):
@@ -174,7 +214,38 @@ class StockExecution:
             executed_at=executed_at,
             lines=lines,
             receipt_cost_evidence=receipt_cost_evidence,
+            write_off_reason=document.write_off_reason,
+            status_change_details=document.status_change_details,
+            return_details=document.return_details,
         )
+        if execution.return_details is not None:
+            StockReturnPolicy.ensure_facts(
+                details=execution.return_details,
+                warehouse_id=execution.warehouse_id,
+                owner_id=execution.owner_id,
+                facts=tuple(
+                    StockReturnFactSnapshot(
+                        line.route.origin_line_id,
+                        line.route.dimensions[0],
+                        line.quantity,
+                        line.base_uom,
+                    )
+                    for line in execution.lines
+                    if isinstance(
+                        line.route,
+                        (ReturnReceiptExecutionRouteVO, ReturnIssueExecutionRouteVO),
+                    )
+                ),
+                origin=return_origin,
+                usage=return_usage,
+            )
+            if (
+                return_origin is not None
+                and execution.executed_at < return_origin.executed_at
+            ):
+                raise InvalidStockReturnError(
+                    "Возврат не может предшествовать исходному исполнению."
+                )
         StockExecutionDocumentPolicy.ensure_compatible(
             document=document, execution=execution.snapshot_for_document()
         )
@@ -256,6 +327,9 @@ class StockExecution:
         executed_at: datetime,
         lines: tuple[StockExecutionLine, ...],
         receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = (),
+        write_off_reason: WriteOffReasonVO | None = None,
+        status_change_details: StockStatusChangeDetailsVO | None = None,
+        return_details: StockReturnDetailsVO | None = None,
     ) -> Self:
         """Восстанавливает полное собственное состояние без актуального плана и снимков физического контекста."""
         execution = cls(
@@ -268,6 +342,9 @@ class StockExecution:
             cls._normalize_time(executed_at),
             lines,
             receipt_cost_evidence,
+            write_off_reason,
+            status_change_details,
+            return_details,
         )
         execution._validate()
         return execution
@@ -400,6 +477,9 @@ class StockExecution:
             self.owner_id,
             self.executed_at,
             tuple(lines),
+            self.write_off_reason,
+            self.status_change_details,
+            self.return_details,
         )
 
     def snapshot_for_document(self) -> StockExecutionDocumentSnapshot:
@@ -415,7 +495,18 @@ class StockExecution:
                 else QuantityArithmeticPolicy.add(previous.quantity, line.quantity)
             )
             grouped[line.document_line_id] = ExecutedDocumentLineQuantityVO(
-                line.document_line_id, line.inventory_item_id, line.base_uom, quantity
+                line.document_line_id,
+                line.inventory_item_id,
+                line.base_uom,
+                quantity,
+                (
+                    line.route.origin_line_id
+                    if isinstance(
+                        line.route,
+                        (ReturnReceiptExecutionRouteVO, ReturnIssueExecutionRouteVO),
+                    )
+                    else None
+                ),
             )
         return StockExecutionDocumentSnapshot(
             self.id,
@@ -426,6 +517,9 @@ class StockExecution:
             self.owner_id,
             self.executed_at,
             tuple(grouped.values()),
+            self.write_off_reason,
+            self.status_change_details,
+            self.return_details,
         )
 
     def adjustment_snapshot(self) -> StockAdjustmentExecutionSnapshot:
@@ -466,6 +560,13 @@ class StockExecution:
 
     def _validate(self) -> None:
         """Проверяет собственный состав, вид маршрута, владельца и уникальность фактических экземпляров."""
+        ReturnDetailsPolicy.ensure_compatible(self.operation_type, self.return_details)
+        StatusChangeDetailsPolicy.ensure_compatible(
+            self.operation_type, self.status_change_details
+        )
+        WriteOffReasonPolicy.ensure_compatible(
+            self.operation_type, self.write_off_reason
+        )
         if (
             not isinstance(self.id, StockExecutionIdVO)
             or not isinstance(self.document_id, StockDocumentIdVO)
@@ -514,11 +615,37 @@ class StockExecution:
                 "Сохранённое время исполнения должно быть в UTC."
             )
         route_type = {
+            StockOperationType.RETURN: (
+                ReturnReceiptExecutionRouteVO,
+                ReturnIssueExecutionRouteVO,
+            ),
             StockOperationType.RECEIPT: ReceiptExecutionRouteVO,
             StockOperationType.ISSUE: IssueExecutionRouteVO,
+            StockOperationType.WRITE_OFF: WriteOffExecutionRouteVO,
+            StockOperationType.STATUS_CHANGE: StatusChangeExecutionRouteVO,
             StockOperationType.INTERNAL_MOVE: InternalMoveExecutionRouteVO,
             StockOperationType.ADJUSTMENT: StockAdjustmentExecutionRouteVO,
         }.get(self.operation_type)
+        if self.status_change_details is not None:
+            for line in self.lines:
+                if (
+                    not isinstance(line.route, StatusChangeExecutionRouteVO)
+                    or line.route.destination.stock_status
+                    != self.status_change_details.target_status
+                ):
+                    raise InvalidStockExecutionRouteError(
+                        "Маршруты должны соответствовать целевому состоянию документа."
+                    )
+        if self.return_details is not None:
+            expected = (
+                ReturnReceiptExecutionRouteVO
+                if self.return_details.direction is ReturnDirection.FROM_RECIPIENT
+                else ReturnIssueExecutionRouteVO
+            )
+            if not all(isinstance(line.route, expected) for line in self.lines):
+                raise InvalidStockExecutionRouteError(
+                    "Маршруты не соответствуют направлению возврата."
+                )
         ids, serials = set(), set()
         planned_items = {}
         for line in self.lines:

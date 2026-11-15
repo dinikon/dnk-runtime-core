@@ -1,3 +1,15 @@
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_issue_route import (
+    ReturnIssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.status_change_route import (
+    StatusChangeExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.write_off_route import (
+    WriteOffExecutionRouteVO,
+)
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Self
@@ -63,6 +75,10 @@ class StockExecutionLine:
     conversion: QuantityConversionSnapshotVO
     route: (
         ReceiptExecutionRouteVO
+        | ReturnReceiptExecutionRouteVO
+        | ReturnIssueExecutionRouteVO
+        | StatusChangeExecutionRouteVO
+        | WriteOffExecutionRouteVO
         | IssueExecutionRouteVO
         | InternalMoveExecutionRouteVO
         | StockAdjustmentExecutionRouteVO
@@ -79,6 +95,10 @@ class StockExecutionLine:
         uom: UomCodeVO,
         route: (
             ReceiptExecutionRouteVO
+            | ReturnReceiptExecutionRouteVO
+            | ReturnIssueExecutionRouteVO
+            | StatusChangeExecutionRouteVO
+            | WriteOffExecutionRouteVO
             | IssueExecutionRouteVO
             | InternalMoveExecutionRouteVO
             | StockAdjustmentExecutionRouteVO
@@ -117,6 +137,10 @@ class StockExecutionLine:
         conversion: QuantityConversionSnapshotVO,
         route: (
             ReceiptExecutionRouteVO
+            | ReturnReceiptExecutionRouteVO
+            | ReturnIssueExecutionRouteVO
+            | StatusChangeExecutionRouteVO
+            | WriteOffExecutionRouteVO
             | IssueExecutionRouteVO
             | InternalMoveExecutionRouteVO
             | StockAdjustmentExecutionRouteVO
@@ -149,7 +173,11 @@ class StockExecutionLine:
                 self.route,
                 (
                     ReceiptExecutionRouteVO,
+                    ReturnReceiptExecutionRouteVO,
+                    ReturnIssueExecutionRouteVO,
                     IssueExecutionRouteVO,
+                    WriteOffExecutionRouteVO,
+                    StatusChangeExecutionRouteVO,
                     InternalMoveExecutionRouteVO,
                     StockAdjustmentExecutionRouteVO,
                 ),

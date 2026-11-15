@@ -1,3 +1,12 @@
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_return import (
+    StockExecutionReturnModel as ReturnDetails,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_return_line import (
+    StockExecutionReturnLineModel as ReturnLine,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_status_change import (
+    StockExecutionStatusChangeModel as StatusDetails,
+)
 from sqlalchemy import select, Nullable
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -71,6 +80,9 @@ class StockFactProjection:
     costs: Sequence[Cost]
     allocations: Sequence[Allocation]
     historical: GetStockExecutionResultDTO | None
+    status_change: StatusDetails | None
+    return_details: ReturnDetails | None
+    return_lines: Sequence[ReturnLine]
 
 
 class StockFactProjectionReader:
@@ -85,7 +97,11 @@ class StockFactProjectionReader:
     ) -> StockFactProjection | None:
         """Пакетно читает нормализованные строки, Ledger, связи и стоимость без N+1."""
         statement = (
-            select(E, Nullable(T), D, W)
+            select(
+                E, Nullable(T), D, W, Nullable(StatusDetails), Nullable(ReturnDetails)
+            )
+            .outerjoin(ReturnDetails, ReturnDetails.execution_id == E.id)
+            .outerjoin(StatusDetails, StatusDetails.execution_id == E.id)
             .outerjoin(T, T.execution_id == E.id)
             .join(D, D.id == E.document_id)
             .join(W, W.id == E.warehouse_id)
@@ -95,7 +111,7 @@ class StockFactProjectionReader:
         header = (await self._session.execute(statement)).one_or_none()
         if header is None:
             return None
-        execution, posted, document, warehouse = header
+        execution, posted, document, warehouse, status_change, return_details = header
         destination_location = aliased(L)
         line_statement = (
             select(
@@ -152,6 +168,13 @@ class StockFactProjectionReader:
             if request is not None and request.result is not None
             else None
         )
+        return_lines = (
+            await self._session.scalars(
+                select(ReturnLine)
+                .join(EL, EL.id == ReturnLine.execution_line_id)
+                .where(EL.execution_id == execution.id)
+            )
+        ).all()
         return StockFactProjection(
             execution,
             posted,
@@ -166,4 +189,7 @@ class StockFactProjectionReader:
             costs,
             allocations,
             historical,
+            status_change,
+            return_details,
+            return_lines,
         )

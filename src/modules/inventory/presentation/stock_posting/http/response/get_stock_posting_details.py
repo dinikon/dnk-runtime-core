@@ -34,6 +34,8 @@ class GetStockPostingDetailsLineResponse(BaseModel):
     location_code_at_receipt: str | None
     destination_location_id: UUID | None = None
     destination_location_code: str | None = None
+    destination_stock_status: str | None = None
+    origin_execution_line_id: UUID | None = None
     source_ledger_entry_id: UUID | None = None
     destination_ledger_entry_id: UUID | None = None
 
@@ -89,6 +91,12 @@ class GetStockPostingDetailsResponse(BaseModel):
     lines: tuple[GetStockPostingDetailsLineResponse, ...]
     ledger: tuple[GetStockPostingDetailsEntryResponse, ...]
     costs: tuple[GetStockPostingDetailsCostResponse, ...]
+
+    write_off_reason: str | None = None
+    operation_reason: str | None = None
+    return_direction: str | None = None
+    origin_execution_id: UUID | None = None
+    target_status: str | None = None
 
     @classmethod
     def from_dto(cls, dto: GetStockPostingDetailsResultDTO) -> Self:

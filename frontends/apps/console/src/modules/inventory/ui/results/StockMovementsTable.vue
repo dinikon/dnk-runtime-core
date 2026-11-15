@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { returnDirectionLabel } from "../../model/return-origin.types";
 import { stockOperationLabel } from "../../model/stock-accounting.constants";
 import { stockStatusLabel } from "../../model/stock-accounting.constants";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ const emit = defineEmits<{ navigate: [target: StockAccountingTarget] }>();
           <th v-if="columns.lot" class="p-3">Партия</th>
           <th v-if="columns.serial" class="p-3">Серия</th>
           <th class="p-3">Изменение</th>
+          <th class="p-3">Причина</th>
           <th class="p-3">Основание</th>
           <th class="p-3">Запись</th>
         </tr>
@@ -67,8 +69,31 @@ const emit = defineEmits<{ navigate: [target: StockAccountingTarget] }>();
             {{ item.quantityDelta.startsWith("-") ? "" : "+"
             }}{{ item.quantityDelta }} {{ item.baseUom }}
           </td>
+          <td class="max-w-72 p-3">
+            <p
+              class="line-clamp-3 whitespace-pre-wrap break-words"
+              :title="item.operationReason ?? item.writeOffReason ?? undefined"
+            >
+              {{ item.operationReason ?? item.writeOffReason ?? "—" }}
+            </p>
+          </td>
           <td class="p-3">
+            <span v-if="item.returnDirection" class="mb-2 block text-xs">{{
+              returnDirectionLabel(item.returnDirection)
+            }}</span>
             <div class="flex flex-col items-start gap-1">
+              <Button
+                v-if="item.originExecutionId"
+                variant="link"
+                class="h-auto p-0"
+                @click="
+                  emit('navigate', {
+                    kind: 'execution',
+                    id: item.originExecutionId,
+                  })
+                "
+                >Исходное исполнение</Button
+              >
               <Button
                 variant="link"
                 class="h-auto p-0"

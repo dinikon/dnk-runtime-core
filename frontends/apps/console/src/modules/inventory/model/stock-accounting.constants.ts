@@ -7,6 +7,9 @@ const statuses: Record<string, string> = {
 const operations: Record<string, string> = {
   RECEIPT: "Поступление",
   ISSUE: "Расход",
+  WRITE_OFF: "Списание",
+  RETURN: "Возврат",
+  STATUS_CHANGE: "Изменение состояния",
   INTERNAL_MOVE: "Перемещение",
   ADJUSTMENT: "Корректировка",
 };

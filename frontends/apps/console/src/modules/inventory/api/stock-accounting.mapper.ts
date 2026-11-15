@@ -154,6 +154,11 @@ export function listStockMovementsItemFromDto(
     quantityDelta: dto.quantity_delta,
     executionLineIds: [...dto.execution_line_ids],
     historicalSkus: [...dto.historical_skus],
+    writeOffReason: dto.write_off_reason,
+    operationReason: dto.operation_reason,
+    targetStatus: dto.target_status,
+    returnDirection: dto.return_direction,
+    originExecutionId: dto.origin_execution_id,
   };
 }
 export function movementPositionSnapshotFromDto(
@@ -262,6 +267,8 @@ export function getStockExecutionDetailsLineFromDto(
     locationCodeAtReceipt: dto.location_code_at_receipt,
     destinationLocationId: dto.destination_location_id,
     destinationLocationCode: dto.destination_location_code,
+    destinationStockStatus: dto.destination_stock_status,
+    originExecutionLineId: dto.origin_execution_line_id,
     sourceLedgerEntryId: dto.source_ledger_entry_id,
     destinationLedgerEntryId: dto.destination_ledger_entry_id,
   };
@@ -318,6 +325,11 @@ export function getStockExecutionDetailsResultFromDto(
     ownerId: dto.owner_id,
     ownerName: dto.owner_name,
     hasReceiptResult: dto.has_receipt_result,
+    writeOffReason: dto.write_off_reason,
+    operationReason: dto.operation_reason,
+    targetStatus: dto.target_status,
+    returnDirection: dto.return_direction,
+    originExecutionId: dto.origin_execution_id,
     lines: dto.lines.map(getStockExecutionDetailsLineFromDto),
     ledger: dto.ledger.map(getStockExecutionDetailsEntryFromDto),
     costs: dto.costs.map(getStockExecutionDetailsCostFromDto),
@@ -350,6 +362,8 @@ export function getStockPostingDetailsLineFromDto(
     locationCodeAtReceipt: dto.location_code_at_receipt,
     destinationLocationId: dto.destination_location_id,
     destinationLocationCode: dto.destination_location_code,
+    destinationStockStatus: dto.destination_stock_status,
+    originExecutionLineId: dto.origin_execution_line_id,
     sourceLedgerEntryId: dto.source_ledger_entry_id,
     destinationLedgerEntryId: dto.destination_ledger_entry_id,
   };
@@ -406,6 +420,11 @@ export function getStockPostingDetailsResultFromDto(
     ownerId: dto.owner_id,
     ownerName: dto.owner_name,
     hasReceiptResult: dto.has_receipt_result,
+    writeOffReason: dto.write_off_reason,
+    operationReason: dto.operation_reason,
+    targetStatus: dto.target_status,
+    returnDirection: dto.return_direction,
+    originExecutionId: dto.origin_execution_id,
     lines: dto.lines.map(getStockPostingDetailsLineFromDto),
     ledger: dto.ledger.map(getStockPostingDetailsEntryFromDto),
     costs: dto.costs.map(getStockPostingDetailsCostFromDto),

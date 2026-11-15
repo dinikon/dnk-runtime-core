@@ -227,3 +227,15 @@ class SqlAlchemyInventoryItemRepository:
             raise InventoryItemConflictError(
                 "Код упаковки уже занят внутри товара."
             ) from error
+
+    async def get(self, identifier: InventoryItemIdVO) -> InventoryItem | None:
+        """Читает без блокировки и перечитывает корень, затем читает обе дочерние коллекции в сохранённом порядке."""
+        statement = (
+            select(InventoryItemModel)
+            .where(InventoryItemModel.id == identifier.uuid)
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        if model is None:
+            return None
+        return await self._restore(model)

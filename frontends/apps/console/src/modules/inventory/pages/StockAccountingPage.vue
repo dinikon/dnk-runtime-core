@@ -285,6 +285,12 @@ function stockView(value: "summary" | "positions"): void {
         :columns="trackingColumns"
         v-else-if="kind === 'positions'"
         :items="positions.data.value?.items ?? []"
+        @status-change="
+          router.push({
+            name: 'inventory-status-change-create',
+            query: { source_position_id: $event },
+          })
+        "
         @navigate="navigate"
       /><StockMovementsTable
         :columns="trackingColumns"

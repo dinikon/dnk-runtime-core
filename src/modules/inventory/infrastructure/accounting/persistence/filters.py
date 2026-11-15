@@ -83,10 +83,16 @@ def fact_filters(filters: StockAccountingFilters) -> tuple[ColumnElement[bool], 
         (EL.inventory_item_id, filters.inventory_item_id),
         (EL.lot_id, filters.lot_id),
         (EL.serial_id, filters.serial_id),
-        (EL.stock_status, filters.stock_status),
     ):
         if value is not None:
             line_filters.append(field == value)
+    if filters.stock_status is not None:
+        line_filters.append(
+            or_(
+                EL.stock_status == filters.stock_status,
+                EL.destination_stock_status == filters.stock_status,
+            )
+        )
     if filters.location_id is not None:
         line_filters.append(
             or_(

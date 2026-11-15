@@ -262,7 +262,7 @@ class StockPostingDomainTests(unittest.TestCase):
         self.assertEqual(self.first.version, 0)
         self.assertEqual(
             {kind.value for kind in StockOperationType},
-            {"RECEIPT", "ISSUE", "INTERNAL_MOVE", "ADJUSTMENT"},
+            {"RECEIPT", "ISSUE", "INTERNAL_MOVE", "ADJUSTMENT", "WRITE_OFF", "STATUS_CHANGE", "RETURN"},
         )
 
     def test_empty_raw_and_duplicate_entries_are_rejected(self) -> None:

@@ -76,3 +76,57 @@ router.add_api_route(
     methods=["GET"],
     response_model=GetInternalMoveExecutionResultResponse,
 )
+
+from src.modules.inventory.presentation.stock_execution.http.controller.get_write_off_execution_result import (
+    get_write_off_execution_result,
+)
+from src.modules.inventory.presentation.stock_execution.http.response.get_write_off_execution_result import (
+    GetWriteOffExecutionResultResponse,
+)
+
+router.add_api_route(
+    "/{identifier}/write-off-result",
+    get_write_off_execution_result,
+    methods=["GET"],
+    response_model=GetWriteOffExecutionResultResponse,
+)
+
+from src.modules.inventory.presentation.stock_execution.http.controller.get_status_change_execution_result import (
+    get_status_change_execution_result,
+)
+from src.modules.inventory.presentation.stock_execution.http.response.get_status_change_execution_result import (
+    GetStatusChangeExecutionResultResponse,
+)
+
+router.add_api_route(
+    "/{identifier}/status-change-result",
+    get_status_change_execution_result,
+    methods=["GET"],
+    response_model=GetStatusChangeExecutionResultResponse,
+)
+
+from src.modules.inventory.presentation.stock_execution.http.controller.get_return_execution_result import (
+    get_return_execution_result,
+)
+from src.modules.inventory.presentation.stock_execution.http.response.get_return_execution_result import (
+    GetReturnExecutionResultResponse,
+)
+from src.modules.inventory.presentation.stock_document.http.controller.get_return_origin import (
+    get_return_origin,
+)
+from src.modules.inventory.presentation.stock_document.http.response.get_return_origin import (
+    GetReturnOriginResponse,
+)
+
+router.add_api_route(
+    "/{identifier}/return-result",
+    get_return_execution_result,
+    methods=["GET"],
+    response_model=GetReturnExecutionResultResponse,
+)
+router.add_api_route(
+    "/{identifier}/return-context",
+    get_return_origin,
+    methods=["GET"],
+    response_model=GetReturnOriginResponse,
+)

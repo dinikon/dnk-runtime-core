@@ -1,3 +1,24 @@
+from src.modules.inventory.domain.stock_document.return_error import (
+    InvalidStockReturnError,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_direction import (
+    ReturnDirection,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_issue_route import (
+    ReturnIssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.return_origin_snapshot import (
+    StockReturnOriginSnapshot,
+    StockReturnUsageSnapshot,
+    StockReturnFactSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_return import StockReturnPolicy
+from src.modules.inventory.domain.policy.stock_status_change_balance import (
+    StockStatusChangeBalancePolicy,
+)
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
@@ -145,6 +166,14 @@ class StockPosting:
         locations: tuple[StockLocationSnapshot, ...] = (),
     ) -> Self:
         """Создаёт завершённое обычное проведение по снимкам позиций и системному пересчёту."""
+        if operation_type in (
+            StockOperationType.RETURN,
+            StockOperationType.WRITE_OFF,
+            StockOperationType.STATUS_CHANGE,
+        ):
+            raise InvalidStockExecutionPostingSnapshotError(
+                "Операция проводится только из проверенного исполнения с обязательными реквизитами."
+            )
         if operation_type is StockOperationType.ADJUSTMENT:
             raise StockAdjustmentError(
                 "Корректировка проводится только из полного факта с повторной проверкой основания."
@@ -182,6 +211,8 @@ class StockPosting:
         serials: tuple[StockSerialSnapshot, ...] = (),
         locations: tuple[StockLocationSnapshot, ...],
         entry_bindings: tuple[StockPostingEntryBindingVO, ...],
+        return_origin: StockReturnOriginSnapshot | None = None,
+        return_usage: tuple[StockReturnUsageSnapshot, ...] = (),
     ) -> Self:
         """Выводит основание и записи из исполнения, сохраняя один однонаправленный итог на позицию."""
         if not isinstance(execution, StockExecutionPostingSnapshot):
@@ -189,6 +220,34 @@ class StockPosting:
                 "Нужен снимок исполнения для построения журнала."
             )
         execution.ensure_valid()
+        if execution.return_details is not None:
+            StockReturnPolicy.ensure_facts(
+                details=execution.return_details,
+                warehouse_id=execution.warehouse_id,
+                owner_id=execution.owner_id,
+                facts=tuple(
+                    StockReturnFactSnapshot(
+                        line.route.origin_line_id,
+                        line.route.dimensions[0],
+                        line.quantity,
+                        line.base_uom,
+                    )
+                    for line in execution.lines
+                    if isinstance(
+                        line.route,
+                        (ReturnReceiptExecutionRouteVO, ReturnIssueExecutionRouteVO),
+                    )
+                ),
+                origin=return_origin,
+                usage=return_usage,
+            )
+            if (
+                return_origin is not None
+                and execution.executed_at < return_origin.executed_at
+            ):
+                raise InvalidStockReturnError(
+                    "Возврат не может предшествовать исходному исполнению."
+                )
         normalized = StockPostingPolicy.normalize_time(posted_at)
         if normalized < execution.executed_at:
             raise StockPostingExecutionTimeError(
@@ -200,6 +259,43 @@ class StockPosting:
             locations=locations,
             entry_bindings=entry_bindings,
         )
+        if execution.operation_type in (
+            StockOperationType.RETURN,
+            StockOperationType.WRITE_OFF,
+            StockOperationType.STATUS_CHANGE,
+        ):
+            posting = cls.restore(
+                identifier=identifier,
+                source=PostingSourceVO(execution.id),
+                operation_type=execution.operation_type,
+                posted_at=normalized,
+                entries=entries,
+                reversal_of_id=None,
+            )
+            for entry in posting.entries:
+                entry.ensure_current_conversion()
+            posting._ensure_context(
+                positions=positions,
+                locations=(
+                    locations
+                    if execution.operation_type is StockOperationType.STATUS_CHANGE
+                    else ()
+                ),
+            )
+            StockPostingTrackingPolicy.ensure_compatible(
+                operation_type=(
+                    StockOperationType.RECEIPT
+                    if execution.return_details is not None
+                    and execution.return_details.direction
+                    is ReturnDirection.FROM_RECIPIENT
+                    else execution.operation_type
+                ),
+                positions=positions,
+                inventory_items=inventory_items,
+                lots=lots,
+                serials=serials,
+            )
+            return posting
         return cls.create(
             identifier=identifier,
             source=PostingSourceVO(execution.id),
@@ -462,7 +558,11 @@ class StockPosting:
         locations: tuple[StockLocationSnapshot, ...],
     ) -> None:
         """Сверяет ссылки и баланс перемещения, оставляя доступность и физический переход позициям."""
-        if self.operation_type is StockOperationType.INTERNAL_MOVE:
+        if self.operation_type is StockOperationType.STATUS_CHANGE:
+            StockStatusChangeBalancePolicy.ensure_balanced(
+                entries=self.entries, positions=positions, locations=locations
+            )
+        elif self.operation_type is StockOperationType.INTERNAL_MOVE:
             StockMovementBalancePolicy.ensure_balanced(
                 entries=self.entries, positions=positions, locations=locations
             )

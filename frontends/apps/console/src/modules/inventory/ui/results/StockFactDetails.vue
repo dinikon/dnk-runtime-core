@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { returnDirectionLabel } from "../../model/return-origin.types";
 import {
   stockDocumentStatusLabel,
   stockStatusLabel,
@@ -22,8 +23,27 @@ const trackingColumns = ref({ lot: false, serial: false });
 </script>
 <template>
   <div class="flex min-w-0 shrink-0 flex-col gap-5">
+    <p
+      v-if="fact.operationReason ?? fact.writeOffReason"
+      class="whitespace-pre-wrap break-words rounded-md border p-4 text-sm"
+    >
+      <strong>Причина операции:</strong>
+      {{ fact.operationReason ?? fact.writeOffReason }}
+    </p>
     <section class="rounded-lg border p-4">
       <h2 class="text-lg font-semibold">Основание движения</h2>
+      <p v-if="fact.returnDirection" class="mt-2 text-sm">
+        {{ returnDirectionLabel(fact.returnDirection) }}
+      </p>
+      <Button
+        v-if="fact.originExecutionId"
+        variant="link"
+        class="h-auto p-0"
+        @click="
+          emit('navigate', { kind: 'execution', id: fact.originExecutionId })
+        "
+        >Исходное исполнение возврата</Button
+      >
       <p class="mt-2 text-sm">
         {{ fact.warehouseCode }} — {{ fact.warehouseName }} ·
         {{ fact.ownerName ?? fact.ownerId }}
@@ -104,6 +124,12 @@ const trackingColumns = ref({ lot: false, serial: false });
                 >
               </td>
               <td class="whitespace-nowrap p-2">
+                <span
+                  v-if="line.originExecutionLineId"
+                  class="block max-w-48 break-all text-xs"
+                  >Исходная фактическая строка:
+                  {{ line.originExecutionLineId }}</span
+                >
                 {{ line.sourceQuantity }} {{ line.sourceUom
                 }}<span class="block text-xs"
                   >Коэффициент {{ line.factorToBase }}</span
@@ -118,7 +144,10 @@ const trackingColumns = ref({ lot: false, serial: false });
                   → {{ line.destinationLocationCode }}</span
                 >
                 ·
-                {{ stockStatusLabel(line.stockStatus) }}
+                {{ stockStatusLabel(line.stockStatus)
+                }}<span v-if="line.destinationStockStatus">
+                  → {{ stockStatusLabel(line.destinationStockStatus) }}</span
+                >
               </td>
               <td v-if="trackingColumns.lot" class="p-2">
                 <Button

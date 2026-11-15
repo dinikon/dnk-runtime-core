@@ -130,7 +130,25 @@ function setTrackingColumns(value: StockTrackingColumns): void {
           Физический остаток. Резервы и доступность к продаже не рассчитываются.
         </p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
+        <Button
+          v-if="
+            position &&
+            /[1-9]/.test(position.onHandQty.split(/[eE]/)[0] ?? '') &&
+            position.warehouseIsActive &&
+            position.locationIsActive
+          "
+          :disabled="
+            query.isFetching.value || !!query.error.value || !scope.ready.value
+          "
+          @click="
+            router.push({
+              name: 'inventory-status-change-create',
+              query: { source_position_id: position.id },
+            })
+          "
+          >Изменить состояние</Button
+        >
         <Button
           variant="outline"
           @click="router.push(stockReadLocation('positions', {}))"

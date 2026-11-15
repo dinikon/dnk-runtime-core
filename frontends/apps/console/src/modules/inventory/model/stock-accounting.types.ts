@@ -87,6 +87,11 @@ export interface ListStockMovementsItem {
   quantityDelta: string;
   executionLineIds: string[];
   historicalSkus: string[];
+  writeOffReason: string | null;
+  operationReason?: string | null;
+  targetStatus?: string | null;
+  returnDirection?: string | null;
+  originExecutionId?: string | null;
 }
 export interface MovementPositionSnapshot {
   id: string;
@@ -165,6 +170,8 @@ export interface GetStockExecutionDetailsLine {
   locationCodeAtReceipt: string | null;
   destinationLocationId: string | null;
   destinationLocationCode: string | null;
+  destinationStockStatus?: string | null;
+  originExecutionLineId?: string | null;
   sourceLedgerEntryId: string | null;
   destinationLedgerEntryId: string | null;
 }
@@ -205,6 +212,11 @@ export interface GetStockExecutionDetailsResult {
   ownerId: string;
   ownerName: string | null;
   hasReceiptResult: boolean;
+  writeOffReason: string | null;
+  operationReason?: string | null;
+  targetStatus?: string | null;
+  returnDirection?: string | null;
+  originExecutionId?: string | null;
   lines: GetStockExecutionDetailsLine[];
   ledger: GetStockExecutionDetailsEntry[];
   costs: GetStockExecutionDetailsCost[];
@@ -233,6 +245,8 @@ export interface GetStockPostingDetailsLine {
   locationCodeAtReceipt: string | null;
   destinationLocationId: string | null;
   destinationLocationCode: string | null;
+  destinationStockStatus?: string | null;
+  originExecutionLineId?: string | null;
   sourceLedgerEntryId: string | null;
   destinationLedgerEntryId: string | null;
 }
@@ -273,6 +287,11 @@ export interface GetStockPostingDetailsResult {
   ownerId: string;
   ownerName: string | null;
   hasReceiptResult: boolean;
+  writeOffReason: string | null;
+  operationReason?: string | null;
+  targetStatus?: string | null;
+  returnDirection?: string | null;
+  originExecutionId?: string | null;
   lines: GetStockPostingDetailsLine[];
   ledger: GetStockPostingDetailsEntry[];
   costs: GetStockPostingDetailsCost[];

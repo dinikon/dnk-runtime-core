@@ -22,3 +22,7 @@ class WarehouseRepositoryProtocol(Protocol):
     async def save(self, warehouse: Warehouse) -> None:
         """Сохраняет состояние существующей карточки по ID без upsert."""
         ...
+
+    async def get(self, identifier: WarehouseIdVO) -> Warehouse | None:
+        """Читает без блокировки и восстанавливает актуальную карточку либо возвращает None."""
+        ...

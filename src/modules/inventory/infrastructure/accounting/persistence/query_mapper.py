@@ -1,3 +1,9 @@
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_return import (
+    StockExecutionReturnModel as ReturnDetails,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_status_change import (
+    StockExecutionStatusChangeModel as StatusDetails,
+)
 from src.modules.inventory.application.stock_position.query.list_stock_balances.dto import (
     ListStockBalancesItemDTO,
 )
@@ -130,6 +136,8 @@ class StockAccountingQueryMapper:
         document: D,
         line_ids: tuple[UUID, ...],
         historical_skus: tuple[str, ...],
+        status_change: StatusDetails | None = None,
+        return_details: ReturnDetails | None = None,
     ) -> ListStockMovementsItemDTO:
         """Создаёт собственный DTO сценария с точными количествами."""
         return ListStockMovementsItemDTO(
@@ -164,6 +172,21 @@ class StockAccountingQueryMapper:
             quantity_delta=entry.quantity_delta,
             execution_line_ids=line_ids,
             historical_skus=historical_skus,
+            return_direction=return_details.direction if return_details else None,
+            origin_execution_id=(
+                return_details.origin_execution_id if return_details else None
+            ),
+            write_off_reason=execution.write_off_reason,
+            operation_reason=(
+                return_details.reason
+                if return_details
+                else (
+                    status_change.reason
+                    if status_change
+                    else execution.write_off_reason
+                )
+            ),
+            target_status=status_change.target_status if status_change else None,
         )
 
     @staticmethod

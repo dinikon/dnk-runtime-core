@@ -19,7 +19,16 @@ class ListStockExecutionsRequest(BaseModel):
     posting_id: UUID | None = None
     stock_status: Literal["SELLABLE", "QUARANTINE", "DAMAGED", "BLOCKED"] | None = None
     operation_type: (
-        Literal["RECEIPT", "ISSUE", "INTERNAL_MOVE", "ADJUSTMENT"] | None
+        Literal[
+            "RECEIPT",
+            "ISSUE",
+            "INTERNAL_MOVE",
+            "ADJUSTMENT",
+            "WRITE_OFF",
+            "STATUS_CHANGE",
+            "RETURN",
+        ]
+        | None
     ) = None
     posted_from: AwareDatetime | None = None
     posted_to: AwareDatetime | None = None

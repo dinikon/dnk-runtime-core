@@ -1,3 +1,37 @@
+from src.modules.inventory.domain.stock_document.value_object.return_details import (
+    StockReturnDetailsVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_reason import (
+    ReturnReasonVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_direction import (
+    ReturnDirection,
+)
+from src.modules.inventory.domain.stock_execution.value_object.identifier import (
+    StockExecutionIdVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.line_id import (
+    StockExecutionLineIdVO,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_document_return import (
+    StockDocumentReturnModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_document_return_line import (
+    StockDocumentReturnLineModel,
+)
+from src.modules.inventory.domain.stock_document.value_object.status_change_details import (
+    StockStatusChangeDetailsVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.status_change_reason import (
+    StatusChangeReasonVO,
+)
+from src.modules.inventory.domain.value_object.stock_status import StockStatus
+from src.modules.inventory.infrastructure.persistence.models.stock_document_status_change import (
+    StockDocumentStatusChangeModel,
+)
+from src.modules.inventory.domain.stock_document.value_object.write_off_reason import (
+    WriteOffReasonVO,
+)
 from typing import Any, Sequence
 from src.modules.inventory.domain.stock_document.aggregate import StockDocument
 from src.modules.inventory.domain.stock_document.entity.stock_document_line import (
@@ -48,6 +82,9 @@ class StockDocumentMapper:
         """Извлекает реквизиты без новых ID и подмены версии."""
         return dict(
             id=document.id.uuid,
+            write_off_reason=(
+                document.write_off_reason.value if document.write_off_reason else None
+            ),
             operation_type=document.operation_type.value,
             warehouse_id=document.warehouse_id.uuid,
             owner_id=document.owner_id.uuid,
@@ -134,7 +171,11 @@ class StockDocumentMapper:
 
     @staticmethod
     def to_domain(
-        model: StockDocumentModel, lines: Sequence[StockDocumentLineModel]
+        model: StockDocumentModel,
+        lines: Sequence[StockDocumentLineModel],
+        status_change: StockDocumentStatusChangeModel | None = None,
+        return_details: StockDocumentReturnModel | None = None,
+        return_lines: Sequence[StockDocumentReturnLineModel] = (),
     ) -> StockDocument:
         """Восстанавливает исторические SKU, единицы и версию без текущих настроек."""
         children = tuple(
@@ -157,12 +198,37 @@ class StockDocumentMapper:
                     else None
                 ),
                 adjustment=None,
+                return_origin_line_id=next(
+                    (
+                        StockExecutionLineIdVO(link.origin_execution_line_id)
+                        for link in return_lines
+                        if link.document_line_id == line.id
+                    ),
+                    None,
+                ),
             )
             for line in lines
         )
         return StockDocument.restore(
             identifier=StockDocumentIdVO(model.id),
             operation_type=StockOperationType(model.operation_type),
+            return_details=(
+                StockReturnDetailsVO(
+                    StockExecutionIdVO(return_details.origin_execution_id),
+                    ReturnDirection(return_details.direction),
+                    ReturnReasonVO(return_details.reason),
+                )
+                if return_details is not None
+                else None
+            ),
+            status_change_details=(
+                StockStatusChangeDetailsVO(
+                    StockStatus(status_change.target_status),
+                    StatusChangeReasonVO(status_change.reason),
+                )
+                if status_change is not None
+                else None
+            ),
             warehouse_id=WarehouseIdVO(model.warehouse_id),
             owner_id=StockOwnerIdVO(model.owner_id),
             status=StockDocumentStatus(model.status),
@@ -177,5 +243,47 @@ class StockDocumentMapper:
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
+            write_off_reason=(
+                WriteOffReasonVO(model.write_off_reason)
+                if model.write_off_reason is not None
+                else None
+            ),
             lines=children,
         )
+
+    @staticmethod
+    def status_change_values(document: StockDocument) -> dict[str, object]:
+        """Извлекает собственные параметры операции без SQL и генерации идентичности."""
+        details = document.status_change_details
+        if details is None:
+            raise RuntimeError("Агрегат не содержит параметров изменения состояния.")
+        return {
+            "document_id": document.id.uuid,
+            "target_status": details.target_status.value,
+            "reason": details.reason.value,
+        }
+
+    @staticmethod
+    def return_values(value: StockDocument) -> dict[str, object]:
+        """Извлекает собственные реквизиты возврата для неизменяемой записи или сохранения плана."""
+        details = value.return_details
+        if details is None:
+            raise RuntimeError("Нет реквизитов возврата.")
+        return {
+            "document_id": value.id.uuid,
+            "origin_execution_id": details.origin_execution_id.uuid,
+            "direction": details.direction.value,
+            "reason": details.reason.value,
+        }
+
+    @staticmethod
+    def return_line_values(value: StockDocument) -> list[dict[str, object]]:
+        """Извлекает собственные дочерние связи без генерации ID или бизнес-решений."""
+        return [
+            {
+                "document_line_id": line.id.uuid,
+                "origin_execution_line_id": line.return_origin_line_id.uuid,
+            }
+            for line in value.lines
+            if line.return_origin_line_id is not None
+        ]

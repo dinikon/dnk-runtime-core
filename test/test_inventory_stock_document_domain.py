@@ -421,6 +421,7 @@ class StockDocumentDomainTests(unittest.TestCase):
                 "executed_qty",
                 "source",
                 "adjustment",
+                "return_origin_line_id",
             },
         )
         self.assertIsNone(confirmed.lines[0].adjustment)

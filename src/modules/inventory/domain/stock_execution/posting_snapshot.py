@@ -1,3 +1,32 @@
+from src.modules.inventory.domain.stock_document.value_object.return_direction import (
+    ReturnDirection,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_issue_route import (
+    ReturnIssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_details import (
+    StockReturnDetailsVO,
+)
+from src.modules.inventory.domain.policy.return_details import ReturnDetailsPolicy
+from src.modules.inventory.domain.stock_execution.value_object.status_change_route import (
+    StatusChangeExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.status_change_details import (
+    StockStatusChangeDetailsVO,
+)
+from src.modules.inventory.domain.policy.status_change_details import (
+    StatusChangeDetailsPolicy,
+)
+from src.modules.inventory.domain.stock_execution.value_object.write_off_route import (
+    WriteOffExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.write_off_reason import (
+    WriteOffReasonVO,
+)
+from src.modules.inventory.domain.policy.write_off_reason import WriteOffReasonPolicy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -50,7 +79,13 @@ class StockExecutionPostingLineSnapshot:
     quantity: QuantityVO
     conversion: QuantityConversionSnapshotVO
     route: (
-        ReceiptExecutionRouteVO | IssueExecutionRouteVO | InternalMoveExecutionRouteVO
+        ReceiptExecutionRouteVO
+        | ReturnReceiptExecutionRouteVO
+        | ReturnIssueExecutionRouteVO
+        | IssueExecutionRouteVO
+        | StatusChangeExecutionRouteVO
+        | WriteOffExecutionRouteVO
+        | InternalMoveExecutionRouteVO
     )
 
     def ensure_valid(self) -> None:
@@ -66,7 +101,11 @@ class StockExecutionPostingLineSnapshot:
                 self.route,
                 (
                     ReceiptExecutionRouteVO,
+                    ReturnReceiptExecutionRouteVO,
+                    ReturnIssueExecutionRouteVO,
                     IssueExecutionRouteVO,
+                    WriteOffExecutionRouteVO,
+                    StatusChangeExecutionRouteVO,
                     InternalMoveExecutionRouteVO,
                 ),
             )
@@ -109,8 +148,19 @@ class StockExecutionPostingSnapshot:
     executed_at: datetime
     lines: tuple[StockExecutionPostingLineSnapshot, ...]
 
+    write_off_reason: WriteOffReasonVO | None = None
+    status_change_details: StockStatusChangeDetailsVO | None = None
+    return_details: StockReturnDetailsVO | None = None
+
     def ensure_valid(self) -> None:
         """Проверяет реквизиты, UTC-время, вид маршрута и уникальность строк и серий."""
+        ReturnDetailsPolicy.ensure_compatible(self.operation_type, self.return_details)
+        StatusChangeDetailsPolicy.ensure_compatible(
+            self.operation_type, self.status_change_details
+        )
+        WriteOffReasonPolicy.ensure_compatible(
+            self.operation_type, self.write_off_reason
+        )
         if (
             not isinstance(self.id, StockExecutionIdVO)
             or not isinstance(self.operation_type, StockOperationType)
@@ -125,10 +175,36 @@ class StockExecutionPostingSnapshot:
                 "Нужен непустой типизированный снимок исполнения с временем UTC."
             )
         expected_route = {
+            StockOperationType.RETURN: (
+                ReturnReceiptExecutionRouteVO,
+                ReturnIssueExecutionRouteVO,
+            ),
             StockOperationType.RECEIPT: ReceiptExecutionRouteVO,
             StockOperationType.ISSUE: IssueExecutionRouteVO,
+            StockOperationType.WRITE_OFF: WriteOffExecutionRouteVO,
+            StockOperationType.STATUS_CHANGE: StatusChangeExecutionRouteVO,
             StockOperationType.INTERNAL_MOVE: InternalMoveExecutionRouteVO,
         }.get(self.operation_type)
+        if self.status_change_details is not None:
+            for line in self.lines:
+                if (
+                    not isinstance(line.route, StatusChangeExecutionRouteVO)
+                    or line.route.destination.stock_status
+                    != self.status_change_details.target_status
+                ):
+                    raise InvalidStockExecutionPostingSnapshotError(
+                        "Маршруты не соответствуют снимку целевого состояния."
+                    )
+        if self.return_details is not None:
+            expected = (
+                ReturnReceiptExecutionRouteVO
+                if self.return_details.direction is ReturnDirection.FROM_RECIPIENT
+                else ReturnIssueExecutionRouteVO
+            )
+            if not all(isinstance(line.route, expected) for line in self.lines):
+                raise InvalidStockExecutionPostingSnapshotError(
+                    "Маршруты не соответствуют направлению возврата."
+                )
         ids, serials = set(), set()
         for line in self.lines:
             if not isinstance(line, StockExecutionPostingLineSnapshot):

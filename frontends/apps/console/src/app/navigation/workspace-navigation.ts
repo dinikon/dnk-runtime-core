@@ -48,6 +48,21 @@ export const workspaceNavigation: WorkspaceNavigation = {
           url: "/inventory/stock-documents/internal-moves",
           icon: Warehouse,
         },
+        {
+          title: "Списания",
+          url: "/inventory/stock-documents/write-offs",
+          icon: Warehouse,
+        },
+        {
+          title: "Состояние запаса",
+          url: "/inventory/stock-documents/status-changes",
+          icon: Warehouse,
+        },
+        {
+          title: "Возвраты",
+          url: "/inventory/stock-documents/returns",
+          icon: Warehouse,
+        },
         { title: "Номенклатура", url: "/inventory/items", icon: Warehouse },
         { title: "Склады", url: "/inventory/warehouses", icon: Building2 },
         {

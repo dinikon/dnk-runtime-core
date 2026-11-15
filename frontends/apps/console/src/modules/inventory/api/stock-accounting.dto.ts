@@ -87,6 +87,11 @@ export interface ListStockMovementsItemDTO {
   quantity_delta: string;
   execution_line_ids: string[];
   historical_skus: string[];
+  write_off_reason: string | null;
+  operation_reason?: string | null;
+  target_status?: string | null;
+  return_direction?: string | null;
+  origin_execution_id?: string | null;
 }
 export interface MovementPositionSnapshotDTO {
   id: string;
@@ -165,6 +170,8 @@ export interface GetStockExecutionDetailsLineDTO {
   location_code_at_receipt: string | null;
   destination_location_id: string | null;
   destination_location_code: string | null;
+  destination_stock_status?: string | null;
+  origin_execution_line_id?: string | null;
   source_ledger_entry_id: string | null;
   destination_ledger_entry_id: string | null;
 }
@@ -205,6 +212,11 @@ export interface GetStockExecutionDetailsResultDTO {
   owner_id: string;
   owner_name: string | null;
   has_receipt_result: boolean;
+  write_off_reason: string | null;
+  operation_reason?: string | null;
+  target_status?: string | null;
+  return_direction?: string | null;
+  origin_execution_id?: string | null;
   lines: GetStockExecutionDetailsLineDTO[];
   ledger: GetStockExecutionDetailsEntryDTO[];
   costs: GetStockExecutionDetailsCostDTO[];
@@ -233,6 +245,8 @@ export interface GetStockPostingDetailsLineDTO {
   location_code_at_receipt: string | null;
   destination_location_id: string | null;
   destination_location_code: string | null;
+  destination_stock_status?: string | null;
+  origin_execution_line_id?: string | null;
   source_ledger_entry_id: string | null;
   destination_ledger_entry_id: string | null;
 }
@@ -273,6 +287,11 @@ export interface GetStockPostingDetailsResultDTO {
   owner_id: string;
   owner_name: string | null;
   has_receipt_result: boolean;
+  write_off_reason: string | null;
+  operation_reason?: string | null;
+  target_status?: string | null;
+  return_direction?: string | null;
+  origin_execution_id?: string | null;
   lines: GetStockPostingDetailsLineDTO[];
   ledger: GetStockPostingDetailsEntryDTO[];
   costs: GetStockPostingDetailsCostDTO[];

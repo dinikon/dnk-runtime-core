@@ -174,3 +174,39 @@ import src.modules.inventory.infrastructure.persistence.models.stock_internal_mo
 HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
     {"stock_internal_move_posting_requests"}
 )
+
+import src.modules.inventory.infrastructure.persistence.models.stock_write_off_creation_request  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_write_off_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {"stock_write_off_posting_requests"}
+)
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document_status_change  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_status_change  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_status_change_creation_request  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_status_change_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {"stock_execution_status_changes", "stock_status_change_posting_requests"}
+)
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document_return  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_return  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document_return_line  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_return_line  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_return_creation_request  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_return_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {
+        "stock_execution_returns",
+        "stock_execution_return_lines",
+        "stock_return_posting_requests",
+    }
+)

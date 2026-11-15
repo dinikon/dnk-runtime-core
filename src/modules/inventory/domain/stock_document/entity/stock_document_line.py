@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_execution.value_object.line_id import (
+    StockExecutionLineIdVO,
+)
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Self
@@ -59,6 +62,7 @@ class StockDocumentLine:
     executed_qty: QuantityVO
     source: DocumentLineSourceVO | None
     adjustment: StockAdjustmentLineVO | None
+    return_origin_line_id: StockExecutionLineIdVO | None = None
 
     @classmethod
     def create_adjustment(
@@ -103,6 +107,7 @@ class StockDocumentLine:
         quantity: QuantityVO,
         uom: UomCodeVO,
         source: DocumentLineSourceVO | None = None,
+        return_origin_line_id: StockExecutionLineIdVO | None = None,
     ) -> Self:
         """Создаёт положительный план, вычисляя базовое количество и фиксируя SKU товара."""
         if not isinstance(inventory_item, InventoryItemDocumentSnapshot):
@@ -123,6 +128,7 @@ class StockDocumentLine:
             executed_qty=QuantityVO(Decimal(0)),
             source=source,
             adjustment=None,
+            return_origin_line_id=return_origin_line_id,
         )
         line.ensure_compatible(inventory_item)
         return line
@@ -140,6 +146,7 @@ class StockDocumentLine:
         executed_qty: QuantityVO,
         source: DocumentLineSourceVO | None,
         adjustment: StockAdjustmentLineVO | None,
+        return_origin_line_id: StockExecutionLineIdVO | None = None,
     ) -> Self:
         """Восстанавливает собственный исторический состав без текущих правил или смены SKU."""
         line = cls(
@@ -152,12 +159,19 @@ class StockDocumentLine:
             executed_qty,
             source,
             adjustment,
+            return_origin_line_id,
         )
         line.ensure_valid()
         return line
 
     def ensure_valid(self) -> None:
         """Проверяет положительный план, исполнение от нуля до плана и точность сохранённого пересчёта."""
+        if self.return_origin_line_id is not None and not isinstance(
+            self.return_origin_line_id, StockExecutionLineIdVO
+        ):
+            raise InvalidStockDocumentLineError(
+                "Нужен типизированный ID исходной фактической строки."
+            )
         if (
             not isinstance(self.id, StockDocumentLineIdVO)
             or not isinstance(self.inventory_item_id, InventoryItemIdVO)

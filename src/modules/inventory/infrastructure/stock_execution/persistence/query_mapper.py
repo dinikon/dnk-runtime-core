@@ -51,6 +51,27 @@ class StockExecutionQueryMapper:
             document_current_version=document.version,
             document_current_status=document.status,
             operation_type=execution.operation_type,
+            return_direction=(
+                value.return_details.direction if value.return_details else None
+            ),
+            origin_execution_id=(
+                value.return_details.origin_execution_id
+                if value.return_details
+                else None
+            ),
+            write_off_reason=execution.write_off_reason,
+            operation_reason=(
+                value.return_details.reason
+                if value.return_details
+                else (
+                    value.status_change.reason
+                    if value.status_change
+                    else execution.write_off_reason
+                )
+            ),
+            target_status=(
+                value.status_change.target_status if value.status_change else None
+            ),
             executed_at=execution.executed_at,
             posted_at=posting.posted_at if posting else None,
             warehouse_id=warehouse.id,
@@ -98,6 +119,15 @@ class StockExecutionQueryMapper:
                     serial_id=line.serial_id,
                     serial_number=serial.number if serial else None,
                     stock_status=line.stock_status,
+                    origin_execution_line_id=next(
+                        (
+                            link.origin_execution_line_id
+                            for link in value.return_lines
+                            if link.execution_line_id == line.id
+                        ),
+                        None,
+                    ),
+                    destination_stock_status=line.destination_stock_status,
                     ledger_entry_ids=tuple(
                         link.ledger_entry_id
                         for link in value.links

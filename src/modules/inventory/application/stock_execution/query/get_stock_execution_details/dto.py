@@ -31,6 +31,8 @@ class GetStockExecutionDetailsLineDTO:
     location_code_at_receipt: str | None
     destination_location_id: UUID | None = None
     destination_location_code: str | None = None
+    destination_stock_status: str | None = None
+    origin_execution_line_id: UUID | None = None
     source_ledger_entry_id: UUID | None = None
     destination_ledger_entry_id: UUID | None = None
 
@@ -90,3 +92,9 @@ class GetStockExecutionDetailsResultDTO:
     lines: tuple[GetStockExecutionDetailsLineDTO, ...]
     ledger: tuple[GetStockExecutionDetailsEntryDTO, ...]
     costs: tuple[GetStockExecutionDetailsCostDTO, ...]
+
+    write_off_reason: str | None = None
+    operation_reason: str | None = None
+    return_direction: str | None = None
+    origin_execution_id: UUID | None = None
+    target_status: str | None = None

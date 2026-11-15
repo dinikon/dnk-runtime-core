@@ -617,6 +617,9 @@ class ExecutionPostingDomainTests(unittest.TestCase):
                 "owner_id",
                 "executed_at",
                 "lines",
+                "write_off_reason",
+                "status_change_details",
+                "return_details",
             },
         )
         self.assertEqual(len(snapshot.lines), 2)

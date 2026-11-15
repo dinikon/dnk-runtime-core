@@ -1,4 +1,16 @@
 <script setup lang="ts">
+import { useReturnQuery } from "../model/use-return-query";
+import { useReturnExecutionResult } from "../model/use-return-execution-result";
+import { useReturnOrigin } from "../model/use-return-origin";
+import ReturnExecutionResult from "../ui/results/ReturnExecutionResult.vue";
+import ReturnOriginSummary from "../ui/results/ReturnOriginSummary.vue";
+
+import { useStatusChangeQuery } from "../model/use-status-change-query";
+import { useStatusChangeExecutionResult } from "../model/use-status-change-execution-result";
+import StatusChangeExecutionResult from "../ui/results/StatusChangeExecutionResult.vue";
+import { useWriteOffQuery } from "../model/use-write-off-query";
+import { useWriteOffExecutionResult } from "../model/use-write-off-execution-result";
+import WriteOffExecutionResult from "../ui/results/WriteOffExecutionResult.vue";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Button } from "@/components/ui/button";
@@ -114,12 +126,64 @@ const internalMoveResult = useInternalMoveExecutionResult(
   ),
   scope,
 );
+const writeOffDocument = useWriteOffQuery(
+  computed(() =>
+    fact.value?.operationType === "WRITE_OFF" ? fact.value.documentId : "",
+  ),
+  scope,
+);
+const writeOffResult = useWriteOffExecutionResult(
+  computed(() =>
+    fact.value?.operationType === "WRITE_OFF" ? fact.value.executionId : "",
+  ),
+  scope,
+);
+const statusChangeDocument = useStatusChangeQuery(
+  computed(() =>
+    fact.value?.operationType === "STATUS_CHANGE" ? fact.value.documentId : "",
+  ),
+  scope,
+);
+const statusChangeResult = useStatusChangeExecutionResult(
+  computed(() =>
+    fact.value?.operationType === "STATUS_CHANGE" ? fact.value.executionId : "",
+  ),
+  scope,
+);
+const returnDocument = useReturnQuery(
+  computed(() =>
+    fact.value?.operationType === "RETURN" ? fact.value.documentId : "",
+  ),
+  scope,
+);
+const returnResult = useReturnExecutionResult(
+  computed(() =>
+    fact.value?.operationType === "RETURN" ? fact.value.executionId : "",
+  ),
+  scope,
+);
+const originEligible = computed(
+  () =>
+    !!fact.value?.postingId &&
+    ["RECEIPT", "ISSUE"].includes(fact.value.operationType) &&
+    currentDocument.value.data.value?.sourceSystem === null,
+);
+const returnOrigin = useReturnOrigin(
+  computed(() => (originEligible.value ? (fact.value?.executionId ?? "") : "")),
+  scope,
+);
 const currentDocument = computed(() =>
-  fact.value?.operationType === "INTERNAL_MOVE"
-    ? internalMoveDocument
-    : fact.value?.operationType === "ISSUE"
-      ? issueDocument
-      : receiptDocument,
+  fact.value?.operationType === "RETURN"
+    ? returnDocument
+    : fact.value?.operationType === "STATUS_CHANGE"
+      ? statusChangeDocument
+      : fact.value?.operationType === "WRITE_OFF"
+        ? writeOffDocument
+        : fact.value?.operationType === "INTERNAL_MOVE"
+          ? internalMoveDocument
+          : fact.value?.operationType === "ISSUE"
+            ? issueDocument
+            : receiptDocument,
 );
 const canReceiveMore = computed(() => {
   const document = currentDocument.value.data.value;
@@ -153,16 +217,28 @@ function openMovements(): void {
       <h1 class="text-2xl font-semibold">
         {{
           kind === "execution"
-            ? fact?.operationType === "INTERNAL_MOVE"
-              ? "Исполнение перемещения"
-              : fact?.operationType === "ISSUE"
-                ? "Исполнение расхода"
-                : "Исполнение поступления"
-            : fact?.operationType === "INTERNAL_MOVE"
-              ? "Проводка перемещения"
-              : fact?.operationType === "ISSUE"
-                ? "Проводка расхода"
-                : "Проводка поступления"
+            ? fact?.operationType === "RETURN"
+              ? "Исполнение возврата"
+              : fact?.operationType === "STATUS_CHANGE"
+                ? "Исполнение изменения состояния"
+                : fact?.operationType === "WRITE_OFF"
+                  ? "Исполнение списания"
+                  : fact?.operationType === "INTERNAL_MOVE"
+                    ? "Исполнение перемещения"
+                    : fact?.operationType === "ISSUE"
+                      ? "Исполнение расхода"
+                      : "Исполнение поступления"
+            : fact?.operationType === "RETURN"
+              ? "Проводка возврата"
+              : fact?.operationType === "STATUS_CHANGE"
+                ? "Проводка изменения состояния"
+                : fact?.operationType === "WRITE_OFF"
+                  ? "Проводка списания"
+                  : fact?.operationType === "INTERNAL_MOVE"
+                    ? "Проводка перемещения"
+                    : fact?.operationType === "ISSUE"
+                      ? "Проводка расхода"
+                      : "Проводка поступления"
         }}
       </h1>
       <div class="flex flex-wrap gap-2">
@@ -172,20 +248,32 @@ function openMovements(): void {
           @click="
             router.push({
               name:
-                fact.operationType === 'INTERNAL_MOVE'
-                  ? 'inventory-internal-move-execute'
-                  : fact.operationType === 'ISSUE'
-                    ? 'inventory-issue-execute'
-                    : 'inventory-receipt-receive',
+                fact.operationType === 'RETURN'
+                  ? 'inventory-return-execute'
+                  : fact.operationType === 'STATUS_CHANGE'
+                    ? 'inventory-status-change-execute'
+                    : fact.operationType === 'WRITE_OFF'
+                      ? 'inventory-write-off-execute'
+                      : fact.operationType === 'INTERNAL_MOVE'
+                        ? 'inventory-internal-move-execute'
+                        : fact.operationType === 'ISSUE'
+                          ? 'inventory-issue-execute'
+                          : 'inventory-receipt-receive',
               params: { documentId: fact.documentId },
             })
           "
           >{{
-            fact.operationType === "INTERNAL_MOVE"
-              ? "Переместить остаток"
-              : fact.operationType === "ISSUE"
-                ? "Выдать остаток"
-                : "Принять остаток"
+            fact.operationType === "RETURN"
+              ? "Исполнить возврат"
+              : fact.operationType === "STATUS_CHANGE"
+                ? "Изменить состояние остатка"
+                : fact.operationType === "WRITE_OFF"
+                  ? "Списать остаток"
+                  : fact.operationType === "INTERNAL_MOVE"
+                    ? "Переместить остаток"
+                    : fact.operationType === "ISSUE"
+                      ? "Выдать остаток"
+                      : "Принять остаток"
           }}</Button
         >
         <Button
@@ -193,19 +281,31 @@ function openMovements(): void {
           @click="
             router.push({
               name:
-                fact?.operationType === 'INTERNAL_MOVE'
-                  ? 'inventory-internal-move-documents'
-                  : fact?.operationType === 'ISSUE'
-                    ? 'inventory-issue-documents'
-                    : 'inventory-receipt-documents',
+                fact?.operationType === 'RETURN'
+                  ? 'inventory-return-documents'
+                  : fact?.operationType === 'STATUS_CHANGE'
+                    ? 'inventory-status-change-documents'
+                    : fact?.operationType === 'WRITE_OFF'
+                      ? 'inventory-write-off-documents'
+                      : fact?.operationType === 'INTERNAL_MOVE'
+                        ? 'inventory-internal-move-documents'
+                        : fact?.operationType === 'ISSUE'
+                          ? 'inventory-issue-documents'
+                          : 'inventory-receipt-documents',
             })
           "
           >{{
-            fact?.operationType === "INTERNAL_MOVE"
-              ? "К перемещениям"
-              : fact?.operationType === "ISSUE"
-                ? "К расходам"
-                : "К поступлениям"
+            fact?.operationType === "RETURN"
+              ? "К возвратам"
+              : fact?.operationType === "STATUS_CHANGE"
+                ? "К изменениям состояния"
+                : fact?.operationType === "WRITE_OFF"
+                  ? "К списаниям"
+                  : fact?.operationType === "INTERNAL_MOVE"
+                    ? "К перемещениям"
+                    : fact?.operationType === "ISSUE"
+                      ? "К расходам"
+                      : "К поступлениям"
           }}</Button
         ><Button
           variant="outline"
@@ -244,12 +344,94 @@ function openMovements(): void {
         >Повторить чтение факта</Button
       >
     </p>
+    <ReturnOriginSummary
+      v-if="originEligible && scope.ready.value"
+      :origin="returnOrigin.data.value"
+      :loading="returnOrigin.isPending.value"
+      :error="returnOrigin.error.value?.message ?? ''"
+      @retry="returnOrigin.refetch()"
+      @create="
+        router.push({
+          name: 'inventory-return-create',
+          query: { origin_execution_id: fact?.executionId },
+        })
+      "
+      @list="
+        router.push({
+          name: 'inventory-return-documents',
+          query: { origin_execution_id: fact?.executionId, status: 'ALL' },
+        })
+      "
+    />
+    <ReturnExecutionResult
+      v-if="
+        fact?.operationType === 'RETURN' &&
+        returnResult.data.value &&
+        scope.ready.value
+      "
+      :result="returnResult.data.value"
+    />
+    <p
+      v-if="fact?.operationType === 'RETURN' && returnResult.error.value"
+      role="alert"
+    >
+      {{ returnResult.error.value.message
+      }}<Button variant="outline" @click="returnResult.refetch()"
+        >Повторить чтение возврата</Button
+      >
+    </p>
     <StockFactDetails
       v-if="fact && scope.ready.value"
       :fact="fact"
       @navigate="navigateAccounting"
       @movements="openMovements"
     />
+    <StatusChangeExecutionResult
+      v-if="
+        fact?.operationType === 'STATUS_CHANGE' &&
+        statusChangeResult.data.value &&
+        scope.ready.value
+      "
+      :result="statusChangeResult.data.value"
+    />
+    <p
+      v-if="
+        fact?.operationType === 'STATUS_CHANGE' &&
+        statusChangeResult.error.value
+      "
+      role="alert"
+    >
+      {{ statusChangeResult.error.value.message
+      }}<Button variant="outline" @click="statusChangeResult.refetch()"
+        >Повторить чтение результата</Button
+      >
+    </p>
+    <WriteOffExecutionResult
+      v-if="
+        fact?.operationType === 'WRITE_OFF' &&
+        writeOffResult.data.value &&
+        scope.ready.value
+      "
+      :result="writeOffResult.data.value"
+    />
+    <p
+      v-if="
+        fact?.operationType === 'WRITE_OFF' && writeOffResult.isPending.value
+      "
+      role="status"
+    >
+      Загрузка первоначального результата списания…
+    </p>
+    <p
+      v-if="fact?.operationType === 'WRITE_OFF' && writeOffResult.error.value"
+      role="alert"
+      class="text-sm text-destructive"
+    >
+      {{ writeOffResult.error.value.message
+      }}<Button variant="outline" @click="writeOffResult.refetch()"
+        >Повторить чтение результата списания</Button
+      >
+    </p>
     <InternalMoveExecutionResult
       v-if="
         fact?.operationType === 'INTERNAL_MOVE' &&

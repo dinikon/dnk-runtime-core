@@ -59,6 +59,9 @@ class StockExecutionDocumentPolicy:
             or execution.operation_type != document.operation_type
             or execution.warehouse_id != document.warehouse_id
             or execution.owner_id != document.owner_id
+            or execution.write_off_reason != document.write_off_reason
+            or execution.status_change_details != document.status_change_details
+            or execution.return_details != document.return_details
         ):
             raise InvalidStockDocumentContextError(
                 "Исполнение должно соответствовать документу, операции, складу и владельцу."
@@ -78,6 +81,7 @@ class StockExecutionDocumentPolicy:
                 planned is None
                 or actual.inventory_item_id != planned.inventory_item_id
                 or actual.base_uom != planned.base_uom
+                or actual.return_origin_line_id != planned.return_origin_line_id
             ):
                 raise InvalidStockDocumentContextError(
                     "Фактическая строка должна соответствовать плановой строке, товару и единице."

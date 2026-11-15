@@ -89,3 +89,18 @@ class SqlAlchemyStockSerialRepository:
             raise StockSerialNumberAlreadyExistsError(
                 "Номер экземпляра уже занят внутри этого SKU."
             ) from error
+
+    async def get(
+        self, identifier: StockSerialIdVO, *, inventory_item_id: InventoryItemIdVO
+    ) -> StockSerial | None:
+        """Читает без блокировки экземпляр после SKU и перечитывает identity map после ожидания."""
+        statement = (
+            select(StockSerialModel)
+            .where(
+                StockSerialModel.id == identifier.uuid,
+                StockSerialModel.inventory_item_id == inventory_item_id.uuid,
+            )
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return StockSerialMapper.to_domain(model) if model is not None else None

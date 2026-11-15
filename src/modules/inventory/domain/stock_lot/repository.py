@@ -23,3 +23,9 @@ class StockLotRepositoryProtocol(Protocol):
     async def save(self, lot: StockLot) -> None:
         """Сохраняет даты существующей партии без изменения номера/владельца и без commit."""
         ...
+
+    async def get(
+        self, identifier: StockLotIdVO, *, inventory_item_id: InventoryItemIdVO
+    ) -> StockLot | None:
+        """Читает без блокировки и перечитывает партию только внутри указанного владельца."""
+        ...

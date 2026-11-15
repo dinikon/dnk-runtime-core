@@ -37,3 +37,5 @@ class StockExecutionModel(TenantBase):
     executed_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), nullable=False
     )
+
+    write_off_reason: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)

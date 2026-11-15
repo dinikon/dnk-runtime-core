@@ -1,3 +1,20 @@
+from src.modules.inventory.domain.stock_execution.value_object.line_id import (
+    StockExecutionLineIdVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_details import (
+    StockReturnDetailsVO,
+)
+from src.modules.inventory.domain.policy.return_details import ReturnDetailsPolicy
+from src.modules.inventory.domain.stock_document.value_object.status_change_details import (
+    StockStatusChangeDetailsVO,
+)
+from src.modules.inventory.domain.policy.status_change_details import (
+    StatusChangeDetailsPolicy,
+)
+from src.modules.inventory.domain.stock_document.value_object.write_off_reason import (
+    WriteOffReasonVO,
+)
+from src.modules.inventory.domain.policy.write_off_reason import WriteOffReasonPolicy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -41,6 +58,7 @@ class StockDocumentLineExecutionSnapshot:
     base_uom: UomCodeVO
     planned_qty: QuantityVO
     executed_qty: QuantityVO
+    return_origin_line_id: StockExecutionLineIdVO | None = None
 
     def ensure_valid(self) -> None:
         """Проверяет собственные типы и допустимый диапазон накопленного исполнения."""
@@ -78,8 +96,19 @@ class StockDocumentExecutionSnapshot:
     updated_at: datetime
     lines: tuple[StockDocumentLineExecutionSnapshot, ...]
 
+    write_off_reason: WriteOffReasonVO | None = None
+    status_change_details: StockStatusChangeDetailsVO | None = None
+    return_details: StockReturnDetailsVO | None = None
+
     def ensure_valid(self) -> None:
         """Проверяет собственные типы, уникальность строк, UTC-время и согласованный прогресс."""
+        ReturnDetailsPolicy.ensure_compatible(self.operation_type, self.return_details)
+        StatusChangeDetailsPolicy.ensure_compatible(
+            self.operation_type, self.status_change_details
+        )
+        WriteOffReasonPolicy.ensure_compatible(
+            self.operation_type, self.write_off_reason
+        )
         if (
             not isinstance(self.id, StockDocumentIdVO)
             or not isinstance(self.operation_type, StockOperationType)

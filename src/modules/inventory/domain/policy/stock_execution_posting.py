@@ -1,3 +1,12 @@
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_issue_route import (
+    ReturnIssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.write_off_route import (
+    WriteOffExecutionRouteVO,
+)
 from decimal import Decimal
 
 from src.modules.inventory.domain.policy.quantity_arithmetic import (
@@ -82,9 +91,18 @@ class StockExecutionPostingPolicy:
             )
         grouped: dict[StockPositionIdVO, tuple[bool, QuantityVO]] = {}
         for line in execution.lines:
-            if isinstance(line.route, ReceiptExecutionRouteVO):
+            if isinstance(
+                line.route, (ReceiptExecutionRouteVO, ReturnReceiptExecutionRouteVO)
+            ):
                 movements = ((line.route.destination, True),)
-            elif isinstance(line.route, IssueExecutionRouteVO):
+            elif isinstance(
+                line.route,
+                (
+                    IssueExecutionRouteVO,
+                    WriteOffExecutionRouteVO,
+                    ReturnIssueExecutionRouteVO,
+                ),
+            ):
                 movements = ((line.route.source, False),)
             else:
                 movements = ((line.route.source, False), (line.route.destination, True))

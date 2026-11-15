@@ -1,3 +1,20 @@
+from src.modules.inventory.domain.stock_document.value_object.return_reason import (
+    ReturnReasonVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_details import (
+    StockReturnDetailsVO,
+)
+from src.modules.inventory.domain.policy.return_details import ReturnDetailsPolicy
+from src.modules.inventory.domain.stock_document.value_object.status_change_details import (
+    StockStatusChangeDetailsVO,
+)
+from src.modules.inventory.domain.policy.status_change_details import (
+    StatusChangeDetailsPolicy,
+)
+from src.modules.inventory.domain.stock_document.value_object.write_off_reason import (
+    WriteOffReasonVO,
+)
+from src.modules.inventory.domain.policy.write_off_reason import WriteOffReasonPolicy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Self
@@ -178,6 +195,9 @@ class StockDocument:
     created_at: datetime
     updated_at: datetime
     version: int
+    write_off_reason: WriteOffReasonVO | None = None
+    status_change_details: StockStatusChangeDetailsVO | None = None
+    return_details: StockReturnDetailsVO | None = None
 
     @classmethod
     def create(
@@ -189,6 +209,9 @@ class StockDocument:
         owner_id: StockOwnerIdVO,
         created_at: datetime,
         source: DocumentSourceVO | None = None,
+        write_off_reason: WriteOffReasonVO | None = None,
+        status_change_details: StockStatusChangeDetailsVO | None = None,
+        return_details: StockReturnDetailsVO | None = None,
     ) -> Self:
         """Создаёт пустой черновик версии 0 для явно указанного владельца и активного склада."""
         if not isinstance(warehouse, WarehouseSnapshot):
@@ -209,6 +232,9 @@ class StockDocument:
             created_at=created_at,
             updated_at=created_at,
             version=0,
+            write_off_reason=write_off_reason,
+            status_change_details=status_change_details,
+            return_details=return_details,
         )
 
     @classmethod
@@ -413,6 +439,9 @@ class StockDocument:
         created_at: datetime,
         updated_at: datetime,
         version: int,
+        write_off_reason: WriteOffReasonVO | None = None,
+        status_change_details: StockStatusChangeDetailsVO | None = None,
+        return_details: StockReturnDetailsVO | None = None,
     ) -> Self:
         """Восстанавливает полный собственный состав без текущих товаров, склада и I/O."""
         document = cls(
@@ -426,6 +455,9 @@ class StockDocument:
             cls._normalize_time(created_at),
             cls._normalize_time(updated_at),
             version,
+            write_off_reason,
+            status_change_details,
+            return_details,
         )
         document._validate()
         return document
@@ -465,6 +497,84 @@ class StockDocument:
             raise InvalidStockDocumentContextError(
                 "Действие доступно ручному документу расхода."
             )
+
+    def ensure_manual_write_off(self) -> None:
+        """Ограничивает ручной сценарий списанием без производного основания."""
+        self._validate()
+        if (
+            self.operation_type is not StockOperationType.WRITE_OFF
+            or self.source is not None
+        ):
+            raise InvalidStockDocumentContextError(
+                "Действие доступно ручному документу списания."
+            )
+
+    def ensure_manual_return(self) -> None:
+        """Требует собственный документ возврата с явным основанием."""
+        self._validate()
+        if (
+            self.operation_type is not StockOperationType.RETURN
+            or self.source is not None
+        ):
+            raise InvalidStockDocumentContextError(
+                "Нужен документ RETURN с собственным основанием."
+            )
+
+    def return_snapshot(self) -> StockReturnDetailsVO:
+        """Возвращает проверенные собственные реквизиты возврата без внешнего чтения."""
+        self.ensure_manual_return()
+        if self.return_details is None:
+            raise InvalidStockDocumentContextError("Нет основания возврата.")
+        return self.return_details
+
+    def change_return_reason(
+        self, reason: ReturnReasonVO, *, updated_at: datetime
+    ) -> Self:
+        """Меняет только причину черновика, сохраняя исходное исполнение и направление."""
+        self.ensure_manual_return()
+        self._ensure_draft()
+        if self.return_details is None:
+            raise InvalidStockDocumentContextError("Нет основания возврата.")
+        return self._with_changes(
+            updated_at=updated_at,
+            return_details=replace(self.return_details, reason=reason),
+        )
+
+    def ensure_manual_status_change(self) -> None:
+        """Ограничивает ручной сценарий изменением состояния без производного основания."""
+        self._validate()
+        if (
+            self.operation_type is not StockOperationType.STATUS_CHANGE
+            or self.source is not None
+        ):
+            raise InvalidStockDocumentContextError(
+                "Действие доступно ручному документу изменения состояния."
+            )
+
+    def status_change_snapshot(self) -> StockStatusChangeDetailsVO:
+        """Возвращает проверенные параметры ручного изменения состояния."""
+        self.ensure_manual_status_change()
+        if self.status_change_details is None:
+            raise InvalidStockDocumentContextError(
+                "Не заданы параметры изменения состояния."
+            )
+        return self.status_change_details
+
+    def change_status_change_details(
+        self, details: StockStatusChangeDetailsVO, *, updated_at: datetime
+    ) -> Self:
+        """Меняет цель и причину только ручного черновика одной доменной операцией."""
+        self.ensure_manual_status_change()
+        self._ensure_draft()
+        return self._with_changes(updated_at=updated_at, status_change_details=details)
+
+    def change_write_off_reason(
+        self, reason: WriteOffReasonVO, *, updated_at: datetime
+    ) -> Self:
+        """Меняет причину только ручного черновика и сохраняет её после подтверждения."""
+        self.ensure_manual_write_off()
+        self._ensure_draft()
+        return self._with_changes(updated_at=updated_at, write_off_reason=reason)
 
     def ensure_manual_internal_move(self) -> None:
         """Ограничивает сценарий ручным перемещением без производного основания."""
@@ -525,6 +635,7 @@ class StockDocument:
             executed_qty=original.executed_qty,
             source=original.source,
             adjustment=original.adjustment,
+            return_origin_line_id=original.return_origin_line_id,
         )
         changed.ensure_compatible(inventory_item)
         return self._with_changes(
@@ -880,9 +991,13 @@ class StockDocument:
                     line.base_uom,
                     line.planned_qty,
                     line.executed_qty,
+                    line.return_origin_line_id,
                 )
                 for line in self.lines
             ),
+            self.write_off_reason,
+            self.status_change_details,
+            self.return_details,
         )
 
     def register_execution(
@@ -996,6 +1111,13 @@ class StockDocument:
             raise InvalidStockDocumentValueError(
                 "Нужны типизированные поля, tuple строк и целая неотрицательная версия документа."
             )
+        WriteOffReasonPolicy.ensure_compatible(
+            self.operation_type, self.write_off_reason
+        )
+        ReturnDetailsPolicy.ensure_compatible(self.operation_type, self.return_details)
+        StatusChangeDetailsPolicy.ensure_compatible(
+            self.operation_type, self.status_change_details
+        )
         created = self._normalize_time(self.created_at)
         updated = self._normalize_time(self.updated_at)
         if (
@@ -1013,6 +1135,12 @@ class StockDocument:
                     "Состав документа содержит только StockDocumentLine."
                 )
             line.ensure_valid()
+            if (self.operation_type is StockOperationType.RETURN) != (
+                line.return_origin_line_id is not None
+            ):
+                raise InvalidStockDocumentLineError(
+                    "Связь с исходной фактической строкой обязательна только для RETURN."
+                )
             if line.id in line_ids:
                 raise StockDocumentLineConflictError(
                     "ID строк документа должны быть уникальны."

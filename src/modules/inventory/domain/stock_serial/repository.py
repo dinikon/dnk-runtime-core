@@ -25,3 +25,9 @@ class StockSerialRepositoryProtocol(Protocol):
     async def save(self, serial: StockSerial) -> None:
         """Сохраняет номер и связь существующего экземпляра без изменения ID/SKU и commit."""
         ...
+
+    async def get(
+        self, identifier: StockSerialIdVO, *, inventory_item_id: InventoryItemIdVO
+    ) -> StockSerial | None:
+        """Читает без блокировки и перечитывает экземпляр только внутри указанного SKU."""
+        ...

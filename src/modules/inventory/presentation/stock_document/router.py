@@ -1,3 +1,6 @@
+from src.modules.inventory.presentation.stock_document.return_router import (
+    router as returns_router,
+)
 from fastapi import APIRouter, Depends
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
@@ -45,6 +48,7 @@ router = APIRouter(
     tags=["inventory-stock-documents"],
     dependencies=[Depends(require_authenticated_request_context)],
 )
+router.include_router(returns_router)
 router.add_api_route(
     "",
     create_receipt_draft,
@@ -68,6 +72,16 @@ from src.modules.inventory.presentation.stock_document.internal_move_router impo
 )
 
 router.include_router(internal_move_router)
+from src.modules.inventory.presentation.stock_document.write_off_router import (
+    router as write_off_router,
+)
+
+router.include_router(write_off_router)
+from src.modules.inventory.presentation.stock_document.status_change_router import (
+    router as status_change_router,
+)
+
+router.include_router(status_change_router)
 router.include_router(issue_router)
 
 router.add_api_route(

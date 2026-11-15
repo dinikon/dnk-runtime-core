@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
 from src.modules.inventory.domain.inventory_item.error import (
     InvalidInventoryItemExecutionSnapshotError,
 )
@@ -190,7 +193,11 @@ class StockExecutionContextPolicy:
                 StockExpirationPolicy.ensure_operation_allowed(
                     dates=dates,
                     expiration_mode=item.expiration_mode,
-                    operation_type=operation_type,
+                    operation_type=(
+                        StockOperationType.RECEIPT
+                        if isinstance(line.route, ReturnReceiptExecutionRouteVO)
+                        else operation_type
+                    ),
                 )
 
         if (

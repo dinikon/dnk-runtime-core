@@ -1,3 +1,9 @@
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_return import (
+    StockExecutionReturnModel as ReturnDetails,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_status_change import (
+    StockExecutionStatusChangeModel as StatusDetails,
+)
 from src.modules.inventory.application.stock_posting.query.list_stock_movements.query import (
     ListStockMovementsQuery,
 )
@@ -203,7 +209,20 @@ class SqlAlchemyStockPostingQueryRepository:
         )
         total = (await self._session.execute(count_statement)).scalar_one()
         statement = (
-            select(P, L, W, I, Nullable(Lot), Nullable(S), Entry, T, E, D)
+            select(
+                P,
+                L,
+                W,
+                I,
+                Nullable(Lot),
+                Nullable(S),
+                Entry,
+                T,
+                E,
+                D,
+                Nullable(StatusDetails),
+                Nullable(ReturnDetails),
+            )
             .select_from(Entry)
             .join(P, P.id == Entry.position_id)
             .join(L, L.id == P.location_id)
@@ -214,6 +233,8 @@ class SqlAlchemyStockPostingQueryRepository:
             .join(T, T.id == Entry.posting_id)
             .join(E, E.id == T.execution_id)
             .join(D, D.id == E.document_id)
+            .outerjoin(StatusDetails, StatusDetails.execution_id == E.id)
+            .outerjoin(ReturnDetails, ReturnDetails.execution_id == E.id)
             .where(*filters)
             .order_by(T.posted_at.desc(), T.id.desc(), Entry.position, Entry.id)
             .offset(query.offset)
@@ -259,8 +280,10 @@ class SqlAlchemyStockPostingQueryRepository:
                         sku for link, sku in links if link.ledger_entry_id == entry.id
                     )
                 ),
+                status_change,
+                return_details,
             )
-            for p, l, w, item, lot, serial, entry, posted, execution, document in rows
+            for p, l, w, item, lot, serial, entry, posted, execution, document, status_change, return_details in rows
         )
         return ListStockMovementsResultDTO(
             items, total, query.offset, query.limit, snapshot

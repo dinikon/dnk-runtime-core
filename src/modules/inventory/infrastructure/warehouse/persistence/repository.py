@@ -95,3 +95,13 @@ class SqlAlchemyWarehouseRepository:
             raise StockLocationNotFoundError(
                 "Основная локация не найдена в указанном складе."
             ) from error
+
+    async def get(self, identifier: WarehouseIdVO) -> Warehouse | None:
+        """Читает без блокировки строку и перечитывает модель поверх кеша текущей сессии."""
+        statement = (
+            select(WarehouseModel)
+            .where(WarehouseModel.id == identifier.uuid)
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return WarehouseMapper.to_domain(model) if model is not None else None

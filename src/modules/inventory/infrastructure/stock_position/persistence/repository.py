@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_position.value_object.dimensions import (
+    StockDimensionsVO,
+)
 from src.modules.inventory.domain.stock_position.value_object.identifier import (
     StockPositionIdVO,
 )
@@ -141,3 +144,55 @@ class SqlAlchemyStockPositionRepository:
             )
             for identifier in identifiers
         )
+
+    async def read_serial_presence(
+        self, identifiers: tuple[StockSerialIdVO, ...]
+    ) -> tuple[StockSerialPresenceSnapshot, ...]:
+        """Читает все положительные позиции затронутых SERIAL без фильтра склада или владельца."""
+        if not identifiers:
+            return ()
+        statement = (
+            select(Model)
+            .where(
+                Model.serial_id.in_(
+                    tuple(identifier.uuid for identifier in identifiers)
+                ),
+                Model.on_hand_qty > 0,
+            )
+            .order_by(Model.serial_id, Model.id)
+            .execution_options(populate_existing=True)
+        )
+        models = (await self._session.scalars(statement)).all()
+        return tuple(
+            StockSerialPresenceSnapshot(
+                identifier,
+                tuple(
+                    StockPositionMapper.to_domain(model).counting_snapshot()
+                    for model in models
+                    if model.serial_id == identifier.uuid
+                ),
+            )
+            for identifier in identifiers
+        )
+
+    async def get_by_dimensions(
+        self, dimensions: StockDimensionsVO
+    ) -> StockPosition | None:
+        """Читает полный nullable-ключ без записи и блокировок для бизнес-preview."""
+        d = dimensions
+        statement = (
+            select(Model)
+            .where(
+                Model.inventory_item_id == d.inventory_item_id.uuid,
+                Model.location_id == d.location_id.uuid,
+                Model.owner_id == d.owner_id.uuid,
+                Model.stock_status == d.stock_status.value,
+                Model.lot_id.is_not_distinct_from(d.lot_id.uuid if d.lot_id else None),
+                Model.serial_id.is_not_distinct_from(
+                    d.serial_id.uuid if d.serial_id else None
+                ),
+            )
+            .execution_options(populate_existing=True)
+        )
+        model = (await self._session.scalars(statement)).one_or_none()
+        return StockPositionMapper.to_domain(model) if model is not None else None

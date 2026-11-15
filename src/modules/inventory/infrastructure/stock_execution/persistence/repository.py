@@ -1,3 +1,12 @@
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_return import (
+    StockExecutionReturnModel as ReturnDetails,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_return_line import (
+    StockExecutionReturnLineModel as ReturnLine,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_status_change import (
+    StockExecutionStatusChangeModel as StatusDetails,
+)
 from sqlalchemy import select, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.inventory.domain.stock_execution.aggregate import StockExecution
@@ -33,9 +42,24 @@ class SqlAlchemyStockExecutionRepository:
         await self._session.execute(
             insert(Header).values(StockExecutionMapper.to_values(execution))
         )
+        if execution.status_change_details is not None:
+            await self._session.execute(
+                insert(StatusDetails).values(
+                    StockExecutionMapper.status_change_values(execution)
+                )
+            )
         await self._session.execute(
             insert(Line), StockExecutionMapper.line_values(execution)
         )
+        if execution.return_details is not None:
+            await self._session.execute(
+                insert(ReturnDetails).values(
+                    StockExecutionMapper.return_values(execution)
+                )
+            )
+            links = StockExecutionMapper.return_line_values(execution)
+            if links:
+                await self._session.execute(insert(ReturnLine), links)
         costs = StockExecutionMapper.cost_values(execution)
         if costs:
             await self._session.execute(insert(Cost), costs)
@@ -77,4 +101,25 @@ class SqlAlchemyStockExecutionRepository:
                 .execution_options(populate_existing=True)
             )
         ).all()
-        return StockExecutionMapper.to_domain(model, lines, costs, allocations)
+        details = (
+            await self._session.scalars(
+                select(StatusDetails)
+                .where(StatusDetails.execution_id == model.id)
+                .execution_options(populate_existing=True)
+            )
+        ).one_or_none()
+        return_details = (
+            await self._session.scalars(
+                select(ReturnDetails).where(ReturnDetails.execution_id == model.id)
+            )
+        ).one_or_none()
+        return_lines = (
+            await self._session.scalars(
+                select(ReturnLine)
+                .join(Line, Line.id == ReturnLine.execution_line_id)
+                .where(Line.execution_id == model.id)
+            )
+        ).all()
+        return StockExecutionMapper.to_domain(
+            model, lines, costs, allocations, details, return_details, return_lines
+        )

@@ -19,7 +19,7 @@ class StockDocumentModel(TenantBase):
             ondelete="RESTRICT",
         ),
         sa.CheckConstraint(
-            "operation_type IN ('RECEIPT','ISSUE','INTERNAL_MOVE','ADJUSTMENT')",
+            "operation_type IN ('RECEIPT','ISSUE','INTERNAL_MOVE','ADJUSTMENT','WRITE_OFF','STATUS_CHANGE','RETURN')",
             name="ck_stock_documents_operation",
         ),
         sa.CheckConstraint(
@@ -50,3 +50,5 @@ class StockDocumentModel(TenantBase):
         sa.DateTime(timezone=True), nullable=False
     )
     version: Mapped[int] = mapped_column(sa.BigInteger(), nullable=False)
+
+    write_off_reason: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)

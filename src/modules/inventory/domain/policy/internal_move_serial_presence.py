@@ -1,3 +1,9 @@
+from src.modules.inventory.domain.policy.stock_position_transition_serial_presence import (
+    StockPositionTransitionSerialPresencePolicy,
+)
+from src.modules.inventory.domain.stock_position.error import (
+    StockPositionTransitionSerialPresenceError,
+)
 from src.modules.inventory.domain.stock_document.internal_move_error import (
     InternalMoveSerialPresenceError,
 )
@@ -21,26 +27,9 @@ class InternalMoveSerialPresencePolicy:
         presence: tuple[StockSerialPresenceSnapshot, ...],
     ) -> None:
         """Требует единственный положительный источник каждого перемещаемого экземпляра."""
-        serial_sources = {
-            line.route.dimensions[0].serial_id: line.route.dimensions[0]
-            for line in lines
-            if line.route.dimensions[0].serial_id is not None
-        }
-        by_serial = {snapshot.serial_id: snapshot for snapshot in presence}
-        if len(by_serial) != len(presence) or set(by_serial) != set(serial_sources):
-            raise InternalMoveSerialPresenceError(
-                "Нужен полный снимок присутствия перемещаемых экземпляров."
+        try:
+            StockPositionTransitionSerialPresencePolicy.ensure_movable(
+                lines=lines, positions=positions, presence=presence
             )
-        by_dimensions = {position.dimensions: position for position in positions}
-        for identifier, dimensions in serial_sources.items():
-            snapshot = by_serial[identifier]
-            snapshot.ensure_valid()
-            source = by_dimensions.get(dimensions)
-            if (
-                source is None
-                or len(snapshot.positions) != 1
-                or snapshot.positions[0] != source.counting_snapshot()
-            ):
-                raise InternalMoveSerialPresenceError(
-                    "Экземпляр должен присутствовать только в выбранном источнике."
-                )
+        except StockPositionTransitionSerialPresenceError as exc:
+            raise InternalMoveSerialPresenceError(str(exc)) from exc
