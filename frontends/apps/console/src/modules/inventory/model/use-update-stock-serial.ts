@@ -1,3 +1,4 @@
+import { stockAccountingKeys } from "./stock-accounting.query-keys";
 import { computed, type Ref } from "vue";
 import {
   useMutation,
@@ -45,6 +46,9 @@ export function useUpdateStockSerial(
     },
     onSuccess: async (result, input) => {
       if (!relevant(input)) return;
+      await cache.invalidateQueries({
+        queryKey: stockAccountingKeys.root(input.scope),
+      });
       const key = stockSerialKeys.detail(
         input.scope,
         input.itemId,

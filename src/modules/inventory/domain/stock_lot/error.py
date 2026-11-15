@@ -31,3 +31,7 @@ class StockLotNotFoundError(StockLotError):
 
 class StockLotNumberAlreadyExistsError(StockLotError):
     """Сообщает о занятом точном номере партии внутри SKU текущего tenant."""
+
+
+class StockLotSettingsInUseError(StockLotError):
+    """Изменение дат нарушает требования к уже существующему физическому запасу."""

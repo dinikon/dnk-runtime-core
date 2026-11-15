@@ -1,3 +1,5 @@
+from src.modules.inventory.domain.stock_lot.error import StockLotSettingsInUseError
+from src.modules.shared.domain.domain_error import DomainError
 from dataclasses import dataclass, replace
 from typing import Self
 
@@ -80,6 +82,18 @@ class StockLot:
         candidate._validate()
         candidate._ensure_compatible(inventory_item)
         return candidate
+
+    def ensure_dates_preserve_stock(
+        self, *, inventory_item: InventoryItemTrackingSnapshot, has_positive_stock: bool
+    ) -> None:
+        """Сохраняет обязательные даты положительного запаса, разрешая неполные пустые карточки."""
+        if has_positive_stock:
+            try:
+                self.ensure_ready_for_receipt(inventory_item=inventory_item)
+            except DomainError as exc:
+                raise StockLotSettingsInUseError(
+                    "Даты несовместимы с положительным физическим остатком: " + str(exc)
+                ) from exc
 
     def ensure_ready_for_receipt(
         self, *, inventory_item: InventoryItemTrackingSnapshot

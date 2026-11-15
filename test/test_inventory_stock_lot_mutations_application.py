@@ -74,7 +74,11 @@ class StockLotMutationsApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.lots = Mock(
             get_for_update=AsyncMock(return_value=self.lot), save=AsyncMock()
         )
-        self.handler = UpdateStockLotHandler(self.items, self.lots)
+        self.handler = UpdateStockLotHandler(
+            self.items,
+            self.lots,
+            Mock(lot_has_positive_stock=AsyncMock(return_value=False)),
+        )
         self.command = UpdateStockLotCommand(
             self.item.id, self.lot.id, frozenset({"expires_on"}), expires_on=None
         )

@@ -92,3 +92,19 @@ from src.modules.inventory.presentation.stock_posting.router import (
 
 router.include_router(stock_executions_router)
 router.include_router(stock_postings_router)
+
+from src.modules.inventory.presentation.stock_position.router import (
+    router as stock_positions_router,
+)
+from src.modules.inventory.presentation.stock_posting.router import (
+    movements_router as stock_movements_router,
+)
+
+router.include_router(stock_positions_router)
+router.include_router(stock_movements_router)
+
+from src.modules.inventory.presentation.stock_position.router import (
+    balances_router as stock_balances_router,
+)
+
+router.include_router(stock_balances_router)

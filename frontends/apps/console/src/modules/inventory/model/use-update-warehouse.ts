@@ -1,3 +1,4 @@
+import { stockAccountingKeys } from "./stock-accounting.query-keys";
 import { computed } from "vue";
 import {
   useMutation,
@@ -33,6 +34,9 @@ export function useUpdateWarehouse(
     },
     onSuccess: async (result, input) => {
       if (!relevant(input)) return;
+      await cache.invalidateQueries({
+        queryKey: stockAccountingKeys.root(input.scope),
+      });
       await cache.cancelQueries({
         queryKey: warehouseKeys.detail(input.scope, result.id),
         exact: true,

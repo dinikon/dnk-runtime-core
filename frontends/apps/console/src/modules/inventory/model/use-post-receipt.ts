@@ -1,3 +1,4 @@
+import { stockAccountingKeys } from "./stock-accounting.query-keys";
 import { computed } from "vue";
 import {
   useMutation,
@@ -42,6 +43,9 @@ export function usePostReceipt(
     },
     onSuccess: async (result, input) => {
       if (!relevant(input)) return;
+      await cache.invalidateQueries({
+        queryKey: stockAccountingKeys.root(input.scope),
+      });
       cache.setQueryData(
         receiptPostingKeys.execution(input.scope, result.executionId),
         result,

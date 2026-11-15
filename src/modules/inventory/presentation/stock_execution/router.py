@@ -20,3 +20,31 @@ router.add_api_route(
     methods=["GET"],
     response_model=GetStockExecutionResponse,
 )
+
+from src.modules.inventory.presentation.stock_execution.http.controller.list_stock_executions import (
+    list_stock_executions,
+)
+from src.modules.inventory.presentation.stock_execution.http.response.list_stock_executions import (
+    ListStockExecutionsResponse,
+)
+
+router.add_api_route(
+    "",
+    list_stock_executions,
+    methods=["GET"],
+    response_model=ListStockExecutionsResponse,
+)
+
+from src.modules.inventory.presentation.stock_execution.http.controller.get_stock_execution_details import (
+    get_stock_execution_details,
+)
+from src.modules.inventory.presentation.stock_execution.http.response.get_stock_execution_details import (
+    GetStockExecutionDetailsResponse,
+)
+
+router.add_api_route(
+    "/{identifier}/details",
+    get_stock_execution_details,
+    methods=["GET"],
+    response_model=GetStockExecutionDetailsResponse,
+)

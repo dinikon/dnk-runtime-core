@@ -1,3 +1,11 @@
+from src.modules.inventory.domain.inventory_item.accounting_usage import (
+    InventoryItemAccountingUsage,
+)
+from src.modules.inventory.domain.policy.quantity_validation import (
+    QuantityValidationPolicy,
+)
+from src.modules.inventory.domain.policy.stock_expiration import StockExpirationPolicy
+from src.modules.shared.domain.domain_error import DomainError
 from src.modules.inventory.domain.inventory_item.error import (
     InventoryItemSettingsInUseError,
 )
@@ -89,6 +97,8 @@ class InventoryItem:
 
     def ensure_can_delete(self, usage: InventoryItemDeletionUsage) -> None:
         """Запрещает удаление при сохранённых связях с каталогом, партиями или экземплярами."""
+        if usage.has_physical_accounting:
+            raise InventoryItemInUseError("SKU используется в физическом учёте.")
         if usage.has_catalog_items:
             raise InventoryItemInUseError(
                 "Нельзя удалить складскую позицию: она связана с элементом каталога."
@@ -120,6 +130,30 @@ class InventoryItem:
             raise InventoryItemSettingsInUseError(
                 "После проведения нельзя менять базовую единицу или режим отслеживания SKU."
             )
+
+    def ensure_accounting_compatible(
+        self, revised: "InventoryItem", usage: InventoryItemAccountingUsage
+    ) -> None:
+        """Сохраняет измерения и проверяет новый шаг и режим срока по текущему запасу, не меняя историю."""
+        self.ensure_revision_preserves_stock(
+            revised, has_physical_history=usage.has_history
+        )
+        try:
+            if revised.quantity_rules != self.quantity_rules:
+                for quantity in usage.quantities:
+                    QuantityValidationPolicy.validate(
+                        quantity=quantity, rules=revised.quantity_rules
+                    )
+            if revised.expiration_mode != self.expiration_mode:
+                for dates in usage.positive_lot_dates:
+                    StockExpirationPolicy.ensure_ready_for_receipt(
+                        dates=dates, expiration_mode=revised.expiration_mode
+                    )
+        except DomainError as exc:
+            raise InventoryItemSettingsInUseError(
+                "Настройки несовместимы с сохранёнными физическими остатками: "
+                + str(exc)
+            ) from exc
 
     @classmethod
     def create(

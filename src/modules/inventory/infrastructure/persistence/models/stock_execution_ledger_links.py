@@ -10,6 +10,7 @@ class StockExecutionLedgerLinkModel(TenantBase):
 
     __tablename__ = "stock_execution_ledger_links"
     __table_args__ = (
+        sa.Index("ix_execution_links_entry", "ledger_entry_id"),
         sa.PrimaryKeyConstraint(
             "execution_line_id", "role", name="pk_stock_execution_ledger_links"
         ),

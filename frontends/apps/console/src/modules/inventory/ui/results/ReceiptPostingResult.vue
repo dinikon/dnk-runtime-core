@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ref } from "vue";
+import StockTrackingColumnsControl from "./StockTrackingColumnsControl.vue";
 import { Button } from "@/components/ui/button";
 import type { ReceiptPostingResult } from "../../model/receipt-posting.types";
 defineProps<{ result: ReceiptPostingResult }>();
@@ -7,6 +9,7 @@ const statuses: Record<string, string> = {
   COMPLETED: "Выполнен",
   PARTIALLY_EXECUTED: "Частично выполнен",
 };
+const trackingColumns = ref({ lot: false, serial: false });
 </script>
 <template>
   <div class="flex w-full max-w-6xl shrink-0 flex-col gap-5">
@@ -59,6 +62,11 @@ const statuses: Record<string, string> = {
     </section>
     <section class="min-w-0 rounded-lg border bg-card p-4">
       <h2 class="mb-3 text-lg font-semibold">Фактически принято</h2>
+      <StockTrackingColumnsControl
+        class="mb-3"
+        :columns="trackingColumns"
+        @change="trackingColumns = $event"
+      />
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead>
@@ -67,7 +75,8 @@ const statuses: Record<string, string> = {
               <th class="p-2">Исходный ввод</th>
               <th class="p-2">Базовое количество</th>
               <th class="p-2">Локация</th>
-              <th class="p-2">Партия / экземпляр</th>
+              <th v-if="trackingColumns.lot" class="p-2">Партия</th>
+              <th v-if="trackingColumns.serial" class="p-2">Серия</th>
               <th class="p-2">Состояние</th>
             </tr>
           </thead>
@@ -81,8 +90,11 @@ const statuses: Record<string, string> = {
                 {{ line.quantity }} {{ line.baseUom }}
               </td>
               <td class="p-2">{{ line.locationCode }}</td>
-              <td class="whitespace-nowrap p-2">
-                {{ line.lotNumber ?? "—" }} / {{ line.serialNumber ?? "—" }}
+              <td v-if="trackingColumns.lot" class="whitespace-nowrap p-2">
+                {{ line.lotNumber ?? "—" }}
+              </td>
+              <td v-if="trackingColumns.serial" class="whitespace-nowrap p-2">
+                {{ line.serialNumber ?? "—" }}
               </td>
               <td class="p-2">{{ line.stockStatus }}</td>
             </tr>

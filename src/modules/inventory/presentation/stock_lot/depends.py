@@ -1,3 +1,6 @@
+from src.modules.inventory.presentation.depends.physical_inventory import (
+    PhysicalInventoryUsageDep,
+)
 from typing import Annotated
 
 from fastapi import Depends
@@ -90,10 +93,12 @@ ListStockLotsHandlerDep = Annotated[
 
 
 def get_update_stock_lot_handler(
-    items: InventoryItemRepositoryDep, lots: StockLotRepositoryDep
+    items: InventoryItemRepositoryDep,
+    lots: StockLotRepositoryDep,
+    physical_usage: PhysicalInventoryUsageDep,
 ) -> UpdateStockLotHandler:
     """Подключает обновление к write-портам одной общей tenant-транзакции."""
-    return UpdateStockLotHandler(items, lots)
+    return UpdateStockLotHandler(items, lots, physical_usage)
 
 
 UpdateStockLotHandlerDep = Annotated[

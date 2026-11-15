@@ -47,7 +47,11 @@ function requestError(cause: unknown, fallback: string): never {
         fields.manufacturedOn = "Проверьте дату производства.";
       if (field === "expires_on") fields.expiresOn = "Проверьте срок годности.";
     }
-  if (status === 409)
+  if (
+    status === 409 &&
+    typeof detail === "string" &&
+    detail.toLowerCase().includes("номер")
+  )
     fields.number = "Номер партии уже занят внутри этого SKU.";
   throw new StockLotRequestError(
     status === 403

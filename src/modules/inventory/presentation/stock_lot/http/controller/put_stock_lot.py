@@ -1,3 +1,4 @@
+from src.modules.inventory.domain.stock_lot.error import StockLotSettingsInUseError
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -46,6 +47,8 @@ async def put_stock_lot(
                 expires_on=payload.expires_on,
             )
         )
+    except StockLotSettingsInUseError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (InventoryItemNotFoundError, StockLotNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
     except InventoryError as exc:

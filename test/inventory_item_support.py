@@ -1,3 +1,7 @@
+from src.modules.inventory.domain.inventory_item.accounting_usage import (
+    InventoryItemAccountingUsage,
+)
+
 """HTTP-сборка InventoryItem с настоящими authentication и CSRF dependencies."""
 
 from typing import Any
@@ -48,6 +52,8 @@ def inventory_item_app(
 
         app.dependency_overrides[get_physical_inventory_usage] = (
             lambda: SimpleNamespace(
+                item_state=AsyncMock(return_value=InventoryItemAccountingUsage(False)),
+                lot_has_positive_stock=AsyncMock(return_value=False),
                 item_has_history=AsyncMock(return_value=False),
                 serial_has_history=AsyncMock(return_value=False),
             )

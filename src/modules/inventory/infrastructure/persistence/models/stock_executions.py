@@ -11,6 +11,7 @@ class StockExecutionModel(TenantBase):
 
     __tablename__ = "stock_executions"
     __table_args__ = (
+        sa.Index("ix_executions_time", "executed_at", "id"),
         sa.PrimaryKeyConstraint("id", name="pk_stock_executions"),
         sa.ForeignKeyConstraint(
             ["document_id"],

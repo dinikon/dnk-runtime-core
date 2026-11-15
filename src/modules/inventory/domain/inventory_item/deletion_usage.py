@@ -9,3 +9,5 @@ class InventoryItemDeletionUsage:
     has_stock_lots: bool = False
     has_stock_serials: bool = False
     has_stock_documents: bool = False
+
+    has_physical_accounting: bool = False

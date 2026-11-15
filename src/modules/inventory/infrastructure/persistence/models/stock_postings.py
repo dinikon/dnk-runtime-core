@@ -11,6 +11,7 @@ class StockPostingModel(TenantBase):
 
     __tablename__ = "stock_postings"
     __table_args__ = (
+        sa.Index("ix_postings_time", "posted_at", "id"),
         sa.PrimaryKeyConstraint("id", name="pk_stock_postings"),
         sa.UniqueConstraint("execution_id", name="uq_stock_postings_execution"),
         sa.ForeignKeyConstraint(

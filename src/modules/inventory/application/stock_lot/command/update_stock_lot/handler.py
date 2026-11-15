@@ -1,3 +1,6 @@
+from src.modules.inventory.application.inventory_item.port.physical_usage import (
+    PhysicalInventoryUsagePort,
+)
 from src.modules.inventory.application.stock_lot.command.update_stock_lot.command import (
     UpdateStockLotCommand,
 )
@@ -17,11 +20,15 @@ class UpdateStockLotHandler:
     """Координирует изменение дат через Domain на актуальном снимке заблокированного SKU."""
 
     def __init__(
-        self, items: InventoryItemRepositoryProtocol, lots: StockLotRepositoryProtocol
+        self,
+        items: InventoryItemRepositoryProtocol,
+        lots: StockLotRepositoryProtocol,
+        physical_usage: PhysicalInventoryUsagePort,
     ) -> None:
         """Принимает write-порты одной сессии внешнего tenant-UoW."""
         self._items = items
         self._lots = lots
+        self._physical_usage = physical_usage
 
     async def execute(self, command: UpdateStockLotCommand) -> UpdateStockLotResultDTO:
         """Блокирует SKU до партии, объединяет PATCH и проверяет Domain даже для no-op."""
@@ -44,6 +51,12 @@ class UpdateStockLotHandler:
             ),
         )
         updated = lot.change_dates(dates, inventory_item=item.tracking_snapshot())
+        updated.ensure_dates_preserve_stock(
+            inventory_item=item.tracking_snapshot(),
+            has_positive_stock=await self._physical_usage.lot_has_positive_stock(
+                lot.id.uuid
+            ),
+        )
         if updated != lot:
             await self._lots.save(updated)
         return UpdateStockLotResultDTO(

@@ -167,10 +167,11 @@ class SqlAlchemyInventoryItemRepository:
             constraint = getattr(exc.orig, "constraint_name", None) or getattr(
                 cause, "constraint_name", None
             )
-            if (
-                self._sqlstate(exc) in {"23503", "23001"}
-                and constraint == "fk_stock_document_lines_item"
-            ):
+            if self._sqlstate(exc) in {"23503", "23001"} and constraint in {
+                "fk_stock_document_lines_item",
+                "fk_stock_positions_item",
+                "fk_stock_execution_lines_item",
+            }:
                 raise InventoryItemInUseError(
                     "SKU используется в складском документе."
                 ) from exc

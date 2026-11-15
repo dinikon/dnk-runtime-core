@@ -11,6 +11,7 @@ class StockExecutionLineModel(TenantBase):
 
     __tablename__ = "stock_execution_lines"
     __table_args__ = (
+        sa.Index("ix_execution_lines_item", "inventory_item_id", "execution_id"),
         sa.PrimaryKeyConstraint("id", name="pk_stock_execution_lines"),
         sa.ForeignKeyConstraint(
             ["execution_id"],

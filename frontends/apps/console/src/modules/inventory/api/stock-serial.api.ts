@@ -45,7 +45,11 @@ function requestError(cause: unknown, fallback: string): never {
       if (field === "number") fields.number = "Проверьте номер экземпляра.";
       if (field === "lot_id") fields.lotId = "Проверьте выбранную партию.";
     }
-  if (status === 409)
+  if (
+    status === 409 &&
+    typeof detail === "string" &&
+    detail.toLowerCase().includes("номер")
+  )
     fields.number = "Номер экземпляра уже занят внутри этого SKU.";
   throw new StockSerialRequestError(
     status === 403

@@ -23,6 +23,8 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Склад",
       items: [
+        {title:"Остатки",url:"/inventory/stock-positions",icon:Warehouse},
+        {title:"Движения",url:"/inventory/stock-movements",icon:Warehouse},
         {
           title: "Поступления",
           url: "/inventory/stock-documents",

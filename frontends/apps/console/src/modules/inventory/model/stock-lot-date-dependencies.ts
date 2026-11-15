@@ -29,6 +29,7 @@ export function isStockLotDateView(
   // Списки партий обновляются явно; сохранённая карточка уже получена из PATCH.
   if (key[4] === "lots" && key[5] === itemId)
     return key[6] === "list" || key[6] === "candidates";
+  if(key[4]==="accounting")return true;
   const dependency = query.meta?.inventoryStockLotDates;
   return (
     typeof dependency === "object" &&

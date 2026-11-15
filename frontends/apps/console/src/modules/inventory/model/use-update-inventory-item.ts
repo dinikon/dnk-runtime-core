@@ -1,3 +1,4 @@
+import { stockAccountingKeys } from "./stock-accounting.query-keys";
 import { stockLotKeys } from "./stock-lot.query-keys";
 import { computed, type Ref } from "vue";
 import {
@@ -57,6 +58,9 @@ export function useUpdateInventoryItem(
     },
     onSuccess: async (result, input) => {
       if (!relevant(input)) return;
+      await cache.invalidateQueries({
+        queryKey: stockAccountingKeys.root(input.scope),
+      });
       await Promise.all([
         cache.cancelQueries({
           queryKey: inventoryItemKeys.detail(input.scope, input.id),

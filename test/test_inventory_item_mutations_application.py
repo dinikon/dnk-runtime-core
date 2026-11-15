@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.inventory_item.accounting_usage import (
+    InventoryItemAccountingUsage,
+)
 from src.modules.inventory.domain.inventory_item.deletion_usage import (
     InventoryItemDeletionUsage,
 )
@@ -66,7 +69,11 @@ class InventoryItemMutationsApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.update = UpdateInventoryItemHandler(
             self.repository,
             self.ids,
-            Mock(item_has_history=AsyncMock(return_value=False)),
+            Mock(
+                item_state=AsyncMock(return_value=InventoryItemAccountingUsage(False)),
+                lot_has_positive_stock=AsyncMock(return_value=False),
+                item_has_history=AsyncMock(return_value=False),
+            ),
         )
         self.delete = DeleteInventoryItemHandler(
             self.repository,

@@ -93,11 +93,8 @@ class UpdateInventoryItemHandler:
             ),
             barcodes=barcodes,
         )
-        item.ensure_revision_preserves_stock(
-            updated,
-            has_physical_history=await self._physical_usage.item_has_history(
-                item.id.uuid
-            ),
+        item.ensure_accounting_compatible(
+            updated, await self._physical_usage.item_state(item.id.uuid)
         )
         if updated is not item:
             await self._repository.save(updated)

@@ -11,6 +11,26 @@ class StockPositionModel(TenantBase):
 
     __tablename__ = "stock_positions"
     __table_args__ = (
+        sa.Index(
+            "ix_positions_serial",
+            "serial_id",
+            "id",
+            postgresql_where=sa.text("serial_id IS NOT NULL"),
+        ),
+        sa.Index(
+            "ix_positions_lot",
+            "lot_id",
+            "id",
+            postgresql_where=sa.text("lot_id IS NOT NULL"),
+        ),
+        sa.Index("ix_positions_owner_item", "owner_id", "inventory_item_id", "id"),
+        sa.Index(
+            "ix_positions_location_owner_item",
+            "location_id",
+            "owner_id",
+            "inventory_item_id",
+            "id",
+        ),
         sa.PrimaryKeyConstraint("id", name="pk_stock_positions"),
         sa.ForeignKeyConstraint(
             ["inventory_item_id"],

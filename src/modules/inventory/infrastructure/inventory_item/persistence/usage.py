@@ -1,3 +1,6 @@
+from src.modules.inventory.infrastructure.inventory_item.persistence.physical_usage import (
+    SqlAlchemyPhysicalInventoryUsage,
+)
 from src.modules.inventory.infrastructure.persistence.models.stock_document_line import (
     StockDocumentLineModel,
 )
@@ -50,4 +53,7 @@ class SqlAlchemyInventoryItemUsage:
             has_stock_lots=lots,
             has_stock_serials=serials,
             has_stock_documents=documents,
+            has_physical_accounting=await SqlAlchemyPhysicalInventoryUsage(
+                self._session
+            ).item_has_history(identifier.uuid),
         )

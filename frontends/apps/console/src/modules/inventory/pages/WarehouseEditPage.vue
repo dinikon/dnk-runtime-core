@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import { useStockAccountingRelated } from "../model/use-stock-accounting-related";
+import {
+  accountingTarget,
+  stockReadLocation,
+  type StockAccountingTarget,
+} from "../model/stock-accounting-navigation";
+import type { StockFilters } from "../model/stock-accounting.types";
+import StockAccountingRelated from "../ui/results/StockAccountingRelated.vue";
 import { computed, reactive, ref, watch, onBeforeUnmount } from "vue";
 import {
   useRoute,
@@ -333,6 +341,38 @@ function back(): void {
 function locations(): void {
   void router.push(stockLocationsLocation(id.value, route.fullPath));
 }
+const accountingFilters = computed<StockFilters>(() => ({
+  warehouseId: id.value,
+}));
+const accounting = useStockAccountingRelated(
+  accountingFilters,
+  scope,
+  computed(() => !!currentItem.value),
+);
+function navigateStockAccounting(target: StockAccountingTarget): void {
+  void router.push(accountingTarget(target));
+}
+function openStockAccounting(kind: "positions" | "movements"): void {
+  void router.push(stockReadLocation(kind, accountingFilters.value));
+}
+function openStockAccountingPositions(
+  row: import("../model/stock-accounting.types").ListStockBalancesItem,
+): void {
+  const target = stockReadLocation("positions", {
+    ...accountingFilters.value,
+    inventoryItemId: row.inventoryItemId,
+    warehouseId: row.warehouseId,
+    locationId: row.locationId,
+    ownerId: row.ownerId,
+    stockStatus: row.stockStatus,
+    lotId: row.lotId ?? accountingFilters.value.lotId,
+    serialId: row.serialId ?? accountingFilters.value.serialId,
+  });
+  void router.push({
+    ...target,
+    query: { ...target.query, stock_view: "positions" },
+  });
+}
 </script>
 
 <template>
@@ -430,5 +470,18 @@ function locations(): void {
         @retry-selected="retrySelectedLocation"
       />
     </SetWarehouseDefaultStorageDialog>
+    <StockAccountingRelated
+      :columns="accounting.columns.value"
+      @columns="accounting.columns.value = $event"
+      @positions="openStockAccountingPositions"
+      v-if="currentItem"
+      :positions="accounting.positionsData.value"
+      :movements="accounting.movementsData.value"
+      :loading="accounting.loading.value"
+      :error="accounting.error.value"
+      @retry="accounting.retry"
+      @navigate="navigateStockAccounting"
+      @all="openStockAccounting"
+    />
   </section>
 </template>
