@@ -36,6 +36,7 @@ const document: ReceiptDocument = {
       sourceUom: "G",
       factorToBase: "0.001",
       executedQty: "0",
+      remainingQty: "1.25",
     },
   ],
 };

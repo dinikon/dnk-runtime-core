@@ -1,4 +1,5 @@
 from typing import Sequence
+from decimal import Decimal
 from src.modules.inventory.infrastructure.persistence.models.stock_document import (
     StockDocumentModel,
 )
@@ -30,7 +31,7 @@ class ReceiptDocumentQueryMapper:
     def to_details(
         model: StockDocumentModel,
         warehouse: WarehouseModel,
-        lines: Sequence[StockDocumentLineModel],
+        lines: Sequence[tuple[StockDocumentLineModel, Decimal]],
     ) -> GetReceiptDocumentResultDTO:
         """Показывает сохранённый план, а не актуальные параметры товара."""
         return GetReceiptDocumentResultDTO(
@@ -60,8 +61,9 @@ class ReceiptDocumentQueryMapper:
                     source_uom=line.source_uom,
                     factor_to_base=line.factor_to_base,
                     executed_qty=line.executed_qty,
+                    remaining_qty=remaining,
                 )
-                for line in lines
+                for line, remaining in lines
             ),
         )
 

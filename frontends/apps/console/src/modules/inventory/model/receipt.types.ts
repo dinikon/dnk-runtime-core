@@ -11,6 +11,7 @@ export interface ReceiptLine {
   sourceUom: string;
   factorToBase: string;
   executedQty: string;
+  remainingQty: string;
 }
 export interface ReceiptDocument {
   id: string;

@@ -10,6 +10,9 @@ class PrepareReceiptLineResponse(BaseModel):
     """Передаёт числовое основание и актуальные режимы одной строки."""
 
     document_line_id: UUID
+    position: int
+    planned_quantity: Decimal
+    executed_quantity: Decimal
     inventory_item_id: UUID
     sku: str
     base_uom: str
@@ -42,6 +45,9 @@ class PrepareReceiptResponse(BaseModel):
             lines=[
                 PrepareReceiptLineResponse(
                     document_line_id=v.document_line_id,
+                    position=v.position,
+                    planned_quantity=v.planned_quantity,
+                    executed_quantity=v.executed_quantity,
                     inventory_item_id=v.inventory_item_id,
                     sku=v.sku,
                     base_uom=v.base_uom,

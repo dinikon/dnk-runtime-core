@@ -9,6 +9,7 @@ import type {
 import { serialTracking, lotTracking } from "../../model/receipt-intake";
 const props = defineProps<{
   rows: readonly IntakeRow[];
+  rowCount: number;
   disabled: boolean;
   errors: ReceiptIntakeErrors;
   uoms: readonly { code: string; dimension: string }[];
@@ -27,9 +28,6 @@ function units(row: IntakeRow): readonly { code: string; dimension: string }[] {
 <template>
   <fieldset class="flex min-w-0 flex-col gap-4" :disabled="disabled">
     <legend class="mb-3 text-lg font-semibold">Фактические строки</legend>
-    <p v-if="errors.form" role="alert" class="text-destructive">
-      {{ errors.form }}
-    </p>
     <section
       v-for="(row, index) in rows"
       :key="row.key"
@@ -49,7 +47,7 @@ function units(row: IntakeRow): readonly { code: string; dimension: string }[] {
             type="button"
             variant="outline"
             size="sm"
-            :disabled="disabled || rows.length >= 500"
+            :disabled="disabled || rowCount >= 500"
             @click="emit('split', row.key)"
             >{{
               serialTracking(row) ? "Ещё экземпляр" : "Разделить строку"
@@ -59,9 +57,15 @@ function units(row: IntakeRow): readonly { code: string; dimension: string }[] {
             variant="ghost"
             size="sm"
             :disabled="disabled"
-            :aria-label="`Исключить факт ${index + 1}`"
+            :aria-label="
+              rows.length === 1
+                ? 'Исключить строку из приёмки'
+                : `Удалить распределение ${index + 1}`
+            "
             @click="emit('remove', row.key)"
-            >Исключить</Button
+            >{{
+              rows.length === 1 ? "Исключить строку" : "Удалить распределение"
+            }}</Button
           >
         </div>
       </header>
@@ -79,6 +83,7 @@ function units(row: IntakeRow): readonly { code: string; dimension: string }[] {
         /></label>
         <label class="text-sm"
           >Единица<select
+            aria-label="Единица"
             :value="row.uom"
             :disabled="disabled || serialTracking(row) || !units(row).length"
             class="mt-1 h-9 w-full rounded-md border bg-background px-2"
@@ -112,6 +117,7 @@ function units(row: IntakeRow): readonly { code: string; dimension: string }[] {
         </div>
         <label class="text-sm"
           >Состояние запаса<select
+            aria-label="Состояние запаса"
             :value="row.stockStatus"
             :disabled="disabled"
             class="mt-1 h-9 w-full rounded-md border bg-background px-2"

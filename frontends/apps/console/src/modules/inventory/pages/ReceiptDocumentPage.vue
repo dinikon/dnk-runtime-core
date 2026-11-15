@@ -473,7 +473,11 @@ onBeforeUnmount(() => {
             params: { documentId: id },
           })
         "
-        >Принять товар</Button
+        >{{
+          query.data.value.status === "PARTIALLY_EXECUTED"
+            ? "Принять остаток"
+            : "Принять товар"
+        }}</Button
       >
       <Button
         v-if="editable && !editor"

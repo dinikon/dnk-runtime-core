@@ -161,6 +161,7 @@ class UpdateReceiptDocumentLinesHandler:
                     source_uom=line.source_uom,
                     factor_to_base=line.factor_to_base,
                     executed_qty=line.executed_qty,
+                    remaining_qty=line.remaining_qty,
                 )
                 for line in result.lines
             ),

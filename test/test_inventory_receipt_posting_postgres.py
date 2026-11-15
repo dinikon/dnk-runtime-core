@@ -1,6 +1,7 @@
 """Сквозная приёмка на PostgreSQL с реальными исполнением, Ledger, позициями и public Outbox."""
 
 import asyncio
+from httpx import Response
 from decimal import Decimal
 import os
 import unittest
@@ -152,7 +153,7 @@ class ReceiptPostingPostgresTests(unittest.IsolatedAsyncioTestCase):
         *,
         key: str | None = None,
         costs: list[dict] | None = None,
-    ):
+    ) -> Response:
         """Отправляет только единый сценарий проведения с обязательным ключом."""
         return await self.client.post(
             f"{self.receipts}/{document['id']}/receive",
@@ -242,6 +243,259 @@ class ReceiptPostingPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(history.json()["total"], 1)
         changed = await self.receive(doc, [self.row(doc, "1")], key=key)
         self.assertEqual(changed.status_code, 409, changed.text)
+
+    async def test_three_partial_receipts_progress_history_and_late_replay(
+        self,
+    ) -> None:
+        """План 100 принимается как 40+35+25; старый ключ не меняет последующие факты."""
+        document = await self.confirmed(quantity="100")
+        original = document
+        original_rows = [self.row(document, "40")]
+        key = str(uuid4())
+        snapshots = []
+        for index, (quantity, done, remaining) in enumerate(
+            (("40", "40", "60"), ("35", "75", "25"), ("25", "100", "0"))
+        ):
+            rows = original_rows if index == 0 else [self.row(document, quantity)]
+            response = await self.receive(
+                document, rows, key=key if index == 0 else None
+            )
+            self.assertEqual(response.status_code, 201, response.text)
+            snapshots.append(response.json())
+            document = (
+                await self.client.get(f"{self.receipts}/{document['id']}")
+            ).json()
+            self.assertEqual(
+                Decimal(document["lines"][0]["executed_qty"]), Decimal(done)
+            )
+            self.assertEqual(
+                Decimal(document["lines"][0]["remaining_qty"]), Decimal(remaining)
+            )
+            context = (
+                await self.client.get(
+                    f"{self.receipts}/{document['id']}/receipt-context"
+                )
+            ).json()
+            line = context["lines"][0]
+            self.assertEqual(
+                (line["document_line_id"], line["position"]),
+                (document["lines"][0]["id"], 0),
+            )
+            self.assertEqual(Decimal(line["planned_quantity"]), Decimal("100"))
+            self.assertEqual(Decimal(line["executed_quantity"]), Decimal(done))
+            self.assertEqual(Decimal(line["remaining_quantity"]), Decimal(remaining))
+            self.assertEqual(context["version"], document["version"])
+        self.assertEqual(document["status"], "COMPLETED")
+        self.assertEqual(document["version"], original["version"] + 3)
+        self.assertEqual(len({value["execution_id"] for value in snapshots}), 3)
+        self.assertEqual(len({value["posting_id"] for value in snapshots}), 3)
+        self.assertEqual(await self.counts(), (1, 3, 3, 3, 3, 3))
+        replay = await self.receive(original, original_rows, key=key)
+        self.assertEqual(replay.status_code, 201, replay.text)
+        self.assertEqual(replay.json(), snapshots[0])
+        self.assertEqual(
+            (await self.client.get(f"{self.receipts}/{document['id']}")).json(),
+            document,
+        )
+        history = (
+            await self.client.get(
+                f"{self.receipts}/{document['id']}/executions",
+                params={"offset": 1, "limit": 1},
+            )
+        ).json()
+        self.assertEqual((history["total"], len(history["items"])), (3, 1))
+        middle = history["items"][0]
+        self.assertEqual(middle["execution_id"], snapshots[1]["execution_id"])
+        self.assertEqual(middle["document_status"], "PARTIALLY_EXECUTED")
+        self.assertEqual(Decimal(middle["lines"][0]["quantity"]), Decimal("35"))
+        self.assertEqual(
+            middle["lines"][0]["document_line_id"], document["lines"][0]["id"]
+        )
+        self.assertEqual(await self.counts(), (1, 3, 3, 3, 3, 3))
+        terminal = await self.receive(document, [self.row(document, "1")])
+        self.assertEqual(terminal.status_code, 409, terminal.text)
+
+    async def test_grouped_overrun_rolls_back_without_borrowing_another_sku_line(
+        self,
+    ) -> None:
+        """60+50 сверх строки 100 не покрываются второй строкой того же SKU и не оставляют нулевую позицию."""
+        document = await self.create_receipt(
+            {
+                "warehouse_id": self.warehouse["id"],
+                "owner_id": self.company["id"],
+                "lines": [
+                    {
+                        "inventory_item_id": self.item["id"],
+                        "quantity": "100",
+                        "uom": "KG",
+                    }
+                ]
+                * 2,
+            }
+        )
+        response = await self.client.post(
+            f"{self.receipts}/{document['id']}/confirm",
+            headers=self.headers,
+            json={"expected_version": document["version"]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        document = response.json()
+        response = await self.receive(
+            document, [self.row(document, "60"), self.row(document, "50")]
+        )
+        self.assertEqual(response.status_code, 422, response.text)
+        detail = response.json()["detail"]
+        self.assertEqual(detail["code"], "stock_document_line_over_execution")
+        self.assertEqual(detail["document_line_id"], document["lines"][0]["id"])
+        self.assertEqual(Decimal(detail["requested_quantity"]), Decimal("110"))
+        self.assertEqual(Decimal(detail["remaining_quantity"]), Decimal("100"))
+        self.assertEqual(await self.counts(), (0, 0, 0, 0, 0, 0))
+        self.assertEqual(
+            (await self.client.get(f"{self.receipts}/{document['id']}")).json(),
+            document,
+        )
+        rows = [self.row(document, "60"), self.row(document, "80")]
+        rows[1]["document_line_id"] = document["lines"][1]["id"]
+        response = await self.receive(document, rows)
+        self.assertEqual(response.status_code, 201, response.text)
+        current = (await self.client.get(f"{self.receipts}/{document['id']}")).json()
+        self.assertEqual(
+            [Decimal(line["remaining_qty"]) for line in current["lines"]],
+            [Decimal("40"), Decimal("20")],
+        )
+        history = (
+            await self.client.get(f"{self.receipts}/{document['id']}/executions")
+        ).json()
+        self.assertEqual(
+            [Decimal(line["quantity"]) for line in history["items"][0]["lines"]],
+            [Decimal("60"), Decimal("80")],
+        )
+        self.assertEqual(len(response.json()["ledger"]), 1)
+
+    async def test_concurrent_distinct_keys_serialize_remaining_and_do_not_over_receive(
+        self,
+    ) -> None:
+        """Независимые команды одной версии не исполняют по 70 из общего плана 100."""
+        document = await self.confirmed(quantity="100")
+        responses = await asyncio.gather(
+            *(self.receive(document, [self.row(document, "70")]) for _ in range(2))
+        )
+        self.assertEqual(
+            sorted(value.status_code for value in responses),
+            [201, 409],
+            [value.text for value in responses],
+        )
+        failed = next(value for value in responses if value.status_code == 409)
+        self.assertEqual(
+            failed.json()["detail"]["code"], "stock_document_version_conflict"
+        )
+        current = (await self.client.get(f"{self.receipts}/{document['id']}")).json()
+        self.assertEqual(Decimal(current["lines"][0]["remaining_qty"]), Decimal("30"))
+        exceeded = await self.receive(current, [self.row(current, "70")])
+        self.assertEqual(exceeded.status_code, 422, exceeded.text)
+        self.assertEqual(
+            Decimal(exceeded.json()["detail"]["remaining_quantity"]), Decimal("30")
+        )
+        self.assertEqual(await self.counts(), (1, 1, 1, 1, 1, 1))
+        final = await self.receive(current, [self.row(current, "30")])
+        self.assertEqual(final.status_code, 201, final.text)
+        self.assertEqual(final.json()["document_status"], "COMPLETED")
+        self.assertEqual(await self.counts(), (1, 2, 2, 2, 2, 2))
+
+    async def test_concurrent_different_plan_lines_still_require_current_document_version(
+        self,
+    ) -> None:
+        """Разные строки одного документа сохраняют общий контроль версии; после сверки обе исполняются."""
+        document = await self.create_receipt(
+            {
+                "warehouse_id": self.warehouse["id"],
+                "owner_id": self.company["id"],
+                "lines": [
+                    {
+                        "inventory_item_id": self.item["id"],
+                        "quantity": "50",
+                        "uom": "KG",
+                    }
+                ]
+                * 2,
+            }
+        )
+        response = await self.client.post(
+            f"{self.receipts}/{document['id']}/confirm",
+            headers=self.headers,
+            json={"expected_version": document["version"]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        document = response.json()
+        rows = [self.row(document, "50"), self.row(document, "50")]
+        rows[1]["document_line_id"] = document["lines"][1]["id"]
+        results = await asyncio.gather(*(self.receive(document, [row]) for row in rows))
+        self.assertEqual(
+            sorted(value.status_code for value in results),
+            [201, 409],
+            [value.text for value in results],
+        )
+        current = (await self.client.get(f"{self.receipts}/{document['id']}")).json()
+        pending = next(
+            row for row, response in zip(rows, results) if response.status_code == 409
+        )
+        result = await self.receive(current, [pending])
+        self.assertEqual(result.status_code, 201, result.text)
+        self.assertEqual(result.json()["document_status"], "COMPLETED")
+        self.assertEqual(await self.counts(), (1, 2, 2, 2, 2, 2))
+
+    async def test_partial_lot_allocations_across_locations_and_cost_only_for_current_fact(
+        self,
+    ) -> None:
+        """Одна плановая строка распределяется между локациями/партиями, стоимость не копируется в следующий факт."""
+        item_response = await self.client.post(
+            "/api/console/inventory/items",
+            headers=self.headers,
+            json={"sku": "LOT-PARTIAL", "base_uom": "KG", "tracking_mode": "LOT"},
+        )
+        self.assertEqual(item_response.status_code, 201, item_response.text)
+        item = item_response.json()
+        lots = []
+        for number in ("000Lot-a", "000Lot-B"):
+            response = await self.client.post(
+                f"/api/console/inventory/items/{item['id']}/lots",
+                headers=self.headers,
+                json={"number": number},
+            )
+            self.assertEqual(response.status_code, 201, response.text)
+            lots.append(response.json())
+        location = await self.location_for(self.warehouse["id"], "B2")
+        document = await self.confirmed(item, "100")
+        rows = [
+            self.row(document, "30", lot_id=lots[0]["id"]),
+            self.row(document, "10", lot_id=lots[1]["id"]),
+        ]
+        rows[1]["location_id"] = location["id"]
+        cost = [
+            {
+                "amount": "0",
+                "currency": "USD",
+                "allocations": [
+                    {"client_line_id": rows[0]["client_line_id"], "amount": "0"}
+                ],
+            }
+        ]
+        response = await self.receive(document, rows, costs=cost)
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(len(response.json()["positions"]), 2)
+        current = (await self.client.get(f"{self.receipts}/{document['id']}")).json()
+        final = await self.receive(
+            current, [self.row(current, "60", lot_id=lots[0]["id"])]
+        )
+        self.assertEqual(final.status_code, 201, final.text)
+        self.assertEqual(final.json()["costs"], [])
+        history = (
+            await self.client.get(f"{self.receipts}/{document['id']}/executions")
+        ).json()
+        first = history["items"][1]
+        self.assertEqual(first["line_count"], 2)
+        self.assertEqual(first["lines"][0]["allocation_count"], 2)
+        self.assertEqual(Decimal(first["lines"][0]["quantity"]), Decimal("40"))
 
     async def test_partial_receipt_accumulates_one_nullable_position(self) -> None:
         """Два проведения корректно увеличивают одну позицию и завершают оставшийся план."""

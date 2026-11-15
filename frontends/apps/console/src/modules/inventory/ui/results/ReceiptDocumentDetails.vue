@@ -62,6 +62,7 @@ defineProps<{ document: ReceiptDocument }>();
               <th class="p-2">Коэффициент</th>
               <th class="p-2">План в базовой единице</th>
               <th class="p-2">Выполнено</th>
+              <th class="p-2">Осталось</th>
             </tr>
           </thead>
           <tbody>
@@ -77,6 +78,9 @@ defineProps<{ document: ReceiptDocument }>();
               </td>
               <td class="whitespace-nowrap p-2">
                 {{ line.executedQty }} {{ line.baseUom }}
+              </td>
+              <td class="whitespace-nowrap p-2">
+                {{ line.remainingQty }} {{ line.baseUom }}
               </td>
             </tr>
           </tbody>

@@ -17,6 +17,7 @@ import {
   stockReadLocation,
   type StockAccountingTarget,
 } from "../model/stock-accounting-navigation";
+import { useReceiptQuery } from "../model/use-receipt-query";
 import StockFactDetails from "../ui/results/StockFactDetails.vue";
 import ReceiptPostingResult from "../ui/results/ReceiptPostingResult.vue";
 const props = defineProps<{ kind: "execution" | "posting" }>(),
@@ -77,6 +78,21 @@ const query = computed(() =>
   loading = computed(
     () => query.value.isPending.value && !!fact.value?.hasReceiptResult,
   );
+const currentDocument = useReceiptQuery(
+  computed(() => (fact.value?.hasReceiptResult ? fact.value.documentId : "")),
+  scope,
+);
+const canReceiveMore = computed(() => {
+  const document = currentDocument.data.value;
+  return (
+    scope.ready.value &&
+    !currentDocument.error.value &&
+    !!document &&
+    document.id === fact.value?.documentId &&
+    document.sourceSystem === null &&
+    ["CONFIRMED", "PARTIALLY_EXECUTED"].includes(document.status)
+  );
+});
 function navigateAccounting(target: StockAccountingTarget): void {
   void router.push(accountingTarget(target));
 }
@@ -102,7 +118,18 @@ function openMovements(): void {
             : "Проводка поступления"
         }}
       </h1>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
+        <Button
+          v-if="canReceiveMore && fact"
+          :disabled="currentDocument.isFetching.value"
+          @click="
+            router.push({
+              name: 'inventory-receipt-receive',
+              params: { documentId: fact.documentId },
+            })
+          "
+          >Принять остаток</Button
+        >
         <Button
           variant="outline"
           @click="router.push({ name: 'inventory-receipt-documents' })"

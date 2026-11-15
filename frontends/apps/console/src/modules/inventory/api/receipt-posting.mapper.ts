@@ -14,7 +14,7 @@ import type {
   IntakeReferencesPage,
   ReceiptExecutionHistory,
 } from "../model/receipt-posting.types";
-import { intakeDecimal } from "../model/receipt-intake.ts";
+import { intakeDecimal, selectedIntakeRows } from "../model/receipt-intake.ts";
 export function postingResultFromDto(
   dto:
     | PostReceiptResponseDTO
@@ -102,6 +102,9 @@ export function preparationFromDto(
       sku: line.sku,
       baseUom: line.base_uom,
       currentBaseUom: line.current_base_uom,
+      position: line.position,
+      plannedQuantity: line.planned_quantity,
+      executedQuantity: line.executed_quantity,
       remainingQuantity: line.remaining_quantity,
       quantityStep: line.quantity_step,
       trackingMode: line.tracking_mode,
@@ -112,7 +115,8 @@ export function preparationFromDto(
 export function intakeToDto(
   values: ReceiptIntakeValues,
 ): PostReceiptRequestDTO {
-  const costs: PostReceiptRequestDTO["costs"] = values.rows
+  const rows = selectedIntakeRows(values);
+  const costs: PostReceiptRequestDTO["costs"] = rows
     .filter((row) => row.costKnown)
     .map((row) => ({
       amount: intakeDecimal(row.costAmount),
@@ -135,7 +139,7 @@ export function intakeToDto(
     });
   return {
     expected_version: values.expectedVersion,
-    lines: values.rows.map((row) => ({
+    lines: rows.map((row) => ({
       client_line_id: row.key,
       document_line_id: row.documentLineId,
       quantity: intakeDecimal(row.quantity),
@@ -175,6 +179,14 @@ export function executionHistoryFromDto(
       documentVersionAfter: v.document_version_after,
       documentStatus: v.document_status,
       lineCount: v.line_count,
+      lines: v.lines.map((line) => ({
+        documentLineId: line.document_line_id,
+        position: line.position,
+        sku: line.sku,
+        baseUom: line.base_uom,
+        quantity: line.quantity,
+        allocationCount: line.allocation_count,
+      })),
     })),
   };
 }

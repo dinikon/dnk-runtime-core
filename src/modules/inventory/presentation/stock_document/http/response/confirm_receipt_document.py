@@ -26,6 +26,7 @@ class ConfirmReceiptDocumentLineResponse(BaseModel):
     source_uom: str
     factor_to_base: Decimal
     executed_qty: Decimal
+    remaining_qty: Decimal
 
 
 class ConfirmReceiptDocumentResponse(BaseModel):
@@ -79,6 +80,7 @@ class ConfirmReceiptDocumentResponse(BaseModel):
                     source_uom=line.source_uom,
                     factor_to_base=line.factor_to_base,
                     executed_qty=line.executed_qty,
+                    remaining_qty=line.remaining_qty,
                 )
                 for line in dto.lines
             ],

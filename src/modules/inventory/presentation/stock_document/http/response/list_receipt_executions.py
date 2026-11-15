@@ -1,9 +1,21 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 from pydantic import BaseModel
 from src.modules.inventory.application.stock_document.query.list_receipt_executions.dto import (
     ListReceiptExecutionsResultDTO,
 )
+
+
+class ListReceiptExecutionLineResponse(BaseModel):
+    """Показывает принятое количество отдельной строки без смешения товаров и единиц."""
+
+    document_line_id: UUID
+    position: int
+    sku: str
+    base_uom: str
+    quantity: Decimal
+    allocation_count: int
 
 
 class ListReceiptExecutionItemResponse(BaseModel):
@@ -15,6 +27,7 @@ class ListReceiptExecutionItemResponse(BaseModel):
     document_version_after: int
     document_status: str
     line_count: int
+    lines: list[ListReceiptExecutionLineResponse]
 
 
 class ListReceiptExecutionsResponse(BaseModel):
@@ -39,6 +52,17 @@ class ListReceiptExecutionsResponse(BaseModel):
                     document_version_after=v.document_version_after,
                     document_status=v.document_status,
                     line_count=v.line_count,
+                    lines=[
+                        ListReceiptExecutionLineResponse(
+                            document_line_id=line.document_line_id,
+                            position=line.position,
+                            sku=line.sku,
+                            base_uom=line.base_uom,
+                            quantity=line.quantity,
+                            allocation_count=line.allocation_count,
+                        )
+                        for line in v.lines
+                    ],
                 )
                 for v in dto.items
             ],

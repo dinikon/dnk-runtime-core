@@ -24,6 +24,7 @@ class CreateReceiptDraftLineDTO:
     source_uom: str
     factor_to_base: Decimal
     executed_qty: Decimal
+    remaining_qty: Decimal
 
 
 @dataclass(frozen=True, slots=True)

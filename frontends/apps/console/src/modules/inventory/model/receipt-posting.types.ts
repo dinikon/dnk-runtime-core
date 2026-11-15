@@ -72,6 +72,9 @@ export type ReceiptTrackingMode = "NONE" | "LOT" | "SERIAL" | "LOT_AND_SERIAL";
 export type ReceiptReferenceKind = "locations" | "lots" | "serials";
 export interface ReceiptPreparationLine {
   documentLineId: string;
+  position: number;
+  plannedQuantity: string;
+  executedQuantity: string;
   inventoryItemId: string;
   sku: string;
   baseUom: string;
@@ -90,6 +93,7 @@ export interface ReceiptPreparation {
   lines: ReceiptPreparationLine[];
 }
 export interface IntakeRow extends ReceiptPreparationLine {
+  selected: boolean;
   key: string;
   quantity: string;
   uom: string;
@@ -120,6 +124,7 @@ export interface ReceiptIntakeValues {
 }
 export interface ReceiptIntakeErrors {
   rows: Record<string, string>;
+  lines?: Record<string, string>;
   costs?: string;
   form?: string;
 }
@@ -145,6 +150,19 @@ export interface ReceiptReferencesParams {
   offset: number;
   limit: number;
 }
+export interface ReceiptExecutionHistoryLine {
+  documentLineId: string;
+  position: number;
+  sku: string;
+  baseUom: string;
+  quantity: string;
+  allocationCount: number;
+}
+export interface ReceiptIntakeGroup {
+  line: ReceiptPreparationLine;
+  current: ReceiptPreparationLine | undefined;
+  rows: IntakeRow[];
+}
 export interface ReceiptExecutionHistoryItem {
   executionId: string;
   postingId: string;
@@ -152,6 +170,7 @@ export interface ReceiptExecutionHistoryItem {
   documentVersionAfter: number;
   documentStatus: string;
   lineCount: number;
+  lines: ReceiptExecutionHistoryLine[];
 }
 export interface ReceiptExecutionHistory {
   items: ReceiptExecutionHistoryItem[];

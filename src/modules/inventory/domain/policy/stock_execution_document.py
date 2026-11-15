@@ -84,5 +84,9 @@ class StockExecutionDocumentPolicy:
                 )
             if actual.quantity.value > planned.remaining_qty.value:
                 raise StockDocumentOverExecutionError(
-                    "Исполнение превышает оставшееся количество конкретной строки."
+                    "Исполнение превышает оставшееся количество конкретной строки.",
+                    document_line_id=planned.id,
+                    requested_quantity=actual.quantity,
+                    remaining_quantity=planned.remaining_qty,
+                    base_uom=planned.base_uom,
                 )

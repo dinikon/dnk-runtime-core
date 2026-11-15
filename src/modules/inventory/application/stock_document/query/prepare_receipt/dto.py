@@ -8,6 +8,9 @@ class PrepareReceiptLineDTO:
     """Передаёт точный остаток плана и актуальные настройки выбора прослеживаемости."""
 
     document_line_id: UUID
+    position: int
+    planned_quantity: Decimal
+    executed_quantity: Decimal
     inventory_item_id: UUID
     sku: str
     base_uom: str

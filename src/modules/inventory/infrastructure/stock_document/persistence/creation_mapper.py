@@ -54,6 +54,9 @@ class ReceiptCreationResultMapper:
                     source_uom=line["source_uom"],
                     factor_to_base=Decimal(line["factor_to_base"]),
                     executed_qty=Decimal(line["executed_qty"]),
+                    remaining_qty=Decimal(
+                        line.get("remaining_qty", line["planned_qty"])
+                    ),
                 )
                 for line in record["lines"]
             ),

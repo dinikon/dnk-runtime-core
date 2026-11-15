@@ -43,6 +43,7 @@ export function receiptFromDto(
       sourceUom: l.source_uom,
       factorToBase: l.factor_to_base,
       executedQty: l.executed_qty,
+      remainingQty: l.remaining_qty,
     })),
   };
 }

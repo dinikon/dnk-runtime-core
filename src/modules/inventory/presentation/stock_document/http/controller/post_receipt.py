@@ -14,6 +14,7 @@ from src.modules.inventory.application.stock_document.command.post_receipt.comma
 )
 from src.modules.inventory.domain.stock_document.error import (
     StockDocumentNotFoundError,
+    StockDocumentOverExecutionError,
     StockDocumentLineNotFoundError,
     StaleStockDocumentVersionError,
     StockDocumentExecutionNotAllowedError,
@@ -95,6 +96,18 @@ async def post_receipt(
                 ),
             )
         )
+    except StockDocumentOverExecutionError as exc:
+        raise HTTPException(
+            422,
+            detail={
+                "code": "stock_document_line_over_execution",
+                "message": str(exc),
+                "document_line_id": str(exc.document_line_id.uuid),
+                "requested_quantity": str(exc.requested_quantity.value),
+                "remaining_quantity": str(exc.remaining_quantity.value),
+                "base_uom": exc.base_uom.value,
+            },
+        ) from exc
     except StaleStockDocumentVersionError as exc:
         raise HTTPException(
             409,

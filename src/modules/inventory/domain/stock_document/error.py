@@ -1,4 +1,9 @@
 from src.modules.inventory.domain.error import InventoryError
+from src.modules.inventory.domain.stock_document.value_object.line_id import (
+    StockDocumentLineIdVO,
+)
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 
 
 class StockDocumentError(InventoryError):
@@ -86,7 +91,23 @@ class StaleStockDocumentVersionError(StockDocumentError):
 
 
 class StockDocumentOverExecutionError(StockDocumentError):
-    """Запрещает суммарное выполнение сверх планового количества строки."""
+    """Запрещает превышение остатка конкретной строки и передаёт величины для сверки."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        document_line_id: StockDocumentLineIdVO,
+        requested_quantity: QuantityVO,
+        remaining_quantity: QuantityVO,
+        base_uom: UomCodeVO,
+    ) -> None:
+        """Сохраняет проверенные доменные значения без транспортного представления."""
+        super().__init__(message)
+        self.document_line_id = document_line_id
+        self.requested_quantity = requested_quantity
+        self.remaining_quantity = remaining_quantity
+        self.base_uom = base_uom
 
 
 class InvalidDocumentLineSourceError(StockDocumentError):

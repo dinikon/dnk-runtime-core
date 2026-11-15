@@ -36,7 +36,8 @@ const emit = defineEmits<{
           <thead>
             <tr>
               <th class="p-2">Проведено</th>
-              <th class="p-2">Строк</th>
+              <th class="p-2">Принято по строкам</th>
+              <th class="p-2">Статус после приёмки</th>
               <th class="p-2">Версия после</th>
               <th class="p-2">Факты</th>
             </tr>
@@ -50,7 +51,28 @@ const emit = defineEmits<{
               <td class="whitespace-nowrap p-2">
                 {{ new Date(item.postedAt).toLocaleString() }}
               </td>
-              <td class="p-2">{{ item.lineCount }}</td>
+              <td class="p-2">
+                <ul class="space-y-1">
+                  <li
+                    v-for="line in item.lines"
+                    :key="line.documentLineId"
+                    class="whitespace-nowrap"
+                  >
+                    Строка {{ line.position + 1 }} · {{ line.sku }}:
+                    {{ line.quantity }} {{ line.baseUom
+                    }}<span class="block text-xs text-muted-foreground"
+                      >Распределений: {{ line.allocationCount }}</span
+                    >
+                  </li>
+                </ul>
+              </td>
+              <td class="p-2">
+                {{
+                  item.documentStatus === "COMPLETED"
+                    ? "Выполнен"
+                    : "Частично выполнен"
+                }}
+              </td>
               <td class="p-2">{{ item.documentVersionAfter }}</td>
               <td class="flex gap-2 p-2">
                 <Button

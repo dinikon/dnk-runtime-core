@@ -39,7 +39,12 @@ class SqlAlchemyReceiptDocumentQueryRepository:
     ) -> GetReceiptDocumentResultDTO | None:
         """Читает реквизиты и nullable-строки одним согласованным SELECT."""
         statement = (
-            select(Document, WarehouseModel, Nullable(Line))
+            select(
+                Document,
+                WarehouseModel,
+                Nullable(Line),
+                Nullable(Line.planned_qty - Line.executed_qty),
+            )
             .join(WarehouseModel, WarehouseModel.id == Document.warehouse_id)
             .outerjoin(Line, Line.document_id == Document.id)
             .where(
@@ -54,7 +59,11 @@ class SqlAlchemyReceiptDocumentQueryRepository:
         return ReceiptDocumentQueryMapper.to_details(
             rows[0][0],
             rows[0][1],
-            tuple(line for _, _, line in rows if line is not None),
+            tuple(
+                (line, remaining)
+                for _, _, line, remaining in rows
+                if line is not None and remaining is not None
+            ),
         )
 
     async def list(

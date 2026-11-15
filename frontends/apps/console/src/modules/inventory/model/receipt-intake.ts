@@ -1,5 +1,7 @@
 import type {
   ReceiptPreparation,
+  ReceiptPreparationLine,
+  ReceiptIntakeGroup,
   ReceiptIntakeValues,
   ReceiptIntakeErrors,
   IntakeRow,
@@ -7,7 +9,17 @@ import type {
   ReceiptReferenceKind,
 } from "./receipt-posting.types.ts";
 export function intakeDecimal(value: string): string {
-  return value.trim().replace(",", ".");
+  const text = value.trim().replace(",", ".");
+  const match = /^(\d+)(?:\.(\d+))?[eE]([+-]?\d{1,3})$/.exec(text);
+  if (!match) return text;
+  const whole = match[1] ?? "0",
+    fraction = match[2] ?? "";
+  // В число переводится только ограниченный показатель степени, а не количество.
+  const point = whole.length + Number.parseInt(match[3] ?? "0", 10);
+  const digits = whole + fraction;
+  if (point <= 0) return `0.${"0".repeat(-point)}${digits}`;
+  if (point >= digits.length) return digits + "0".repeat(point - digits.length);
+  return `${digits.slice(0, point)}.${digits.slice(point)}`;
 }
 export function serialTracking(row: IntakeRow): boolean {
   return row.trackingMode === "SERIAL" || row.trackingMode === "LOT_AND_SERIAL";
@@ -21,33 +33,31 @@ export function prepareIntake(
 ): ReceiptIntakeValues {
   return {
     expectedVersion: context.version,
-    rows: context.lines
-      .filter((line) => /[1-9]/.test(line.remainingQuantity))
-      .map((line) => ({
-        ...line,
-        key: key(),
-        quantity:
-          line.trackingMode === "SERIAL" ||
-          line.trackingMode === "LOT_AND_SERIAL"
-            ? "1"
-            : line.remainingQuantity,
-        uom: line.baseUom,
-        locationId: context.defaultStorageLocationId ?? "",
-        locationLabel: context.defaultStorageLocationId
-          ? "Основная STORAGE-локация"
-          : "",
-        lotId: "",
-        lotNumber: "",
-        serialId: "",
-        serialNumber: "",
-        manufacturedOn: null,
-        expiresOn: null,
-        stockStatus: "SELLABLE",
-        costKnown: false,
-        costAmount: "",
-        costCurrency: "",
-        costReference: "",
-      })),
+    rows: context.lines.map((line) => ({
+      ...line,
+      key: key(),
+      selected: hasRemaining(line),
+      quantity:
+        line.trackingMode === "SERIAL" || line.trackingMode === "LOT_AND_SERIAL"
+          ? "1"
+          : intakeDecimal(line.remainingQuantity),
+      uom: line.baseUom,
+      locationId: context.defaultStorageLocationId ?? "",
+      locationLabel: context.defaultStorageLocationId
+        ? "Основная STORAGE-локация"
+        : "",
+      lotId: "",
+      lotNumber: "",
+      serialId: "",
+      serialNumber: "",
+      manufacturedOn: null,
+      expiresOn: null,
+      stockStatus: "SELLABLE",
+      costKnown: false,
+      costAmount: "",
+      costCurrency: "",
+      costReference: "",
+    })),
     unallocatedCost: { known: false, amount: "", currency: "", reference: "" },
   };
 }
@@ -103,6 +113,7 @@ export function intakeSignature(values: ReceiptIntakeValues): string {
     version: values.expectedVersion,
     rows: values.rows.map((row) => ({
       key: row.key,
+      selected: row.selected,
       line: row.documentLineId,
       quantity: intakeDecimal(row.quantity),
       uom: row.uom,
@@ -131,17 +142,20 @@ export function validateIntake(
   values: ReceiptIntakeValues,
 ): ReceiptIntakeErrors {
   const result: ReceiptIntakeErrors = { rows: {} };
-  if (!values.rows.length || values.rows.length > 500)
+  const rows = selectedIntakeRows(values);
+  if (!rows.length || rows.length > 500)
     result.form = "Нужно от 1 до 500 фактических строк.";
   const serials = new Set<string>();
   const money = (amount: string, currency: string): boolean =>
     /^\d+(?:\.\d{1,4})?$/.test(intakeDecimal(amount)) &&
     /^[A-Za-z]{3}$/.test(currency.trim());
-  for (const row of values.rows) {
+  for (const row of rows) {
     const q = intakeDecimal(row.quantity);
     let error = "";
     if (q.length > 128 || !/^\d+(?:\.\d+)?$/.test(q) || !/[1-9]/.test(q))
       error = "Укажите положительное количество.";
+    else if (!hasRemaining(row))
+      error = "Строка плана уже выполнена. Исключите её из приёмки.";
     else if (row.baseUom !== row.currentBaseUom)
       error = "Базовая единица SKU изменилась. Требуется актуальный план.";
     else if (!row.locationId) error = "Выберите локацию.";
@@ -159,6 +173,18 @@ export function validateIntake(
       error = "Укажите известную сумму (до 4 знаков) и код валюты.";
     if (row.serialId) serials.add(row.serialId);
     if (error) result.rows[row.key] = error;
+  }
+  for (const group of intakeGroups(values)) {
+    const selected = group.rows.filter((row) => row.selected);
+    const total = intakeBaseTotal(selected);
+    if (
+      total !== null &&
+      compareIntakeQuantities(total, group.line.remainingQuantity) > 0
+    ) {
+      result.lines ??= {};
+      result.lines[group.line.documentLineId] =
+        `Распределено ${total} ${group.line.baseUom}, осталось ${group.line.remainingQuantity} ${group.line.baseUom}. Уменьшите количество.`;
+    }
   }
   if (
     values.unallocatedCost.known &&
@@ -192,4 +218,101 @@ export class ReceiptIntakeAttempt {
     this.sent = null;
     this.uncertain = false;
   }
+}
+
+export function hasRemaining(line: ReceiptPreparationLine): boolean {
+  return /[1-9]/.test(line.remainingQuantity.split(/[eE]/)[0] ?? "");
+}
+export function selectedIntakeRows(values: ReceiptIntakeValues): IntakeRow[] {
+  return values.rows.filter((row) => row.selected);
+}
+export function intakeGroups(
+  values: ReceiptIntakeValues,
+  context?: ReceiptPreparation,
+): ReceiptIntakeGroup[] {
+  const groups = new Map<string, ReceiptIntakeGroup>();
+  for (const row of values.rows) {
+    let group = groups.get(row.documentLineId);
+    if (!group) {
+      group = {
+        line: row,
+        current: context?.lines.find(
+          (line) => line.documentLineId === row.documentLineId,
+        ),
+        rows: [],
+      };
+      groups.set(row.documentLineId, group);
+    }
+    group.rows.push(row);
+  }
+  return [...groups.values()].sort(
+    (left, right) =>
+      left.line.position - right.line.position ||
+      left.line.documentLineId.localeCompare(right.line.documentLineId),
+  );
+}
+export function selectIntakeLine(
+  values: ReceiptIntakeValues,
+  id: string,
+  selected: boolean,
+): ReceiptIntakeValues {
+  return {
+    ...values,
+    rows: values.rows.map((row) =>
+      row.documentLineId === id
+        ? { ...row, selected: selected && hasRemaining(row) }
+        : row,
+    ),
+  };
+}
+export function rebaseIntake(
+  values: ReceiptIntakeValues,
+  context: ReceiptPreparation,
+): ReceiptIntakeValues {
+  return {
+    ...copyIntake(values),
+    expectedVersion: context.version,
+    rows: values.rows.map((row) => {
+      const line = context.lines.find(
+        (value) => value.documentLineId === row.documentLineId,
+      );
+      return line
+        ? { ...row, ...line, selected: row.selected && hasRemaining(line) }
+        : { ...row, selected: false, remainingQuantity: "0" };
+    }),
+  };
+}
+// Сравнение десятичных строк не использует floating point и не повторяет пересчёт единиц Domain.
+function quantityParts(
+  value: string,
+): { coefficient: bigint; scale: number } | null {
+  const q = intakeDecimal(value);
+  if (q.length > 128 || !/^\d+(?:\.\d+)?$/.test(q)) return null;
+  const [whole = "0", fraction = ""] = q.split(".");
+  return { coefficient: BigInt(whole + fraction), scale: fraction.length };
+}
+export function compareIntakeQuantities(left: string, right: string): number {
+  const a = quantityParts(left),
+    b = quantityParts(right);
+  if (!a || !b) return 0;
+  const scale = Math.max(a.scale, b.scale);
+  const x = a.coefficient * 10n ** BigInt(scale - a.scale),
+    y = b.coefficient * 10n ** BigInt(scale - b.scale);
+  return x > y ? 1 : x < y ? -1 : 0;
+}
+export function intakeBaseTotal(rows: readonly IntakeRow[]): string | null {
+  if (!rows.length) return "0";
+  if (rows.some((row) => row.uom !== row.baseUom)) return null;
+  const parts = rows.map((row) => quantityParts(row.quantity));
+  if (parts.some((part) => part === null)) return null;
+  const scale = Math.max(...parts.map((part) => part?.scale ?? 0));
+  let sum = 0n;
+  for (const part of parts)
+    if (part) sum += part.coefficient * 10n ** BigInt(scale - part.scale);
+  if (!scale) return String(sum);
+  const digits = String(sum).padStart(scale + 1, "0");
+  return `${digits.slice(0, -scale)}.${digits.slice(-scale)}`.replace(
+    /\.?0+$/,
+    "",
+  );
 }

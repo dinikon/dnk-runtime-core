@@ -228,6 +228,9 @@ export interface PostReceiptRequestDTO {
   }[];
 }
 export interface PrepareReceiptLineResponseDTO {
+  position: number;
+  planned_quantity: string;
+  executed_quantity: string;
   document_line_id: string;
   inventory_item_id: string;
   sku: string;
@@ -260,6 +263,14 @@ export interface ListReceiptReferencesResponseDTO {
   offset: number;
   limit: number;
 }
+export interface ListReceiptExecutionLineResponseDTO {
+  document_line_id: string;
+  position: number;
+  sku: string;
+  base_uom: string;
+  quantity: string;
+  allocation_count: number;
+}
 export interface ListReceiptExecutionItemResponseDTO {
   execution_id: string;
   posting_id: string;
@@ -267,6 +278,7 @@ export interface ListReceiptExecutionItemResponseDTO {
   document_version_after: number;
   document_status: string;
   line_count: number;
+  lines: ListReceiptExecutionLineResponseDTO[];
 }
 export interface ListReceiptExecutionsResponseDTO {
   items: ListReceiptExecutionItemResponseDTO[];

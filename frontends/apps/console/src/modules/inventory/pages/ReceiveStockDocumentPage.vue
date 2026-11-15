@@ -1,32 +1,37 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onBeforeUnmount } from "vue";
-import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+import {
+  useRoute,
+  useRouter,
+  onBeforeRouteLeave,
+  onBeforeRouteUpdate,
+} from "vue-router";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useInventoryScope } from "../model/use-inventory-scope";
 import { useInventoryUomsQuery } from "../model/use-inventory-item-query";
 import { useReceiptPreparation } from "../model/use-receipt-posting-queries";
 import { usePostReceipt } from "../model/use-post-receipt";
 import { useReceiptReferencePicker } from "../model/use-receipt-reference-picker";
 import {
-  prepareIntake,
   copyIntake,
-  intakeSignature,
-  duplicateIntakeRow,
   chooseIntakeReference,
   validateIntake,
   ReceiptIntakeAttempt,
+  intakeGroups,
+  selectedIntakeRows,
 } from "../model/receipt-intake";
 import { ReceiptPostingRequestError } from "../model/receipt-posting.errors";
 import type {
-  ReceiptIntakeValues,
-  ReceiptIntakeErrors,
   IntakeRow,
+  IntakeUnallocatedCost,
   IntakeReference,
   ReceiptReferenceKind,
 } from "../model/receipt-posting.types";
 import type { InventoryScope } from "../model/inventory-scope.types";
-import ReceiptIntakeLinesForm from "../ui/forms/ReceiptIntakeLinesForm.vue";
+import ReceiptIntakeCostForm from "../ui/forms/ReceiptIntakeCostForm.vue";
+import ReceiptIntakePlanForm from "../ui/forms/ReceiptIntakePlanForm.vue";
+import ReceiptIntakeStatus from "../ui/forms/ReceiptIntakeStatus.vue";
+import { useReceiptIntakeDraft } from "../model/use-receipt-intake-draft";
 import ReceiptIntakePickerDialog from "../ui/forms/ReceiptIntakePickerDialog.vue";
 import ReceiptIntakeConfirmDialog from "../ui/forms/ReceiptIntakeConfirmDialog.vue";
 const route = useRoute(),
@@ -42,10 +47,15 @@ const query = useReceiptPreparation(id, scope),
   uoms = useInventoryUomsQuery(scope),
   mutation = usePostReceipt(scope),
   picker = useReceiptReferencePicker(id, scope, identity);
-const values = ref<ReceiptIntakeValues | null>(null),
-  baseline = ref(""),
-  errors = ref<ReceiptIntakeErrors>({ rows: {} }),
-  error = ref(""),
+const draft = useReceiptIntakeDraft();
+const { values, errors, dirty } = draft;
+const groups = computed(() =>
+  values.value ? intakeGroups(values.value, query.data.value) : [],
+);
+const selectedCount = computed(() =>
+  values.value ? selectedIntakeRows(values.value).length : 0,
+);
+const error = ref(""),
   pending = ref(false),
   conflict = ref(false),
   actualVersion = ref<number | null>(null),
@@ -53,9 +63,6 @@ const values = ref<ReceiptIntakeValues | null>(null),
   done = ref(false),
   attempt = reactive(new ReceiptIntakeAttempt());
 let request: AbortController | null = null;
-const dirty = computed(
-  () => !!values.value && intakeSignature(values.value) !== baseline.value,
-);
 const receivable = computed(() =>
   ["CONFIRMED", "PARTIALLY_EXECUTED"].includes(query.data.value?.status ?? ""),
 );
@@ -75,9 +82,7 @@ watch(
   () => {
     request?.abort();
     request = null;
-    values.value = null;
-    baseline.value = "";
-    errors.value = { rows: {} };
+    draft.reset();
     error.value = "";
     pending.value = false;
     conflict.value = false;
@@ -94,8 +99,7 @@ watch(
   (context) => {
     if (!context || !scope.ready.value || pending.value) return;
     if (!values.value) {
-      values.value = prepareIntake(context, () => crypto.randomUUID());
-      baseline.value = intakeSignature(values.value);
+      draft.initialize(context);
     } else if (
       context.version !== values.value.expectedVersion &&
       !attempt.uncertain
@@ -112,21 +116,22 @@ function clearError(): void {
 }
 function changeRow(key: string, row: IntakeRow): void {
   if (!values.value || disabled.value) return;
-  values.value.rows = values.value.rows.map((value) =>
-    value.key === key ? { ...row, key: value.key } : value,
-  );
+  draft.change(key, row);
+  clearError();
+}
+function changeCost(value: IntakeUnallocatedCost): void {
+  if (!values.value || disabled.value) return;
+  values.value.unallocatedCost = { ...value };
   clearError();
 }
 function removeRow(key: string): void {
   if (!values.value || disabled.value) return;
-  values.value.rows = values.value.rows.filter((row) => row.key !== key);
+  draft.remove(key);
   clearError();
 }
 function splitRow(key: string): void {
-  if (!values.value || disabled.value || values.value.rows.length >= 500)
-    return;
-  const row = values.value.rows.find((value) => value.key === key);
-  if (row) values.value.rows.push(duplicateIntakeRow(row, crypto.randomUUID()));
+  if (!values.value || disabled.value || selectedCount.value >= 500) return;
+  draft.split(key);
   clearError();
 }
 function openPicker(key: string, kind: ReceiptReferenceKind): void {
@@ -141,28 +146,45 @@ function selectReference(option: IntakeReference): void {
     changeRow(row.key, chooseIntakeReference(row, selected.kind, option));
   picker.close();
 }
-function replacePlan(): void {
+function selectLine(id: string, selected: boolean): void {
+  if (disabled.value) return;
+  draft.select(id, selected);
+  clearError();
+}
+function fillLine(lineId: string): void {
+  const context = query.data.value;
+  if (!context || disabled.value) return;
+  if (
+    !window.confirm(
+      "Заполнить строку оставшимся количеством? Введённые распределения этой строки будут заменены.",
+    )
+  )
+    return;
+  draft.fill(context, lineId);
+  clearError();
+}
+function acceptCurrent(): void {
   const context = query.data.value;
   if (
     !context ||
     pending.value ||
     attempt.uncertain ||
     query.error.value ||
-    context.version !== serverVersion.value
+    context.version !== serverVersion.value ||
+    !receivable.value
   )
     return;
   if (
-    dirty.value &&
     !window.confirm(
-      "Заменить введённый факт актуальным остатком плана? Несохранённый ввод будет потерян.",
+      "Принять новую версию документа, сохранив введённые количества и распределения? Полностью выполненные строки будут исключены из текущей приёмки.",
     )
   )
     return;
-  values.value = prepareIntake(context, () => crypto.randomUUID());
-  baseline.value = intakeSignature(values.value);
+  draft.accept(context);
+  actualVersion.value = context.version;
   conflict.value = false;
   attempt.clear();
-  clearError();
+  error.value = "";
 }
 function submit(): void {
   if (
@@ -177,6 +199,7 @@ function submit(): void {
     if (
       errors.value.form ||
       errors.value.costs ||
+      Object.keys(errors.value.lines ?? {}).length ||
       Object.keys(errors.value.rows).length
     )
       return;
@@ -250,6 +273,9 @@ function canLeave(): boolean {
   );
 }
 onBeforeRouteLeave(canLeave);
+onBeforeRouteUpdate(
+  (to, from) => to.params.documentId === from.params.documentId || canLeave(),
+);
 function beforeUnload(event: BeforeUnloadEvent): void {
   if (!done.value && (dirty.value || pending.value || attempt.uncertain)) {
     event.preventDefault();
@@ -287,22 +313,28 @@ onBeforeUnmount(() => {
         >К документу</Button
       >
     </header>
-    <p v-if="query.isPending.value" role="status">
-      Загрузка оставшегося плана…
-    </p>
-    <div
-      v-if="scope.error.value || query.error.value"
-      role="alert"
-      class="shrink-0 rounded-md border border-destructive p-3 text-sm text-destructive"
-    >
-      {{ scope.error.value || query.error.value?.message
-      }}<Button
-        variant="outline"
-        :disabled="pending || query.isFetching.value || !scope.ready.value"
-        @click="query.refetch()"
-        >Повторить</Button
-      >
-    </div>
+    <ReceiptIntakeStatus
+      :loading="query.isPending.value"
+      :error="scope.error.value || query.error.value?.message || ''"
+      :receivable="receivable"
+      :has-draft="!!values"
+      :conflict="conflict"
+      :uncertain="attempt.uncertain"
+      :expected-version="values?.expectedVersion ?? 0"
+      :server-version="serverVersion"
+      :refresh-disabled="
+        pending || query.isFetching.value || !scope.ready.value
+      "
+      :accept-disabled="
+        pending ||
+        query.isFetching.value ||
+        !!query.error.value ||
+        query.data.value?.version !== serverVersion ||
+        !receivable
+      "
+      @retry="query.refetch()"
+      @accept="acceptCurrent"
+    />
     <div
       v-if="values && scope.ready.value"
       class="flex w-full max-w-5xl shrink-0 flex-col gap-5"
@@ -311,116 +343,32 @@ onBeforeUnmount(() => {
         Основание формы: версия {{ values.expectedVersion }}. Для серийного
         учёта каждый экземпляр принимается отдельно в количестве 1 PCS.
       </p>
-      <p
-        v-if="!receivable && !attempt.uncertain"
-        role="alert"
-        class="text-sm text-destructive"
-      >
-        Текущий статус документа не допускает приёмку. Введённый факт сохранён
-        для сверки.
-      </p>
-      <div
-        v-if="conflict && !attempt.uncertain"
-        role="alert"
-        class="rounded-md bg-muted p-3 text-sm"
-      >
-        Конфликт версии: форма {{ values.expectedVersion }}, сервер
-        {{ serverVersion }}. Ввод не заменён.
-        <div class="mt-2 flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            :disabled="pending || query.isFetching.value"
-            @click="query.refetch()"
-            >Загрузить актуальный план</Button
-          ><Button
-            variant="outline"
-            :disabled="
-              pending ||
-              !!query.error.value ||
-              query.data.value?.version !== serverVersion
-            "
-            @click="replacePlan"
-            >Принять актуальный план</Button
-          >
-        </div>
-      </div>
-      <p
-        v-if="attempt.uncertain"
-        role="alert"
-        class="rounded-md bg-muted p-3 text-sm"
-      >
-        Результат запроса неизвестен. Повтор исходной команды с прежним ключом
-        не создаст второй факт. Поля сохранены и заблокированы.
-      </p>
       <form
         class="flex shrink-0 flex-col gap-5 rounded-lg border bg-card p-4 sm:p-6"
         @submit.prevent="submit"
       >
-        <p
-          v-if="uoms.error.value"
-          role="alert"
-          class="text-sm text-destructive"
-        >
-          {{ uoms.error.value.message
-          }}<Button
-            type="button"
-            variant="outline"
-            :disabled="pending"
-            @click="uoms.refetch()"
-            >Повторить загрузку единиц</Button
-          >
-        </p>
-        <ReceiptIntakeLinesForm
-          :rows="values.rows"
+        <ReceiptIntakePlanForm
+          :groups="groups"
+          :row-count="selectedCount"
+          @select="selectLine"
+          @fill="fillLine"
           :disabled="disabled"
           :errors="errors"
           :uoms="uoms.data.value ?? []"
+          :uom-error="uoms.error.value?.message ?? ''"
+          :uom-pending="pending || uoms.isFetching.value"
+          @retry-units="uoms.refetch()"
           @change="changeRow"
           @remove="removeRow"
           @split="splitRow"
           @pick="openPicker"
         />
-        <details class="rounded-md border p-3">
-          <summary class="cursor-pointer text-sm">
-            Общая сумма без распределения
-          </summary>
-          <label class="mt-3 flex items-center gap-2 text-sm"
-            ><input
-              v-model="values.unallocatedCost.known"
-              type="checkbox"
-              :disabled="disabled"
-            />Сумма известна, распределение по строкам пока неизвестно</label
-          >
-          <div
-            v-if="values.unallocatedCost.known"
-            class="mt-3 grid gap-3 sm:grid-cols-2"
-          >
-            <label class="text-sm"
-              >Нераспределённая сумма<Input
-                v-model="values.unallocatedCost.amount"
-                type="text"
-                inputmode="decimal"
-                :disabled="disabled" /></label
-            ><label class="text-sm"
-              >Валюта общей суммы<Input
-                v-model="values.unallocatedCost.currency"
-                maxlength="3"
-                :disabled="disabled" /></label
-            ><label class="text-sm sm:col-span-2"
-              >Основание общей суммы<Input
-                v-model="values.unallocatedCost.reference"
-                maxlength="200"
-                :disabled="disabled"
-            /></label>
-          </div>
-          <p
-            v-if="errors.costs"
-            role="alert"
-            class="mt-2 text-sm text-destructive"
-          >
-            {{ errors.costs }}
-          </p>
-        </details>
+        <ReceiptIntakeCostForm
+          :value="values.unallocatedCost"
+          :disabled="disabled"
+          :error="errors.costs ?? ''"
+          @change="changeCost"
+        />
         <p
           v-if="error"
           role="alert"
@@ -462,7 +410,7 @@ onBeforeUnmount(() => {
     <ReceiptIntakeConfirmDialog
       v-if="confirmOpen && values"
       :version="values.expectedVersion"
-      :count="values.rows.length"
+      :count="selectedCount"
       :pending="pending"
       :uncertain="attempt.uncertain"
       :error="error"

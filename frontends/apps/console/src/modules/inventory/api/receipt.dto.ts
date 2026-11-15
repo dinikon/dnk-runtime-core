@@ -10,6 +10,7 @@ export interface CreateReceiptDraftLineResponseDTO {
   source_uom: string;
   factor_to_base: string;
   executed_qty: string;
+  remaining_qty: string;
 }
 export interface CreateReceiptDraftResponseDTO {
   id: string;
@@ -39,6 +40,7 @@ export interface GetReceiptDocumentLineResponseDTO {
   source_uom: string;
   factor_to_base: string;
   executed_qty: string;
+  remaining_qty: string;
 }
 export interface GetReceiptDocumentResponseDTO {
   id: string;
@@ -97,6 +99,7 @@ export interface PatchReceiptDocumentLineResponseDTO {
   source_uom: string;
   factor_to_base: string;
   executed_qty: string;
+  remaining_qty: string;
 }
 export interface PatchReceiptDocumentResponseDTO {
   id: string;
@@ -127,6 +130,7 @@ export interface ConfirmReceiptDocumentLineResponseDTO {
   source_uom: string;
   factor_to_base: string;
   executed_qty: string;
+  remaining_qty: string;
 }
 export interface ConfirmReceiptDocumentResponseDTO {
   id: string;
@@ -157,6 +161,7 @@ export interface CancelReceiptDocumentLineResponseDTO {
   source_uom: string;
   factor_to_base: string;
   executed_qty: string;
+  remaining_qty: string;
 }
 export interface CancelReceiptDocumentResponseDTO {
   id: string;

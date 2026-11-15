@@ -29,6 +29,7 @@ import {
   executionHistoryFromDto,
 } from "./receipt-posting.mapper";
 import { ReceiptPostingRequestError } from "../model/receipt-posting.errors";
+import { selectedIntakeRows } from "../model/receipt-intake";
 const root = "/console/inventory";
 function fail(
   cause: unknown,
@@ -58,6 +59,33 @@ function fail(
       ? metadata.actual_version
       : undefined;
   const fields: ReceiptIntakeErrors = { rows: {} };
+  const rows = values ? selectedIntakeRows(values) : [];
+  if (
+    metadata &&
+    "document_line_id" in metadata &&
+    typeof metadata.document_line_id === "string"
+  ) {
+    const remaining =
+      "remaining_quantity" in metadata &&
+      typeof metadata.remaining_quantity === "string"
+        ? metadata.remaining_quantity
+        : null;
+    const requested =
+      "requested_quantity" in metadata &&
+      typeof metadata.requested_quantity === "string"
+        ? metadata.requested_quantity
+        : null;
+    const unit =
+      "base_uom" in metadata && typeof metadata.base_uom === "string"
+        ? metadata.base_uom
+        : "";
+    fields.lines = {
+      [metadata.document_line_id]:
+        remaining !== null && requested !== null
+          ? `${message} Запрошено ${requested} ${unit}, осталось ${remaining} ${unit}.`
+          : message,
+    };
+  }
   if (Array.isArray(raw) && values)
     for (const issue of raw) {
       if (
@@ -68,8 +96,8 @@ function fail(
         continue;
       const index = issue.loc.indexOf("lines"),
         position: unknown = issue.loc[index + 1];
-      if (index >= 0 && typeof position === "number" && values.rows[position])
-        fields.rows[values.rows[position].key] =
+      if (index >= 0 && typeof position === "number" && rows[position])
+        fields.rows[rows[position].key] =
           typeof issue.msg === "string"
             ? issue.msg
             : "Проверьте фактическую строку.";

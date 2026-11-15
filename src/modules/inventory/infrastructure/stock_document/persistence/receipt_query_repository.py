@@ -1,3 +1,12 @@
+from src.modules.inventory.infrastructure.stock_document.persistence.receipt_progress_mapper import (
+    ReceiptProgressQueryMapper,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_execution_lines import (
+    StockExecutionLineModel as ActualLine,
+)
+from src.modules.inventory.application.stock_document.query.list_receipt_executions.dto import (
+    ListReceiptExecutionLineDTO,
+)
 from sqlalchemy import Nullable, or_
 from sqlalchemy.sql.elements import ColumnElement
 from src.modules.inventory.infrastructure.persistence.models.stock_location import (
@@ -24,7 +33,6 @@ from src.modules.inventory.application.stock_document.query.prepare_receipt.quer
 )
 from src.modules.inventory.application.stock_document.query.prepare_receipt.dto import (
     PrepareReceiptResultDTO,
-    PrepareReceiptLineDTO,
 )
 from src.modules.inventory.infrastructure.persistence.models.stock_document_line import (
     StockDocumentLineModel as PlanLine,
@@ -66,7 +74,7 @@ from src.modules.inventory.application.stock_document.query.list_receipt_executi
 
 
 class SqlAlchemyReceiptFactsQueryRepository:
-    """Читает неизменяемые проекции первоначального результата без Domain и текущих остатков."""
+    """Читает подготовку приёмки и неизменяемые факты без восстановления агрегатов."""
 
     def __init__(self, session: AsyncSession) -> None:
         """Принимает единственную tenant-сессию внешнего UoW."""
@@ -134,7 +142,32 @@ class SqlAlchemyReceiptFactsQueryRepository:
             .execution_options(populate_existing=True)
         )
         rows = (await self._session.execute(statement)).all()
-        items = []
+        progress: dict[UUID, list[ListReceiptExecutionLineDTO]] = {}
+        if rows:
+            statement_lines = (
+                select(
+                    ActualLine.execution_id,
+                    PlanLine,
+                    ActualLine.base_uom,
+                    func.sum(ActualLine.quantity),
+                    func.count(ActualLine.id),
+                )
+                .join(PlanLine, PlanLine.id == ActualLine.document_line_id)
+                .where(
+                    ActualLine.execution_id.in_([execution.id for execution, _ in rows])
+                )
+                .group_by(ActualLine.execution_id, PlanLine.id, ActualLine.base_uom)
+                .order_by(ActualLine.execution_id, PlanLine.position, PlanLine.id)
+                .execution_options(populate_existing=True)
+            )
+            line_rows = (await self._session.execute(statement_lines)).all()
+            for execution_id, line, base_uom, quantity, count in line_rows:
+                progress.setdefault(execution_id, []).append(
+                    ReceiptProgressQueryMapper.to_history_line(
+                        line, base_uom, quantity, count
+                    )
+                )
+        items: list[ListReceiptExecutionItemDTO] = []
         for execution, request in rows:
             if request.result is None:
                 raise RuntimeError("Завершённый факт не содержит результата.")
@@ -147,6 +180,7 @@ class SqlAlchemyReceiptFactsQueryRepository:
                     result.document_version_after,
                     result.document_status,
                     len(result.lines),
+                    tuple(progress.get(execution.id, ())),
                 )
             )
         return ListReceiptExecutionsResultDTO(
@@ -158,31 +192,28 @@ class SqlAlchemyReceiptFactsQueryRepository:
     ) -> PrepareReceiptResultDTO | None:
         """Вычисляет точный оставшийся план в NUMERIC и дополняет актуальными настройками SKU."""
         statement = (
-            select(StockDocumentModel, Warehouse)
+            select(
+                StockDocumentModel,
+                Warehouse,
+                Nullable(PlanLine),
+                Nullable(Item),
+                Nullable(PlanLine.planned_qty - PlanLine.executed_qty),
+            )
             .join(Warehouse, Warehouse.id == StockDocumentModel.warehouse_id)
+            .outerjoin(PlanLine, PlanLine.document_id == StockDocumentModel.id)
+            .outerjoin(Item, Item.id == PlanLine.inventory_item_id)
             .where(
                 StockDocumentModel.id == query.document_id,
                 StockDocumentModel.operation_type == "RECEIPT",
                 StockDocumentModel.source_system.is_(None),
             )
-            .execution_options(populate_existing=True)
-        )
-        header = (await self._session.execute(statement)).one_or_none()
-        if header is None:
-            return None
-        document, warehouse = header
-        statement_lines = (
-            select(
-                PlanLine,
-                Item,
-                (PlanLine.planned_qty - PlanLine.executed_qty).label("remaining"),
-            )
-            .join(Item, Item.id == PlanLine.inventory_item_id)
-            .where(PlanLine.document_id == document.id)
             .order_by(PlanLine.position, PlanLine.id)
             .execution_options(populate_existing=True)
         )
-        rows = (await self._session.execute(statement_lines)).all()
+        rows = (await self._session.execute(statement)).all()
+        if not rows:
+            return None
+        document, warehouse = rows[0][0], rows[0][1]
         return PrepareReceiptResultDTO(
             document.id,
             document.version,
@@ -190,18 +221,9 @@ class SqlAlchemyReceiptFactsQueryRepository:
             document.warehouse_id,
             warehouse.default_storage_location_id,
             tuple(
-                PrepareReceiptLineDTO(
-                    line.id,
-                    item.id,
-                    line.sku,
-                    line.base_uom,
-                    item.base_uom,
-                    remaining,
-                    item.quantity_step,
-                    item.tracking_mode,
-                    item.expiration_mode,
-                )
-                for line, item, remaining in rows
+                ReceiptProgressQueryMapper.to_preparation_line(line, item, remaining)
+                for _, _, line, item, remaining in rows
+                if line is not None and item is not None and remaining is not None
             ),
         )
 
