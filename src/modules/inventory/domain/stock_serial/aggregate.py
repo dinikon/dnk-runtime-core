@@ -1,3 +1,4 @@
+from src.modules.inventory.domain.stock_serial.error import StockSerialLotInUseError
 from dataclasses import dataclass, replace
 from typing import Self
 
@@ -34,6 +35,11 @@ class StockSerial:
     inventory_item_id: InventoryItemIdVO
     number: SerialNumberVO
     lot_id: StockLotIdVO | None
+
+    def ensure_revision_preserves_stock(self, revised: "StockSerial", *, has_physical_history: bool) -> None:
+        """Разрешает исправление номера, сохраняя историческую связь учтённого экземпляра с партией."""
+        if has_physical_history and revised.lot_id != self.lot_id:
+            raise StockSerialLotInUseError("Нельзя менять партию серийного экземпляра, участвовавшего в физическом учёте.")
 
     @classmethod
     def create(

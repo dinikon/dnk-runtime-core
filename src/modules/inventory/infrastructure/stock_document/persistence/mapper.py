@@ -67,6 +67,44 @@ class StockDocumentMapper:
         )
 
     @staticmethod
+    def to_update_values(document: StockDocument) -> dict[str, Any]:
+        """Подготавливает реквизиты существующего корня без изменения его ID."""
+        values = StockDocumentMapper.to_insert_values(document)
+        del values["id"]
+        return values
+
+    @staticmethod
+    def line_matches(
+        model: StockDocumentLineModel, line: StockDocumentLine, position: int
+    ) -> bool:
+        """Сравнивает сохранённые скаляры строки, не вызывая бизнес-проверок."""
+        return (
+            model.position,
+            model.inventory_item_id,
+            model.sku,
+            model.base_uom,
+            model.planned_qty,
+            model.source_quantity,
+            model.source_uom,
+            model.factor_to_base,
+            model.executed_qty,
+            model.source_system,
+            model.source_reference,
+        ) == (
+            position,
+            line.inventory_item_id.uuid,
+            line.sku.value,
+            line.base_uom.value,
+            line.planned_qty.value,
+            line.conversion.quantity.value,
+            line.conversion.uom.value,
+            line.conversion.factor_to_base,
+            line.executed_qty.value,
+            line.source.system if line.source is not None else None,
+            line.source.reference if line.source is not None else None,
+        )
+
+    @staticmethod
     def to_line_insert_values(document: StockDocument) -> list[dict[str, Any]]:
         """Сохраняет порядок, точные количества и исходный пересчёт строк."""
         if any(line.adjustment is not None for line in document.lines):

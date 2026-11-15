@@ -13,7 +13,6 @@ from src.config import dnk_config
 from src.modules.identity.domain.auth.principal import Principal
 from src.modules.identity.domain.auth.request_context import RequestContext
 from test.crm_company_support import company_app
-from src.modules.crm.presentation.company.depends import get_company_source_usage
 
 
 class CompanyHttpTests(unittest.IsolatedAsyncioTestCase):
@@ -45,9 +44,6 @@ class CompanyHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.session.scalar = AsyncMock(return_value=self.identifier)
         self.app = company_app(lambda: self.session, self.context)
-        self.app.dependency_overrides[get_company_source_usage] = lambda: Mock(
-            is_used=AsyncMock(return_value=False)
-        )
         self.app.state.clock = Mock(now=Mock(return_value=self.now + timedelta(days=1)))
         self.app.state.uuid_generator = Mock(new=Mock(return_value=self.identifier))
         scheme = "http" if dnk_config.AUTH.allow_insecure_http else "https"

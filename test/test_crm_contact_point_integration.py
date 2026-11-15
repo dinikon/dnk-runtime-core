@@ -3,7 +3,6 @@ from src.modules.crm.domain.contact.aggregate import ContactEntity
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.domain.company.aggregate import CompanyEntity
 from src.modules.crm.domain.company.value_object.identifier import CompanyIdVO
-from src.modules.crm.presentation.company.depends import get_company_source_usage
 
 """CRM владеет target; ContactPoints обслуживает значения и связи."""
 
@@ -182,9 +181,6 @@ class CrmContactPointsHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.app.dependency_overrides[get_company_contact_points] = (
             lambda: self.company_points
-        )
-        self.app.dependency_overrides[get_company_source_usage] = lambda: Mock(
-            is_used=AsyncMock(return_value=False)
         )
         scheme = "http" if dnk_config.AUTH.allow_insecure_http else "https"
         self.origin = f"{scheme}://tenant.example"

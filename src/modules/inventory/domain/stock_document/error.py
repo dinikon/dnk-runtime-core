@@ -70,7 +70,19 @@ class StockDocumentExecutionNotAllowedError(StockDocumentError):
 
 
 class StaleStockDocumentVersionError(StockDocumentError):
-    """Отклоняет исполнение, подготовленное по другой версии плана."""
+    """Отклоняет изменение или исполнение, подготовленное по другой версии плана."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        expected_version: int | None = None,
+        actual_version: int | None = None,
+    ) -> None:
+        """Сохраняет версии для явного разрешения конфликта вызывающим сценарием."""
+        super().__init__(message)
+        self.expected_version = expected_version
+        self.actual_version = actual_version
 
 
 class StockDocumentOverExecutionError(StockDocumentError):

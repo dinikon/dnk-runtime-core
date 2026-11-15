@@ -1,1 +1,0 @@
-export { supplierSourcingRoutes } from "./routes";

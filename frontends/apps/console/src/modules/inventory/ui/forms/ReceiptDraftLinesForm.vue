@@ -67,7 +67,19 @@ function units(
         :for="`receipt-sku-${line.key}`"
         class="mb-1 block text-sm font-medium"
         >SKU</label
-      ><InventorySkuPicker
+      >
+      <p
+        v-if="line.id"
+        :id="`receipt-sku-${line.key}`"
+        class="rounded-md bg-muted p-2 font-mono text-sm"
+      >
+        {{ line.sku
+        }}<span class="ml-2 font-sans text-xs text-muted-foreground"
+          >Сохранённая строка</span
+        >
+      </p>
+      <InventorySkuPicker
+        v-else
         :id="`receipt-sku-${line.key}`"
         :search="activeKey === line.key ? search : ''"
         :options="options"

@@ -4,6 +4,11 @@ export class ReceiptRequestError extends Error {
     message: string,
     public readonly status?: number,
     public readonly fields: ReceiptErrors = { lineFields: {} },
+    public readonly conflict?: {
+      code: string;
+      expectedVersion?: number;
+      actualVersion?: number;
+    },
   ) {
     super(message);
   }

@@ -1,3 +1,4 @@
+from src.modules.inventory.presentation.depends.physical_inventory import PhysicalInventoryUsageDep
 from src.modules.inventory.infrastructure.inventory_item.persistence.usage import (
     SqlAlchemyInventoryItemUsage,
 )
@@ -126,10 +127,10 @@ GetInventoryItemHandlerDep = Annotated[
 
 
 def get_update_inventory_item_handler(
-    repository: InventoryItemRepositoryDep, uuid_generator: UuidDep
+    repository: InventoryItemRepositoryDep, uuid_generator: UuidDep, physical_usage: PhysicalInventoryUsageDep
 ) -> UpdateInventoryItemHandler:
     """Собирает обновление на write-порте общей сессии."""
-    return UpdateInventoryItemHandler(repository, uuid_generator)
+    return UpdateInventoryItemHandler(repository, uuid_generator, physical_usage)
 
 
 UpdateInventoryItemHandlerDep = Annotated[

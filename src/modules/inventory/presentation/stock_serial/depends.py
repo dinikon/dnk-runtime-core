@@ -1,3 +1,4 @@
+from src.modules.inventory.presentation.depends.physical_inventory import PhysicalInventoryUsageDep
 from typing import Annotated
 from fastapi import Depends
 
@@ -98,9 +99,10 @@ def get_update_stock_serial_handler(
     items: InventoryItemRepositoryDep,
     lots: StockLotRepositoryDep,
     serials: StockSerialRepositoryDep,
+    physical_usage: PhysicalInventoryUsageDep,
 ) -> UpdateStockSerialHandler:
     """Собирает изменение номера и партии на одной сессии внешнего UoW."""
-    return UpdateStockSerialHandler(items, lots, serials)
+    return UpdateStockSerialHandler(items, lots, serials, physical_usage)
 
 
 UpdateStockSerialHandlerDep = Annotated[

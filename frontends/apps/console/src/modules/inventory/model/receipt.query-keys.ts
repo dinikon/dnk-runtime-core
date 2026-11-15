@@ -16,6 +16,12 @@ export const receiptKeys = {
     id: string,
   ): readonly [...Root, "detail", string] =>
     [...receiptKeys.root(scope), "detail", id] as const,
+  update: (scope: InventoryScope): readonly [...Root, "update"] =>
+    [...receiptKeys.root(scope), "update"] as const,
+  confirm: (scope: InventoryScope): readonly [...Root, "confirm"] =>
+    [...receiptKeys.root(scope), "confirm"] as const,
+  cancel: (scope: InventoryScope): readonly [...Root, "cancel"] =>
+    [...receiptKeys.root(scope), "cancel"] as const,
   create: (scope: InventoryScope): readonly [...Root, "create"] =>
     [...receiptKeys.root(scope), "create"] as const,
 };

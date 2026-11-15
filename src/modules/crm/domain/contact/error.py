@@ -11,7 +11,3 @@ class ContactNotFoundError(DomainError):
 
 class InvalidContactCompanyLinkError(DomainError):
     """Пара идентификаторов связи Contact–Company имеет неверные типы."""
-
-
-class ContactInUseError(DomainError):
-    """Контакт используется источниками поставки и не может быть удалён."""

@@ -67,3 +67,7 @@ class InvalidPackagingQuantityError(InventoryItemError):
 
 class InventoryItemInUseError(InventoryItemConflictError):
     """Запрещает удаление позиции, на которую ссылается каталог."""
+
+
+class InventoryItemSettingsInUseError(InventoryItemInUseError):
+    """Запрещает переопределить измерения уже учтённого физического запаса."""

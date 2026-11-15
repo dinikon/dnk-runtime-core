@@ -32,12 +32,13 @@ export function useCreateReceipt(
     },
     onSuccess: async (result, input) => {
       if (!relevant(input)) return;
-      await cache.cancelQueries({
+      // Ответ идемпотентного создания может описывать прежнюю версию плана.
+      await cache.invalidateQueries({
         queryKey: receiptKeys.detail(input.scope, result.id),
         exact: true,
+        refetchType: "all",
       });
       if (!relevant(input)) return;
-      cache.setQueryData(receiptKeys.detail(input.scope, result.id), result);
       await cache.invalidateQueries({
         queryKey: receiptKeys.lists(input.scope),
       });

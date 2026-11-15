@@ -1,3 +1,4 @@
+from src.modules.inventory.infrastructure.inventory_item.persistence.physical_usage import SqlAlchemyPhysicalInventoryUsage
 from src.modules.inventory.infrastructure.inventory_item.catalog_usage import (
     CatalogInventoryItemUsage,
 )
@@ -531,7 +532,7 @@ class InventoryItemPostgresTests(unittest.IsolatedAsyncioTestCase):
                         await barrier.wait()
                         if isinstance(command, UpdateInventoryItemCommand):
                             await UpdateInventoryItemHandler(
-                                repository, UUID7Generator()
+                                repository, UUID7Generator(), SqlAlchemyPhysicalInventoryUsage(uow.session)
                             ).execute(command)
                             outcome = "updated"
                         else:

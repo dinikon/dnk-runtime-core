@@ -39,6 +39,7 @@ from src.modules.crm.application.company.query.list_companies.query import (
 )
 from src.modules.crm.domain.company.aggregate import CompanyEntity
 from src.modules.crm.domain.company.error import (
+    CompanyInUseError,
     CompanyNotFoundError,
     InvalidCompanyLegalNameError,
 )
@@ -143,7 +144,6 @@ class CompanyHandlerTests(unittest.IsolatedAsyncioTestCase):
             self.repository,
             points,
             Mock(is_used=AsyncMock(return_value=False)),
-            Mock(is_used=AsyncMock(return_value=False)),
         ).execute(DeleteCompanyCommand(self.company.id, tenant))
         points.remove.assert_awaited_once_with(tenant, self.company.id)
         self.repository.delete.assert_awaited_once_with(self.company)
@@ -160,7 +160,6 @@ class CompanyHandlerTests(unittest.IsolatedAsyncioTestCase):
                 self.repository,
                 points,
                 Mock(is_used=AsyncMock(return_value=False)),
-                Mock(is_used=AsyncMock(return_value=False)),
             ).execute(DeleteCompanyCommand(self.company.id, EntityIdVO(uuid4())))
         points.remove.assert_not_awaited()
         self.repository.add.side_effect = RuntimeError("storage")
@@ -168,6 +167,19 @@ class CompanyHandlerTests(unittest.IsolatedAsyncioTestCase):
             await CreateCompanyHandler(self.repository, self.clock, self.uuid).execute(
                 CreateCompanyCommand(self.actor, "New")
             )
+
+    async def test_stock_document_owner_still_cannot_be_deleted(self) -> None:
+        """Отключение источников не снимает защиту владельцев складских документов."""
+        points = Mock(remove=AsyncMock())
+        stock_owners = Mock(is_used=AsyncMock(return_value=True))
+        handler = DeleteCompanyHandler(self.repository, points, stock_owners)
+        with self.assertRaises(CompanyInUseError):
+            await handler.execute(
+                DeleteCompanyCommand(self.company.id, EntityIdVO(uuid4()))
+            )
+        stock_owners.is_used.assert_awaited_once_with(self.company.id.uuid)
+        points.remove.assert_not_awaited()
+        self.repository.delete.assert_not_awaited()
 
     async def test_queries_use_projection_repository(self):
         projection = Mock(

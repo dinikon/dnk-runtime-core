@@ -1,3 +1,7 @@
+from src.modules.inventory.infrastructure.persistence.models.stock_positions import StockPositionModel
+from src.modules.inventory.infrastructure.persistence.models.stock_executions import StockExecutionModel
+from src.modules.inventory.infrastructure.persistence.models.stock_postings import StockPostingModel
+from src.modules.inventory.infrastructure.persistence.models.stock_ledger_entries import StockLedgerEntryModel
 """Поступления: реальный HTTP/UoW, точность, идемпотентность и защита ссылок на PostgreSQL."""
 
 import asyncio
@@ -49,17 +53,17 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection imp
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
     TenantMigrator,
 )
-from test import test_supplier_source_postgres as support
+from test.crm_postgres_support import CrmPostgresTestCase
 
 
 @unittest.skipUnless(
     os.environ.get("TEST_POSTGRES_URL"), "Требуется одноразовая PostgreSQL БД."
 )
 class InventoryReceiptPostgresTests(unittest.IsolatedAsyncioTestCase):
-    drop_schemas = support.SupplierSourcePostgresTests.drop_schemas
+    drop_schemas = CrmPostgresTestCase.drop_schemas
 
     async def asyncSetUp(self) -> None:
-        await support.SupplierSourcePostgresTests.asyncSetUp(self)
+        await CrmPostgresTestCase.asyncSetUp(self)
         self.app.include_router(receipt_router, prefix="/api/console")
         self.app.include_router(warehouse_router, prefix="/api/console")
         self.app.include_router(item_router, prefix="/api/console")
@@ -131,17 +135,9 @@ class InventoryReceiptPostgresTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get(f"{self.receipts}/{document['id']}")
         self.assertEqual(response.json(), document)
         async with self.engine.connect() as connection:
-            tables = await connection.run_sync(
-                lambda c: inspect(c).get_table_names(schema=self.schemas[0])
-            )
-            for name in (
-                "stock_positions",
-                "stock_postings",
-                "stock_executions",
-                "stock_ledger_entries",
-            ):
-                self.assertNotIn(name, tables)
             await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
+            for model in (StockPositionModel, StockExecutionModel, StockPostingModel, StockLedgerEntryModel):
+                self.assertEqual((await connection.execute(select(func.count()).select_from(model))).scalar_one(), 0)
             async with self.sessions(bind=connection) as session:
                 model = (await session.scalars(select(StockDocumentModel))).one()
                 lines = (
@@ -515,5 +511,5 @@ class InventoryReceiptPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             await migrator.upgrade(connection, schema)
             self.assertEqual(
-                await migrator.current(connection, schema), ("0025_stock_documents",)
+                await migrator.current(connection, schema), (migrator.head(),)
             )

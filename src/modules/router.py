@@ -71,12 +71,6 @@ router.include_router(channels_router)
 router.include_router(inventory_stock_lots_router)
 router.include_router(inventory_stock_serials_router)
 
-from src.modules.supplier_sourcing.presentation.supplier_source.router import (
-    router as supplier_sources_router,
-)
-
-router.include_router(supplier_sources_router)
-
 from src.modules.crm.presentation.counterparty_reference.router import (
     router as counterparty_references_router,
 )
@@ -88,3 +82,8 @@ from src.modules.inventory.presentation.stock_document.router import (
 )
 
 router.include_router(stock_documents_router)
+
+from src.modules.inventory.presentation.stock_execution.router import router as stock_executions_router
+from src.modules.inventory.presentation.stock_posting.router import router as stock_postings_router
+router.include_router(stock_executions_router)
+router.include_router(stock_postings_router)

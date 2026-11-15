@@ -1,3 +1,4 @@
+from src.modules.inventory.domain.inventory_item.error import InventoryItemSettingsInUseError
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Self
@@ -105,6 +106,11 @@ class InventoryItem:
             raise InventoryItemInUseError(
                 "Нельзя удалить SKU: он используется в складском документе."
             )
+
+    def ensure_revision_preserves_stock(self, revised: "InventoryItem", *, has_physical_history: bool) -> None:
+        """Не позволяет изменить смысл количества и измерений после появления физической истории."""
+        if has_physical_history and (revised.base_uom != self.base_uom or revised.tracking_mode != self.tracking_mode):
+            raise InventoryItemSettingsInUseError("После проведения нельзя менять базовую единицу или режим отслеживания SKU.")
 
     @classmethod
     def create(

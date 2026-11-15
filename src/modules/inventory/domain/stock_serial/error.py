@@ -39,3 +39,7 @@ class StockSerialNotFoundError(StockSerialError):
 
 class StockSerialNumberAlreadyExistsError(StockSerialError):
     """Сообщает о занятом точном серийном номере внутри SKU текущего tenant."""
+
+
+class StockSerialLotInUseError(StockSerialError):
+    """Запрещает переопределить измерения уже учтённого физического запаса."""

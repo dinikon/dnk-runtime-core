@@ -112,6 +112,8 @@ from src.modules.inventory.domain.stock_document.entity.stock_document_line impo
 )
 from src.modules.inventory.domain.stock_document.error import (
     InventoryCountAdjustmentMismatchError,
+    StaleStockDocumentVersionError,
+    InvalidStockDocumentContextError,
     StockAdjustmentDocumentImmutableError,
     StockDocumentExecutionNotAllowedError,
     InvalidStockDocumentLineError,
@@ -132,6 +134,9 @@ from src.modules.inventory.domain.shipment.value_object.identifier import Shipme
 from src.modules.inventory.domain.shipment.value_object.line_id import ShipmentLineIdVO
 from src.modules.inventory.domain.stock_document.value_object.document_source import (
     DocumentSourceVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.line_source import (
+    DocumentLineSourceVO,
 )
 from src.modules.inventory.domain.stock_document.value_object.identifier import (
     StockDocumentIdVO,
@@ -368,11 +373,16 @@ class StockDocument:
             line_bindings=line_bindings,
             as_of=normalized,
         )
+        transit = transfer.transit
+        if transit is None:
+            raise StockDocumentTransferReceiptMismatchError(
+                "Не задан склад транзита приёмки."
+            )
         return cls.restore(
             identifier=identifier,
             operation_type=operation_type,
             warehouse_id=(
-                transfer.transit.warehouse_id
+                transit.warehouse_id
                 if operation_type is StockOperationType.ISSUE
                 else transfer.destination_warehouse_id
             ),
@@ -419,6 +429,36 @@ class StockDocument:
         )
         document._validate()
         return document
+
+    def ensure_version(self, expected_version: int) -> None:
+        """Запрещает действие по устаревшему снимку документа, включая пустое изменение."""
+        self._validate()
+        if type(expected_version) is not int or expected_version < 0:
+            raise InvalidStockDocumentValueError(
+                "Ожидаемая версия должна быть целой неотрицательной."
+            )
+        if self.version != expected_version:
+            raise StaleStockDocumentVersionError(
+                "Документ изменён. Загрузите актуальный план перед повторным действием.",
+                expected_version=expected_version,
+                actual_version=self.version,
+            )
+
+    def ensure_manual_receipt(self) -> None:
+        """Ограничивает ручной сценарий поступлением без производного основания."""
+        self._validate()
+        if (
+            self.operation_type is not StockOperationType.RECEIPT
+            or self.source is not None
+        ):
+            raise InvalidStockDocumentContextError(
+                "Действие доступно ручному документу поступления."
+            )
+
+    def ensure_can_edit_lines(self) -> None:
+        """Проверяет право изменить состав, даже если сохранён пустой или прежний план."""
+        self._ensure_draft()
+        self._ensure_editable_lines()
 
     def add_line(
         self,
@@ -569,7 +609,10 @@ class StockDocument:
     ) -> Self:
         """Подтверждает производную корректировку только после повторной проверки зарегистрированного результата и всего основания."""
         self._ensure_draft()
-        if self.operation_type is not StockOperationType.ADJUSTMENT:
+        if (
+            self.operation_type is not StockOperationType.ADJUSTMENT
+            or self.source is None
+        ):
             raise InventoryCountAdjustmentMismatchError("Нужен документ ADJUSTMENT.")
         StockDocumentConfirmationPolicy.ensure_confirmable(
             warehouse_id=self.warehouse_id,
@@ -618,6 +661,7 @@ class StockDocument:
         if (
             self.source is None
             or self.source.system != ShipmentDocumentPolicy.SOURCE_SYSTEM
+            or self.source.version is None
         ):
             raise StockDocumentShipmentMismatchError(
                 "Документ не имеет основания Shipment."
@@ -635,7 +679,7 @@ class StockDocument:
             tuple(
                 StockDocumentShipmentLineSnapshot(
                     line.id,
-                    ShipmentLineIdVO(UUID(line.source.reference)),
+                    ShipmentLineIdVO(UUID(self._line_source(line).reference)),
                     line.inventory_item_id,
                     line.base_uom,
                     line.planned_qty,
@@ -648,9 +692,14 @@ class StockDocument:
     def transfer_dispatch_snapshot(self) -> StockDocumentTransferDispatchSnapshot:
         """Передаёт собственный прогресс и проверенные основания отправки без загрузки StockTransfer или второго документа."""
         self._validate()
-        if self.source is None or self.source.system not in (
-            StockTransferDispatchDocumentPolicy.ISSUE_SOURCE_SYSTEM,
-            StockTransferDispatchDocumentPolicy.RECEIPT_SOURCE_SYSTEM,
+        if (
+            self.source is None
+            or self.source.version is None
+            or self.source.system
+            not in (
+                StockTransferDispatchDocumentPolicy.ISSUE_SOURCE_SYSTEM,
+                StockTransferDispatchDocumentPolicy.RECEIPT_SOURCE_SYSTEM,
+            )
         ):
             raise StockDocumentTransferDispatchMismatchError(
                 "Документ не имеет основания отправки StockTransfer."
@@ -668,7 +717,7 @@ class StockDocument:
             tuple(
                 StockDocumentTransferDispatchLineSnapshot(
                     line.id,
-                    StockTransferLineIdVO(UUID(line.source.reference)),
+                    StockTransferLineIdVO(UUID(self._line_source(line).reference)),
                     line.inventory_item_id,
                     line.base_uom,
                     line.planned_qty,
@@ -681,9 +730,14 @@ class StockDocument:
     def transfer_receipt_snapshot(self) -> StockDocumentTransferReceiptSnapshot:
         """Передаёт проверенное происхождение и прогресс приёмочного документа отдельно от этапа отправки."""
         self._validate()
-        if self.source is None or self.source.system not in (
-            StockTransferReceiptDocumentPolicy.ISSUE_SOURCE_SYSTEM,
-            StockTransferReceiptDocumentPolicy.RECEIPT_SOURCE_SYSTEM,
+        if (
+            self.source is None
+            or self.source.version is None
+            or self.source.system
+            not in (
+                StockTransferReceiptDocumentPolicy.ISSUE_SOURCE_SYSTEM,
+                StockTransferReceiptDocumentPolicy.RECEIPT_SOURCE_SYSTEM,
+            )
         ):
             raise StockDocumentTransferReceiptMismatchError(
                 "Документ не имеет основания приёмки StockTransfer."
@@ -701,7 +755,7 @@ class StockDocument:
             tuple(
                 StockDocumentTransferReceiptLineSnapshot(
                     line.id,
-                    StockTransferLineIdVO(UUID(line.source.reference)),
+                    StockTransferLineIdVO(UUID(self._line_source(line).reference)),
                     line.inventory_item_id,
                     line.base_uom,
                     line.planned_qty,
@@ -716,7 +770,10 @@ class StockDocument:
     ) -> StockDocumentAdjustmentCompletionSnapshot:
         """Передаёт проверенные источник и полное исполнение завершённой корректировки для закрытия инвентаризации."""
         self._validate()
-        if self.operation_type is not StockOperationType.ADJUSTMENT:
+        if (
+            self.operation_type is not StockOperationType.ADJUSTMENT
+            or self.source is None
+        ):
             raise StockAdjustmentError("Нужен документ ADJUSTMENT.")
         snapshot = StockDocumentAdjustmentCompletionSnapshot(
             self.id,
@@ -728,9 +785,7 @@ class StockDocument:
             self.source,
             tuple(
                 StockDocumentAdjustmentCompletionLineSnapshot(
-                    StockDocumentAdjustmentLineSnapshot(
-                        line.id, line.sku, line.base_uom, line.adjustment, line.source
-                    ),
+                    self._adjustment_line_snapshot(line),
                     line.planned_qty,
                     line.executed_qty,
                 )
@@ -743,7 +798,10 @@ class StockDocument:
     def adjustment_execution_snapshot(self) -> StockDocumentAdjustmentExecutionSnapshot:
         """Передаёт только подтверждённую неисполненную корректировку без потери измерений и источников."""
         self._validate()
-        if self.operation_type is not StockOperationType.ADJUSTMENT:
+        if (
+            self.operation_type is not StockOperationType.ADJUSTMENT
+            or self.source is None
+        ):
             raise StockAdjustmentError("Нужен документ ADJUSTMENT.")
         snapshot = StockDocumentAdjustmentExecutionSnapshot(
             self.id,
@@ -753,12 +811,7 @@ class StockDocument:
             self.status,
             self.updated_at,
             self.source,
-            tuple(
-                StockDocumentAdjustmentLineSnapshot(
-                    line.id, line.sku, line.base_uom, line.adjustment, line.source
-                )
-                for line in self.lines
-            ),
+            tuple(self._adjustment_line_snapshot(line) for line in self.lines),
         )
         snapshot.ensure_valid()
         return snapshot
@@ -842,6 +895,26 @@ class StockDocument:
             else StockDocumentStatus.PARTIALLY_EXECUTED
         )
         return self._with_changes(updated_at=updated_at, lines=lines, status=status)
+
+    @staticmethod
+    def _line_source(line: StockDocumentLine) -> DocumentLineSourceVO:
+        """Явно уточняет проверенное происхождение строки перед построением снимка."""
+        if line.source is None:
+            raise InvalidStockDocumentLineError("Не задано основание строки документа.")
+        return line.source
+
+    @staticmethod
+    def _adjustment_line_snapshot(
+        line: StockDocumentLine,
+    ) -> StockDocumentAdjustmentLineSnapshot:
+        """Передаёт только полный состав ранее проверенной строки корректировки."""
+        if line.adjustment is None or line.source is None:
+            raise StockAdjustmentError(
+                "Не заданы поправка или основание строки корректировки."
+            )
+        return StockDocumentAdjustmentLineSnapshot(
+            line.id, line.sku, line.base_uom, line.adjustment, line.source
+        )
 
     def _with_changes(self, *, updated_at: datetime, **changes: object) -> Self:
         """Возвращает новый проверенный экземпляр с версией +1, сохраняя объект при отсутствии изменений."""

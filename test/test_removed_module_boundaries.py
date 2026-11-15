@@ -198,6 +198,7 @@ class RemovedModuleBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 "/api/console/crm/deals/{deal_id}/stage",
                 "/api/console/crm/deals/{deal_id}/funnel",
                 "/api/console/crm/deal-currencies",
+                "/api/console/crm/counterparty-references",
                 "/api/console/crm/contacts",
                 "/api/console/crm/contacts/{contact_id}",
                 "/api/console/crm/contacts/{contact_id}/companies",

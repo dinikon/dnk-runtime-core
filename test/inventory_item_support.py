@@ -39,6 +39,12 @@ def inventory_item_app(
         lambda: app.state.test_context
     )
 
+    if not scoped_connection:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from src.modules.inventory.presentation.depends.physical_inventory import get_physical_inventory_usage
+        app.dependency_overrides[get_physical_inventory_usage] = lambda: SimpleNamespace(item_has_history=AsyncMock(return_value=False),serial_has_history=AsyncMock(return_value=False))
+
     if scoped_connection:
 
         class TestTenantConnection:

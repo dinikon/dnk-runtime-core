@@ -49,6 +49,7 @@ export interface ReceiptsParams {
   limit: number;
 }
 export interface ReceiptDraftLine {
+  id?: string;
   key: string;
   inventoryItemId: string;
   sku: string;
@@ -78,4 +79,12 @@ export interface ReceiptErrors {
 export interface ReceiptReferenceOption {
   id: string;
   name: string;
+}
+
+export interface ReceiptEditValues {
+  expectedVersion: number;
+  lines: ReceiptDraftLine[];
+}
+export interface ReceiptVersionValues {
+  expectedVersion: number;
 }

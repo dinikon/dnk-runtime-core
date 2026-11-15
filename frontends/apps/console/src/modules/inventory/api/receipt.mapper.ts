@@ -1,3 +1,5 @@
+import type { ReceiptEditValues } from "../model/receipt.types";
+import type { PatchReceiptDocumentRequestDTO } from "./receipt.dto";
 import type {
   GetReceiptDocumentResponseDTO,
   ListReceiptDocumentsResponseDTO,
@@ -95,5 +97,26 @@ export function receiptsParamsToDto(
     created_to: p.createdTo,
     offset: p.offset,
     limit: p.limit,
+  };
+}
+
+export function patchReceiptToDto(
+  values: ReceiptEditValues,
+): PatchReceiptDocumentRequestDTO {
+  return {
+    expected_version: values.expectedVersion,
+    lines: values.lines.map((line) =>
+      line.id
+        ? {
+            id: line.id,
+            quantity: normalizeReceiptQuantity(line.quantity),
+            uom: line.uom,
+          }
+        : {
+            inventory_item_id: line.inventoryItemId,
+            quantity: normalizeReceiptQuantity(line.quantity),
+            uom: line.uom,
+          },
+    ),
   };
 }

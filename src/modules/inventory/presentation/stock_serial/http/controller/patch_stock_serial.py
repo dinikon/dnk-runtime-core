@@ -1,3 +1,4 @@
+from src.modules.inventory.domain.stock_serial.error import StockSerialLotInUseError
 from uuid import UUID
 from fastapi import HTTPException
 
@@ -64,6 +65,8 @@ async def patch_stock_serial(
         raise HTTPException(404, str(exc)) from exc
     except StockSerialNumberAlreadyExistsError as exc:
         raise HTTPException(409, str(exc)) from exc
+    except StockSerialLotInUseError as exc:
+        raise HTTPException(409,str(exc)) from exc
     except InventoryError as exc:
         raise HTTPException(422, str(exc)) from exc
     return PatchStockSerialResponse.from_dto(result)

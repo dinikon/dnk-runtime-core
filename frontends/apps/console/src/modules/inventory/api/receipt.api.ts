@@ -1,3 +1,15 @@
+import type {
+  ReceiptEditValues,
+  ReceiptVersionValues,
+} from "../model/receipt.types";
+import type {
+  PatchReceiptDocumentResponseDTO,
+  ConfirmReceiptDocumentResponseDTO,
+  CancelReceiptDocumentResponseDTO,
+  ConfirmReceiptDocumentRequestDTO,
+  CancelReceiptDocumentRequestDTO,
+} from "./receipt.dto";
+import { patchReceiptToDto } from "./receipt.mapper";
 import { isAxiosError, isCancel } from "axios";
 import {
   httpClient,
@@ -67,10 +79,35 @@ function fail(
       else if (path.includes("owner_id"))
         fields.ownerId = "Выберите компанию-владельца.";
     }
+  const metadata =
+    typeof detail === "object" && detail !== null && !Array.isArray(detail)
+      ? detail
+      : undefined;
+  const message =
+    metadata && "message" in metadata && typeof metadata.message === "string"
+      ? metadata.message
+      : getApiErrorMessage(cause, fallback);
+  const conflict =
+    metadata && "code" in metadata && typeof metadata.code === "string"
+      ? {
+          code: metadata.code,
+          expectedVersion:
+            "expected_version" in metadata &&
+            typeof metadata.expected_version === "number"
+              ? metadata.expected_version
+              : undefined,
+          actualVersion:
+            "actual_version" in metadata &&
+            typeof metadata.actual_version === "number"
+              ? metadata.actual_version
+              : undefined,
+        }
+      : undefined;
   throw new ReceiptRequestError(
-    getApiErrorMessage(cause, fallback),
+    message,
     getApiErrorStatus(cause) ?? undefined,
     fields,
+    conflict,
   );
 }
 export async function listReceipts(
@@ -128,5 +165,73 @@ export async function createReceipt(
       "Не удалось создать поступление. Введённые данные сохранены.",
       values.lines.map((l) => l.key),
     );
+  }
+}
+
+export async function patchReceipt(
+  id: string,
+  values: ReceiptEditValues,
+  signal: AbortSignal,
+): Promise<ReceiptDocument> {
+  try {
+    return receiptFromDto(
+      (
+        await httpClient.patch<PatchReceiptDocumentResponseDTO>(
+          `${base}/${encodeURIComponent(id)}`,
+          patchReceiptToDto(values),
+          { signal },
+        )
+      ).data,
+    );
+  } catch (cause: unknown) {
+    return fail(
+      cause,
+      "Не удалось сохранить план. Введённые данные сохранены.",
+      values.lines.map((line) => line.key),
+    );
+  }
+}
+export async function confirmReceipt(
+  id: string,
+  values: ReceiptVersionValues,
+  signal: AbortSignal,
+): Promise<ReceiptDocument> {
+  const payload: ConfirmReceiptDocumentRequestDTO = {
+    expected_version: values.expectedVersion,
+  };
+  try {
+    return receiptFromDto(
+      (
+        await httpClient.post<ConfirmReceiptDocumentResponseDTO>(
+          `${base}/${encodeURIComponent(id)}/confirm`,
+          payload,
+          { signal },
+        )
+      ).data,
+    );
+  } catch (cause: unknown) {
+    return fail(cause, "Не удалось подтвердить план.");
+  }
+}
+export async function cancelReceipt(
+  id: string,
+  values: ReceiptVersionValues,
+  signal: AbortSignal,
+): Promise<ReceiptDocument> {
+  const payload: CancelReceiptDocumentRequestDTO = {
+    expected_version: values.expectedVersion,
+  };
+  try {
+    return receiptFromDto(
+      (
+        await httpClient.post<CancelReceiptDocumentResponseDTO>(
+          `${base}/${encodeURIComponent(id)}/cancel`,
+          payload,
+          { signal },
+        )
+      ).data,
+    );
+  } catch (cause: unknown) {
+    return fail(cause, "Не удалось отменить документ.");
   }
 }

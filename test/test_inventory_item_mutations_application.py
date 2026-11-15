@@ -63,7 +63,7 @@ class InventoryItemMutationsApplicationTests(unittest.IsolatedAsyncioTestCase):
             delete=AsyncMock(),
         )
         self.ids = Mock(new=Mock(side_effect=uuid4))
-        self.update = UpdateInventoryItemHandler(self.repository, self.ids)
+        self.update = UpdateInventoryItemHandler(self.repository, self.ids, Mock(item_has_history=AsyncMock(return_value=False)))
         self.delete = DeleteInventoryItemHandler(
             self.repository,
             AsyncMock(get=AsyncMock(return_value=InventoryItemDeletionUsage(False))),

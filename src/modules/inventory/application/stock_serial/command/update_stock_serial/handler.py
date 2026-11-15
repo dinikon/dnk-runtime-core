@@ -1,3 +1,4 @@
+from src.modules.inventory.application.inventory_item.port.physical_usage import PhysicalInventoryUsagePort
 from src.modules.inventory.application.stock_serial.command.update_stock_serial.command import (
     UpdateStockSerialCommand,
 )
@@ -27,9 +28,12 @@ class UpdateStockSerialHandler:
         items: InventoryItemRepositoryProtocol,
         lots: StockLotRepositoryProtocol,
         serials: StockSerialRepositoryProtocol,
+        physical_usage: PhysicalInventoryUsagePort,
     ) -> None:
         """Принимает write-порты одной сессии внешнего tenant-UoW."""
         self._items, self._lots, self._serials = items, lots, serials
+
+        self._physical_usage = physical_usage
 
     async def execute(
         self, command: UpdateStockSerialCommand
@@ -58,6 +62,7 @@ class UpdateStockSerialHandler:
             inventory_item=item.tracking_snapshot(),
             lot=lot.snapshot() if lot is not None else None,
         )
+        serial.ensure_revision_preserves_stock(updated, has_physical_history=await self._physical_usage.serial_has_history(serial.id.uuid))
         if updated != serial:
             await self._serials.save(updated)
         return UpdateStockSerialResultDTO(

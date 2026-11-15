@@ -133,9 +133,18 @@ import src.modules.inventory.infrastructure.persistence.models.stock_lot  # noqa
 
 import src.modules.inventory.infrastructure.persistence.models.stock_serial  # noqa: F401
 
-import src.modules.supplier_sourcing.infrastructure.persistence.models.supplier_source  # noqa: F401
-import src.modules.supplier_sourcing.infrastructure.persistence.models.supplier_source_fulfillment_mode  # noqa: F401
-
 import src.modules.inventory.infrastructure.persistence.models.stock_document  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.stock_document_line  # noqa: F401
 import src.modules.inventory.infrastructure.persistence.models.stock_document_creation_request  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_positions  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_executions  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_lines  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_receipt_cost_evidence  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_receipt_cost_allocations  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_postings  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_ledger_entries  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_ledger_links  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_receipt_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union({'stock_executions', 'stock_postings', 'stock_ledger_entries', 'stock_receipt_posting_requests', 'stock_receipt_cost_allocations', 'stock_receipt_cost_evidence', 'stock_execution_lines', 'stock_execution_ledger_links', 'stock_positions'})

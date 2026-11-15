@@ -1,3 +1,4 @@
+from src.modules.inventory.domain.inventory_item.error import InventoryItemSettingsInUseError
 from uuid import UUID
 from fastapi import HTTPException
 
@@ -65,6 +66,8 @@ async def put_inventory_item(
         InventoryItemBarcodeAlreadyExistsError,
     ) as exc:
         raise HTTPException(409, str(exc)) from exc
+    except InventoryItemSettingsInUseError as exc:
+        raise HTTPException(409,str(exc)) from exc
     except InventoryError as exc:
         raise HTTPException(422, str(exc)) from exc
     return PutInventoryItemResponse.from_dto(result)

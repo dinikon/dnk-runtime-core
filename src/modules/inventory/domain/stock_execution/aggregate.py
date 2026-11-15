@@ -1,3 +1,6 @@
+from src.modules.inventory.domain.stock_execution.receipt_cost import (
+    ReceiptCostEvidence,
+)
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Self
@@ -138,6 +141,7 @@ class StockExecution:
     owner_id: StockOwnerIdVO
     executed_at: datetime
     lines: tuple[StockExecutionLine, ...]
+    receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = ()
 
     @classmethod
     def create(
@@ -152,6 +156,7 @@ class StockExecution:
         locations: tuple[StockLocationSnapshot, ...],
         lots: tuple[StockLotSnapshot, ...] = (),
         serials: tuple[StockSerialSnapshot, ...] = (),
+        receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = (),
     ) -> Self:
         """Фиксирует исполнение после проверки текущего плана, активных адресов, количества и прослеживаемости."""
         if not isinstance(document, StockDocumentExecutionSnapshot):
@@ -168,6 +173,7 @@ class StockExecution:
             owner_id=document.owner_id,
             executed_at=executed_at,
             lines=lines,
+            receipt_cost_evidence=receipt_cost_evidence,
         )
         StockExecutionDocumentPolicy.ensure_compatible(
             document=document, execution=execution.snapshot_for_document()
@@ -249,6 +255,7 @@ class StockExecution:
         owner_id: StockOwnerIdVO,
         executed_at: datetime,
         lines: tuple[StockExecutionLine, ...],
+        receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = (),
     ) -> Self:
         """Восстанавливает полное собственное состояние без актуального плана и снимков физического контекста."""
         execution = cls(
@@ -260,6 +267,7 @@ class StockExecution:
             owner_id,
             cls._normalize_time(executed_at),
             lines,
+            receipt_cost_evidence,
         )
         execution._validate()
         return execution
@@ -472,6 +480,34 @@ class StockExecution:
             raise InvalidStockExecutionValueError(
                 "Нужны типизированные реквизиты, версия плана и непустой tuple фактических строк."
             )
+        if not isinstance(self.receipt_cost_evidence, tuple) or (
+            self.receipt_cost_evidence
+            and self.operation_type is not StockOperationType.RECEIPT
+        ):
+            raise InvalidStockExecutionValueError(
+                "Стоимостные основания допустимы только для поступления."
+            )
+        evidence_ids = set()
+        line_ids = {
+            line.id for line in self.lines if isinstance(line, StockExecutionLine)
+        }
+        for evidence in self.receipt_cost_evidence:
+            if (
+                not isinstance(evidence, ReceiptCostEvidence)
+                or evidence.id in evidence_ids
+            ):
+                raise InvalidStockExecutionValueError(
+                    "Основания стоимости должны иметь уникальные ID."
+                )
+            evidence.ensure_valid()
+            evidence_ids.add(evidence.id)
+            if any(
+                allocation.execution_line_id not in line_ids
+                for allocation in evidence.allocations
+            ):
+                raise InvalidStockExecutionValueError(
+                    "Стоимость ссылается на чужую фактическую строку."
+                )
         self._normalize_time(self.executed_at)
         if self.executed_at.utcoffset() != timedelta(0):
             raise StockExecutionTimeError(
