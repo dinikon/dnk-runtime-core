@@ -1,11 +1,9 @@
-from uuid import UUID
-from decimal import Decimal
+from src.modules.inventory.domain.stock_execution.value_object.receipt_cost_evidence_id import (
+    ReceiptCostEvidenceIdVO,
+)
 from typing import Any
 from src.modules.inventory.domain.stock_position.value_object.dimensions import (
     StockDimensionsVO,
-)
-from src.modules.inventory.domain.stock_position.value_object.identifier import (
-    StockPositionIdVO,
 )
 from src.modules.inventory.domain.inventory_item.value_object.identifier import (
     InventoryItemIdVO,
@@ -34,8 +32,10 @@ from src.modules.inventory.domain.stock_execution.aggregate import StockExecutio
 from src.modules.inventory.domain.stock_execution.entity.stock_execution_line import (
     StockExecutionLine,
 )
-from src.modules.inventory.domain.stock_execution.receipt_cost import (
+from src.modules.inventory.domain.stock_execution.entity.receipt_cost_evidence import (
     ReceiptCostEvidence,
+)
+from src.modules.inventory.domain.stock_execution.value_object.receipt_cost_allocation import (
     ReceiptCostAllocationVO,
 )
 from src.modules.inventory.domain.stock_execution.value_object.identifier import (
@@ -121,7 +121,7 @@ class StockExecutionMapper:
         """Сохраняет именно известные суммы, не создавая основание для неизвестной стоимости."""
         return [
             dict(
-                id=c.id,
+                id=c.id.uuid,
                 execution_id=execution.id.uuid,
                 total_amount=c.total.amount,
                 currency=c.total.currency.value,
@@ -137,7 +137,7 @@ class StockExecutionMapper:
         """Привязывает суммы к собственным фактическим строкам."""
         return [
             dict(
-                evidence_id=c.id,
+                evidence_id=c.id.uuid,
                 execution_line_id=a.execution_line_id.uuid,
                 amount=a.amount.amount,
             )
@@ -188,7 +188,7 @@ class StockExecutionMapper:
             ),
             receipt_cost_evidence=tuple(
                 ReceiptCostEvidence.restore(
-                    identifier=c.id,
+                    identifier=ReceiptCostEvidenceIdVO(c.id),
                     total=MoneyVO(c.total_amount, CurrencyVO(c.currency)),
                     basis_kind=c.basis_kind,
                     source_system=c.source_system,

@@ -2,6 +2,10 @@ import type { InventoryScope } from "./inventory-scope.types";
 import type { ReceiptReferencesParams } from "./receipt-posting.types";
 type Root = readonly ["inventory", ...InventoryScope];
 export const receiptPostingKeys = {
+  referenceLists: (
+    scope: InventoryScope,
+  ): readonly [...Root, "receipt-references"] =>
+    ["inventory", ...scope, "receipt-references"] as const,
   context: (
     scope: InventoryScope,
     id: string,

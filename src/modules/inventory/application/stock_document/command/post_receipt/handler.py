@@ -1,3 +1,9 @@
+from src.modules.inventory.domain.stock_execution.value_object.receipt_cost_evidence_id import (
+    ReceiptCostEvidenceIdVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.receipt_event_id import (
+    StockReceiptEventIdVO,
+)
 from uuid import UUID
 from src.modules.inventory.application.stock_document.command.post_receipt.command import (
     PostReceiptCommand,
@@ -80,8 +86,10 @@ from src.modules.inventory.domain.stock_execution.value_object.line_id import (
 from src.modules.inventory.domain.stock_execution.value_object.receipt_route import (
     ReceiptExecutionRouteVO,
 )
-from src.modules.inventory.domain.stock_execution.receipt_cost import (
+from src.modules.inventory.domain.stock_execution.entity.receipt_cost_evidence import (
     ReceiptCostEvidence,
+)
+from src.modules.inventory.domain.stock_execution.value_object.receipt_cost_allocation import (
     ReceiptCostAllocationVO,
 )
 from src.modules.inventory.domain.stock_position.repository import (
@@ -275,7 +283,7 @@ class PostReceiptHandler:
         }
         costs = tuple(
             ReceiptCostEvidence.create(
-                identifier=self._uuid.new(),
+                identifier=ReceiptCostEvidenceIdVO(self._uuid.new()),
                 total=MoneyVO(cost.amount, CurrencyVO(cost.currency)),
                 basis_kind=cost.basis_kind,
                 source_system=cost.source_system,
@@ -291,7 +299,7 @@ class PostReceiptHandler:
             for cost in command.costs
         )
         presence = await self._positions.serial_presence(
-            tuple(serial.id.uuid for serial in serials.values())
+            tuple(serial.id for serial in serials.values())
         )
         dimensions = {line.route.dimensions[0] for line in lines}
         positions = []
@@ -321,7 +329,7 @@ class PostReceiptHandler:
             expected_version=command.expected_version,
             execution_id=StockExecutionIdVO(self._uuid.new()),
             posting_id=StockPostingIdVO(self._uuid.new()),
-            event_id=self._uuid.new(),
+            event_id=StockReceiptEventIdVO(self._uuid.new()),
             lines=tuple(lines),
             positions=tuple(positions),
             warehouse=warehouse.snapshot(),
@@ -361,17 +369,17 @@ class PostReceiptHandler:
         event = bundle.event
         await self._outbox.add(
             IntegrationEvent(
-                event_id=event.event_id,
+                event_id=event.event_id.uuid,
                 tenant_id=command.tenant_id,
                 event_type="inventory.stock_receipt_posted",
                 event_version=1,
                 aggregate_type="StockPosting",
-                aggregate_id=event.posting_id,
+                aggregate_id=event.posting_id.uuid,
                 occurred_at=event.occurred_at,
                 payload={
-                    "document_id": str(event.document_id),
-                    "execution_id": str(event.execution_id),
-                    "posting_id": str(event.posting_id),
+                    "document_id": str(event.document_id.uuid),
+                    "execution_id": str(event.execution_id.uuid),
+                    "posting_id": str(event.posting_id.uuid),
                     "document_version": event.document_version,
                     "positions": [
                         {

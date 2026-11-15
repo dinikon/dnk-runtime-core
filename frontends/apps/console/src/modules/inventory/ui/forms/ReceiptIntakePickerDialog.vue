@@ -41,8 +41,8 @@ const labels: Record<ReceiptReferenceKind, string> = {
         ><DialogTitle>{{ labels[kind] }}</DialogTitle
         ><DialogDescription>{{
           kind === "serials"
-            ? "Показаны экземпляры SKU без положительного остатка в tenant."
-            : "Серверный поиск внутри склада или SKU строки документа."
+            ? "Показаны экземпляры товара без положительного остатка на всех складах."
+            : "Поиск по локациям склада или по партиям товара из строки документа."
         }}</DialogDescription></DialogHeader
       >
       <Input

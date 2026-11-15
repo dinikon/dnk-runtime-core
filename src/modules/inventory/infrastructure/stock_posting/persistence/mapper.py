@@ -1,24 +1,7 @@
-from uuid import UUID
-from decimal import Decimal
 from typing import Any
-from src.modules.inventory.domain.stock_position.value_object.dimensions import (
-    StockDimensionsVO,
-)
 from src.modules.inventory.domain.stock_position.value_object.identifier import (
     StockPositionIdVO,
 )
-from src.modules.inventory.domain.inventory_item.value_object.identifier import (
-    InventoryItemIdVO,
-)
-from src.modules.inventory.domain.stock_location.value_object.identifier import (
-    StockLocationIdVO,
-)
-from src.modules.inventory.domain.stock_lot.value_object.identifier import StockLotIdVO
-from src.modules.inventory.domain.stock_serial.value_object.identifier import (
-    StockSerialIdVO,
-)
-from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
-from src.modules.inventory.domain.value_object.stock_status import StockStatus
 from src.modules.inventory.domain.value_object.quantity import QuantityVO
 from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
 from src.modules.inventory.domain.value_object.quantity_conversion_snapshot import (

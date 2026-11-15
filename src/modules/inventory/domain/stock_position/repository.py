@@ -1,5 +1,7 @@
 from typing import Protocol
-from uuid import UUID
+from src.modules.inventory.domain.stock_serial.value_object.identifier import (
+    StockSerialIdVO,
+)
 from src.modules.inventory.domain.stock_position.aggregate import StockPosition
 from src.modules.inventory.domain.stock_serial.presence_snapshot import (
     StockSerialPresenceSnapshot,
@@ -18,7 +20,7 @@ class StockPositionRepositoryProtocol(Protocol):
         ...
 
     async def serial_presence(
-        self, identifiers: tuple[UUID, ...]
+        self, identifiers: tuple[StockSerialIdVO, ...]
     ) -> tuple[StockSerialPresenceSnapshot, ...]:
         """Возвращает полное положительное присутствие каждого SERIAL во всём tenant."""
         ...

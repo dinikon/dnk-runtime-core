@@ -61,7 +61,12 @@ class StockSerialMutationsApplicationTests(unittest.IsolatedAsyncioTestCase):
             get_for_update=AsyncMock(return_value=self.serial), save=AsyncMock()
         )
         self.lots = Mock(get_for_update=AsyncMock(return_value=None))
-        self.handler = UpdateStockSerialHandler(self.items, self.lots, self.serials, Mock(serial_has_history=AsyncMock(return_value=False)))
+        self.handler = UpdateStockSerialHandler(
+            self.items,
+            self.lots,
+            self.serials,
+            Mock(serial_has_history=AsyncMock(return_value=False)),
+        )
         self.command = UpdateStockSerialCommand(
             self.item.id, self.serial.id, frozenset({"number"}), number=" 000S-A "
         )

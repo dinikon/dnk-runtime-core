@@ -66,7 +66,7 @@ async def put_stock_serial(
     except StockSerialNumberAlreadyExistsError as exc:
         raise HTTPException(409, str(exc)) from exc
     except StockSerialLotInUseError as exc:
-        raise HTTPException(409,str(exc)) from exc
+        raise HTTPException(409, str(exc)) from exc
     except InventoryError as exc:
         raise HTTPException(422, str(exc)) from exc
     return PutStockSerialResponse.from_dto(result)

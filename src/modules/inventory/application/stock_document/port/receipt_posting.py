@@ -1,7 +1,15 @@
-from src.modules.inventory.application.stock_document.query.list_receipt_references.query import ListReceiptReferencesQuery
-from src.modules.inventory.application.stock_document.query.list_receipt_references.dto import ListReceiptReferencesResultDTO
-from src.modules.inventory.application.stock_document.query.prepare_receipt.query import PrepareReceiptQuery
-from src.modules.inventory.application.stock_document.query.prepare_receipt.dto import PrepareReceiptResultDTO
+from src.modules.inventory.application.stock_document.query.list_receipt_references.query import (
+    ListReceiptReferencesQuery,
+)
+from src.modules.inventory.application.stock_document.query.list_receipt_references.dto import (
+    ListReceiptReferencesResultDTO,
+)
+from src.modules.inventory.application.stock_document.query.prepare_receipt.query import (
+    PrepareReceiptQuery,
+)
+from src.modules.inventory.application.stock_document.query.prepare_receipt.dto import (
+    PrepareReceiptResultDTO,
+)
 from src.modules.inventory.application.stock_document.query.list_receipt_executions.query import (
     ListReceiptExecutionsQuery,
 )
@@ -77,10 +85,14 @@ class ReceiptFactsQueryPort(Protocol):
         """Отличает отсутствующий документ от пустой истории."""
         ...
 
-    async def prepare(self,query:PrepareReceiptQuery)->PrepareReceiptResultDTO|None:
+    async def prepare(
+        self, query: PrepareReceiptQuery
+    ) -> PrepareReceiptResultDTO | None:
         """Читает оставшийся план, не загружая агрегат для UI."""
         ...
 
-    async def references(self,query:ListReceiptReferencesQuery)->ListReceiptReferencesResultDTO|None:
+    async def references(
+        self, query: ListReceiptReferencesQuery
+    ) -> ListReceiptReferencesResultDTO | None:
         """Читает собственную проекцию выбора локации, партии или свободного экземпляра."""
         ...

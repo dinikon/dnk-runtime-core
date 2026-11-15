@@ -1,4 +1,3 @@
-from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,14 +86,19 @@ class SqlAlchemyStockPositionRepository:
             )
 
     async def serial_presence(
-        self, identifiers: tuple[UUID, ...]
+        self, identifiers: tuple[StockSerialIdVO, ...]
     ) -> tuple[StockSerialPresenceSnapshot, ...]:
         """Читает все положительные позиции затронутых SERIAL без фильтра склада или владельца."""
         if not identifiers:
             return ()
         statement = (
             select(Model)
-            .where(Model.serial_id.in_(identifiers), Model.on_hand_qty > 0)
+            .where(
+                Model.serial_id.in_(
+                    tuple(identifier.uuid for identifier in identifiers)
+                ),
+                Model.on_hand_qty > 0,
+            )
             .order_by(Model.serial_id, Model.id)
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -102,11 +106,11 @@ class SqlAlchemyStockPositionRepository:
         models = (await self._session.scalars(statement)).all()
         return tuple(
             StockSerialPresenceSnapshot(
-                StockSerialIdVO(identifier),
+                identifier,
                 tuple(
                     StockPositionMapper.to_domain(model).counting_snapshot()
                     for model in models
-                    if model.serial_id == identifier
+                    if model.serial_id == identifier.uuid
                 ),
             )
             for identifier in identifiers

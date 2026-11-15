@@ -271,8 +271,8 @@ onBeforeUnmount(() => {
       <div>
         <h1 class="text-2xl font-semibold">Принять товар</h1>
         <p class="mt-1 text-sm text-muted-foreground">
-          Фактическое исполнение и физический остаток фиксируются одной
-          транзакцией.
+          Укажите фактически принятое количество. После подтверждения товар
+          появится в остатках склада.
         </p>
       </div>
       <Button
@@ -308,8 +308,8 @@ onBeforeUnmount(() => {
       class="flex w-full max-w-5xl shrink-0 flex-col gap-5"
     >
       <p class="text-sm text-muted-foreground">
-        Основание формы: версия {{ values.expectedVersion }}. Остатки плана
-        вычислены сервером; для SERIAL выбирается каждый экземпляр по 1 PCS.
+        Основание формы: версия {{ values.expectedVersion }}. Для серийного
+        учёта каждый экземпляр принимается отдельно в количестве 1 PCS.
       </p>
       <p
         v-if="!receivable && !attempt.uncertain"

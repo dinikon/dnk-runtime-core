@@ -1,4 +1,4 @@
-from src.modules.inventory.domain.stock_execution.receipt_cost import (
+from src.modules.inventory.domain.stock_execution.entity.receipt_cost_evidence import (
     ReceiptCostEvidence,
 )
 from dataclasses import dataclass

@@ -1,4 +1,6 @@
-from src.modules.inventory.application.inventory_item.port.physical_usage import PhysicalInventoryUsagePort
+from src.modules.inventory.application.inventory_item.port.physical_usage import (
+    PhysicalInventoryUsagePort,
+)
 from src.modules.inventory.application.inventory_item.command.update_inventory_item.command import (
     UpdateInventoryItemCommand,
 )
@@ -91,7 +93,12 @@ class UpdateInventoryItemHandler:
             ),
             barcodes=barcodes,
         )
-        item.ensure_revision_preserves_stock(updated, has_physical_history=await self._physical_usage.item_has_history(item.id.uuid))
+        item.ensure_revision_preserves_stock(
+            updated,
+            has_physical_history=await self._physical_usage.item_has_history(
+                item.id.uuid
+            ),
+        )
         if updated is not item:
             await self._repository.save(updated)
         return UpdateInventoryItemResultDTO(

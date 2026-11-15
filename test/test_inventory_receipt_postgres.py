@@ -1,7 +1,16 @@
-from src.modules.inventory.infrastructure.persistence.models.stock_positions import StockPositionModel
-from src.modules.inventory.infrastructure.persistence.models.stock_executions import StockExecutionModel
-from src.modules.inventory.infrastructure.persistence.models.stock_postings import StockPostingModel
-from src.modules.inventory.infrastructure.persistence.models.stock_ledger_entries import StockLedgerEntryModel
+from src.modules.inventory.infrastructure.persistence.models.stock_positions import (
+    StockPositionModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_executions import (
+    StockExecutionModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_postings import (
+    StockPostingModel,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_ledger_entries import (
+    StockLedgerEntryModel,
+)
+
 """Поступления: реальный HTTP/UoW, точность, идемпотентность и защита ссылок на PostgreSQL."""
 
 import asyncio
@@ -136,8 +145,20 @@ class InventoryReceiptPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json(), document)
         async with self.engine.connect() as connection:
             await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
-            for model in (StockPositionModel, StockExecutionModel, StockPostingModel, StockLedgerEntryModel):
-                self.assertEqual((await connection.execute(select(func.count()).select_from(model))).scalar_one(), 0)
+            for model in (
+                StockPositionModel,
+                StockExecutionModel,
+                StockPostingModel,
+                StockLedgerEntryModel,
+            ):
+                self.assertEqual(
+                    (
+                        await connection.execute(
+                            select(func.count()).select_from(model)
+                        )
+                    ).scalar_one(),
+                    0,
+                )
             async with self.sessions(bind=connection) as session:
                 model = (await session.scalars(select(StockDocumentModel))).one()
                 lines = (

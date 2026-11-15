@@ -52,6 +52,9 @@ export function usePostReceipt(
       );
       await Promise.all([
         cache.invalidateQueries({
+          queryKey: receiptPostingKeys.referenceLists(input.scope),
+        }),
+        cache.invalidateQueries({
           queryKey: receiptKeys.detail(input.scope, input.id),
           exact: true,
           refetchType: "all",

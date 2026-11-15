@@ -1,12 +1,17 @@
 from dataclasses import dataclass
 from datetime import datetime
-from uuid import UUID
+from src.modules.inventory.domain.stock_document.value_object.receipt_event_id import (
+    StockReceiptEventIdVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.identifier import (
+    StockDocumentIdVO,
+)
 from src.modules.inventory.domain.stock_document.aggregate import StockDocument
 from src.modules.inventory.domain.stock_execution.aggregate import StockExecution
 from src.modules.inventory.domain.stock_execution.entity.stock_execution_line import (
     StockExecutionLine,
 )
-from src.modules.inventory.domain.stock_execution.receipt_cost import (
+from src.modules.inventory.domain.stock_execution.entity.receipt_cost_evidence import (
     ReceiptCostEvidence,
 )
 from src.modules.inventory.domain.stock_execution.value_object.identifier import (
@@ -39,10 +44,10 @@ from src.modules.inventory.domain.policy.receipt_serial_presence import (
 class StockReceiptPosted:
     """Доменный факт согласованного изменения документа, позиций и физического журнала."""
 
-    event_id: UUID
-    execution_id: UUID
-    posting_id: UUID
-    document_id: UUID
+    event_id: StockReceiptEventIdVO
+    execution_id: StockExecutionIdVO
+    posting_id: StockPostingIdVO
+    document_id: StockDocumentIdVO
     document_version: int
     occurred_at: datetime
 
@@ -69,7 +74,7 @@ class ReceiptPostingService:
         expected_version: int,
         execution_id: StockExecutionIdVO,
         posting_id: StockPostingIdVO,
-        event_id: UUID,
+        event_id: StockReceiptEventIdVO,
         lines: tuple[StockExecutionLine, ...],
         positions: tuple[StockPosition, ...],
         warehouse: WarehouseSnapshot,
@@ -123,8 +128,16 @@ class ReceiptPostingService:
                 ].stock_snapshot(),
                 location=by_location[position.dimensions.location_id],
                 warehouse=warehouse,
-                lot=by_lot.get(position.dimensions.lot_id) if position.dimensions.lot_id is not None else None,
-                serial=by_serial.get(position.dimensions.serial_id) if position.dimensions.serial_id is not None else None,
+                lot=(
+                    by_lot.get(position.dimensions.lot_id)
+                    if position.dimensions.lot_id is not None
+                    else None
+                ),
+                serial=(
+                    by_serial.get(position.dimensions.serial_id)
+                    if position.dimensions.serial_id is not None
+                    else None
+                ),
             )
             for position in positions
         )
@@ -139,9 +152,9 @@ class ReceiptPostingService:
             after,
             StockReceiptPosted(
                 event_id,
-                execution.id.uuid,
-                posting.id.uuid,
-                updated.id.uuid,
+                execution.id,
+                posting.id,
+                updated.id,
                 updated.version,
                 now,
             ),

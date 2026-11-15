@@ -1,6 +1,3 @@
-from src.modules.inventory.application.stock_document.port.receipt_posting import (
-    ReceiptCurrencyPort,
-)
 from src.modules.reference_data.application.currency.port.validation_catalog import (
     CurrencyValidationCatalogQueryRepositoryProtocol,
 )

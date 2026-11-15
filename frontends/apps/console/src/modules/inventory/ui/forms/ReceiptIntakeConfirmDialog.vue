@@ -27,10 +27,9 @@ const emit = defineEmits<{ close: []; confirm: [] }>();
       ><AlertDialogHeader
         ><AlertDialogTitle>Принять товар и провести?</AlertDialogTitle
         ><AlertDialogDescription
-          >План версии {{ version }}. Фактических строк: {{ count }}. Будут
-          созданы исполнение, Ledger и физический остаток одной транзакцией.
-          Простая отмена документа после исполнения
-          недоступна.</AlertDialogDescription
+          >План версии {{ version }}. Фактических строк: {{ count }}. Товар
+          появится в остатках склада, а движение сохранится в истории. Простая
+          отмена документа после исполнения недоступна.</AlertDialogDescription
         ></AlertDialogHeader
       >
       <p v-if="error" role="alert" class="text-sm text-destructive">

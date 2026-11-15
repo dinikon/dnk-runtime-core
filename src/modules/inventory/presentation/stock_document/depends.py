@@ -51,6 +51,51 @@ from src.modules.inventory.application.stock_document.command.cancel_receipt_doc
 )
 
 
+from src.modules.inventory.presentation.stock_location.depends import (
+    StockLocationRepositoryDep,
+)
+from src.modules.inventory.presentation.stock_serial.depends import (
+    StockSerialRepositoryDep,
+)
+from src.modules.inventory.presentation.stock_lot.depends import StockLotRepositoryDep
+from src.modules.inventory.infrastructure.stock_position.persistence.repository import (
+    SqlAlchemyStockPositionRepository,
+)
+from src.modules.inventory.infrastructure.stock_execution.persistence.repository import (
+    SqlAlchemyStockExecutionRepository,
+)
+from src.modules.inventory.infrastructure.stock_posting.persistence.repository import (
+    SqlAlchemyStockPostingRepository,
+)
+from src.modules.inventory.infrastructure.stock_document.persistence.receipt_requests import (
+    SqlAlchemyReceiptPostingRequests,
+)
+from src.modules.inventory.infrastructure.stock_document.persistence.receipt_query_repository import (
+    SqlAlchemyReceiptFactsQueryRepository,
+)
+from src.modules.inventory.infrastructure.stock_document.receipt_currency import (
+    ReferenceReceiptCurrencies,
+)
+from src.modules.reference_data.infrastructure.currency.persistence.validation_catalog_repository import (
+    SqlAlchemyCurrencyValidationCatalogQueryRepository,
+)
+from src.modules.shared.infrastructure.events.sqlalchemy_outbox_repository import (
+    SqlAlchemyOutboxRepository,
+)
+from src.modules.inventory.application.stock_document.command.post_receipt.handler import (
+    PostReceiptHandler,
+)
+from src.modules.inventory.application.stock_document.query.prepare_receipt.handler import (
+    PrepareReceiptHandler,
+)
+from src.modules.inventory.application.stock_document.query.list_receipt_executions.handler import (
+    ListReceiptExecutionsHandler,
+)
+from src.modules.inventory.application.stock_document.query.list_receipt_references.handler import (
+    ListReceiptReferencesHandler,
+)
+
+
 def get_stock_owner_reference(uow: UoWDep) -> StockOwnerReferencePort:
     """Собирает публичный контракт CRM на общей tenant-сессии."""
     return CrmStockOwnerReference(
@@ -174,43 +219,72 @@ CancelReceiptDocumentHandlerDep = Annotated[
     CancelReceiptDocumentHandler, Depends(get_cancel_receipt_document_handler)
 ]
 
-from src.modules.inventory.presentation.stock_location.depends import StockLocationRepositoryDep
-from src.modules.inventory.presentation.stock_serial.depends import StockSerialRepositoryDep
-from src.modules.inventory.presentation.stock_lot.depends import StockLotRepositoryDep
-from src.modules.inventory.infrastructure.stock_position.persistence.repository import SqlAlchemyStockPositionRepository
-from src.modules.inventory.infrastructure.stock_execution.persistence.repository import SqlAlchemyStockExecutionRepository
-from src.modules.inventory.infrastructure.stock_posting.persistence.repository import SqlAlchemyStockPostingRepository
-from src.modules.inventory.infrastructure.stock_document.persistence.receipt_requests import SqlAlchemyReceiptPostingRequests
-from src.modules.inventory.infrastructure.stock_document.persistence.receipt_query_repository import SqlAlchemyReceiptFactsQueryRepository
-from src.modules.inventory.infrastructure.stock_document.receipt_currency import ReferenceReceiptCurrencies
-from src.modules.reference_data.infrastructure.currency.persistence.validation_catalog_repository import SqlAlchemyCurrencyValidationCatalogQueryRepository
-from src.modules.shared.infrastructure.events.sqlalchemy_outbox_repository import SqlAlchemyOutboxRepository
-from src.modules.inventory.application.stock_document.command.post_receipt.handler import PostReceiptHandler
-from src.modules.inventory.application.stock_document.query.prepare_receipt.handler import PrepareReceiptHandler
-from src.modules.inventory.application.stock_document.query.list_receipt_executions.handler import ListReceiptExecutionsHandler
 
-def get_post_receipt_handler(uow:UoWDep,warehouses:WarehouseRepositoryDep,items:InventoryItemRepositoryDep,
-    locations:StockLocationRepositoryDep,serials:StockSerialRepositoryDep,lots:StockLotRepositoryDep,
-    reader:ReceiptReaderDep,clock:ClockDep,uuid:UuidDep)->PostReceiptHandler:
+def get_post_receipt_handler(
+    uow: UoWDep,
+    warehouses: WarehouseRepositoryDep,
+    items: InventoryItemRepositoryDep,
+    locations: StockLocationRepositoryDep,
+    serials: StockSerialRepositoryDep,
+    lots: StockLotRepositoryDep,
+    reader: ReceiptReaderDep,
+    clock: ClockDep,
+    uuid: UuidDep,
+) -> PostReceiptHandler:
     """Собирает физический учёт и глобальный Outbox на одной сессии внешнего UoW."""
-    return PostReceiptHandler(SqlAlchemyStockDocumentRepository(uow.session),warehouses,items,locations,serials,lots,
-        SqlAlchemyStockPositionRepository(uow.session),SqlAlchemyStockExecutionRepository(uow.session),SqlAlchemyStockPostingRepository(uow.session),
-        SqlAlchemyReceiptPostingRequests(uow.session),ReferenceReceiptCurrencies(SqlAlchemyCurrencyValidationCatalogQueryRepository(uow.session)),
-        reader,SqlAlchemyOutboxRepository(uow.session),clock,uuid)
-PostReceiptHandlerDep=Annotated[PostReceiptHandler,Depends(get_post_receipt_handler)]
+    return PostReceiptHandler(
+        SqlAlchemyStockDocumentRepository(uow.session),
+        warehouses,
+        items,
+        locations,
+        serials,
+        lots,
+        SqlAlchemyStockPositionRepository(uow.session),
+        SqlAlchemyStockExecutionRepository(uow.session),
+        SqlAlchemyStockPostingRepository(uow.session),
+        SqlAlchemyReceiptPostingRequests(uow.session),
+        ReferenceReceiptCurrencies(
+            SqlAlchemyCurrencyValidationCatalogQueryRepository(uow.session)
+        ),
+        reader,
+        SqlAlchemyOutboxRepository(uow.session),
+        clock,
+        uuid,
+    )
 
-def get_prepare_receipt_handler(uow:UoWDep)->PrepareReceiptHandler:
+
+PostReceiptHandlerDep = Annotated[PostReceiptHandler, Depends(get_post_receipt_handler)]
+
+
+def get_prepare_receipt_handler(uow: UoWDep) -> PrepareReceiptHandler:
     """Собирает проекцию подготовки без загрузки Domain."""
     return PrepareReceiptHandler(SqlAlchemyReceiptFactsQueryRepository(uow.session))
-PrepareReceiptHandlerDep=Annotated[PrepareReceiptHandler,Depends(get_prepare_receipt_handler)]
 
-def get_list_receipt_executions_handler(uow:UoWDep)->ListReceiptExecutionsHandler:
+
+PrepareReceiptHandlerDep = Annotated[
+    PrepareReceiptHandler, Depends(get_prepare_receipt_handler)
+]
+
+
+def get_list_receipt_executions_handler(uow: UoWDep) -> ListReceiptExecutionsHandler:
     """Собирает пагинацию истории одного документа."""
-    return ListReceiptExecutionsHandler(SqlAlchemyReceiptFactsQueryRepository(uow.session))
-ListReceiptExecutionsHandlerDep=Annotated[ListReceiptExecutionsHandler,Depends(get_list_receipt_executions_handler)]
+    return ListReceiptExecutionsHandler(
+        SqlAlchemyReceiptFactsQueryRepository(uow.session)
+    )
 
-from src.modules.inventory.application.stock_document.query.list_receipt_references.handler import ListReceiptReferencesHandler
-def get_list_receipt_references_handler(uow:UoWDep)->ListReceiptReferencesHandler:
+
+ListReceiptExecutionsHandlerDep = Annotated[
+    ListReceiptExecutionsHandler, Depends(get_list_receipt_executions_handler)
+]
+
+
+def get_list_receipt_references_handler(uow: UoWDep) -> ListReceiptReferencesHandler:
     """Собирает серверный поиск по собственным моделям Inventory."""
-    return ListReceiptReferencesHandler(SqlAlchemyReceiptFactsQueryRepository(uow.session))
-ListReceiptReferencesHandlerDep=Annotated[ListReceiptReferencesHandler,Depends(get_list_receipt_references_handler)]
+    return ListReceiptReferencesHandler(
+        SqlAlchemyReceiptFactsQueryRepository(uow.session)
+    )
+
+
+ListReceiptReferencesHandlerDep = Annotated[
+    ListReceiptReferencesHandler, Depends(get_list_receipt_references_handler)
+]

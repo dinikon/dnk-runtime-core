@@ -8,9 +8,6 @@ from src.modules.inventory.application.stock_document.command.post_receipt.comma
 from src.modules.inventory.application.stock_document.query.get_receipt_document.dto import (
     GetReceiptDocumentResultDTO,
 )
-from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
-from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
-from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
 from src.modules.inventory.application.stock_document.command.post_receipt.dto import (
     PostReceiptLineDTO,
     PostReceiptPositionDTO,
@@ -70,7 +67,7 @@ def receipt_result(
         document_status=bundle.document.status.value,
         execution_id=bundle.execution.id.uuid,
         posting_id=bundle.posting.id.uuid,
-        event_id=bundle.event.event_id,
+        event_id=bundle.event.event_id.uuid,
         actor_id=command.actor_id,
         warehouse_id=bundle.document.warehouse_id.uuid,
         warehouse_code=header.warehouse_code,
@@ -99,7 +96,7 @@ def receipt_result(
         ),
         costs=tuple(
             PostReceiptCostDTO(
-                c.id,
+                c.id.uuid,
                 c.total.amount,
                 c.total.currency.value,
                 c.basis_kind,

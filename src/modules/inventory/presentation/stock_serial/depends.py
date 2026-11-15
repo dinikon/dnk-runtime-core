@@ -1,4 +1,6 @@
-from src.modules.inventory.presentation.depends.physical_inventory import PhysicalInventoryUsageDep
+from src.modules.inventory.presentation.depends.physical_inventory import (
+    PhysicalInventoryUsageDep,
+)
 from typing import Annotated
 from fastapi import Depends
 

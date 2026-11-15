@@ -378,6 +378,29 @@ class ReceiptPostingPostgresTests(unittest.IsolatedAsyncioTestCase):
             [r.text for r in responses],
         )
         self.assertEqual(await self.counts(), (1, 1, 1, 1, 1, 1))
+        # Дополнительный индекс целостности защищает от ошибочного обхода write-процесса.
+        from sqlalchemy import insert
+        from sqlalchemy.exc import IntegrityError
+
+        with self.assertRaises(IntegrityError) as raised:
+            async with self.engine.begin() as connection:
+                await bind_tenant_schema(connection, self.tenant.uuid, self.naming)
+                await connection.execute(
+                    insert(StockPositionModel).values(
+                        id=uuid4(),
+                        inventory_item_id=UUID(item["id"]),
+                        location_id=UUID(self.location["id"]),
+                        owner_id=UUID(self.company["id"]),
+                        lot_id=None,
+                        serial_id=UUID(serial["id"]),
+                        stock_status="BLOCKED",
+                        base_uom="PCS",
+                        on_hand_qty=1,
+                        version=0,
+                    )
+                )
+        self.assertEqual(raised.exception.orig.sqlstate, "23505")
+        self.assertIn("uq_stock_positions_serial_positive", str(raised.exception))
 
     async def test_lot_and_serial_guards_references_and_immutable_restore(self) -> None:
         """LOT_AND_SERIAL берёт даты партии; история защищает измерения, но не номер."""
@@ -479,7 +502,10 @@ class ReceiptPostingPostgresTests(unittest.IsolatedAsyncioTestCase):
                     [Decimal("10"), Decimal("12.3456")],
                 )
                 self.assertEqual(posting.entries[0].quantity_delta.value, Decimal("1"))
-        for payload in ({"tracking_mode": "LOT"}, {"base_uom": "KG", "tracking_mode": "LOT"}):
+        for payload in (
+            {"tracking_mode": "LOT"},
+            {"base_uom": "KG", "tracking_mode": "LOT"},
+        ):
             changed = await self.client.patch(root, headers=self.headers, json=payload)
             self.assertEqual(changed.status_code, 409, changed.text)
         changed = await self.client.patch(

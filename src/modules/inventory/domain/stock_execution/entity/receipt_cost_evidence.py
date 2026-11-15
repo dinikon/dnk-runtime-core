@@ -1,38 +1,21 @@
 from dataclasses import dataclass
-from uuid import UUID
 from src.modules.shared.domain.value_object.money import MoneyVO
-from src.modules.inventory.domain.stock_execution.value_object.line_id import (
-    StockExecutionLineIdVO,
-)
 from src.modules.inventory.domain.stock_execution.error import (
     InvalidStockExecutionValueError,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class ReceiptCostAllocationVO:
-    """Связывает часть исходной суммы с собственной фактической строкой."""
-
-    execution_line_id: StockExecutionLineIdVO
-    amount: MoneyVO
-
-    def __post_init__(self) -> None:
-        """Проверяет собственную идентичность, валюту и неотрицательную сумму."""
-        if (
-            not isinstance(self.execution_line_id, StockExecutionLineIdVO)
-            or not isinstance(self.amount, MoneyVO)
-            or self.amount.amount < 0
-        ):
-            raise InvalidStockExecutionValueError(
-                "Нужны строка исполнения и неотрицательная сумма распределения."
-            )
+from src.modules.inventory.domain.stock_execution.value_object.receipt_cost_allocation import (
+    ReceiptCostAllocationVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.receipt_cost_evidence_id import (
+    ReceiptCostEvidenceIdVO,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class ReceiptCostEvidence:
     """Неизменяемое исходное коммерческое основание, а не вычисленная себестоимость."""
 
-    id: UUID
+    id: ReceiptCostEvidenceIdVO
     total: MoneyVO
     basis_kind: str
     source_system: str | None
@@ -43,7 +26,7 @@ class ReceiptCostEvidence:
     def create(
         cls,
         *,
-        identifier: UUID,
+        identifier: ReceiptCostEvidenceIdVO,
         total: MoneyVO,
         basis_kind: str,
         source_system: str | None,
@@ -61,7 +44,7 @@ class ReceiptCostEvidence:
     def restore(
         cls,
         *,
-        identifier: UUID,
+        identifier: ReceiptCostEvidenceIdVO,
         total: MoneyVO,
         basis_kind: str,
         source_system: str | None,
@@ -81,7 +64,7 @@ class ReceiptCostEvidence:
     def ensure_valid(self) -> None:
         """Проверяет полное либо отсутствующее распределение суммы одной валюты."""
         if (
-            not isinstance(self.id, UUID)
+            not isinstance(self.id, ReceiptCostEvidenceIdVO)
             or not isinstance(self.total, MoneyVO)
             or self.total.amount < 0
             or self.basis_kind not in ("MANUAL", "EXTERNAL")

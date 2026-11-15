@@ -13,8 +13,8 @@ const statuses: Record<string, string> = {
     <section class="rounded-lg border bg-card p-4">
       <h2 class="mb-3 text-lg font-semibold">Результат приёмки</h2>
       <p class="mb-4 rounded-md bg-muted p-3 text-sm">
-        Исполнение, проводка и физический остаток зафиксированы одной
-        транзакцией.
+        Товар принят на склад. Движение и результат операции сохранены в
+        истории.
       </p>
       <dl class="grid gap-4 text-sm sm:grid-cols-2">
         <div>
@@ -53,7 +53,7 @@ const statuses: Record<string, string> = {
         <Button variant="outline" @click="emit('document')">Документ</Button
         ><Button variant="outline" @click="emit('execution')">Исполнение</Button
         ><Button variant="outline" @click="emit('posting')"
-          >Проводка и Ledger</Button
+          >Проводка и движения</Button
         >
       </div>
     </section>
@@ -132,7 +132,7 @@ const statuses: Record<string, string> = {
       </div>
     </section>
     <section class="min-w-0 rounded-lg border bg-card p-4">
-      <h2 class="mb-3 text-lg font-semibold">Неизменяемый Ledger</h2>
+      <h2 class="mb-3 text-lg font-semibold">Журнал движений</h2>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead>
@@ -192,8 +192,8 @@ const statuses: Record<string, string> = {
         </li>
       </ul>
       <p class="mt-3 text-xs text-muted-foreground">
-        Это исходные коммерческие сведения. Учётная себестоимость этим срезом не
-        рассчитывается.
+        Это исходные коммерческие сведения, а не рассчитанная себестоимость. Для
+        строк без стоимостного основания стоимость неизвестна.
       </p>
     </section>
   </div>

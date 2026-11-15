@@ -93,18 +93,60 @@ router.add_api_route(
     dependencies=[Depends(require_csrf)],
 )
 
-from src.modules.inventory.presentation.stock_document.http.controller.post_receipt import post_receipt
-from src.modules.inventory.presentation.stock_document.http.response.post_receipt import PostReceiptResponse
-router.add_api_route("/{document_id}/receive",post_receipt,methods=["POST"],response_model=PostReceiptResponse,status_code=201,dependencies=[Depends(require_csrf)])
+from src.modules.inventory.presentation.stock_document.http.controller.post_receipt import (
+    post_receipt,
+)
+from src.modules.inventory.presentation.stock_document.http.response.post_receipt import (
+    PostReceiptResponse,
+)
 
-from src.modules.inventory.presentation.stock_document.http.controller.prepare_receipt import prepare_receipt
-from src.modules.inventory.presentation.stock_document.http.response.prepare_receipt import PrepareReceiptResponse
-router.add_api_route("/{document_id}/receipt-context",prepare_receipt,methods=["GET"],response_model=PrepareReceiptResponse)
+router.add_api_route(
+    "/{document_id}/receive",
+    post_receipt,
+    methods=["POST"],
+    response_model=PostReceiptResponse,
+    status_code=201,
+    dependencies=[Depends(require_csrf)],
+)
 
-from src.modules.inventory.presentation.stock_document.http.controller.list_receipt_executions import list_receipt_executions
-from src.modules.inventory.presentation.stock_document.http.response.list_receipt_executions import ListReceiptExecutionsResponse
-router.add_api_route("/{document_id}/executions",list_receipt_executions,methods=["GET"],response_model=ListReceiptExecutionsResponse)
+from src.modules.inventory.presentation.stock_document.http.controller.prepare_receipt import (
+    prepare_receipt,
+)
+from src.modules.inventory.presentation.stock_document.http.response.prepare_receipt import (
+    PrepareReceiptResponse,
+)
 
-from src.modules.inventory.presentation.stock_document.http.controller.list_receipt_references import list_receipt_references
-from src.modules.inventory.presentation.stock_document.http.response.list_receipt_references import ListReceiptReferencesResponse
-router.add_api_route("/{document_id}/receipt-references",list_receipt_references,methods=["GET"],response_model=ListReceiptReferencesResponse)
+router.add_api_route(
+    "/{document_id}/receipt-context",
+    prepare_receipt,
+    methods=["GET"],
+    response_model=PrepareReceiptResponse,
+)
+
+from src.modules.inventory.presentation.stock_document.http.controller.list_receipt_executions import (
+    list_receipt_executions,
+)
+from src.modules.inventory.presentation.stock_document.http.response.list_receipt_executions import (
+    ListReceiptExecutionsResponse,
+)
+
+router.add_api_route(
+    "/{document_id}/executions",
+    list_receipt_executions,
+    methods=["GET"],
+    response_model=ListReceiptExecutionsResponse,
+)
+
+from src.modules.inventory.presentation.stock_document.http.controller.list_receipt_references import (
+    list_receipt_references,
+)
+from src.modules.inventory.presentation.stock_document.http.response.list_receipt_references import (
+    ListReceiptReferencesResponse,
+)
+
+router.add_api_route(
+    "/{document_id}/receipt-references",
+    list_receipt_references,
+    methods=["GET"],
+    response_model=ListReceiptReferencesResponse,
+)

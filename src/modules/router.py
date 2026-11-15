@@ -83,7 +83,12 @@ from src.modules.inventory.presentation.stock_document.router import (
 
 router.include_router(stock_documents_router)
 
-from src.modules.inventory.presentation.stock_execution.router import router as stock_executions_router
-from src.modules.inventory.presentation.stock_posting.router import router as stock_postings_router
+from src.modules.inventory.presentation.stock_execution.router import (
+    router as stock_executions_router,
+)
+from src.modules.inventory.presentation.stock_posting.router import (
+    router as stock_postings_router,
+)
+
 router.include_router(stock_executions_router)
 router.include_router(stock_postings_router)
