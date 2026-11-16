@@ -12,7 +12,7 @@
 
 Пользователь должен иметь возможность:
 
-1. Создать `Feed` с названием, схемой и собственной ценовой политикой. Языки и валюты задаются независимо для каждого поля.
+1. Создать `Feed` с названием, валютой и языком.
 2. Через визуальный drag-and-drop конструктор определить структуру публикации.
 3. Добавить типизированные поля, указать для них источники, ограничения и преобразования.
 4. Привязать товары Catalog к Feed.
@@ -29,7 +29,7 @@
 | ---------- | --------- | --------------- |
 | `STRING`   | `str`     | Название товара |
 | `TEXT`     | `str`     | Описание        |
-| `MONEY`    | `ExportMoneyVO` | Точная сумма с валютой |
+| `MONEY`    | `MoneyVO` | Цена            |
 
 Начальная схема автоматически содержит три обязательных поля:
 
@@ -37,17 +37,13 @@
 - `description: TEXT`
 - `price: MONEY`
 
-В редакторе можно менять порядок полей, названия, настройки, источники, constraints и transforms. Допускается добавление полей тех же трёх типов с собственной обязательностью, в том числе нескольких переводов и цен в разных валютах. Таким образом, движок сразу будет работать с динамическим списком полей, а не с жёстко заданными колонками.
+В редакторе можно менять порядок полей, названия, настройки, источники, constraints и transforms. Допускается добавление необязательных полей тех же трёх типов. Таким образом, движок сразу будет работать с динамическим списком полей, а не с жёстко заданными колонками.
 
 В рамках MVP обязательные системные ключи `title`, `description`, `price` нельзя удалить или изменить на несовместимый тип. Остальные поля можно добавлять и удалять.
 
 В первом релизе не реализуем варианты товаров, категории, изображения, характеристики, AI-генерацию, динамический подбор ассортимента и специализированные контракты Prom/Rozetka.
 
-В MVP входят независимые locale/currency полей, версионируемая `PricePolicy`, наценка `PERCENT`, выбор базовой цены Catalog, конвертация через публичный Currency Port, overrides каждой валюты и перевода, snapshot политики и курсов. `NO_ADJUSTMENT` — явный режим без наценки. Отсутствие PricePolicy не запрещает конвертацию.
-
-Источники остатков подключаются отдельным интеграционным срезом после появления доступных Application-контрактов Inventory/3PL/Supplier Sourcing. Уже в модели Feed предусмотрены именованные availability bindings и ссылки на версии политик. До регистрации соответствующего адаптера UI не предлагает такие поля; отсутствие источника нельзя подменять нулём или фиктивным складом.
-
-Структура схемы, идентификаторы полей и границы агрегатов проектируются универсальными.
+При этом **структуру схемы, идентификаторы полей и границы агрегатов сразу проектируем универсальными**.
 
 ### **1.2. Bounded Context**
 
@@ -83,18 +79,6 @@ Channels остаётся независимым модулем. FeedBuilder н�
 
 Связь с Catalog реализуется через Application Port, а не через прямое использование его SQLAlchemy ORM-моделей.
 
-| Контекст | Ответственность |
-| --- | --- |
-| Catalog | Локализованные title/body, базовые цены, идентичность товара |
-| Pricing | PricePolicy, выбор базы, коммерческая наценка и PriceQuote |
-| Currency | Версионируемые курсы, FxRateSnapshot и конвертация |
-| Inventory | Физические остатки, резервы и доступное количество по складам/владельцу |
-| Внешние источники / Supplier Sourcing | Доступность 3PL и поставщиков с датой наблюдения и точностью |
-| Availability | Политика выбора/объединения источников и AvailabilityQuote через публичный порт |
-| FeedBuilder | Схема, языки/валюты полей, ссылки на политики, overrides, проверка и файлы |
-
-`Availability` обозначает публичный контракт расчёта доступности; его размещение согласуется с владельцами источников. FeedBuilder не становится складским учётом. Channels при последующей API-синхронизации использует ту же PricePolicy и согласованную политику доступности.
-
 ## **2. Основные архитектурные решения**
 
 До реализации необходимо зафиксировать следующие решения.
@@ -113,18 +97,7 @@ Channels остаётся независимым модулем. FeedBuilder н�
 | Что происходит при ошибке генерации? | Предыдущие файлы остаются активными        |
 | Где хранятся файлы?                  | В ArtifactStorage, в SQL только метаданные |
 
-### **2.1. Языки, валюты и политики**
-
-- `Feed` не имеет обязательного единственного языка или валюты.
-- `FieldDefinition.locale` задаёт язык локализованного текста; нелокализованный текст может иметь locale=null.
-- `FieldDefinition.currency` обязательно для MONEY; для остальных типов currency=null.
-- `default_locale`/`default_currency` у Feed — необязательные подсказки создания полей. После создания поле хранит явное значение; смена defaults не меняет расчёт существующих полей.
-- Один Feed содержит, например, title_uk/title_ru и price_uah/price_usd/price_eur. Каждое поле имеет собственные ID, constraints, transforms и override.
-- `pricing_policy_id` — логическая ссылка на Pricing. Наценка не копируется в каждое поле.
-- `availability_bindings` связывает ключи default/kyiv/supplier с политиками доступности; поле выбирает binding явно.
-- Выбранные языки и валюты проверяются через Reference Data. Списки не зашиваются в enum UAH/USD/EUR или uk/ru.
-
-### **2.2. Три принципиально разных типа данных**
+### **2.1. Три принципиально разных типа данных**
 
 **Definition**
 
@@ -160,29 +133,9 @@ Channels остаётся независимым модулем. FeedBuilder н�
 
 ### **3.2. Aggregate Feed**
 
-```python
-class Feed:
-    id: FeedId
-    name: str
-    code: FeedCodeVO
-    default_locale: LocaleCodeVO | None
-    default_currency: CurrencyCodeVO | None
-    pricing_policy_id: UUID | None
-    availability_bindings: tuple[AvailabilityBinding, ...]
-    status: FeedStatus
-    active_schema_version: int | None
-    draft_schema: FeedSchema | None
-    latest_generation_sequence: int
-    active_generation_id: UUID | None
-    input_revision: int
-    version: int
-
-    # create/restore, replace_draft_schema, publish_schema,
-    # change_pricing_policy, replace_availability_bindings,
-    # request_generation, activate_generation — доменные методы.
 ```
-
-`AvailabilityBinding` — immutable VO: key, policy_id и policy_version. Это ссылка на внешний контракт, а не коллекция складских остатков внутри Feed. Агрегаты других контекстов в Feed не передаются.
+class Feed(AggregateRoot):    id: FeedId    name: str    code: FeedCodeVO    currency: CurrencyCodeVO    locale: LocaleCodeVO    status: FeedStatus    active_schema_version: int | None    draft_schema: FeedSchema | None    latest_generation_sequence: int    active_generation_id: UUID | None    version: int    def rename(self, name: str) -> None:        ...    def replace_draft_schema(        self,        schema: FeedSchema,    ) -> None:        ...    def publish_schema(        self,        next_version: int,    ) -> SchemaPublishedEvent:        ...    def request_generation(        self,    ) -> GenerationRequest:
+```
 
 Основные инварианты:
 
@@ -192,42 +145,13 @@ class Feed:
 - Все `field_id` и `key` внутри схемы уникальны.
 - Нельзя генерировать файл без опубликованной схемы.
 - Более старая генерация не должна перезаписывать результат более новой.
-- Изменение locale/currency существующего поля требует новой версии схемы и перепроверки overrides; ручная сумма не получает другой код валюты автоматически.
-- Изменение schema, привязки PricePolicy, availability bindings, состава/статусов публикаций или overrides увеличивает input_revision. Изменение имени или UI-defaults само по себе не меняет входы экспорта.
-- Чужая/устаревшая generation не активируется: проверяются schema_version, input_revision, policy versions, request_sequence и lifecycle Feed.
-- Смена активной версии внешней политики помечает projections устаревшими; worker фиксирует версии в execution manifest и проверяет их актуальность перед активацией.
+- Изменение валюты или языка после публикации схемы выполняется как контролируемое изменение конфигурации с последующей проверкой публикаций.
 
 ### **3.3. FeedSchema и FieldDefinition**
 
-```python
-@dataclass(frozen=True, slots=True)
-class FieldDefinition:
-    id: UUID
-    key: str
-    label: str
-    value_type: FieldValueType
-    locale: LocaleCodeVO | None
-    currency: CurrencyCodeVO | None
-    fallback_policy: LocaleFallbackPolicy
-    source: SourceReference | None
-    default_mode: ValueMode
-    constraints: FieldConstraints
-    transforms: tuple[TransformDefinition, ...]
-    export: FieldExportSettings
-    ai_instruction: str | None
-
-@dataclass(frozen=True, slots=True)
-class SourceReference:
-    provider: str
-    path: str
-    binding: str | None = None
 ```
-
-`FeedSchema` содержит immutable упорядоченный tuple полей, schema_format_version, get_field(), used_locales(), used_currencies() и проверку структуры. Локаль не кодируется внутри source path: item.title + locale=uk и тот же путь + locale=ru.
-
-Для локализованного источника locale обязателен. По умолчанию fallback=NONE: отсутствие перевода не включает другой язык. Явная LOCALE_CHAIN проверяет перечисленные локали по порядку, без циклов и дублей; MANUAL_REQUIRED требует ручного значения при отсутствии перевода. Происхождение содержит requested_locale и resolved_locale. Необязательное поле без перевода остаётся пустым; required получает REQUIRED_VALUE_MISSING.
-
-Модель использует типизированные VO; __post_init__ разрешён только для VO. Для Aggregate/Entity обязательны create/restore и domain-методы.
+@dataclass(frozen=True)class FeedSchema:    fields: tuple[FieldDefinition, ...]    schema_format_version: int = 1    def get_field(self, field_id: UUID) -> FieldDefinition:        ...    def validate_structure(self) -> list[SchemaIssue]:        ...    def reorder_fields(        self,        field_ids: tuple[UUID, ...],    ) -> "FeedSchema":        ...@dataclass(frozen=True)class FieldDefinition:    id: UUID    key: str    label: str    value_type: FieldValueType    source: SourceReference | None    default_mode: ValueMode    constraints: FieldConstraints    transforms: tuple[TransformDefinition, ...]    ai_instruction: str | None = None
+```
 
 Для будущей поддержки вложенных объектов можно расширить модель свойствами `kind`, `children` и `item_schema`. В MVP все редактируемые поля являются scalar-полями внутри одного корневого объекта `publication`.
 
@@ -267,9 +191,9 @@ Constraints проверяют результат, но не изменяют е
 
 Порядок операций определяется порядком элементов массива `transforms`.
 
-Для MONEY используется точный `ExportMoneyVO(amount: Decimal, currency)`, до шести дробных знаков, без неявного округления. Общий MoneyVO проекта округляет до четырёх знаков и не подходит для промежуточных расчётов экспорта. Изменять его глобальную семантику ради FeedBuilder не требуется. JSON передаёт суммы строками; арифметика не зависит от внешнего Decimal context.
+Для `MONEY` используется `Decimal` и существующий в проекте Money Value Object. При сериализации JSON денежная сумма представляется десятичной строкой.
 
-Наценка и конвертация выполняются Pricing/Currency до field transforms. `money.ceil_step` только округляет сумму в валюте конкретного поля; target_currency берётся из FieldDefinition.currency. Несовпадение валюты готового quote или ручного override с валютой поля — CURRENCY_MISMATCH. Ручная цена не конвертируется и не получает наценку автоматически.
+В MVP валюта наследуемой или ручной цены должна совпадать с валютой Feed. При несовпадении возвращается `CURRENCY_MISMATCH`; конвертация валют добавляется отдельным transform позже.
 
 ### **3.6. Aggregate FeedPublication**
 
@@ -325,57 +249,7 @@ SUCCEEDED
 
 FAILED
 
-Generation фиксирует feed input_revision, schema_version, PricePolicy ID/version или явный NO_ADJUSTMENT, FxRateSnapshot, availability binding/policy versions, source fingerprints и as_of. Большие source snapshots и ExportRecord хранятся в staging; в агрегате остаётся manifest/reference.
-
 Успешное завершение генерации и её активация — разные действия. Генерация может закончиться успешно, но не стать активной, например если пользователь уже изменил схему.
-
-### **3.9. PricePolicy и расчёт цены**
-
-PricePolicy — самостоятельный версионируемый Aggregate Root контекста Pricing. Feed хранит только policy_id. В минимальном Pricing реализуются source базовой цены, правило NONE/PERCENT, immutable версии и PriceCalculator; не создавать временный второй движок наценок внутри FeedBuilder.
-
-| Параметр | Правило |
-| --- | --- |
-| base_price_source | Catalog regular/current price; выбран явно |
-| default_rule | NO_ADJUSTMENT либо PERCENT; percent передаётся десятичной строкой, 20 означает 20% |
-| currency_rules | Явные дополнительные корректировки после конвертации; не замена default_rule |
-| version | Неизменяемая опубликованная версия, общая политика может обслуживать несколько Feed |
-
-Начальная реализация: P = B × (1 + percent / 100), percent >= 0. Дополнительная процентная корректировка поддерживает ту же семантику и может отсутствовать. Для разных Feed выбираются разные политики: +20%, +30%, +5%. Без политики действует явный NO_ADJUSTMENT. Настройки меняются через Application Pricing; FeedBuilder не импортирует и не изменяет его агрегат.
-
-Последовательность расчёта:
-
-1. Получить B и его currency из выбранного источника.
-2. Применить основную наценку один раз на товар и версию политики.
-3. Преобразовать результат во все валюты, требуемые наследуемыми MONEY-полями.
-4. Применить явно заданную дополнительную корректировку соответствующей валюты.
-5. Для MANUAL заменить quote окончательным значением override без новой наценки/FX.
-6. Применить transforms конкретного поля, затем constraints и сериализацию.
-
-Для условного курса 40 UAH за USD база 1000 UAH с +20% даёт 1200 UAH/30 USD, с +30% — 1300 UAH/32.50 USD. Это пример арифметики, не текущий валютный курс. Несколько полей USD получают один quote и независимо округляют его; базовая наценка повторно не применяется.
-
-PriceQuote содержит amount/currency, base price snapshot, policy ID/version, FX snapshot и trace валютной корректировки. FxRateSnapshot фиксирует направление from/to, множитель (target amount = source amount × rate), источник, effective_at, obtained_at и срок допустимости. Совпадающие валюты используют identity conversion без внешнего курса. Отсутствующий/просроченный курс — FX_RATE_MISSING; отсутствующая база — BASE_PRICE_MISSING, без условных значений и скрытого fallback.
-
-FIXED_AMOUNT (B+A с явной currency A), TARGET_MARGIN (C/(1-m), 0<=m<1 и обязательная себестоимость C), комиссии, налоги и category/SKU приоритеты — следующие срезы. Наценка и целевая валовая маржа имеют разные типы; их нельзя заменять одной формулой.
-
-### **3.10. Источники остатков и AvailabilityPolicy**
-
-У каждого Feed собственные именованные bindings, например default, kyiv и supplier. Поле с source.provider=availability, path=status или quantity указывает binding. Binding ссылается на конкретную версию AvailabilityPolicy; изменение источников не требует замены всех полей.
-
-AvailabilityPolicy определяет разрешённые собственные склады, 3PL или SupplierSource, приоритеты, freshness/TTL, учёт резервов/буфера и strategy. Физический warehouse, внешний 3PL и dropshipping не превращаются в один SQL StockBalance. Поставщик со статусом наличия не является фиктивным Warehouse.
-
-| Strategy | Семантика |
-| --- | --- |
-| PRIORITY | Выбрать первый допустимый свежий источник; возвращаем количество только выбранного источника |
-| SUM_EXACT | Суммировать только точные, совместимые и независимые остатки; STATUS_ONLY не включается и отмечается в trace |
-| ANY_AVAILABLE | Рассчитать возможность продажи; агрегированное количество не обещается |
-
-AvailabilityQuote содержит status=IN_STOCK/OUT_OF_STOCK/UNKNOWN, quantity nullable, quantity_mode=EXACT/STATUS_ONLY/UNKNOWN, unit, source refs, policy version, observed_at, valid_until и fingerprint. quantity=null не равно 0; статус IN_STOCK без количества не превращается в 1/9999. Просроченный/недоступный источник не равен OUT_OF_STOCK.
-
-При SUM_EXACT количество полного выбранного набора остаётся null, если в наборе есть непросуммированный STATUS_ONLY или unknown источник; при необходимости отдельный диагностический known_exact_total показывает известную часть. Требующее точного количества поле получает EXACT_QUANTITY_UNAVAILABLE. Политика может заранее ограничить набор только EXACT-источниками.
-
-Inventory/внешний адаптер отвечает за доступный для продажи остаток с резервами и буфером. FeedBuilder не вычитает их повторно. Перед суммированием проверяются единицы, права владельца, physical_stock_identity и отсутствие зеркал одного склада через 3PL. Бэкордеры и неизвестная свежесть требуют явной политики; произвольное количество не создаётся.
-
-Эта конфигурация описывает доступность для экспорта, не резервирует товар и не выбирает фактический источник исполнения заказа. Ценовая и availability policies независимы: automatic выбор самой дешёвой цены и самого большого остатка разных поставщиков не создаёт согласованное предложение. Для такого сценария нужен общий offer/source binding и отдельный контракт Sourcing/Fulfillment.
 
 ## **4. Формат типизированной схемы**
 
@@ -394,9 +268,6 @@ Inventory/внешний адаптер отвечает за доступный
       {
         "id": "11111111-1111-4111-8111-111111111111",
         "key": "title",
-        "locale": "uk",
-        "currency": null,
-        "fallback_policy": {"mode": "NONE"},
         "label": "Название",
         "value_type": "string",
         "source": {
@@ -425,9 +296,6 @@ Inventory/внешний адаптер отвечает за доступный
       {
         "id": "22222222-2222-4222-8222-222222222222",
         "key": "description",
-        "locale": "uk",
-        "currency": null,
-        "fallback_policy": {"mode": "NONE"},
         "label": "Описание",
         "value_type": "text",
         "source": {
@@ -451,13 +319,11 @@ Inventory/внешний адаптер отвечает за доступный
       {
         "id": "33333333-3333-4333-8333-333333333333",
         "key": "price",
-        "locale": null,
-        "currency": "UAH",
         "label": "Цена",
         "value_type": "money",
         "source": {
-          "provider": "pricing",
-          "path": "final_price"
+          "provider": "catalog",
+          "path": "item.regular_price"
         },
         "default_mode": "INHERIT",
         "constraints": {
@@ -494,16 +360,11 @@ Inventory/внешний адаптер отвечает за доступный
 | `key`            | Внутренний системный ключ                |
 | `label`          | Отображаемое пользователю название       |
 | `value_type`     | Зарегистрированный тип                   |
-| `locale` | Язык конкретного текстового поля |
-| `currency` | Целевая валюта конкретного MONEY-поля |
-| `fallback_policy` | Явное поведение при отсутствии перевода |
-| `source.binding` | Ключ именованной политики доступности |
 | `source`         | Ссылка на источник данных                |
 | `default_mode`   | Поведение без пользовательского override |
 | `constraints`    | Правила проверки итогового значения      |
 | `transforms`     | Упорядоченные преобразования             |
 | `export.name`    | Имя колонки CSV или элемента XML         |
-| `export.scale` | Явная точность сериализации MONEY (стартовое значение 2), без скрытого округления |
 | `ai.instruction` | Метаданные для будущего AI-агента        |
 
 `field_id` нельзя изменять при простом переименовании поля.
@@ -515,15 +376,12 @@ Inventory/внешний адаптер отвечает за доступный
 При сохранении черновика проверяется синтаксическая корректность. При публикации выполняется полная семантическая валидация:
 
 - Уникальность `field_id`, `key`, экспортных имён.
-- Совместимость поля с Source, наличием locale/currency и объявленной capability источника.
-- MONEY требует currency и не принимает locale; текст не принимает currency.
-- Локализованный Source требует locale, fallback-цепочки явно валидируются.
-- Source availability требует существующий binding. При недоступном адаптере поле нельзя опубликовать.
+- Совместимость поля с Source.
 - Совместимость constraints с типом.
 - Поддержка указанных transforms.
 - Наличие обязательных полей и корректность их типов.
 - Допустимость имён XML-элементов.
-- Ограничение числа полей и размеров JSON-документа; стартовые лимиты — 50 полей, 1 MiB schema, batch до 100 товаров, 10000 включённых публикаций на Feed; лимиты конфигурируются.
+- Ограничение числа полей и размеров JSON-документа.
 
 Для XML в MVP допустим безопасный набор имён вроде `title`, `regular_price`, `description_ua`, без пользовательских namespace и произвольных XPath-выражений.
 
@@ -553,7 +411,7 @@ class FeedSchemaValidator:    def validate(self, schema: FeedSchema) -> list[Sch
 
 Дополнительно в `public` schema нужен реестр публичных идентификаторов Feed для маршрутизации в tenant.
 
-Черновик схемы хранится отдельно от неизменяемых опубликованных версий.
+От предыдущего варианта предлагаю одно уточнение: **черновик схемы лучше хранить отдельно от опубликованных версий**. Это упрощает редактирование, блокировки и обеспечение неизменяемости опубликованной конфигурации.
 
 ### **5.2. Таблица Feed**
 
@@ -565,11 +423,8 @@ CREATE TABLE fb_feeds (
     name TEXT NOT NULL,
     code TEXT NOT NULL UNIQUE,
 
-    default_currency CHAR(3) NULL,
-    default_locale TEXT NULL,
-    pricing_policy_id UUID NULL,
-    availability_bindings JSONB NOT NULL DEFAULT '[]',
-    input_revision BIGINT NOT NULL DEFAULT 1 CHECK (input_revision > 0),
+    currency_code CHAR(3) NOT NULL,
+    locale_code TEXT NOT NULL,
 
     status TEXT NOT NULL DEFAULT 'DRAFT'
         CHECK (status IN (
@@ -749,13 +604,6 @@ CREATE TABLE fb_publication_projections (
     publication_version BIGINT NOT NULL,
 
     catalog_revision TEXT NULL,
-    feed_input_revision BIGINT NOT NULL,
-    pricing_policy_id UUID NULL,
-    pricing_policy_version INTEGER NULL,
-    fx_snapshot_id UUID NULL,
-    availability_fingerprint TEXT NULL,
-    dependency_manifest JSONB NOT NULL DEFAULT '{}',
-    valid_until TIMESTAMPTZ NULL,
 
     resolved_values JSONB NOT NULL DEFAULT '{}',
     field_states JSONB NOT NULL DEFAULT '{}',
@@ -792,7 +640,7 @@ ON fb_publication_projections(readiness);
 }
 ```
 
-Проекция считается устаревшей, если её версия схемы или публикации не совпадает с текущей. Дополнительно сравниваются input_revision, fingerprints всех локалей Catalog, PricePolicy version, Fx snapshot/срок действия, availability binding/policy/source versions и valid_until. Изменение любого влияющего входа даёт STALE. Отсутствие событий не означает вечную актуальность: перед экспортом источники перечитываются.
+Проекция считается устаревшей, если её версия схемы или публикации не совпадает с текущей. При наличии событий Catalog дополнительно сравнивается `catalog_revision`.
 
 Не требуется массово обновлять все 100 тысяч строк сразу после публикации новой схемы. Их устаревание можно выявлять по несовпадающим версиям.
 
@@ -808,14 +656,6 @@ CREATE TABLE fb_generations (
 
     schema_version INTEGER NOT NULL,
     request_sequence BIGINT NOT NULL,
-    feed_input_revision BIGINT NOT NULL,
-    pricing_policy_id UUID NULL,
-    pricing_policy_version INTEGER NULL,
-    fx_rate_snapshot_id UUID NULL,
-    availability_policy_snapshot JSONB NOT NULL DEFAULT '[]',
-    execution_manifest JSONB NOT NULL DEFAULT '{}',
-    source_capture_started_at TIMESTAMPTZ NULL,
-    source_capture_completed_at TIMESTAMPTZ NULL,
 
     status TEXT NOT NULL
         CHECK (status IN (
@@ -868,7 +708,7 @@ CREATE TABLE fb_artifacts (
     format_code TEXT NOT NULL
         CHECK (format_code IN ('csv', 'xml')),
 
-    file_id UUID NOT NULL UNIQUE,
+    storage_key TEXT NOT NULL UNIQUE,
     content_type TEXT NOT NULL,
 
     sha256 CHAR(64) NOT NULL,
@@ -914,14 +754,6 @@ CREATE TABLE fb_access_keys (
 
 Она позволяет по публичному URL найти нужный tenant, не допуская прямого выбора SQL-схемы из пользовательского ввода.
 
-### **5.8. Хранение политик и snapshots**
-
-Pricing владеет tenant-таблицами pricing_policies и pricing_policy_versions: ID/name, active_version и immutable definition источника/наценки/валютных корректировок. Это модели Pricing, а не дополнительные агрегаты FeedBuilder. AvailabilityPolicy и её версии принадлежат владельцу Availability; bindings хранят только логические UUID/version references без межконтекстных FK.
-
-Execution manifest generation содержит policy versions, список from/to FX rates (либо ссылку на immutable Currency snapshot с гарантией хранения), availability policy/source snapshots, все required locales и currencies, as_of и источник каждого поля. Значения amount/rate в JSON — decimal strings.
-
-Source snapshots каждой записи и зафиксированные membership/status/overrides сохраняются в staging generation. Их нельзя подменять чтением текущей fb_publication_projections. Сериализаторы используют только sealed staging. Повтор после sealing не перечитывает текущие курсы/политики/источники.
-
 ## **6. Application Layer — структура и Use Cases**
 
 ### **6.1. Основные Application Ports**
@@ -929,15 +761,11 @@ Source snapshots каждой записи и зафиксированные mem
 | Port                        | Назначение                            |
 | --------------------------- | ------------------------------------- |
 | `FeedRepository`            | Загрузка и сохранение Feed            |
-| `FeedSchemaVersionStore` | Application-порт append-only истории; изменение схемы только через Feed |
+| `FeedSchemaRepository`      | Черновики и опубликованные схемы      |
 | `FeedPublicationRepository` | Публикации и overrides                |
 | `FeedProjectionRepository`  | Материализованные read models         |
 | `FeedGenerationRepository`  | Запуски и результаты генераций        |
-| `CatalogProductReader`      | Batch локализованного контента и базовых цен |
-| `PriceCalculationPort` | PriceQuote для набора валют, фиксированная PricePolicy |
-| `CurrencySnapshotPort` | Согласованный набор курсов через публичный Currency-контракт |
-| `AvailabilityReaderPort` | Batch AvailabilityQuote по именованным bindings |
-| `PricingPolicyManagementPort` | Создание/изменение политики через владельца Pricing |
+| `CatalogProductReader`      | Исходные значения товаров             |
 | `SourcePathRegistry`        | Контракты разрешённых источников      |
 | `FieldTypeRegistry`         | Типизация и валидация значений        |
 | `TransformRegistry`         | Выполнение разрешённых операций       |
@@ -950,9 +778,7 @@ Source snapshots каждой записи и зафиксированные mem
 | Use Case                       | Назначение                               |
 | ------------------------------ | ---------------------------------------- |
 | `CreateFeed`                   | Создать Feed и стартовую схему           |
-| `UpdateFeedSettings`           | Изменить название и UI-defaults |
-| `AssignFeedPricingPolicy` | Привязать существующую PricePolicy либо выбрать NO_ADJUSTMENT |
-| `ReplaceFeedAvailabilityBindings` | Сохранить именованные ссылки на версии политик доступности |
+| `UpdateFeedSettings`           | Изменить название и допустимые настройки |
 | `SaveFeedSchemaDraft`          | Сохранить черновик конструктора          |
 | `PublishFeedSchema`            | Валидировать и опубликовать версию       |
 | `AddCatalogItemsToFeed`        | Привязать товары из Catalog              |
@@ -970,9 +796,7 @@ Source snapshots каждой записи и зафиксированные mem
 | Query                    | Возвращает                            |
 | ------------------------ | ------------------------------------- |
 | `ListFeeds`              | Список прайс-листов                   |
-| `GetFeed`                | Настройки, policy refs, availability bindings и метаданные |
-| `PreviewFeedPriceCalculation` | База, основная наценка, курс, корректировка и итог для валют |
-| `ListAvailabilitySources` | Доступные источники и поддержанные capabilities |
+| `GetFeed`                | Настройки и метаданные                |
 | `GetFeedSchema`          | Активная версия или draft             |
 | `ListFeedPublications`   | Публикации со статусами и ошибками    |
 | `GetFeedPublication`     | Полная карточка с вычисленными полями |
@@ -988,9 +812,11 @@ Source snapshots каждой записи и зафиксированные mem
 
 Например, `PublishFeedSchema`:
 
-Обработчик получает репозитории и порты уже открытого внешним Depends UoW. Он загружает Feed под блокировкой, проверяет expected_version, передаёт typed schema в domain-метод публикации, сохраняет агрегат/immutable revision и Outbox в той же сессии. Domain проверяет структуру; Application через порты проверяет справочники и существование внешних policy references.
+```
+class PublishFeedSchema:    async def execute(        self,        command: PublishSchemaCommand,    ) -> PublishSchemaResult:        async with self.uow_factory() as uow:            feed = await uow.feeds.get_for_update(                command.feed_id            )            draft = await uow.schemas.get_draft(                feed.id            )            if draft.row_version != command.expected_version:                raise VersionConflict()            schema = self.schema_codec.decode(                draft.definition            )            issues = self.schema_validator.validate(                schema            )            if issues:                raise InvalidFeedSchema(issues)            next_version = (                feed.active_schema_version or 0            ) + 1            # Создаётся неизменяемая версия.            await uow.schemas.create_published(                feed_id=feed.id,
+```
 
-Use Case не открывает вложенный UoW, не получает AsyncSession и не вызывает commit. Завершение транзакции выполняет внешняя сборка.
+Use Case не вызывает `commit()` напрямую. Управление транзакцией выполняет Unit of Work.
 
 Изменение активной версии схемы автоматически делает старые проекции устаревшими, поскольку их `schema_version` перестаёт совпадать с активной.
 
@@ -1008,34 +834,21 @@ SQLAlchemy 2.0 Documentation
 
 Поэтому операции, меняющие активную версию схемы или активный артефакт, должны дополнительно проверять ожидаемые значения непосредственно в транзакции.
 
-### **6.6. Файлы сценариев и сборка зависимостей**
-
-Backend: `src/modules/feed_builder/<layer>/<aggregate_root>/`; root names — feed, feed_publication, feed_generation. В Domain у каждого корня aggregate.py/repository.py/error.py и необходимые VO. FeedSchema и FieldDefinition размещаются внутри domain/feed. Pricing создаётся в `src/modules/pricing/` с собственными слоями; Source/FX/Availability adapters находятся в Infrastructure FeedBuilder.
-
-Каждый command/query имеет отдельные command.py или query.py, handler.py и собственный dto.py при результате. Например AssignFeedPricingPolicyCommand → AssignFeedPricingPolicyHandler.execute → AssignFeedPricingPolicyResultDTO; ReplaceFeedAvailabilityBindings возвращает свой ResultDTO с bindings/input_revision. Для операции без результата используется None, пустой DTO не создаётся.
-
-HTTP каждого метода разделён на controller/request/response/<scenario>.py; router только регистрирует контракты, Depends собирает порты на общем внешнем UoW. Query repositories/проекции принадлежат Application, write repositories — Domain и работают с корнями. FeedSchemaVersionStore сохраняет immutable версии в рамках сохранения Feed, а не даёт независимый CRUD для дочернего объекта.
-
-Все методы имеют типы входов/результатов, русские docstrings; __init__ возвращает None, __init__.py пустые, импорты прямые. Ссылки на чужие policies — IDs/snapshots, не Domain aggregates/ORM соседей. Domain не проверяет существование справочника через I/O.
-
 ## **7. Value Resolution Engine**
 
-Это pipeline подготовки значений: Application координирует порты, Domain выполняет чистые правила выбора, преобразования и проверки.
+Это центральный Application Service модуля.
 
 Он должен принимать определение поля, товар Catalog, overrides публикации и контекст Feed, после чего возвращать результат вычисления.
 
 ### **7.1. SourcePathRegistry**
 
-Реестр объявляет следующие источники; availability paths доступны только после реализации соответствующего интеграционного среза:
+В первом MVP доступны следующие пути:
 
 | Source path          | Type   | Данные                  |
 | -------------------- | ------ | ----------------------- |
 | `item.title`         | STRING | Локализованное название |
 | `item.description`   | TEXT   | Локализованное описание |
-| `item.regular_price` | MONEY | Базовая цена Catalog; явный обход коммерческой наценки, с FX в валюту поля |
-| `pricing.final_price` | MONEY | Итог PricePolicy в field.currency; provider=pricing, path=final_price |
-| `availability.status` | STRING | Статус именованного binding |
-| `availability.quantity` | INTEGER | Точное количество либо null; только после регистрации типа/адаптера |
+| `item.regular_price` | MONEY  | Цена и валюта           |
 
 Каждый Source path имеет зарегистрированный контракт и обработчик.
 
@@ -1047,25 +860,17 @@ HTTP каждого метода разделён на controller/request/respon
 
 SourcePath — только зарегистрированный идентификатор.
 
-### **7.2. Контракты чтения и ResolutionContext**
+### **7.2. Контракт CatalogProductReader**
 
-```python
-class CatalogProductReader(Protocol):
-    async def get_many(
-        self,
-        item_ids: tuple[UUID, ...],
-        locales: frozenset[str],
-        as_of: datetime,
-    ) -> tuple[CatalogProductSnapshot, ...]: ...
+```
+@dataclass(frozen=True)class CatalogProductSnapshot:    id: UUID    title: str | None    description: str | None    regular_price: MoneyVO | None    revision: strclass CatalogProductReader(Protocol):    async def get_many(        self,        item_ids: tuple[UUID, ...],        locale: str,    ) -> dict[UUID, CatalogProductSnapshot]:        ...
 ```
 
-Snapshot содержит own typed localized_content[locale], исходную цену с валютой, отсутствие перевода/позиции, eligibility и dependency fingerprints. Locale set включает все локали полей и явных fallback-цепочек. Один batch получает весь нужный контент, без I/O на каждое поле. Catalog title/body адаптируются к item.title/item.description; HTML description преобразуется безопасным парсером в текст до чистого resolver.
+Реализация находится в Infrastructure.
 
-`ResolutionContext` содержит as_of, schema/input revision, snapshots PricePolicy/FX/availability и подготовленные PriceQuote/AvailabilityQuote. В нём нет feed_locale/feed_currency. Application загружает данные через порты; чистая Domain-логика выбирает значения, выполняет transforms и constraints без I/O. API DTO чужих модулей преобразуются adapter в свои snapshots.
+Она использует публичный контракт чтения Catalog, а не его доменные агрегаты.
 
-PriceCalculationPort рассчитывает базовую наценку один раз на товар+policy version, затем даёт quotes по всем необходимым валютам. Прямой MONEY source Catalog явно обходит наценку, но использует тот же FX snapshot для приведения в currency поля. UI поясняет этот выбор. Отсутствие policy у pricing.final_price означает NO_ADJUSTMENT с конвертацией, а не обход проверки курса. AvailabilityReaderPort читает источники по binding пакетами. MANUAL-поля не требуют доступности источника, если override полностью заменяет результат; недоступный исходник отмечается в provenance, но не блокирует корректное ручное поле.
-
-Каждое отсутствующее значение и ошибка зависимости представлены раздельно. Отсутствие перевода — missing, неисправный adapter — SOURCE_UNAVAILABLE; их нельзя подменять пустой строкой/нулём.
+Описание из Catalog для MVP должно возвращаться как текст. Если Catalog хранит HTML, адаптер обязан либо предоставить отдельную plain-text проекцию, либо использовать явно зарегистрированное безопасное преобразование. Не следует передавать HTML в XML без определённого контракта.
 
 ### **7.3. FieldTypeRegistry**
 
@@ -1087,25 +892,11 @@ class TransformHandler(Protocol):    operation: str    def apply(        self,  
 
 ### **7.5. Полный алгоритм FieldValueResolver**
 
-```python
-def resolve_field(field, publication_snapshot, prepared_context):
-    override = publication_snapshot.overrides.get(field.id)
-    source_value, source_issue = prepared_context.source_for(field)
-    if override is not None:
-        raw_value = override.value
-        origin = "MANUAL"
-    else:
-        raw_value = source_value
-        origin = "INHERITED"
-    value = parse_typed_value(raw_value, field.value_type)
-    value = apply_field_transforms(value, field.transforms)
-    issues = validate_constraints(value, field.constraints, field.currency)
-    if override is None and source_issue is not None:
-        issues.append(source_issue)
-    return resolved_field(value, origin, issues, requested_locale=field.locale)
+```
+class FieldValueResolver:    def resolve(        self,        field: FieldDefinition,        publication: FeedPublication,        snapshot: CatalogProductSnapshot,        context: ResolutionContext,    ) -> ResolvedField:        issues = []        # 1. Получаем исходное значение.        source_value = self.source_resolver.resolve(            field.source,            snapshot,        )        # 2. Определяем режим.        override = publication.overrides.get(field.id)        if override is not None:            mode = override.mode        else:            mode = field.default_mode        # 3. Выбираем конечный источник.        if mode == ValueMode.MANUAL:            raw_value = (                override.value if override else None            )        else:            raw_value = source_value        # 4. Приводим к доменному типу.        try:
 ```
 
-Это иллюстрация порядка, а не готовый интерфейс реализации: реальные классы и все методы типизированы. Pricing quotes уже содержат коммерческую наценку и конвертацию; повторное применение этих операций в FieldValueResolver запрещено. Для ручного значения проверяется field.currency, а преобразование перевода не выполняется.
+`source_resolver.resolve()` для поля без источника должен возвращать `None`. Для поля со ссылкой на источник, который временно недоступен, необходимо возвращать отдельную ошибку `SOURCE_UNAVAILABLE`, а не трактовать её как обычное отсутствие значения.
 
 ### **7.6. Правила вычисления**
 
@@ -1139,9 +930,11 @@ Resolved Field
 
 Используем `Decimal`, а не `float`.
 
-`MoneyCeilStepTransform` принимает типизированный ExportMoneyVO, положительный step и currency конкретного поля. Он проверяет валюту, рассчитывает ceil(amount / step) * step в изолированном Decimal context и возвращает новое значение. Операция не получает наценку, policy ID или текущий курс.
+```
+from decimal import Decimal, ROUND_CEILINGclass MoneyCeilStepTransform:    operation = "money.ceil_step"    def apply(        self,        value: MoneyVO,        parameters: dict,        context: ResolutionContext,    ) -> MoneyVO:        step = Decimal(parameters["step"])        if step <= 0:            raise InvalidTransformParameters()        if value.currency != context.feed_currency:            raise CurrencyMismatch()        units = (            value.amount / step        ).to_integral_value(rounding=ROUND_CEILING)        return MoneyVO(            amount=units * step,            currency=value.currency,        )
+```
 
-590.21 при step=0.1 становится 590.3. Форматирование на экспорт задаётся явным параметром scale конкретного поля: стартовое значение 2 даёт 590.30. Если исходная точность выше scale, схема должна содержать явное округление; serializer не теряет знаки молча.
+При цене `590.21` и шаге `0.1` итоговое значение будет `590.3`. На этапе сериализации цены в MVP используется фиксированная точность два знака: `590.30`.
 
 ### **7.8. PublicationResolver**
 
@@ -1174,13 +967,17 @@ class PublicationResolver:    def resolve(        self,        schema: FeedSchem
 7. Сохранить всё в одной транзакции.
 8. Запланировать построение проекций.
 
-Application получает товары batch-контрактом по schema.used_locales() и fallback-локалям, проверяет допустимые типы и через domain-фабрику создаёт отсутствующие FeedPublication. Запись membership, увеличение feed.input_revision и durable projection jobs выполняются одной внешней транзакцией. Handler не открывает UoW и не меняет поля агрегата напрямую.
+```
+class AddCatalogItemsToFeed:    async def execute(        self,        command: AddItemsCommand,    ) -> list[FeedPublicationId]:        products = await self.catalog.get_many(            command.catalog_item_ids,            command.locale,        )        self.validate_products(products, command.catalog_item_ids)        async with self.uow_factory() as uow:            feed = await uow.feeds.get(command.feed_id)            if feed.active_schema_version is None:                raise SchemaNotPublished()            result = []            for item_id in command.catalog_item_ids:                publication = await (                    uow.publications.get_or_create(                        feed_id=feed.id,                        catalog_item_id=item_id,                        catalog_variant_id=None,                    )                )                result.append(publication.id)            await uow.projection_tasks.enqueue_many(result)        return result
+```
 
 `get_or_create()` должен быть идемпотентным и учитывать SQL UNIQUE constraint, в том числе при конкурентных запросах.
 
 ### **8.2. SetPublicationOverride**
 
-Handler получает опубликованную схему и текущую публикацию в общем внешнем UoW, проверяет expected versions, передаёт field definition и typed override в domain-метод, сохраняет публикацию, feed.input_revision и invalidation job. MANUAL money требует явную currency, совпадающую с FieldDefinition.currency; наценка и FX к нему не применяются.
+```
+class SetPublicationOverride:    async def execute(        self,        command: SetOverrideCommand,    ) -> None:        async with self.uow_factory() as uow:            publication = await uow.publications.get(                command.publication_id            )            feed = await uow.feeds.get(                publication.feed_id            )            schema = await uow.schemas.get_published(                feed.id,                feed.active_schema_version,            )            field = schema.get_field(command.field_id)            # Проверяем базовую совместимость значения            # с типом поля, но не блокируем ввод из-за            # длины строки или ограничения диапазона.            self.types.validate_input_type(                field.value_type,                command.value,            )            publication.set_override(                field_id=field.id,                value=command.value,            )
+```
 
 Ручное значение, превышающее `max_length`, разрешено сохранить, но поле становится `INVALID`. Так пользователь не теряет ввод и может исправить значение в UI.
 
@@ -1188,7 +985,9 @@ Handler получает опубликованную схему и текущу
 
 ### **8.3. ResetPublicationOverride**
 
-Handler вызывает publication.reset_override(field_id), сохраняет агрегат и изменение feed.input_revision, затем атомарно планирует обновление проекции в уже открытом UoW. Повторный reset отсутствующего override — no-op.
+```
+class ResetPublicationOverride:    async def execute(self, command):        async with self.uow_factory() as uow:            publication = await uow.publications.get(                command.publication_id            )            publication.reset_override(command.field_id)            await uow.publications.save(publication)            await uow.projections.invalidate(publication.id)
+```
 
 После удаления override значение вновь определяется `default_mode` из схемы. Для поля без Source это может привести к состоянию `NEEDS_INPUT`, что является корректным поведением.
 
@@ -1196,7 +995,9 @@ Handler вызывает publication.reset_override(field_id), сохраняе�
 
 Предпросмотр не требует сохранения промежуточной проекции.
 
-Query читает выбранную схему/публикацию, batch контент всех требуемых локалей, policy/FX snapshots и quotes; применяет общий resolver без сохранения и возвращает собственный PreviewFeedPublicationResultDTO. Currency/locale берутся из каждого поля. Ошибки и trace расчёта передаются по field_id.
+```
+class PreviewFeedPublication:    async def execute(        self,        publication_id: UUID,        schema_mode: str = "ACTIVE",    ) -> PublicationPreviewDTO:        publication = await self.publications.get(            publication_id        )        feed = await self.feeds.get(            publication.feed_id        )        schema = await self.schemas.get_for_preview(            feed.id,            mode=schema_mode,        )        product = await self.catalog.get(            publication.catalog_item_id,            locale=feed.locale,        )        resolved = self.resolver.resolve(            schema,            publication,            product,            context=ResolutionContext.for_feed(feed),        )        return self.preview_mapper.to_dto(            schema=schema,            publication=publication,
+```
 
 Поддерживаются два режима:
 
@@ -1207,7 +1008,9 @@ Query читает выбранную схему/публикацию, batch к�
 
 ### **8.5. RefreshPublicationProjection**
 
-Command фиксирует dependency manifest, batch читает контент/quotes и рассчитывает публикацию тем же resolver. Запись upsert_if_current сравнивает schema/publication/feed input versions, policy versions, source fingerprints и freshness до замены проекции. Результат имеет собственный RefreshPublicationProjectionResultDTO.
+```
+class RefreshPublicationProjection:    async def execute(self, publication_id: UUID):        publication = await self.publications.get(publication_id)        feed = await self.feeds.get(publication.feed_id)        schema = await self.schemas.get_active(feed.id)        product = await self.catalog.get(            publication.catalog_item_id,            feed.locale,        )        resolved = self.resolver.resolve(            schema,            publication,            product,            context=ResolutionContext.for_feed(feed),        )        await self.projections.upsert_if_current(            publication_id=publication.id,            schema_version=feed.active_schema_version,            publication_version=publication.version,            catalog_revision=product.revision,            resolved=resolved,        )
+```
 
 `upsert_if_current()` не должен перезаписывать более новую проекцию результатом устаревшего worker.
 
@@ -1290,26 +1093,6 @@ XML:
 
 Оба файла формируются из одного набора `ExportRecord`.
 
-Пример другой пользовательской схемы в том же формате:
-
-```csv
-title_uk,title_ru,price_uah,price_usd
-"Хлорофіл NOW Foods","Хлорофилл NOW Foods",1200.00,30.00
-```
-
-```xml
-<catalog>
-  <product>
-    <title_uk>Хлорофіл NOW Foods</title_uk>
-    <title_ru>Хлорофилл NOW Foods</title_ru>
-    <price_uah>1200.00</price_uah>
-    <price_usd>30.00</price_usd>
-  </product>
-</catalog>
-```
-
-Валюта определяется metadata поля; в универсальном CSV/XML она не выводится автоматически дополнительным тегом. Пользователь явно задаёт экспортные имена, позволяющие различить валюты. Generic CSV/XML не гарантирует соответствие Prom/Rozetka: будущий FormatProfile задаёт свои допустимые локали/валюты, обязательные поля и mapping. Требования платформ проверяются отдельно по актуальной официальной документации при реализации профиля.
-
 ## **10. Асинхронная генерация и публикация файлов**
 
 ### **10.1. Процесс выполнения**
@@ -1348,21 +1131,29 @@ Activate
 
 ### **10.2. RequestFeedGeneration**
 
-Внешний Depends открывает общий UoW. Handler загружает Feed под lock, через domain-метод проверяет active schema и регистрирует request_sequence. В одной транзакции фиксируются schema/input revision, назначенная PricePolicy и её версия, availability binding versions, membership/status/overrides snapshot, FeedGeneration и durable shared job. Idempotency-Key с hash payload защищает повтор HTTP-запроса.
+```
+class RequestFeedGeneration:    async def execute(self, feed_id: UUID) -> UUID:        async with self.uow_factory() as uow:            feed = await uow.feeds.get_for_update(feed_id)            if feed.active_schema_version is None:                raise FeedSchemaNotPublished()            sequence = feed.generation_sequence + 1            generation = FeedGeneration.create(                feed_id=feed.id,                schema_version=feed.active_schema_version,                request_sequence=sequence,            )            feed.generation_sequence = sequence            await uow.feeds.save(feed)            await uow.generations.add(generation)        return generation.id
+```
 
-Перед чтением первого товара worker получает единый as_of и FxRateSnapshot для всех требуемых валют и базовых валют, найденных в источниках. Пара фиксируется один раз и больше не обновляется внутри generation. При невозможности подготовить полный допустимый набор курсов inherited поля получают FX_RATE_MISSING; готовый ручной override независим от этого курса.
+Задание создаётся транзакционно. Не нужно сначала сохранять строку в БД, а затем отправлять сообщение во внешний брокер без Outbox — это создаёт риск потерянного задания.
 
-Используются штатные shared jobs/heartbeat/recovery, без второй очереди внутри fb_generations. Если доставку инициирует Outbox, запись job/Outbox атомарна с generation. Worker/CLI открывает собственные короткие UoW; HTTP session не передаётся в фон.
+Для MVP PostgreSQL может выступать очередью заданий.
+
+Worker забирает `PENDING` через `SELECT ... FOR UPDATE SKIP LOCKED`, помечает задание `RUNNING`, устанавливает lease и фиксирует транзакцию. PostgreSQL поддерживает такой подход именно для queue-подобных сценариев с несколькими потребителями.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://www.postgresql.org\&sz=32)
+
+PostgreSQL
+
+
 
 ### **10.3. ExecuteFeedGeneration**
 
-Worker читает зафиксированный request manifest и источники batch-пакетами по стабильному порядку. Application запрашивает контент всех нужных локалей, Pricing quotes для валют полей и Availability quotes по bindings. Domain resolver получает immutable typed snapshots; нет locale=feed.locale, feed_currency или нового курса на каждую позицию.
+```
+class ExecuteFeedGeneration:    async def execute(self, generation_id: UUID) -> None:        generation = await self.generations.claim(            generation_id        )        feed = await self.feeds.get(generation.feed_id)        schema = await self.schemas.get_published(            feed.id,            generation.schema_version,        )        staging = await self.staging.create(            generation_id        )        issues = []        total = 0        # Стабильный порядок и keyset pagination.        async for publications in self.publications.iter_batches(            feed_id=feed.id,            status=PublicationStatus.ENABLED,            batch_size=500,        ):            products = await self.catalog.get_many(                item_ids=tuple(                    p.catalog_item_id                    for p in publications                ),                locale=feed.locale,            )
+```
 
-Для каждой записи сохраняются исходные зависимости, policy/FX/source versions и resolved ExportRecord. После проверки всего набора staging запечатывается. CSV и XML строятся исключительно из него.
-
-Files reserve → загрузка байтов вне SQL → Files confirm и регистрация artifacts выполняются по существующему двухфазному Application-контракту Files. В FeedBuilder хранятся file_id, hash, размер и format, а не второй реестр объектов хранилища. Методы claim/complete/activate используют короткие внешние транзакции; сеть не удерживает SQL UoW.
-
-Финальный domain-метод активации получает snapshot результата и проверяет request_sequence, schema/input revision, актуальность PricePolicy/availability versions и lifecycle. Если пользователь сменил политику/схему/источники, старый успешный результат остаётся в истории. CAS и lease fencing предотвращают перезапись более новым или потерявшим lease worker.
+Здесь операции `claim`, `complete`, `activate_if_current` выполняются в отдельных коротких транзакциях. Долгое чтение каталога и запись файлов не должны происходить внутри одной открытой SQL-транзакции.
 
 ### **10.4. Гарантии выполнения**
 
@@ -1405,19 +1196,15 @@ class DownloadPublicFeed:    async def execute(        self,        public_id: U
 
 | Метод   | Endpoint                                      | Use Case              |
 | ------- | --------------------------------------------- | --------------------- |
-| `POST`  | `/api/console/feed-builder/feeds`                     | `CreateFeed`          |
-| `GET`   | `/api/console/feed-builder/feeds`                     | `ListFeeds`           |
-| `GET`   | `/api/console/feed-builder/feeds/{id}`                | `GetFeed`             |
-| `PATCH` | `/api/console/feed-builder/feeds/{id}`                | `UpdateFeedSettings`  |
-| `GET`   | `/api/console/feed-builder/feeds/{id}/schema`         | `GetFeedSchema`       |
-| `PUT`   | `/api/console/feed-builder/feeds/{id}/schema/draft`   | `SaveFeedSchemaDraft` |
-| `POST`  | `/api/console/feed-builder/feeds/{id}/schema/publish` | `PublishFeedSchema`   |
-| `GET`   | `/api/console/feed-builder/field-types`               | Поддерживаемые типы   |
-| `GET`   | `/api/console/feed-builder/source-paths`              | Доступные источники   |
-| `PUT` | `/api/console/feed-builder/feeds/{id}/pricing-policy` | AssignFeedPricingPolicy |
-| `POST` | `/api/console/feed-builder/feeds/{id}/pricing-preview` | PreviewFeedPriceCalculation |
-| `PUT` | `/api/console/feed-builder/feeds/{id}/availability-bindings` | ReplaceFeedAvailabilityBindings |
-| `GET` | `/api/console/feed-builder/availability-sources` | ListAvailabilitySources |
+| `POST`  | `/api/feed-builder/feeds`                     | `CreateFeed`          |
+| `GET`   | `/api/feed-builder/feeds`                     | `ListFeeds`           |
+| `GET`   | `/api/feed-builder/feeds/{id}`                | `GetFeed`             |
+| `PATCH` | `/api/feed-builder/feeds/{id}`                | `UpdateFeedSettings`  |
+| `GET`   | `/api/feed-builder/feeds/{id}/schema`         | `GetFeedSchema`       |
+| `PUT`   | `/api/feed-builder/feeds/{id}/schema/draft`   | `SaveFeedSchemaDraft` |
+| `POST`  | `/api/feed-builder/feeds/{id}/schema/publish` | `PublishFeedSchema`   |
+| `GET`   | `/api/feed-builder/field-types`               | Поддерживаемые типы   |
+| `GET`   | `/api/feed-builder/source-paths`              | Доступные источники   |
 
 ### **11.2. Публикации**
 
@@ -1431,7 +1218,7 @@ class DownloadPublicFeed:    async def execute(        self,        public_id: U
 | `PATCH`  | `/publications/{id}/status`               | Изменить участие       |
 | `POST`   | `/publications/{id}/preview`              | Вычислить предпросмотр |
 
-Для краткости префикс `/api/console/feed-builder` в нижней части таблицы опущен.
+Для краткости префикс `/api/feed-builder` в нижней части таблицы опущен.
 
 ### **11.3. Генерации**
 
@@ -1493,11 +1280,13 @@ Backend возвращает полностью вычисленную моде�
 
 Значения UUID здесь схематические для объяснения контракта.
 
-В каждом поле ответа обязательны locale/currency (nullable по типу), requested_locale/resolved_locale, source binding, quote ID и применённые policy/FX versions. Для MONEY trace показывает base, markup, conversion, extra adjustment, override и rounding; для availability — выбранные источники, observed_at/valid_until и точность количества. Ответ не раскрывает credentials поставщика/3PL. Можно возвращать can_override/can_reset/is_stale и метаданные редактора.
+В ответе можно также возвращать `can_override`, `can_reset`, `is_stale` и метаданные редактора.
 
 ### **11.5. Единый формат ошибок**
 
-Application возвращает конкретные dataclass DTO сценариев; HTTP Request/Response — отдельные Pydantic-схемы Presentation. Транспортная ошибка содержит code/message, nullable field_id и безопасные details. Pydantic BaseModel в Application не используется.
+```
+class ApplicationErrorDTO(BaseModel):    code: str    message: str    field_id: UUID | None = None    details: dict = {}
+```
 
 Примеры:
 
@@ -1511,12 +1300,7 @@ Application возвращает конкретные dataclass DTO сценар
 | `SOURCE_TYPE_MISMATCH`   | Несовместимые типы           |
 | `REQUIRED_VALUE_MISSING` | Отсутствует значение         |
 | `MAX_LENGTH_EXCEEDED`    | Превышена длина              |
-| `CURRENCY_MISMATCH` | Готовый quote/override имеет другую валюту, чем поле |
-| `FX_RATE_MISSING` | Нет допустимого курса конвертации |
-| `BASE_PRICE_MISSING` | Нет базовой цены для расчёта |
-| `PRICING_POLICY_UNAVAILABLE` | Не найдена доступная версия PricePolicy |
-| `AVAILABILITY_SOURCE_STALE` | Источник остатка просрочен |
-| `EXACT_QUANTITY_UNAVAILABLE` | У binding нет точного количества |
+| `CURRENCY_MISMATCH`      | Неверная валюта              |
 | `VERSION_CONFLICT`       | Конкурентное изменение       |
 | `SOURCE_UNAVAILABLE`     | Источник временно недоступен |
 
@@ -1524,7 +1308,7 @@ Application возвращает конкретные dataclass DTO сценар
 
 ## **12. Frontend — Vue 3 + TypeScript**
 
-Frontend предоставляет создание Feed, конструктор, публикации и экспорт, а также настройки ценообразования и источников остатков.
+Фронтенд должен строиться по согласованному интерактивному прототипу и состоять из четырёх основных экранов.
 
 ### **12.1. Экран создания Feed**
 
@@ -1535,8 +1319,8 @@ FeedCreatePage
  ├── FeedGeneralForm
  │    ├── NameInput
  │    ├── CodeInput
- │    ├── DefaultCurrencySelect (подсказка новых полей)
- │    └── DefaultLocaleSelect (подсказка новых полей)
+ │    ├── CurrencySelect
+ │    └── LocaleSelect
  ├── FeedFormatSelector
  │    ├── CsvOption
  │    └── XmlOption
@@ -1609,9 +1393,6 @@ FeedSchemaBuilderPage
  └── FieldInspector
       ├── IdentitySettings
       ├── SourceSettings
-      ├── LocaleAndFallbackSettings
-      ├── FieldCurrencySettings
-      ├── AvailabilityBindingSelect
       ├── ConstraintSettings
       ├── TransformSettings
       └── AiSettings
@@ -1635,9 +1416,6 @@ interface FieldDefinition {
   key: string;
   label: string;
   value_type: "string" | "text" | "money";
-  locale: string | null;
-  currency: string | null;
-  fallback_policy: LocaleFallbackPolicy;
   source: SourceReference | null;
   default_mode: "INHERIT" | "MANUAL";
   constraints: Record<string, unknown>;
@@ -1699,14 +1477,14 @@ FeedPublicationsPage
 | Поле      | Содержание                             |
 | --------- | -------------------------------------- |
 | Product   | Название Catalog, SKU                  |
-| Title     | Выбранные локализованные поля схемы с указанием языка |
-| Price     | Выбранные MONEY-поля с валютой каждого столбца |
+| Title     | Вычисленное название                   |
+| Price     | Вычисленная цена                       |
 | Overrides | Количество ручных значений             |
 | Readiness | Готово / Заполнить / Ошибка / Устарело |
 | Issues    | Краткое описание проблемы              |
 | Updated   | Время расчёта проекции                 |
 
-Нужна серверная пагинация, фильтрация и сортировка. Не загружать все публикации на frontend. Язык и валюта столбца выбираются по field_id схемы, а не по единственным feed.locale/feed.currency.
+Нужна серверная пагинация, фильтрация и сортировка. Не загружать все публикации на frontend.
 
 ### **12.4. Редактор публикации**
 
@@ -1739,17 +1517,7 @@ FeedPublicationEditor
 
 Логику вычисления цены и применения transforms нельзя дублировать во frontend. Для мгновенного UX допустима локальная предварительная проверка, но окончательный результат всегда возвращает backend.
 
-### **12.5. Ценообразование и источники остатков**
-
-Feed имеет раздел «Ценообразование»: выбор существующей PricePolicy/создание через API Pricing, источник базы, процент наценки, дополнительные валютные корректировки и просмотр применённой версии. Наценка +20% хранится один раз в политике, не копируется в price_uah/price_usd. Для NO_ADJUSTMENT показывается явное отсутствие наценки.
-
-Inspector текста показывает locale/fallback, Inspector MONEY — currency/rounding и ссылку на PricePolicy; default_locale/default_currency формы создания только заполняют значения новых полей. Перед публикацией пользователь видит итоговый список языков и валют. Предпросмотр объясняет вычисление цены и показывает override как окончательную цену до field transforms.
-
-Раздел «Источники остатков» показывает bindings и доступные capabilities: собственный склад, 3PL или SupplierSource, policy/version, strategy, freshness и точность. Он появляется после подключения адаптеров. Поле quantity нельзя назначить STATUS_ONLY-источнику без видимой ошибки. Выбор связки не изменяет Inventory и не создаёт резерв.
-
-Frontend разделяется по архитектуре Console: api DTO/mapper, чистые frontend types, queries/mutations, page state, Page-оркестраторы и UI с props/emits. Используется общий HTTP provider, Vue Query с tenant-aware keys; суммы остаются строками. Изменение schema/policy/bindings инвалидирует зависимые preview/projections. Refetch/409 не стирают несохранённый ввод, смена tenant отменяет запросы и очищает drafts. Вычисления наценки/FX/availability выполняет backend.
-
-### **12.6. Интерфейс экспорта**
+### **12.5. Интерфейс экспорта**
 
 ```
 FeedExportPage
@@ -1822,18 +1590,8 @@ FeedExportPage
 | ------------------------------------ | ------------------------------------- |
 | Название длиннее 80 символов         | `MAX_LENGTH_EXCEEDED`                 |
 | Пустое обязательное описание         | `REQUIRED_VALUE_MISSING`              |
-| Пустой обязательный MANUAL price без источника | REQUIRED_VALUE_MISSING |
-| Исходная цена UAH, поле USD, курс доступен | Конвертация по фиксированному snapshot |
-| Ручной USD override в UAH-поле | CURRENCY_MISMATCH |
-| Нет допустимого курса | FX_RATE_MISSING; нет тихого fallback |
-| Нет базовой цены Pricing | BASE_PRICE_MISSING, поле INVALID |
-| title_uk и title_ru в одном Feed | Независимые переводы и overrides |
-| MANUAL price_usd | Нет повторной наценки и конвертации |
-| Цена 1000 UAH, +20%, 40 UAH/USD | 1200 UAH и 30 USD |
-| Цена 1000 UAH, +30%, тот же курс | Другой Feed: 1300 UAH и 32.50 USD |
-| Повторное MONEY-поле одной валюты | Не применяет базовую наценку второй раз |
-| STATUS_ONLY у поставщика | quantity=null, точное количество не выдумывается |
-| Тот же остаток через склад и его 3PL зеркало | Не суммируется повторно |
+| Отсутствует цена                     | `REQUIRED_VALUE_MISSING`              |
+| Цена в другой валюте                 | `CURRENCY_MISMATCH`                   |
 | Цена 590.21, шаг 0.1                 | `590.30`                              |
 | Строка с кавычками и запятыми        | Корректный CSV                        |
 | Строка с `&` и XML-разметкой         | Корректное экранирование              |
@@ -1876,7 +1634,7 @@ DownloadCSV / DownloadXML
 
 ## **15. Последовательные срезы реализации**
 
-Первый срез реализует Domain и unit-тесты. Последующие срезы последовательно подключают persistence, Application, HTTP и Console; коммерческая арифметика Pricing остаётся в собственном контексте. Availability contracts закладываются сразу, реальные adapters подключаются при готовности владельцев источников.
+Рекомендую реализовать модуль семью срезами. Каждый должен включать необходимые изменения во всех соответствующих слоях, а не строиться по принципу «сначала весь Domain, затем весь Infrastructure».
 
 ## **1**
 
@@ -1884,7 +1642,7 @@ DownloadCSV / DownloadXML
 
 `Feed`, `FeedSchema`, `FieldDefinition`, Constraints, Transforms, `FeedPublication`, `FeedGeneration`, Value Objects, доменные ошибки и события.
 
-Реализовать инварианты схемы, статусы, версионирование и overrides. FieldDefinition содержит locale/currency/fallback_policy, Feed — pricing_policy_id и availability bindings; ExportMoneyVO сохраняет точность. Три корня FeedBuilder: Feed, FeedPublication, FeedGeneration; FeedSchema остаётся частью Feed. PricePolicy — отдельный агрегат Pricing, не четвёртый корень FeedBuilder.
+Реализовать инварианты схемы, статусы, версионирование и правила overrides.
 
 Готовность: все Domain Unit Tests проходят без PostgreSQL, FastAPI и SQLAlchemy.
 
@@ -1894,7 +1652,7 @@ DownloadCSV / DownloadXML
 
 Alembic-миграция, SQLAlchemy Models, Row Mappers, Repositories, Unit of Work.
 
-Создать таблицы, ограничения, индексы, tenant schema и row_version; обязательные feed.locale_code/currency_code отсутствуют. Locale/currency живут в JSON схемы, policy refs и input_revision — отдельные колонки; snapshots — в generation/projections. Межконтекстных FK нет.
+Создать таблицы, уникальные ограничения, индексы, связь с tenant schema и поддержку `row_version`.
 
 Готовность: агрегаты сохраняются и восстанавливаются без потери доменной типизации.
 
@@ -1902,7 +1660,7 @@ Alembic-миграция, SQLAlchemy Models, Row Mappers, Repositories, Unit of 
 
 **Feed CRUD + Schema Builder**
 
-Use Cases создания Feed, draft/publish, реестров типов/источников, назначения PricePolicy и availability bindings; UI выбирает язык/fallback и валюту каждого поля.
+Use Cases создания Feed, сохранения draft, публикации схемы и получения реестра типов/источников.
 
 Реализовать административный REST API и первые два экрана frontend — создание Feed и конструктор.
 
@@ -1912,7 +1670,7 @@ Use Cases создания Feed, draft/publish, реестров типов/ис
 
 **Publication + Value Resolution**
 
-Минимальный Pricing-контекст: PricePolicy, версии, PERCENT/NO_ADJUSTMENT, PriceCalculator, base-price adapter и CurrencySnapshotPort. Затем CatalogProductReader, registries, resolver и projections с multi-locale/multi-currency quotes. Наценка считается один раз; ручные цены её обходят.
+CatalogProductReader, SourcePathRegistry, FieldTypeRegistry, TransformRegistry, FieldValueResolver, PublicationResolver и проекции.
 
 Реализовать добавление товаров, редактирование overrides, список публикаций и карточку предпросмотра.
 
@@ -1922,7 +1680,7 @@ Use Cases создания Feed, draft/publish, реестров типов/ис
 
 **Export Engine**
 
-Динамический ExportRecord, CSV/XML serializers, GenerationWorker, staging, история/ошибки и Files adapter. Generation фиксирует schema/input/policy versions, FX и availability snapshots; оба формата читают один sealed набор.
+Динамический `ExportRecord`, CSV/XML Serializers, ArtifactStorage, GenerationWorker, staging, история запусков и ошибки.
 
 Готовность: пользователь получает корректные CSV/XML из одного набора публикаций.
 
@@ -1944,10 +1702,6 @@ Public route registry, AccessKey, публичный контроллер, ро�
 
 Готовность: выполнение всех критериев приёмки MVP.
 
-### **15.8. Интеграция источников остатков**
-
-При готовности Inventory/внешних адаптеров реализовать AvailabilityPolicy/quotes и INTEGER/BOOLEAN типы для quantity/available, capability descriptors, batch-read и UI bindings. Проверить стратегии PRIORITY/SUM_EXACT/ANY_AVAILABLE, TTL, права владельца, единицы измерения и дедупликацию. До этого среза binding contracts хранятся, но неподдержанные availability fields не публикуются. Не блокировать многоязычные/мультивалютные CSV/XML наличием полного WMS.
-
 ## **16. Что заложить сейчас для дальнейшего расширения**
 
 Эти возможности не входят в первую реализацию, но должны учитываться в контрактах.
@@ -1959,13 +1713,12 @@ Public route registry, AccessKey, публичный контроллер, ро�
 | Вложенные объекты    | `FieldDefinition.kind` и `children`                     |
 | Массивы изображений  | `array` + `media`                                       |
 | Варианты товаров     | `catalog_variant_id`                                    |
-| Дополнительные локали | Locale/fallback поля уже работают; источник не кодирует язык в path |
+| Переводы             | `locale` и локализованные SourcePath                    |
 | AI-генерация         | `ai_instruction`, отдельный GenerateSuggestion Use Case |
 | Динамическая выборка | FeedSelectionPolicy и Selection Engine                  |
 | Расписание генераций | Планировщик, создающий Generation Request               |
 | Prom/Rozetka         | Platform-specific FormatProfile и Serializer            |
-| Сложные ценовые правила | FIXED_AMOUNT, TARGET_MARGIN, category/SKU правила в Pricing |
-| Новые источники остатков | Версионируемые availability bindings и adapter capabilities |
+| Валютная конвертация | `MoneyConvertTransform` через CurrencyRate Port         |
 | Массовые изменения   | Bulk Override Application Service                       |
 
 Особенно важно не объединять `FeedSchema` и `FeedPublication`. Это позволит добавлять все перечисленные возможности, не изменяя фундамент наследования и пользовательских значений.
@@ -1974,7 +1727,7 @@ Public route registry, AccessKey, публичный контроллер, ро�
 
 Модуль можно считать реализованным, когда выполняется следующий сценарий:
 
-1. Пользователь создаёт Feed с собственной PricePolicy; добавляет title_uk/title_ru и price_uah/price_usd с явными locale/currency.
+1. Пользователь создаёт Feed с валютой UAH.
 2. Конструктор автоматически предлагает поля Title, Description и Price.
 3. Пользователь меняет порядок полей, source path, constraints и transforms.
 4. Публикует версию схемы.
@@ -1984,18 +1737,16 @@ Public route registry, AccessKey, публичный контроллер, ро�
 8. Для отсутствующей цены видит требование заполнения.
 9. Переопределяет проблемное поле.
 10. Предпросмотр показывает исходное, ручное и конечное значения.
-11. Все включённые публикации переходят в READY; override одного перевода/валюты не меняет соседние поля.
-12. Разные Feed применяют разные PricePolicy (+20% / +30%) к той же базе, не меняя Catalog; FX snapshot одинаков для всех строк поколения. Ручная цена не получает наценку повторно.
-13. Генерация создаёт CSV и XML с одинаковыми переводами и валютными колонками из одного staging.
-14. Оба файла доступны по постоянным URL.
-15. Изменение Catalog/PricePolicy/FX делает зависимую проекцию STALE; новый расчёт читает новые входы.
-16. Новая ошибочная генерация не уничтожает предыдущий корректный файл.
-17. При подключённых availability adapters два Feed могут выбирать разные bindings; STATUS_ONLY сохраняет quantity=null, устаревший источник виден как ошибка/UNKNOWN по политике.
+11. Все публикации переходят в `READY`.
+12. Генерация создаёт CSV и XML.
+13. Оба файла доступны по постоянным URL.
+14. Изменение Catalog обновляет наследуемые значения при следующем разрешении.
+15. Новая ошибочная генерация не уничтожает предыдущий корректный файл.
 
 **Итоговая архитектура MVP:**
 
-`Feed + FeedSchema + FeedPublication + Catalog/Pricing/Currency/Availability snapshots → ResolvedPublication → ExportRecord → FeedGeneration → Artifact`
+`Feed → FeedSchema → FeedPublication → ResolvedPublication → ExportRecord → FeedGeneration → Artifact`
 
 Эта последовательность должна стать основным контрактом модуля. SQL хранит идентичность, конфигурацию и overrides; Application вычисляет значения; Domain защищает инварианты; Infrastructure сериализует и доставляет файлы; Presentation предоставляет универсальный конструктор.
 
-Контракты первого среза включают FieldDefinition, FeedSchema, FieldOverride, ExportMoneyVO, policy references и immutable resolution snapshots. Код, миграции и UI реализуются отдельными задачами согласно срезам.
+Для начала реализации рекомендую зафиксировать API и доменные контракты первого среза, особенно `FieldDefinition`, `FeedSchema`, `FieldOverride` и `MoneyVO`. Именно они определяют совместимость последующих слоёв и возможность расширения FeedBuilder без переработки SQL-структуры.&#x20;
