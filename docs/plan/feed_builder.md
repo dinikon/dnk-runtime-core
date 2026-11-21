@@ -4,7 +4,7 @@
 **Backend:** Python, FastAPI, SQLAlchemy Async, PostgreSQL\
 **Frontend:** Vue 3, TypeScript, TanStack Vue Query\
 **Определения:** версионируемые JSONB-схемы с типизированными условиями и AST\
-**Целевой MVP:** Generic CSV/XML, плоская выгрузка простых товаров и выбранных вариантов, расчёт денежных полей внутри Feed
+**Целевой MVP:** один выбранный Generic CSV либо XML на Feed, плоская выгрузка простых товаров и выбранных вариантов, расчёт денежных полей внутри Feed
 
 Документ фиксирует согласованную целевую модель и последовательность реализации.
 Все поля пользовательские и равноправные; обычный Feed начинается с пустой схемы.
@@ -21,7 +21,7 @@ FeedBuilder — самостоятельный bounded context, создающи
 
 ### **1.1. Целевые возможности MVP**
 
-1. Создать Feed с названием, кодом и пустой пользовательской схемой.
+1. Создать Feed с названием, кодом, явно выбранным CSV либо XML и пустой пользовательской схемой.
 2. Собрать структуру предложения из произвольного числа STRING, TEXT и MONEY полей.
 3. Выбрать каждому полю источник или ручное заполнение, язык/валюту,
    ограничения, преобразования и экспортное имя.
@@ -31,7 +31,7 @@ FeedBuilder — самостоятельный bounded context, создающи
 6. Привязать простые товары и выбранные варианты Catalog, просматривать значения/ошибки
    и задавать независимые overrides каждой позиции.
 7. Сохранять draft, публиковать неизменяемую версию схемы и проверять preview.
-8. Асинхронно генерировать Generic CSV/XML из одного проверенного набора записей.
+8. Асинхронно генерировать один Generic CSV либо XML из проверенного набора записей.
 9. Получать файлы по постоянным HTTPS-ссылкам; ошибочная генерация сохраняет прежнюю выдачу.
 
 | Тип поля | Значение | Контекст |
@@ -139,7 +139,7 @@ field_id/rule_id внутри конкретного Feed, а не живую с
 | Как представлены выражения | Типизированное декларативное дерево, не исполняемый текст |
 | Где хранится ручное значение | Override публикации по field_id |
 | Какая версия включает изменение формулы | Новая версия схемы, без отдельной версии политики |
-| Как создаются файлы | Асинхронно, все выбранные форматы из одного staging; по умолчанию CSV и XML |
+| Как создаётся файл | Один явно выбранный CSV либо XML на Feed; одна генерация — один артефакт |
 | Что сохраняется при ошибке | Предыдущая успешная активная генерация |
 | С чего начинается реализация | Только Domain-объекты Feed с create/restore |
 
@@ -241,16 +241,19 @@ FieldDefinition и ConditionalPriceRule — Entity внутри Feed. Отдел
 | export_settings | FeedExportSettingsVO |
 | created_at, updated_at | Timezone-aware datetime |
 
-Feed.create получает явные ID/время и исходные настройки, создаёт пустую схему,
-если состав не передан. Feed.restore восстанавливает все переданные значения,
-проверяет согласованность и не генерирует ID, события или предзаполненные поля.
+Feed.create получает явные ID/время и обязательные export_settings с выбранным
+форматом; создаёт пустую схему, если состав не передан. export_settings не имеет
+значения по умолчанию и не принимает None. Feed.restore восстанавливает все
+переданные значения, проверяет согласованность и не генерирует ID, события или
+предзаполненные поля.
 Новый Feed создаётся в DRAFT. Restore сохраняет явно переданное допустимое состояние.
 
-FeedExportSettingsVO содержит product_mode: FeedProductMode с единственным
-значением VARIABLE_TO_SINGLE по умолчанию, formats: tuple[ExportFormatSettings, ...]
-и validation_policy. ExportFormatSettings — закрытое объединение
-`CsvExportSettingsVO | XmlExportSettingsVO` в types.py. Отдельных свойств csv/xml
-у FeedExportSettingsVO нет: настройки находятся только внутри выбранных элементов.
+FeedExportSettingsVO содержит обязательное format_settings: ExportFormatSettings,
+product_mode: FeedProductMode со значением VARIABLE_TO_SINGLE по умолчанию и
+validation_policy=STRICT. ExportFormatSettings — закрытое объединение
+`CsvExportSettingsVO | XmlExportSettingsVO` в types.py. Один Feed формирует ровно
+один файл выбранного формата; для CSV и XML одновременно создаются два отдельных
+Feed со своими ID/кодами и явно заданными настройками.
 
 Каждый VO хранится в своём файле и определяет фиксированный формат класса:
 
@@ -260,26 +263,24 @@ FeedExportSettingsVO содержит product_mode: FeedProductMode с един�
 | XmlExportSettingsVO | ExportFormat.XML | root_name: ExportNameVO, item_name: ExportNameVO, encoding |
 
 format не является полем конструктора; нельзя задать XML для CSV-настроек или
-наоборот. Каждый VO проверяет только собственные параметры. formats принимает
-непустую коллекцию из одного или двух поддержанных VO, копирует входной list в tuple
-и сохраняет порядок. Пустой состав, Enum/строки/dict вместо VO и повтор формата
-отклоняются; два CSV с разными delimiter тоже считаются дубликатом по format.
-По умолчанию создаются `(CsvExportSettingsVO(), XmlExportSettingsVO())` с обычными
-параметрами. Один элемент означает один файл, два — CSV и XML. Настройки
-невыбранного формата не создаются как параллельное свойство Feed.
+наоборот. Каждый VO проверяет собственные параметры. format_settings принимает
+ровно один CsvExportSettingsVO либо XmlExportSettingsVO, без значения по умолчанию.
+Без format_settings настройки не создаются, без export_settings не создаётся Feed.
+Сырые Enum/строки/dict, None и коллекции любого размера отклоняются. Отдельных
+formats/csv/xml-свойств нет; проверки количества и дубликатов форматов не нужны.
+Настройки и вложенный VO неизменяемы, фабрики не выбирают формат за вызывающий код.
 
 ```python
 FeedExportSettingsVO(
+    format_settings=CsvExportSettingsVO(delimiter=";", include_header=True),
     product_mode=FeedProductMode.VARIABLE_TO_SINGLE,
-    formats=(
-        CsvExportSettingsVO(delimiter=";", include_header=True),
-        XmlExportSettingsVO(
-            root_name=ExportNameVO("catalog"),
-            item_name=ExportNameVO("product"),
-        ),
-    ),
 )
 ```
+
+Для XML вместо CsvExportSettingsVO передаётся один XmlExportSettingsVO с нужными
+root_name/item_name. Выбранный формат доступен как
+`feed.export_settings.format_settings.format`; дублирующий Enum на уровне Feed
+или FeedExportSettingsVO не вводится. Пустая схема draft по-прежнему допустима.
 
 FeedProductMode объявляется в отдельном enum/feed_product_mode.py:
 
@@ -293,9 +294,9 @@ class FeedProductMode(StrEnum):
 VO проверяет в __post_init__, что product_mode — экземпляр FeedProductMode;
 сырые строки, неизвестные значения и чужие Enum отклоняются с InvalidFeedValueError.
 Будущая граница ввода явно преобразует код в Enum. Feed.create получает режим
-из настроек либо использует настройки по умолчанию; Feed.restore сохраняет его
-без изменения остальных свойств. Product Mode принадлежит настройкам экспорта
-Feed, применяется ко всем его форматам и не входит в FieldDefinition/FeedSchemaVO.
+из явно переданных настроек (product_mode в них имеет default); Feed.restore
+сохраняет его без изменения остальных свойств. Product Mode принадлежит настройкам экспорта
+Feed, применяется к выбранной выгрузке и не входит в FieldDefinition/FeedSchemaVO.
 В первой версии нет выбора между стратегиями, отдельной схемы родителя,
 настроек группировки или переключения режимов.
 
@@ -857,7 +858,7 @@ CREATE TABLE fb_feeds (
     generation_sequence BIGINT NOT NULL DEFAULT 0,
     row_version BIGINT NOT NULL DEFAULT 1,
 
-    export_settings JSONB NOT NULL DEFAULT '{}',
+    export_settings JSONB NOT NULL,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -869,39 +870,31 @@ CREATE TABLE fb_feeds (
 
 ```json
 {
+  "format_settings": {
+    "format": "csv",
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "include_header": true
+  },
   "product_mode": "VARIABLE_TO_SINGLE",
-  "formats": [
-    {
-      "format": "csv",
-      "delimiter": ",",
-      "encoding": "utf-8",
-      "include_header": true
-    },
-    {
-      "format": "xml",
-      "root_name": "catalog",
-      "item_name": "product",
-      "encoding": "utf-8"
-    }
-  ],
   "validation_policy": "STRICT"
 }
 ```
 
 Для первого релиза `STRICT` — единственная политика: нельзя опубликовать новый файл с ошибочными товарами.
-product_mode хранится в том же JSONB; отдельная колонка/таблица режима не нужна.
-При создании отсутствие режима во входных настройках даёт VARIABLE_TO_SINGLE;
-после применения типизированных defaults запись сохраняет полный снимок настроек
-с явным product_mode и структурированным массивом formats. Mapper преобразует
-код product_mode в FeedProductMode, а дискриминатор formats[].format выбирает
+format_settings и product_mode хранятся в том же JSONB; отдельные колонки/таблицы
+для настроек не нужны. При создании format_settings обязательно, defaults
+применяются только к product_mode/validation_policy и параметрам выбранного VO.
+Запись сохраняет полный снимок с явным format_settings.format и параметрами
+одного формата; SQL-default для export_settings отсутствует.
+Mapper преобразует product_mode в FeedProductMode, а format_settings.format выбирает
 CsvExportSettingsVO/XmlExportSettingsVO; format не передаётся в конструктор VO.
-При записи mapper явно берёт format.value из ClassVar и собственные параметры
-элемента: обычный dataclass asdict не добавляет ClassVar автоматически.
-Готовые настройки передаются фабрике restore; бизнес-правила проверяет Domain.
-Старая плоская форма formats=["csv", "xml"] с отдельными csv/xml не поддерживается;
+При записи mapper явно берёт format.value из ClassVar: dataclass asdict сам по себе
+ClassVar не добавляет. Готовые настройки передаются фабрике restore, собственные
+инварианты проверяет Domain. Коллекция formats и отдельные csv/xml не поддерживаются;
 persistence/API срезы ещё не реализованы, адаптеры совместимости заранее не вводятся.
-Определение режима не меняет schema_format_version. В будущих срезах изменение
-настроек экспорта учитывается configuration_version, отдельно от версии схемы.
+Изменение формата/его параметров учитывается configuration_version и требует новой
+генерации; schema_format_version и версия схемы полей при этом не меняются.
 
 ### **5.3. Таблицы Schema**
 
@@ -1171,7 +1164,7 @@ CREATE TABLE fb_artifacts (
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    UNIQUE (generation_id, format_code)
+    UNIQUE (generation_id)
 );
 
 ALTER TABLE fb_feeds
@@ -1181,9 +1174,14 @@ REFERENCES fb_generations(feed_id, id);
 
 ```
 
-Таким образом, `Feed.active_generation_id` указывает на конкретную успешную
-генерацию, а она — на все выбранные файлы: CSV, XML либо оба. Артефакты отсутствующих
-в снимке форматов не входят в активный набор.
+Таким образом, Feed.active_generation_id указывает на конкретную успешную
+генерацию с одним артефактом. UNIQUE(generation_id) ограничивает число артефактов
+одним; format_code обязан соответствовать format_settings.format снимка генерации.
+Переключение active_generation_id меняет единственный активный файл. История может
+содержать генерации другого формата, но они не выдаются как параллельные активные файлы.
+Метаданные итогового артефакта связываются с генерацией при complete в общей
+транзакции с проверкой attempt_token; временные файлы попыток не создают второй
+артефакт той же генерации.
 
 При ошибке новой генерации указатель не изменяется.
 
@@ -1330,7 +1328,7 @@ Command, Handler и конкретный DTO результата либо None.
 | PreviewFieldCalculation | feed_id, catalog_item_id, catalog_variant_id или null, field_id, schema_mode, optional definition_override | FieldCalculationPreviewDTO |
 | GetGeneration / ListGenerations | generation_id / feed_id и пагинация | GenerationDetailsDTO / Page[GenerationListItemDTO] |
 | ListGenerationIssues | generation_id, фильтры/пагинация | Page[GenerationIssueDTO] |
-| GetActiveFeedArtifact | feed_id, format | ActiveFeedArtifactDTO |
+| GetActiveFeedArtifact | feed_id | ActiveFeedArtifactDTO: формат, ссылка и метаданные единственного активного файла |
 | DownloadPublicFeed | public_id, token, format | ArtifactDownloadDTO для streaming |
 
 List/detail Queries читают проекции. Preview исполняет тот же Domain evaluator
@@ -1798,7 +1796,7 @@ class ExportCell:
 
 @dataclass(frozen=True)
 class ExportRecord:
-    """Передаёт упорядоченные ячейки публикации выбранным сериализаторам."""
+    """Передаёт упорядоченные ячейки публикации выбранному сериализатору."""
 
     publication_id: UUID
     cells: tuple[ExportCell, ...]
@@ -1834,8 +1832,8 @@ class FeedSerializer(Protocol):
         ...
 ```
 
-Application проходит по export_settings_snapshot.formats, выбирает сериализатор
-по фиксированному settings.format и передаёт ему соответствующий VO. CSV получает
+Application берёт один export_settings_snapshot.format_settings, выбирает
+сериализатор по фиксированному settings.format и передаёт ему этот VO. CSV получает
 CsvExportSettingsVO, XML — XmlExportSettingsVO; неподдержанный тип отклоняется.
 В Domain и первом срезе не создаются registry/serializer заготовки.
 
@@ -1885,9 +1883,9 @@ title_uk,title_ru,description_uk,price_uah,price_usd
 </catalog>
 ```
 
-В примере выбраны оба формата, поэтому оба файла создаются из одного набора
-ExportRecord. При одном элементе formats создаётся только соответствующий файл.
-Деньги сохраняют валюту в
+Это альтернативные представления одной схемы: конкретный Feed создаёт только
+CSV либо XML согласно format_settings. Оба примера не означают два файла одной
+генерации; для обоих нужны отдельные Feed. Деньги сохраняют валюту в
 Domain и preview; в Generic CSV/XML числовое значение не содержит символ валюты,
 а назначение валюты определяется явной схемой и экспортным именем поля.
 
@@ -1937,10 +1935,10 @@ RequestFeedGeneration: PENDING + schema/config/export/engine versions
   → batch выбранных позиций, нужного контекста родителей и разрешённых параметров
   → override либо выбор IF/ELSE и выражение → transforms → constraints
   → staging ExportRecord + фактические source revisions/trace metadata
-  → файлы выбранных formats из одного staging
-  → неизменяемые артефакты
+  → один CSV либо XML согласно снимку format_settings
+  → один неизменяемый артефакт
   → SUCCEEDED
-  → условная атомарная активация одной ссылки на весь набор
+  → условная атомарная активация единственного артефакта
 ```
 
 ### **11.2. Запрос и фиксированный контекст**
@@ -1948,11 +1946,11 @@ RequestFeedGeneration: PENDING + schema/config/export/engine versions
 В короткой общей транзакции Request проверяет Feed/опубликованную схему,
 выделяет sequence через Domain и сохраняет FeedGeneration PENDING со схемой,
 configuration_version, export_settings_snapshot и calculation_engine_version.
-export_settings_snapshot содержит явный product_mode=VARIABLE_TO_SINGLE и полный
-упорядоченный список formats с параметрами каждого выбранного формата.
+export_settings_snapshot содержит явный product_mode=VARIABLE_TO_SINGLE и один
+format_settings с фиксированным format и всеми параметрами выбранного VO.
 Worker использует снимок задания, preview — выбранные настройки Feed;
 оба вызывают общую стратегию. Retry использует сохранённый код, а не текущий
-default. Изменение delimiter/имён XML/состава formats требует новой конфигурации
+default. Изменение CSV/XML или delimiter/имён XML требует новой конфигурации
 и задания; retry не подмешивает текущие параметры. Экспорт не раскрывает заново
 список вариантов Catalog.
 Будущий Domain не позволяет запрашивать генерацию DRAFT/PAUSED/ARCHIVED Feed;
@@ -1990,10 +1988,10 @@ Worker читает точную версию схемы/AST/закупочны�
 зафиксированный FX snapshot. Обновлённый context требует нового задания.
 
 При STRICT и issue у ENABLED-публикации — FAILED с issues/counts, без переключения
-выдачи. Иначе все ExportRecord сначала сохраняются в staging, затем все выбранные
-форматы строятся из того же набора со своими параметрами из снимка. Storage key
-уникален для попытки/артефакта, сохраняются
-sha256, size и content-type. Даже успешный отдельный временный формат не активируется.
+выдачи. Иначе ExportRecord сохраняются в staging, затем единственный сериализатор
+создаёт файл с параметрами из снимка format_settings. Storage key уникален для
+попытки/артефакта, сохраняются sha256, size и content-type. Временный файл не
+активируется до успешного завершения генерации.
 
 Claim, heartbeat, capture context, complete и activation — короткие отдельные
 UoW во внешнем worker bootstrap. Долгое чтение/расчёт/storage не держит SQL-транзакцию.
@@ -2005,14 +2003,15 @@ UoW во внешнем worker bootstrap. Долгое чтение/расчёт
 Успешная генерация активируется, только если:
 
 - она принадлежит Feed и имеет SUCCEEDED;
-- все требуемые форматы сохранены и проверены;
+- единственный требуемый артефакт сохранён, проверен и соответствует формату снимка;
 - schema_version и configuration_version всё ещё текущие;
 - Feed допускает активацию, sequence не старее уже активной;
 - попытка не потеряла право завершения, публикация результата идемпотентна.
 
 Под блокировкой Feed условно меняется один active_generation_id и его sequence.
-Все выбранные форматы переключаются вместе; если выбран один, активируется один.
-Невыбранный файл предыдущей генерации не остаётся частью нового активного набора.
+Активируется один файл. При смене CSV на XML или наоборот предыдущий файл остаётся
+активным до успешной активации новой генерации; после неё старый исторический
+артефакт не выдаётся как второй активный файл.
 Повтор активации того же результата — no-op.
 Изменившаяся схема/настройки дают SUCCEEDED без активации с понятной причиной.
 Attempt token проверяется при complete в RUNNING. Для уже сохранённого SUCCEEDED
@@ -2047,7 +2046,11 @@ https://feeds.example.com/f/{public_id}/{token}/catalog.xml
 
 Public registry разрешает public_id в доверенный tenant, Tenancy/admission
 подключают tenant, FeedAccess проверяет хеш токена/отзыв, read-side находит
-активный артефакт. Нет активной выдачи — 404. UoW и DB-проверки завершаются
+единственный активный артефакт. Расширение URL проверяется по формату именно
+активной генерации: XML не отдаётся по .csv и наоборот, несовпадение — 404.
+До успешной активации нового формата прежний URL/Content-Type сохраняются;
+после активации доступен только URL нового активного формата. Нет активной выдачи —
+404. UoW и DB-проверки завершаются
 до streaming; сессия/ORM не живут вместе с долгой HTTP-передачей файла.
 
 Поддержать ETag, Last-Modified, Content-Type и HTTPS. Токен показывается однократно,
@@ -2091,13 +2094,15 @@ MONEY — обязательную currency; неизвестные/чужие �
 GetFeed возвращает его явно; null/неизвестные коды отклоняются. Вход преобразуется
 в FeedProductMode на границе до вызова Domain. PATCH различает отсутствие настройки
 и явное значение, в первой версии альтернативных режимов нет.
-export_settings.formats передаётся как непустой массив объектов с дискриминатором
-format=csv/xml и параметрами соответствующего типа, как в разделе 5.2. Неизвестные,
-чужие свойства, повторы format и старая плоская форма отклоняются. На границе
-создаются нужные VO без передачи ClassVar format в конструктор. При создании без
-formats используются оба VO с defaults; GET возвращает только выбранные элементы.
-Для PATCH поле formats заменяет коллекцию целиком, отсутствие сохраняет её,
-null/пустая коллекция недопустимы. HTTP/API классы пока не реализуются.
+CreateFeed требует export_settings и обязательное format_settings внутри него,
+без default формата. format_settings — один объект с дискриминатором format=csv/xml
+и параметрами соответствующего типа, как в разделе 5.2. Неизвестные/чужие свойства,
+None/null, коллекции и старая форма formats отклоняются. На границе создаётся
+один VO без передачи ClassVar format в конструктор. GET возвращает выбранную
+конфигурацию и отдельно метаданные единственного активного файла, если он уже есть.
+Для PATCH format_settings заменяет объект целиком, отсутствие сохраняет его,
+null недопустим; смена формата не заменяет активный файл до успешной генерации.
+HTTP/API классы пока не реализуются.
 Схема сохраняется и возвращается в
 единственной форме type_definition без параллельных aliases. Реестры /field-types
 описывают возможности типов для UI и не заменяют типизированную схему параметрами
@@ -2133,7 +2138,7 @@ mapping каждой пары catalog_item_id/catalog_variant_id в publication_
 | GET | /feeds/{id}/generations | ListGenerations |
 | GET | /generations/{id} | GetGeneration |
 | GET | /generations/{id}/issues | ListGenerationIssues |
-| GET | /feeds/{id}/artifacts | Активные форматы |
+| GET | /feeds/{id}/artifact | Единственный активный файл и его фактический формат |
 | POST | /feeds/{id}/access-keys | Создать ключ |
 | POST | /feeds/{id}/access-keys/{key_id}/rotate | Ротация |
 | DELETE | /feeds/{id}/access-keys/{key_id} | Отзыв |
@@ -2204,10 +2209,12 @@ PATCH различает отсутствие поля и null. Создание
 Форма содержит name, code и настройки форматов. В Export Settings показано
 описание «Варианты как самостоятельные товары»; единственный код модели —
 VARIABLE_TO_SINGLE по умолчанию. Выбор между режимами в первой версии не нужен.
-DTO и чистая модель сохраняют явный код режима. Выбор форматов содержит настройки
-только отмеченных CSV/XML; по умолчанию отмечены оба. Чистая модель — объединение
-по format, без второго списка флагов и общих csv/xml-свойств. UI получает выбранные
-настройки через props и emits изменения; API mapper собирает вложенный массив.
+DTO и чистая модель сохраняют явный код режима. Форма требует явный выбор CSV
+либо XML без предвыбранного формата; одновременно выбрать два нельзя. Показываются
+настройки только выбранного варианта. До выбора submit недоступен, backend также
+проверяет обязательность. Чистая модель — объединение по format; UI получает
+настройки через props и emits изменения, API mapper собирает один format_settings.
+Смена выбора заменяет конфигурацию, без коллекции/флагов formats и общих csv/xml.
 Backend создаёт Feed с пустым составом. Пустое состояние объясняет добавление
 полей; title/description/price
 не добавляются автоматически. Нет выбора общей валюты/локали вычислений или
@@ -2299,9 +2306,11 @@ Reset удаляет override и возвращает автоматическо
 ### **13.5. Экспорт и история**
 
 Экран показывает активную генерацию, as_of, время создания, товары/размеры,
-ссылки только выбранных форматов, Generate, progress, history, issues и управление ключами.
+одну ссылку на активный файл с его форматом, Generate, progress, history, issues
+и управление ключами. Текущая конфигурация и формат активного файла показываются
+отдельно, если новая генерация ещё не активирована.
 При FAILED последнего запуска явно указано, что публичная ссылка выдаёт предыдущий
-успешный набор. Изменение draft не обещает немедленную смену выгрузки.
+успешный файл. Изменение draft не обещает немедленную смену выгрузки.
 
 ### **13.6. Модульная структура и кеш**
 
@@ -2390,16 +2399,17 @@ Unit-тесты обычного Python без PostgreSQL/FastAPI/HTTP:
 
 - Feed.create с пустым составом не создаёт title/description/price и иные примеры.
 - Feed.restore сохраняет ID, состав, порядок, статусы, настройки и даты.
-- formats по умолчанию содержит CSV/XML VO. Поддерживаются только CSV, только XML
-  и оба в заданном порядке; все параметры сохраняются через Feed.create/restore.
+- FeedExportSettingsVO требует один format_settings без default; Feed.create и
+  Feed.restore требуют export_settings. Пропуск аргументов не выбирает формат
+  автоматически, явный None отклоняется. Пустая схема с выбранным форматом допустима.
+- CSV либо XML с нестандартными параметрами сохраняется через create/restore вместе
+  со всеми полями Feed, датами, Product Mode и validation_policy.
 - CsvExportSettingsVO/XmlExportSettingsVO имеют фиксированный ClassVar format;
   нельзя передать противоречащий format конструктору. У FeedExportSettingsVO нет
-  параллельных csv/xml-свойств. Пустая коллекция, Enum/строки/dict вместо VO,
-  смешанные неверные элементы и повтор формата с разными параметрами отклоняются.
-- Коллекция formats копируется в tuple; вложенные VO неизменяемы, входной список
-  не меняет созданные настройки. Проверяется структурный лимит числа форматов.
+  formats/csv/xml-свойств. Enum/строки/dict, null и коллекции любого размера вместо
+  одного VO отклоняются. Настройки и вложенные VO неизменяемы.
 - FeedProductMode содержит только VARIABLE_TO_SINGLE. FeedExportSettingsVO и
-  Feed.create без явного режима используют его по умолчанию; явные настройки и
+  Feed.create с явно выбранным форматом используют его по умолчанию; настройки и
   Feed.restore сохраняют Enum вместе со всеми остальными свойствами. Сырые строки,
   null, чужие Enum и неизвестные значения отклоняются; внешних чтений для этого нет.
 - FieldDefinition/ConditionalPriceRule имеют create/restore без __post_init__;
@@ -2499,22 +2509,22 @@ source IDs/offer IDs/FX snapshots/артефакты. Прямого чтени�
 
 - Кириллица, кавычки/запятые/переносы CSV, безопасные XML-имена/escaping/символы.
 - Произвольные колонки, отсутствующее необязательное значение и явная точность.
-- Все выбранные форматы читают один staging, serializer не меняет цену/правила.
-- Только CSV/только XML создаёт один файл с соответствующими настройками; оба
-  создают два. Снимок/retry сохраняет параметры и состав formats. Невыбранный
-  формат не исполняется и не публикуется.
-- VARIABLE_TO_SINGLE даёт одинаковый набор самостоятельных позиций в обоих
-  форматах, если выбраны оба: одна публикация — одна запись, без родителя и группировки.
-  Снимок задания содержит режим, retry не подменяет его текущими настройками/defaults.
+- Единственный выбранный сериализатор читает staging, не меняет цену/правила.
+- CSV Feed создаёт один CSV, XML Feed — один XML; второй формат не исполняется.
+  Снимок/retry сохраняет format_settings и его параметры; UNIQUE(generation_id)
+  не допускает второй артефакт той же генерации.
+- VARIABLE_TO_SINGLE даёт одну запись на публикацию без родителя и группировки;
+  снимок задания содержит режим, retry не подменяет настройки текущими/defaults.
 - Один as_of, фиксированный FX набор; Currency-книга обновлена — retry не читает
   новые курсы вместо сохранённого JSONB контекста.
 - Изменён draft — активная схема прежняя; publish другой версии запрещает
   активацию старого результата, прежняя активная выдача сохраняется.
 - Старый запрос завершился позднее нового — sequence не откатывает выдачу.
 - Повтор/истёкший lease/старый attempt_token — без двойной активации.
-- При выбранных CSV и XML успешен один, второй упал — весь прежний публичный
-  набор сохраняется. При переходе с двух форматов на один невыбранный старый
-  артефакт не выдаётся как часть нового активного набора.
+- Смена CSV на XML/обратно увеличивает configuration_version, не версию схемы.
+  Ошибка нового запуска сохраняет старый активный файл; успешная активация заменяет
+  его одним новым. URL-расширение и Content-Type соответствуют активной генерации,
+  исторический файл не становится вторым активным артефактом.
 - Источники недоступны технически — ограниченный retry; ошибка формулы — FAILED без retry.
 - Полностью ручные поля не требуют ненужных цен/курсов.
 - Отзыв/ротация ключа работают с HTTP cache; streaming не держит DB-транзакцию.
@@ -2523,7 +2533,7 @@ source IDs/offer IDs/FX snapshots/артефакты. Прямого чтени�
 ### **15.5. API, UI и E2E**
 
 ```text
-CreateFeed (пустая схема)
+CreateFeed (пустая схема, явно выбранный CSV либо XML)
   → SaveFeedSchemaDraft (пользовательские поля, IF/ELSE/AST)
   → PreviewFieldCalculation
   → PublishFeedSchema
@@ -2531,7 +2541,7 @@ CreateFeed (пустая схема)
   → PreviewFeedPublication
   → SetPublicationOverride / ResetPublicationOverride
   → RequestFeedGeneration / ExecuteFeedGeneration
-  → Download CSV/XML
+  → Download выбранного CSV либо XML
 ```
 
 Повторить с двумя Feed с разными формулами, несколькими языками/валютами,
@@ -2563,9 +2573,10 @@ Feed, FieldDefinition и ConditionalPriceRule с create/restore; VO/enums/оши
 раздела 3.4, каждый VO в своём файле. Пустая схема, равноправные поля, дерево
 условий/выражений, три типизированных VO типов полей, раздельные ограничения,
 PriceCalculationStructurePolicy, SourceProvider/CatalogSourcePath и настройки
-экспорта с FeedProductMode.VARIABLE_TO_SINGLE по умолчанию и formats как tuple
-CsvExportSettingsVO/XmlExportSettingsVO с фиксированными ExportFormat. По умолчанию
-создаются оба VO; общих csv/xml-свойств нет.
+экспорта с FeedProductMode.VARIABLE_TO_SINGLE по умолчанию и обязательным
+format_settings: CsvExportSettingsVO либо XmlExportSettingsVO с фиксированным
+ExportFormat. Feed.create требует export_settings; формат автоматически не выбирается.
+Коллекции formats и общих csv/xml-свойств нет.
 Существующие CurrencyVO/MoneyVO/EntityIdVO
 переиспользуются, чужие внутренние агрегаты не импортируются.
 
@@ -2599,7 +2610,7 @@ Application Command/Query/DTO, Depends, HTTP методы, метаданные 
 параметров/операций, создание пустого Feed, save/publish. Vue Page/model/UI,
 свободные поля, AST редактор IF/ELSE и источника закупки, сохранность draft.
 Export Settings/API/DTO явно сохраняют единственный product_mode=VARIABLE_TO_SINGLE
-и структурированный массив выбранных formats с собственными параметрами.
+и один обязательный format_settings; форма/DTO/API требуют явный выбор CSV либо XML.
 
 Готовность: пользователь создаёт/редактирует определения; UI не обещает расчёт,
 пока следующий срез не подключён. Unsupported definitions отклоняются явно.
@@ -2630,13 +2641,12 @@ overrides/reset, участие/readiness, FieldValueResolver/PublicationResolve
 
 Domain генерации и задачи, staging/serializers/ArtifactStorage, as_of,
 сохранённые Product Mode/FX snapshot, source revisions, engine version, lease/heartbeat/
-fencing/retry, counts/issues/history и условная активация всех форматов.
-VARIABLE_TO_SINGLE создаёт одну плоскую запись на выбранную публикацию во всех
-выбранных форматах, без родительских строк/группировки и повторного раскрытия Catalog.
+fencing/retry, counts/issues/history и условная активация одного артефакта.
+VARIABLE_TO_SINGLE создаёт одну плоскую запись на выбранную публикацию в заданном
+CSV либо XML, без родительских строк/группировки и повторного раскрытия Catalog.
 
-Готовность: один либо два выбранных файла из общего staging, старый/ошибочный
-результат не заменяет активный, технический retry сохраняет фиксированный
-временной/валютный контекст.
+Готовность: один файл согласно снимку format_settings, старый/ошибочный результат
+не заменяет активный, retry сохраняет формат/параметры и временной/валютный контекст.
 
 ### **16.8. Public Distribution**
 
@@ -2687,9 +2697,9 @@ Feed с другим. Схема, публикация и итоговый ар�
 1. Создаётся Feed с пустой или явно переданной пользовательской схемой.
 2. Нет встроенных полей по именам и привилегированных ролей.
    Export Settings содержит единственный FeedProductMode.VARIABLE_TO_SINGLE
-   по умолчанию и formats из одного/двух типизированных VO, по умолчанию обоих.
-   Фабрики сохраняют режим, порядок и параметры, VO отклоняет неверные элементы
-   и повторы форматов; фиксированный ExportFormat определяется классом VO.
+   по умолчанию и обязательное format_settings с одним CSV либо XML VO.
+   Feed.create требует export_settings. Фабрики сохраняют режим и параметры,
+   VO отклоняет коллекции/нетипизированные значения; формат определяется классом VO.
 3. Feed/FieldDefinition/ConditionalPriceRule имеют только create/restore;
    VO/enums/ошибки корректно разнесены, каждый VO — отдельный файл.
    Настройки принадлежат трём VO типов, структура расчёта проверяется
@@ -2721,14 +2731,14 @@ Feed с другим. Схема, публикация и итоговый ар�
    учитывают категории/закупку/курсы/версии/время акции и используемые ревизии
    позиции/родителя; устаревание видно пользователю.
 9. После устранения blocking issues ENABLED-позиции готовы; Generation создаёт
-   выбранные Generic CSV/XML из одного staging, с фиксированными formats/settings,
+   один выбранный Generic CSV либо XML из staging, с фиксированным format_settings,
    product_mode/as_of/FX/engine version. VARIABLE_TO_SINGLE даёт по одной
    самостоятельной записи на публикацию, без строки VARIABLE и группировки;
    схема полей общая для SIMPLE/VARIANT.
 10. Источники сохраняют собственные цены: FeedBuilder их не изменяет и не требует
     отдельного модуля прайс-листов/наценок.
-11. Успех и активация разделены, все форматы переключаются вместе, старый worker
-    или несовместимая версия не заменяет новый активный результат.
+11. Успех и активация разделены, активен один артефакт. Старый worker или
+    несовместимая версия не заменяет новый активный результат.
 12. Ошибочный запуск сохраняет предыдущую выдачу, retry/fencing/cleanup корректны.
 13. Ключи/tenant/protected inputs/trace/публичные файлы защищены, cache не обходит отзыв.
 14. Пройдены Domain/Integration/E2E/нагрузочные и frontend проверки, архитектурный
@@ -2745,7 +2755,7 @@ Feed с другим. Схема, публикация и итоговый ар�
   → transforms / Decimal rounding / constraints
   → ResolvedPublication
   → одна плоская ExportRecord на публикацию + FormatProfile + staging
-  → FeedGeneration → CSV/XML artifacts
+  → FeedGeneration → один CSV либо XML artifact
   → атомарная активная выдача
 ```
 

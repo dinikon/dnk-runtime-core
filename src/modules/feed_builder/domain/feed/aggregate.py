@@ -40,19 +40,17 @@ class Feed:
         name: FeedNameVO,
         code: FeedCodeVO,
         now: datetime,
+        export_settings: FeedExportSettingsVO,
         schema: FeedSchemaVO | None = None,
-        export_settings: FeedExportSettingsVO | None = None,
     ) -> Self:
-        """Создаёт DRAFT с пустой или явно переданной схемой без событий/предзаполнения."""
+        """Создаёт DRAFT с явными настройками экспорта и пустой либо переданной схемой."""
         return cls.restore(
             identifier=identifier,
             name=name,
             code=code,
             status=FeedStatus.DRAFT,
             schema=FeedSchemaVO() if schema is None else schema,
-            export_settings=(
-                FeedExportSettingsVO() if export_settings is None else export_settings
-            ),
+            export_settings=export_settings,
             created_at=now,
             updated_at=now,
         )

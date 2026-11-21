@@ -213,6 +213,9 @@ def feed(schema: FeedSchemaVO | None = None, **changes: object) -> Feed:
                 code=FeedCodeVO("partner"),
                 now=NOW,
                 schema=schema,
+                export_settings=FeedExportSettingsVO(
+                    format_settings=CsvExportSettingsVO()
+                ),
             )
             | changes
         )
@@ -241,54 +244,80 @@ def rule(
 class FeedConstructionTests(unittest.TestCase):
     """Проверяет фабрики, границу агрегата и независимость пользовательских полей."""
 
-    def test_create_assigns_every_field_with_defaults_and_explicit_settings(
-        self,
-    ) -> None:
-        """Create правильно распределяет все поля независимо от порядка dataclass."""
+    def test_create_assigns_every_field_with_empty_or_explicit_schema(self) -> None:
+        """Create сохраняет все поля с обязательным CSV/XML и необязательной схемой."""
         identifier = FeedIdVO(uuid4())
         name = FeedNameVO("Новый пользовательский прайс")
         code = FeedCodeVO("created-feed")
         schema = FeedSchemaVO((text_field(), money_field()))
-        settings = FeedExportSettingsVO(
-            product_mode=FeedProductMode.VARIABLE_TO_SINGLE,
-            formats=(
+        for supplied_schema in (None, schema):
+            for format_settings in (
+                CsvExportSettingsVO(delimiter=";", include_header=False),
                 XmlExportSettingsVO(
-                    root_name=ExportNameVO("offers"),
-                    item_name=ExportNameVO("offer"),
+                    root_name=ExportNameVO("offers"), item_name=ExportNameVO("offer")
                 ),
-            ),
+            ):
+                with self.subTest(
+                    schema=supplied_schema, format_settings=format_settings
+                ):
+                    settings = FeedExportSettingsVO(format_settings=format_settings)
+                    result = Feed.create(
+                        identifier=identifier,
+                        name=name,
+                        code=code,
+                        now=NOW,
+                        schema=supplied_schema,
+                        export_settings=settings,
+                    )
+                    expected = {
+                        "id": identifier,
+                        "name": name,
+                        "code": code,
+                        "status": FeedStatus.DRAFT,
+                        "schema": FeedSchemaVO() if supplied_schema is None else schema,
+                        "export_settings": settings,
+                        "created_at": NOW,
+                        "updated_at": NOW,
+                    }
+                    self.assertEqual(
+                        {item.name for item in fields(Feed)}, set(expected)
+                    )
+                    for attribute, value in expected.items():
+                        self.assertEqual(getattr(result, attribute), value, attribute)
+                    self.assertIs(result.export_settings, settings)
+                    self.assertIs(
+                        result.export_settings.format_settings, format_settings
+                    )
+                    self.assertIs(
+                        result.export_settings.product_mode,
+                        FeedProductMode.VARIABLE_TO_SINGLE,
+                    )
+
+    def test_factories_require_explicit_export_settings(self) -> None:
+        """Ни create, ни restore не выбирают формат вместо вызывающего кода."""
+        common = dict(
+            identifier=FeedIdVO(uuid4()),
+            name=FeedNameVO("Прайс"),
+            code=FeedCodeVO("price"),
         )
-        for supplied_schema, supplied_settings in ((None, None), (schema, settings)):
-            with self.subTest(explicit=supplied_schema is not None):
-                result = Feed.create(
-                    identifier=identifier,
-                    name=name,
-                    code=code,
-                    now=NOW,
-                    schema=supplied_schema,
-                    export_settings=supplied_settings,
-                )
-                expected = {
-                    "id": identifier,
-                    "name": name,
-                    "code": code,
+        for factory, arguments in (
+            (Feed.create, common | {"now": NOW}),
+            (
+                Feed.restore,
+                common
+                | {
                     "status": FeedStatus.DRAFT,
-                    "schema": FeedSchemaVO() if supplied_schema is None else schema,
-                    "export_settings": (
-                        FeedExportSettingsVO()
-                        if supplied_settings is None
-                        else settings
-                    ),
+                    "schema": FeedSchemaVO(),
                     "created_at": NOW,
                     "updated_at": NOW,
-                }
-                self.assertEqual({item.name for item in fields(Feed)}, set(expected))
-                for attribute, value in expected.items():
-                    self.assertEqual(getattr(result, attribute), value, attribute)
-                self.assertIs(
-                    result.export_settings.product_mode,
-                    FeedProductMode.VARIABLE_TO_SINGLE,
-                )
+                },
+            ),
+        ):
+            with self.subTest(factory=factory.__name__):
+                with self.assertRaisesRegex(TypeError, "export_settings"):
+                    factory(**arguments)
+                with self.assertRaises(InvalidFeedValueError):
+                    factory(**arguments, export_settings=None)
 
     def test_restore_assigns_every_field_from_independent_saved_values(self) -> None:
         """Restore проверяется без create и сохраняет обе разные даты и настройки."""
@@ -298,7 +327,7 @@ class FeedConstructionTests(unittest.TestCase):
         schema = FeedSchemaVO((money_field(), text_field("restored_text")))
         settings = FeedExportSettingsVO(
             product_mode=FeedProductMode.VARIABLE_TO_SINGLE,
-            formats=(CsvExportSettingsVO(delimiter=";", include_header=False),),
+            format_settings=CsvExportSettingsVO(delimiter=";", include_header=False),
         )
         created_at = NOW - timedelta(days=10)
         updated_at = NOW + timedelta(hours=3)
@@ -533,21 +562,19 @@ class FeedConstructionTests(unittest.TestCase):
             ),
             money_field(calculation),
         ]
-        formats = [XmlExportSettingsVO()]
         result = feed(
             FeedSchemaVO(schema_fields),
-            export_settings=FeedExportSettingsVO(formats=formats),
+            export_settings=FeedExportSettingsVO(format_settings=XmlExportSettingsVO()),
         )
         transforms.clear()
         arguments.clear()
         rules.clear()
         schema_fields.clear()
-        formats.clear()
         self.assertEqual(len(result.schema.fields), 2)
         self.assertEqual(len(result.schema.fields[0].type_definition.transforms), 1)
         self.assertEqual(len(calculation.rules), 1)
         self.assertEqual(len(expression.arguments), 2)
-        self.assertEqual(result.export_settings.formats, (XmlExportSettingsVO(),))
+        self.assertEqual(result.export_settings.format_settings, XmlExportSettingsVO())
         for value, attribute, new_value in (
             (result, "name", FeedNameVO("Другое")),
             (result.schema.fields[0], "label", FieldLabelVO("Другое")),
@@ -1068,8 +1095,8 @@ class FeedValuesTests(unittest.TestCase):
                 fallback_policy=fallback,
             )
 
-    def test_export_settings_validate_names_flags_and_formats(self) -> None:
-        """Допускает разделитель tab, отклоняет пустые/дублирующиеся форматы и raw bool."""
+    def test_export_settings_validate_names_flags_and_single_format(self) -> None:
+        """Принимает настройки одного формата и отклоняет коллекции/нетипизированный ввод."""
         self.assertEqual(CsvExportSettingsVO(delimiter="\t").delimiter, "\t")
         for delimiter in ("", "ab", '"', "\n", "\x00"):
             with self.assertRaises(InvalidFeedValueError):
@@ -1078,50 +1105,41 @@ class FeedValuesTests(unittest.TestCase):
             CsvExportSettingsVO(include_header=1)
         with self.assertRaises(InvalidFeedValueError):
             XmlExportSettingsVO(root_name="catalog")
-        for formats in (
-            (),
-            (CsvExportSettingsVO(), CsvExportSettingsVO()),
-            (CsvExportSettingsVO(delimiter=";"), CsvExportSettingsVO(delimiter=",")),
-            (
-                XmlExportSettingsVO(root_name=ExportNameVO("offers")),
-                XmlExportSettingsVO(root_name=ExportNameVO("catalog")),
-            ),
-            (ExportFormat.CSV,),
-            ("csv",),
-            ({"format": "csv"},),
-            (CsvExportSettingsVO(), ExportFormat.XML),
+        for format_settings in (
             None,
             "csv",
+            ExportFormat.CSV,
+            {},
+            {"format": "csv"},
+            (),
+            [],
+            (CsvExportSettingsVO(),),
+            [CsvExportSettingsVO(), XmlExportSettingsVO()],
+            FeedProductMode.VARIABLE_TO_SINGLE,
         ):
             with (
-                self.subTest(formats=formats),
+                self.subTest(format_settings=format_settings),
                 self.assertRaises(InvalidFeedValueError),
             ):
-                FeedExportSettingsVO(formats=formats)
-        with self.assertRaises(DefinitionStructureLimitExceededError):
-            FeedExportSettingsVO(
-                formats=(
-                    CsvExportSettingsVO(),
-                    XmlExportSettingsVO(),
-                    CsvExportSettingsVO(),
-                )
-            )
+                FeedExportSettingsVO(format_settings=format_settings)
+        with self.assertRaisesRegex(TypeError, "format_settings"):
+            FeedExportSettingsVO()
         with self.assertRaises(InvalidFeedValueError):
-            FeedExportSettingsVO(validation_policy="STRICT")
+            FeedExportSettingsVO(
+                format_settings=CsvExportSettingsVO(), validation_policy="STRICT"
+            )
         with self.assertRaises(InvalidFeedValueError):
             FieldExportSettingsVO(ExportNameVO("name"), enabled=1)
 
     def test_format_settings_have_fixed_formats_and_no_parallel_configuration(
         self,
     ) -> None:
-        """Каждый VO определяет формат, а Feed хранит единственный источник настроек."""
-        settings = FeedExportSettingsVO()
-        self.assertEqual(
-            settings.formats, (CsvExportSettingsVO(), XmlExportSettingsVO())
-        )
+        """Feed хранит настройки одного явно выбранного формата, закреплённого классом VO."""
+        settings = FeedExportSettingsVO(format_settings=CsvExportSettingsVO())
+        self.assertEqual(settings.format_settings, CsvExportSettingsVO())
         self.assertEqual(
             {item.name for item in fields(settings)},
-            {"formats", "validation_policy", "product_mode"},
+            {"format_settings", "validation_policy", "product_mode"},
         )
         for constructor, expected_format, other_format in (
             (CsvExportSettingsVO, ExportFormat.CSV, ExportFormat.XML),
@@ -1136,20 +1154,24 @@ class FeedValuesTests(unittest.TestCase):
         for name, definition in (
             ("csv", CsvExportSettingsVO()),
             ("xml", XmlExportSettingsVO()),
+            ("formats", (CsvExportSettingsVO(), XmlExportSettingsVO())),
         ):
             self.assertFalse(hasattr(settings, name))
-            with self.assertRaises(TypeError):
-                FeedExportSettingsVO(**{name: definition})
+            with self.assertRaisesRegex(TypeError, name):
+                FeedExportSettingsVO(
+                    format_settings=CsvExportSettingsVO(), **{name: definition}
+                )
 
-    def test_selected_format_configurations_survive_create_and_restore(self) -> None:
-        """Сохраняет один либо два формата, их параметры и заданный порядок."""
-        csv = CsvExportSettingsVO(delimiter=";", include_header=False)
-        xml = XmlExportSettingsVO(
-            root_name=ExportNameVO("offers"), item_name=ExportNameVO("offer")
-        )
-        for formats in ((csv,), (xml,), (xml, csv)):
-            with self.subTest(formats=formats):
-                settings = FeedExportSettingsVO(formats=formats)
+    def test_selected_format_configuration_survives_create_and_restore(self) -> None:
+        """Явный CSV либо XML сохраняет все параметры через обе фабрики без подмены."""
+        for format_settings in (
+            CsvExportSettingsVO(delimiter=";", include_header=False),
+            XmlExportSettingsVO(
+                root_name=ExportNameVO("offers"), item_name=ExportNameVO("offer")
+            ),
+        ):
+            with self.subTest(format_settings=format_settings):
+                settings = FeedExportSettingsVO(format_settings=format_settings)
                 created = feed(export_settings=settings)
                 restored = Feed.restore(
                     identifier=created.id,
@@ -1163,24 +1185,22 @@ class FeedValuesTests(unittest.TestCase):
                 )
                 self.assertEqual(restored, created)
                 for result in (created, restored):
-                    self.assertEqual(result.export_settings.formats, formats)
+                    self.assertIs(
+                        result.export_settings.format_settings, format_settings
+                    )
                     self.assertEqual(result.export_settings, settings)
                     self.assertIs(
                         result.export_settings.product_mode,
                         FeedProductMode.VARIABLE_TO_SINGLE,
                     )
 
-    def test_nested_format_settings_and_collection_are_immutable(self) -> None:
-        """Замораживает список форматов и не даёт менять вложенные настройки."""
+    def test_nested_single_format_settings_are_immutable(self) -> None:
+        """Не даёт заменить выбранный формат или изменить собственные настройки его VO."""
         csv = CsvExportSettingsVO(delimiter=";")
         xml = XmlExportSettingsVO()
-        formats = [csv, xml]
-        settings = FeedExportSettingsVO(formats=formats)
-        formats.clear()
-        self.assertIsInstance(settings.formats, tuple)
-        self.assertEqual(settings.formats, (csv, xml))
+        settings = FeedExportSettingsVO(format_settings=csv)
         for value, attribute, replacement in (
-            (settings, "formats", (xml,)),
+            (settings, "format_settings", xml),
             (csv, "delimiter", ","),
             (xml, "root_name", ExportNameVO("offers")),
         ):
@@ -1197,11 +1217,14 @@ class FeedValuesTests(unittest.TestCase):
             {"VARIABLE_TO_SINGLE": FeedProductMode.VARIABLE_TO_SINGLE},
         )
         self.assertEqual(FeedProductMode.VARIABLE_TO_SINGLE.value, "VARIABLE_TO_SINGLE")
-        settings = FeedExportSettingsVO()
+        settings = FeedExportSettingsVO(format_settings=CsvExportSettingsVO())
         self.assertIs(settings.product_mode, FeedProductMode.VARIABLE_TO_SINGLE)
         self.assertEqual(
             settings,
-            FeedExportSettingsVO(product_mode=FeedProductMode.VARIABLE_TO_SINGLE),
+            FeedExportSettingsVO(
+                format_settings=CsvExportSettingsVO(),
+                product_mode=FeedProductMode.VARIABLE_TO_SINGLE,
+            ),
         )
         with self.assertRaises(FrozenInstanceError):
             settings.product_mode = "VARIABLE_TO_SINGLE"
@@ -1230,7 +1253,9 @@ class FeedValuesTests(unittest.TestCase):
                 self.subTest(product_mode=product_mode),
                 self.assertRaises(InvalidFeedValueError),
             ):
-                FeedExportSettingsVO(product_mode=product_mode)
+                FeedExportSettingsVO(
+                    format_settings=CsvExportSettingsVO(), product_mode=product_mode
+                )
 
 
 class FeedCalculationStructureTests(unittest.TestCase):
@@ -1392,7 +1417,9 @@ class FeedCalculationStructureTests(unittest.TestCase):
                 code=FeedCodeVO("restored"),
                 status=FeedStatus.DRAFT,
                 schema=FeedSchemaVO((reconstituted,)),
-                export_settings=FeedExportSettingsVO(),
+                export_settings=FeedExportSettingsVO(
+                    format_settings=CsvExportSettingsVO()
+                ),
                 created_at=NOW,
                 updated_at=NOW,
             )
