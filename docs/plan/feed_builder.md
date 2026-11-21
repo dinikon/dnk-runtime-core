@@ -9,8 +9,10 @@
 Документ фиксирует согласованную целевую модель и последовательность реализации.
 Все поля пользовательские и равноправные; обычный Feed начинается с пустой схемы.
 Наценки/условия/формулы находятся в определении конкретного денежного поля.
-Первый срез — только объекты Domain Feed с create/restore; остальные разделы
-описывают будущие срезы. Этот план не означает наличие реализованного модуля.
+Реализован объектный Domain-срез: Feed, FeedPublication, FeedGeneration и
+FeedAccessKey с create/restore и проверками. Бизнес-методы, ревизии схем,
+репозитории, исполнение генерации и остальные слои пока не реализуются.
+Разделы будущего поведения и SQL/API ниже не означают наличие этих возможностей.
 
 ## **1. Цель, границы и порядок реализации**
 
@@ -90,12 +92,32 @@ VO, enums, чистыми структурными Policy, ошибками со
 создать их заготовки в первом срезе. Структурные Policy проверяют определения
 при конструировании, но не исполняют условия, формулы или жизненный цикл Feed.
 
+#### **1.3.1. Текущий срез: Publication, Generation и AccessKey**
+
+После объектов Feed добавлены три самостоятельных Aggregate Root:
+FeedPublication, FeedGeneration и FeedAccessKey. Их фабрики create/restore
+проверяют только значения и согласованность сохранённого состояния.
+FeedArtifact — зависимая Entity генерации; каждый VO находится в своём файле.
+
+Ревизии, отдельный контейнер схем и методы изменения объектов не создаются.
+Генерация хранит полный GenerationDefinitionSnapshotVO текущих FeedSchemaVO и
+FeedExportSettingsVO; ссылки schema_revision_id/schema_version/activation_id
+не нужны для конструирования. Положительный request_sequence обозначает порядок
+запросов сборки, а не версию схемы; атомарное выделение появится с хранением.
+
+Feed остаётся в существующем контракте. Коллекции публикаций, генераций и ключей
+в него не добавляются. Ключи имеют самостоятельный жизненный цикл и ссылаются
+на Feed по ID. Нет evaluator, публикации схем, запуска/повтора сборки,
+выпуска/отзыва секретов, событий, repositories, SQL, Application, API или UI.
+Исторические версии/draft в следующих разделах — отложенное поведение,
+которое потребуется отдельно согласовать перед реализацией.
+
 ### **1.4. Границы контекстов**
 
 ```text
 Catalog: простые товары, родители/варианты, эффективный контент, regular/sale price, категории и ревизии
 Supplier Sourcing: явно выбранное закупочное предложение
-Currency: неизменяемый FX snapshot
+Поставщик FX: неизменяемый snapshot через FxRateSnapshotPort; интеграция отложена
 reference_data: поддерживаемые коды локалей и валют
         ↓ публичные Application Ports
 FeedBuilder: схема → условный расчёт поля / override → проекция
@@ -127,7 +149,7 @@ field_id/rule_id внутри конкретного Feed, а не живую с
 
 | Вопрос | Решение |
 | --- | --- |
-| Корни агрегатов целевого модуля | Feed, FeedPublication, FeedGeneration |
+| Корни агрегатов целевого модуля | Feed, FeedPublication, FeedGeneration, FeedAccessKey |
 | Что хранит Feed | Общую пользовательскую схему предложений и настройки экспорта |
 | Product Mode MVP | Только VARIABLE_TO_SINGLE, по умолчанию в export_settings |
 | Состав выгрузки | Явно выбранные простые товары и конкретные варианты через FeedPublication |
@@ -157,11 +179,11 @@ Override — индивидуальное значение конкретной 
 [frontend](../architecture/frontend.md). Требования проверяются по объёму среза:
 
 1. Структура: модуль → слой → Aggregate Root → ответственность. Дочерние Entity
-   поля/правила не получают самостоятельных repositories. Первый срез содержит
-   только domain/feed и применимые тесты, без пустых заготовок других слоёв.
+   поля/правила/артефакт не получают самостоятельных repositories. Текущий срез
+   содержит domain/{feed,publication,generation,access_key} и тесты без других слоёв.
 2. Domain — обычный Python без FastAPI, Pydantic, SQLAlchemy, I/O и logger.
    Фабрики агрегата/Entity create/restore явные; __post_init__ допустим только VO.
-   В первом срезе других методов поведения нет. В последующих срезах состояние
+   В объектном срезе других методов поведения нет. В последующих срезах состояние
    меняется через domain-методы, не присваивания из Application.
 3. VO неизменяемы глубоко: typed tuples/frozensets и вложенные VO вместо mutable
    dict/list. Каждый VO — отдельный файл; package __init__.py пустые.
@@ -197,34 +219,35 @@ Override — индивидуальное значение конкретной 
 
 ```text
 src/modules/feed_builder/
-  domain/{feed,publication,generation}/
-  application/{feed,publication,generation}/
+  domain/{feed,publication,generation,access_key}/
+  application/{feed,publication,generation,access_key}/
     command/<scenario>/{command.py,handler.py,dto.py}
     query/<scenario>/{query.py,handler.py,dto.py}
     port/
   application/service/
-  infrastructure/{feed,publication,generation}/persistence/
+  infrastructure/{feed,publication,generation,access_key}/persistence/
   infrastructure/persistence/models/<table>.py
-  infrastructure/{catalog,supplier_sourcing,currency,storage,serialization}/
-  presentation/{feed,publication,generation}/
+  infrastructure/{catalog,supplier_sourcing,fx,storage,serialization}/
+  presentation/{feed,publication,generation,access_key}/
     router.py, depends.py
     http/{controller,request,response}/<scenario>.py
   presentation/depends/
 ```
 
-Первый срез создаёт только файлы Domain, перечисленные в разделе 3.4.
+Объектный срез создаёт только Domain из разделов 3.4 и 3.7–3.10.
 Остальные каталоги появляются по факту реализации. Общие UoW/jobs/events/storage
 механизмы переиспользуются; файловая структура не определяет границы агрегатов.
 
-## **3. Domain: объекты первого среза и будущие границы**
+## **3. Domain: текущие объекты и будущие границы**
 
 ### **3.1. Aggregate Roots целевого модуля**
 
 | Корень | Ответственность | Когда реализуется |
 | --- | --- | --- |
 | Feed | Определения полей, расчётов и настройки схемы/экспорта | Объекты — первый срез; поведение — следующие |
-| FeedPublication | Привязка товара, участие, индивидуальные overrides | После Domain Feed |
-| FeedGeneration | Выполнение, snapshot контекста, issues и артефакты | Экспортный срез |
+| FeedPublication | Привязка позиции, участие, индивидуальные overrides | Объекты и проверки — текущий срез; поведение — позже |
+| FeedGeneration | Снимок определения, состояние сборки, контекст и один артефакт | Объекты и проверки — текущий срез; выполнение — позже |
+| FeedAccessKey | Состояние отдельного ключа чтения публичного файла | Объекты и проверки — текущий срез; выпуск/отзыв — позже |
 
 FieldDefinition и ConditionalPriceRule — Entity внутри Feed. Отдельного корня
 для наценок нет. FeedSchemaVO и настройки — VO. Проекция публикации — read model.
@@ -532,8 +555,8 @@ MoneyVO хранит итоговую сумму/валюту, не формул
 Будущие domain-операции владеют изменениями полей/правил и публикацией;
 ни Application, ни дочерний объект не обходят корень. Конкретные методы
 добавляются вместе с поведением соответствующего среза, не заготовками сейчас.
-FeedGeneration/FeedPublication также получают собственные create/restore и методы
-только в своих срезах. row_version не означает commit Domain.
+FeedGeneration/FeedPublication/FeedAccessKey уже имеют собственные create/restore;
+методы поведения появятся в отдельных срезах. row_version не означает commit Domain.
 
 Жизненный цикл следующего среза: первая публикация переводит DRAFT в ACTIVE;
 ACTIVE можно приостановить и затем возобновить через PAUSED. Новая публикация
@@ -542,10 +565,14 @@ ACTIVE можно приостановить и затем возобновит�
 выдачу, архивация отключает public route в общей транзакции и сохраняет историю.
 UpdateFeedSettings передаёт желаемый status, переход проверяет Domain.
 
-### **3.7. Будущая FeedPublication и готовность**
+### **3.7. FeedPublication и будущая готовность**
 
-Publication хранит id, feed_id, catalog_item_id, catalog_variant_id,
-status, overrides по field_id, version и timestamps. Ссылка на Catalog однозначна:
+Publication хранит id: FeedPublicationIdVO, feed_id: FeedIdVO,
+product_reference: CatalogProductReferenceVO, status: PublicationStatus,
+overrides: tuple[FieldOverrideVO, ...], created_at и updated_at.
+Версии конкурентного сохранения добавляются с поведением/хранением.
+CatalogProductReferenceVO содержит catalog_item_id: EntityIdVO и
+catalog_variant_id: EntityIdVO | None. Ссылка на Catalog однозначна:
 
 - Для SIMPLE: catalog_item_id — ID простого товара, catalog_variant_id=None.
 - Для VARIANT: catalog_item_id — ID родительского VARIABLE, catalog_variant_id —
@@ -560,8 +587,23 @@ FeedPublication — отдельный Aggregate Root со ссылкой на F
 mode=MANUAL и value; отсутствие записи включает автоматическое определение поля.
 Для MANUAL-поля отсутствие override означает отсутствие значения.
 
+FieldOverrideVO содержит field_id: FieldIdVO и value: str | MoneyVO | None.
+Единственный mode=OverrideMode.MANUAL фиксирован ClassVar и не передаётся
+конструктору. Явный None не равен отсутствию записи: автоматический источник
+не подменяет явно пустое значение. Пустой/многострочный текст допустим;
+совместимость с required/типом/валютой схемы проверяется будущим поведением.
+
+create требует ID, feed_id, ссылку и now, создаёт ENABLED без overrides.
+restore сохраняет все свойства, требует типизированный статус, timezone-aware
+даты с updated_at >= created_at, уникальные field_id и не более MAX_FIELDS
+overrides. Входной list/tuple копируется в tuple. Restore не требует текущую
+схему: после её изменения исторический override не теряется и не удаляется молча.
+Существование Catalog/Feed, принадлежность варианта и уникальность публикаций
+между агрегатами будут проверяться через Application/хранение, без I/O в Domain.
+
 PublicationStatus: DRAFT / ENABLED / PAUSED / ARCHIVED.
 Readiness: READY / NEEDS_INPUT / INVALID / STALE. Это разные измерения.
+Readiness и проекции в текущем срезе не создаются.
 
 - NEEDS_INPUT: нет обязательного ручного/текстового значения, перевода либо
   MANUAL_REQUIRED требует ручного перевода, при отсутствии более серьёзных ошибок.
@@ -575,17 +617,135 @@ Readiness: READY / NEEDS_INPUT / INVALID / STALE. Это разные измер
 расчёта этого поля. С STRICT ошибка ENABLED-публикации блокирует весь новый файл;
 молчаливое исключение товаров запрещено.
 
-### **3.8. Будущая FeedGeneration**
+### **3.8. FeedGeneration без ревизий схем**
 
-Фиксирует id, feed_id, schema_version, configuration_version, request_sequence,
-as_of, fx_rate_snapshot_id, export_settings_snapshot, calculation_engine_version,
-attempt_token/lease, статусы PENDING → RUNNING → SUCCEEDED / FAILED,
-счётчики, issues и артефакты. Engine version — версия семантики интерпретатора,
-не отдельная ценовая политика; старые определения не переинтерпретируются молча.
+| Поле | Тип / смысл |
+| --- | --- |
+| id, feed_id | FeedGenerationIdVO, FeedIdVO |
+| request_sequence | GenerationSequenceVO: положительное целое, не версия схемы |
+| definition_snapshot | GenerationDefinitionSnapshotVO |
+| status | GenerationStatus: PENDING / RUNNING / SUCCEEDED / FAILED |
+| calculation_context | GenerationCalculationContextVO или None до фиксации |
+| attempt_count | Неотрицательное целое, bool не допускается |
+| current_attempt | GenerationAttemptVO только для RUNNING |
+| counts | GenerationCountsVO |
+| failure | GenerationFailureVO только для FAILED |
+| artifact | FeedArtifact только для SUCCEEDED |
+| requested_at, started_at, finished_at | Timezone-aware даты, начало/завершение могут отсутствовать |
+
+GenerationDefinitionSnapshotVO хранит schema: FeedSchemaVO,
+export_settings: FeedExportSettingsVO и
+calculation_engine_version: CalculationEngineVersionVO.
+Engine version — положительная версия семантики интерпретатора, не ревизия схемы
+и не отдельная ценовая политика. Снимок содержит VARIABLE_TO_SINGLE и один
+обязательный format_settings CSV либо XML. Менять его текущими настройками Feed
+при повторе нельзя. Поля/AST проверяются FeedSchemaStructurePolicy из фабрики
+генерации: одинаковые правила состава применяются и в Feed.restore, без
+создания временного Feed и без переноса инвариантов в VO или mapper.
+
+create требует identifier/feed_id/request_sequence/definition_snapshot/now
+и создаёт PENDING: attempt_count=0, нулевые counts, остальные результаты None.
+Пустая схема допустима как снимок объекта; разрешение фактического запуска
+относится к будущему поведению, а не к конструированию.
+
+restore проверяет согласованность:
+
+- PENDING не содержит начатой работы, контекста, попытки, ошибки или файла.
+- RUNNING требует started_at и current_attempt; finished_at/итоговый файл/ошибка
+  отсутствуют. Номер текущей попытки равен attempt_count.
+- SUCCEEDED требует started_at/finished_at, расчётный контекст, полный учёт
+  позиций и один артефакт. При STRICT rejected_items=0.
+- FAILED требует finished_at и failure, не содержит current_attempt или
+  итогового артефакта. Допустим сбой до первого захвата и частичный прогресс.
+- attempt_count > 0 соответствует наличию started_at. Даты выполнения не раньше
+  requested_at; завершение не раньше начала. as_of находится в интервале выполнения.
+- Учтённые позиции не превышают total_items; до расчёта позиций нужен контекст.
+  До первой попытки все counts нулевые.
+- Формат и MIME артефакта соответствуют снимку; время файла находится между
+  началом и завершением. Вложенная Entity повторно проверяется через restore.
+
+GenerationAttemptVO: number, GenerationAttemptTokenVO, claimed_at, lease_until.
+Номер положительный, lease_until > claimed_at, claimed_at не раньше started_at.
+started_at сохраняет начало первой попытки, а не заменяется временем retry.
+Восстановление истёкшего lease допустимо: Domain не обращается к текущим часам.
+В завершённых состояниях current_attempt=None, число попыток сохраняется.
+
+GenerationCalculationContextVO: as_of и необязательный FxRateSnapshotVO.
+Снимок курсов содержит source_snapshot_id: FxRateSnapshotIdVO, captured_at
+и tuple[FxRateVO, ...]. Каждый FxRateVO содержит разные source_currency и
+target_currency, конечный положительный Decimal rate без округления MoneyVO.
+Направленные пары уникальны; исходный список копируется в tuple.
+Нет валютных зависимостей — fx_rate_snapshot=None; новый справочник курсов
+FeedBuilder не создаёт. Фиксация/получение контекста и retry появятся позже.
+
+GenerationCountsVO содержит total_items, exported_items и rejected_items.
+exported_items — подготовленные корректные экспортные записи, включая staging;
+это не доказательство публичной выдачи файла. FAILED может сохранить частичный
+прогресс. GenerationFailureVO содержит стабильный code в lower_snake_case
+до 100 символов и безопасный message до 1000 символов без управляющих знаков.
+Очистка внешних исключений — ответственность вызывающего слоя.
+
+FeedArtifact — Entity внутри FeedGeneration с create/restore:
+FeedArtifactIdVO, ExportFormat, ArtifactStorageKeyVO (до 1024 символов),
+ArtifactContentTypeVO (text/csv либо application/xml без параметров),
+ArtifactChecksumVO (64 lowercase hex символа SHA-256), неотрицательный
+size_bytes и created_at. В ней нет содержимого файла, публичного URL или I/O.
+Формат и базовый MIME согласованы; нулевой размер допустим.
+Подробные issues по всем публикациям и staging не являются коллекциями агрегата.
 
 Успех генерации и активация — разные действия. Изменившаяся схема/конфигурация
 или более новая активная sequence препятствуют активации старого результата.
 Повтор использует прежние as_of/FX/схему, новая конфигурация требует нового задания.
+Методы переходов, выделение sequence, fencing/heartbeat, активация и сравнение
+конфигураций появятся отдельным срезом; сейчас эти процессы не исполняются.
+
+### **3.9. FeedAccessKey**
+
+Самостоятельный Aggregate Root: id: FeedAccessKeyIdVO, feed_id: FeedIdVO,
+token_hash: AccessTokenHashVO, status: AccessKeyStatus, created_at, revoked_at.
+Feed не хранит коллекцию ключей. Ключ предназначен только для чтения публичного
+файла одного фида, не для управления Feed или запуска сборки.
+
+AccessKeyStatus: ACTIVE / REVOKED. create принимает готовые ID/digest/now,
+создаёт ACTIVE с revoked_at=None. restore сохраняет все поля; ACTIVE запрещает
+revoked_at, REVOKED требует timezone-aware дату не раньше created_at.
+AccessTokenHashVO содержит только immutable bytes длиной 32 (SHA-256 digest);
+значение исключено из repr. Секрет не хранится и не восстанавливается.
+Генерация секрета, хеширование и проверка находятся за пределами Domain-среза.
+Будущая ротация атомарно создаёт новый ключ и отзывает старый, а не меняет digest
+существующего. Публичный tenant route registry остаётся Infrastructure/read-side.
+
+### **3.10. Файлы текущего объектного среза**
+
+```text
+domain/
+  error.py, validation.py
+  feed/policy/schema_structure.py
+  publication/
+    aggregate.py, error.py
+    enum/{publication_status,override_mode}.py
+    value_object/{feed_publication_id,catalog_product_reference,field_override}.py
+  generation/
+    aggregate.py, error.py
+    enum/generation_status.py
+    entity/feed_artifact.py
+    value_object/
+      feed_generation_id.py, feed_artifact_id.py, generation_attempt_token.py
+      generation_sequence.py, calculation_engine_version.py
+      generation_definition_snapshot.py, generation_calculation_context.py
+      generation_attempt.py, generation_counts.py, generation_failure.py
+      fx_rate.py, fx_rate_snapshot.py, fx_rate_snapshot_id.py
+      artifact_storage_key.py, artifact_content_type.py, artifact_checksum.py
+  access_key/
+    aggregate.py, error.py
+    enum/access_key_status.py
+    value_object/{feed_access_key_id,access_token_hash}.py
+```
+
+Общий FeedBuilderDomainError объединяет ошибки четырёх корней; контекстные
+ошибки остаются в соответствующих каталогах. Каждый VO имеет собственный файл,
+package __init__.py пустые. Агрегаты и Entity frozen в объектном срезе;
+изменения состояния через replace/присваивание из Application не вводятся.
 
 ## **4. Декларативная схема, источники и валидация**
 
@@ -1093,13 +1253,10 @@ CREATE TABLE fb_generations (
     feed_id UUID NOT NULL
         REFERENCES fb_feeds(id),
 
-    schema_version INTEGER NOT NULL,
-    configuration_version BIGINT NOT NULL,
+    definition_snapshot JSONB NOT NULL,
     fx_rate_snapshot_id UUID NULL,
     fx_rate_snapshot JSONB NULL,
     as_of TIMESTAMPTZ NULL,
-    calculation_engine_version INTEGER NOT NULL,
-    export_settings_snapshot JSONB NOT NULL,
     request_sequence BIGINT NOT NULL,
 
     status TEXT NOT NULL
@@ -1110,7 +1267,9 @@ CREATE TABLE fb_generations (
 
     attempt_count INTEGER NOT NULL DEFAULT 0,
     attempt_token UUID NULL,
+    claimed_at TIMESTAMPTZ NULL,
     lease_until TIMESTAMPTZ NULL,
+    failure JSONB NULL,
 
     total_items INTEGER NOT NULL DEFAULT 0,
     exported_items INTEGER NOT NULL DEFAULT 0,
@@ -1121,10 +1280,7 @@ CREATE TABLE fb_generations (
     finished_at TIMESTAMPTZ NULL,
 
     UNIQUE (feed_id, request_sequence),
-    UNIQUE (feed_id, id),
-
-    FOREIGN KEY (feed_id, schema_version)
-        REFERENCES fb_schema_versions(feed_id, version)
+    UNIQUE (feed_id, id)
 );
 
 CREATE TABLE fb_generation_issues (
@@ -1183,6 +1339,16 @@ REFERENCES fb_generations(feed_id, id);
 транзакции с проверкой attempt_token; временные файлы попыток не создают второй
 артефакт той же генерации.
 
+Это целевое хранение следующего среза, не созданная миграция.
+definition_snapshot сохраняет полную schema, export_settings и
+calculation_engine_version из GenerationDefinitionSnapshotVO, без обязательного
+FK к версии схемы. as_of и fx_rate_snapshot восстанавливаются в единый
+GenerationCalculationContextVO; attempt_count/attempt_token/claimed_at/lease_until —
+в число попыток и текущий GenerationAttemptVO. После завершения токен и lease
+очищаются, число попыток сохраняется. failure восстанавливается в GenerationFailureVO.
+Версии конкурентного сохранения и происхождение будущей опубликованной схемы
+добавятся только вместе с соответствующим поведением.
+
 При ошибке новой генерации указатель не изменяется.
 
 ### **5.7. Доступ по URL**
@@ -1194,12 +1360,17 @@ CREATE TABLE fb_access_keys (
     feed_id UUID NOT NULL
         REFERENCES fb_feeds(id),
 
-    token_hash BYTEA NOT NULL,
+    token_hash BYTEA NOT NULL CHECK (octet_length(token_hash) = 32),
 
-    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    status TEXT NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'REVOKED')),
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    revoked_at TIMESTAMPTZ NULL
+    revoked_at TIMESTAMPTZ NULL,
+    CHECK (
+        (status = 'ACTIVE' AND revoked_at IS NULL)
+        OR (status = 'REVOKED' AND revoked_at >= created_at AND revoked_at IS NOT NULL)
+    )
 );
 
 ```
@@ -1207,6 +1378,10 @@ CREATE TABLE fb_access_keys (
 В `public` schema создаётся дополнительная таблица `feed_public_routes` с полями `public_id`, `tenant_id`, `feed_id`, `status`.
 
 Она позволяет по публичному URL найти нужный tenant, не допуская прямого выбора SQL-схемы из пользовательского ввода.
+fb_access_keys сохраняет отдельный агрегат FeedAccessKey. Выпуск секрета,
+вычисление SHA-256 digest, однократная выдача и проверка доступа появятся
+в Application/адаптерах. Сохранение ключа не требует загрузки всего Feed;
+проверка существования фида и прав выполняется будущим сценарием.
 
 ### **5.8. Контекст расчёта и ревизии источников**
 
@@ -1225,12 +1400,12 @@ Catalog/категорий/закупочных источников. valid_unti
 идентификатор выбранного закупочного предложения, нужные временные границы,
 применённый rule_id и FX snapshot. Чувствительные суммы не копируются в общие логи.
 
-Книга курсов принадлежит Currency; FeedBuilder использует публичный snapshot
-контракт существующего модуля, не создаёт свой справочник. Snapshot содержит
-направление котировки, валюты, точный курс, источник и время действия.
-Текущая Currency-книга не является историей котировок. Поэтому генерация
-сохраняет также fx_rate_snapshot JSONB с использованным набором/metadata для retry;
-это снимок контекста конкретного задания, не управляемый FeedBuilder справочник.
+FeedBuilder получает курсы через FxRateSnapshotPort, не создавая свой справочник.
+Модуль Currency удалён; поставщик и его Application-контракт должны быть определены
+отдельно до реализации конвертации. Snapshot содержит направление котировки,
+валюты, точный курс, источник и время действия. Генерация сохраняет также
+fx_rate_snapshot JSONB с использованным набором/metadata для retry; это снимок
+контекста конкретного задания, не управляемый FeedBuilder справочник.
 Контекст фиксируется до первого расчёта и сохраняется для retry. Отсутствующий курс
 не подставляется устаревшим/условным значением. Для полностью ручной/одновалютной
 генерации FX snapshot может не требоваться.
@@ -1246,9 +1421,10 @@ Application-классы, порты и репозитории не создаю
 
 ### **6.1. Контракты хранения и внешних данных**
 
-Write contracts FeedRepositoryProtocol, FeedPublicationRepositoryProtocol и
-FeedGenerationRepositoryProtocol принадлежат Domain своих корней и работают
-с агрегатами. Draft/версии/правила сохраняются через границу Feed; репозитории
+Write contracts FeedRepositoryProtocol, FeedPublicationRepositoryProtocol,
+FeedGenerationRepositoryProtocol и FeedAccessKeyRepositoryProtocol принадлежат
+Domain своих корней и работают с агрегатами. Draft/версии/правила сохраняются
+через границу Feed; репозитории
 для каждого VO, поля, правила или таблицы не создаются.
 
 | Application Port / Service | Назначение |
@@ -1256,6 +1432,7 @@ FeedGenerationRepositoryProtocol принадлежат Domain своих кор
 | FeedQueryRepositoryProtocol | Списки/детали Feed и метаданные схем |
 | FeedPublicationQueryRepositoryProtocol | Карточки, страницы, фильтры, статистика |
 | FeedGenerationQueryRepositoryProtocol | История, issues и артефакты |
+| FeedAccessKeyQueryRepositoryProtocol | Метаданные ключей без digest и секрета |
 | SchemaVersionReaderProtocol | Immutable draft/опубликованные определения |
 | PublicationProjectionPort | Условная запись и инвалидация проекций |
 | CatalogProductReader | Batch простые позиции/выбранные варианты, принадлежность родителю, эффективный контент, regular/sale price, интервалы акций и ревизии |
@@ -1275,7 +1452,7 @@ FeedGenerationRepositoryProtocol принадлежат Domain своих кор
 
 Source adapter скрывает конкретный модуль и возвращает immutable snapshot,
 не ORM/чужой агрегат. Метаданные вычислений не дают права читать закрытую цену.
-Пакеты Catalog/Currency/Supplier Sourcing не импортируются во внутренний Domain Feed.
+Пакеты Catalog, Supplier Sourcing и поставщика FX не импортируются во внутренний Domain Feed.
 Если необходимого публичного чтения ещё нет, согласовать минимальный owner-контракт;
 это не требует создания отдельного модуля прайс-листов.
 
@@ -1832,7 +2009,7 @@ class FeedSerializer(Protocol):
         ...
 ```
 
-Application берёт один export_settings_snapshot.format_settings, выбирает
+Application берёт один definition_snapshot.export_settings.format_settings, выбирает
 сериализатор по фиксированному settings.format и передаёт ему этот VO. CSV получает
 CsvExportSettingsVO, XML — XmlExportSettingsVO; неподдержанный тип отклоняется.
 В Domain и первом срезе не создаются registry/serializer заготовки.
@@ -1928,7 +2105,7 @@ Serializer не выполняет арифметику, дополнитель�
 ### **11.1. Полный процесс**
 
 ```text
-RequestFeedGeneration: PENDING + schema/config/export/engine versions
+RequestFeedGeneration: PENDING + полный снимок schema/export settings/engine version
   → claim: RUNNING, attempt_token, lease
   → однократная фиксация as_of и нужного FX-контекста
   → выбранные ENABLED-публикации SIMPLE/VARIANT по снимку Product Mode
@@ -1944,9 +2121,9 @@ RequestFeedGeneration: PENDING + schema/config/export/engine versions
 ### **11.2. Запрос и фиксированный контекст**
 
 В короткой общей транзакции Request проверяет Feed/опубликованную схему,
-выделяет sequence через Domain и сохраняет FeedGeneration PENDING со схемой,
-configuration_version, export_settings_snapshot и calculation_engine_version.
-export_settings_snapshot содержит явный product_mode=VARIABLE_TO_SINGLE и один
+выделяет sequence через Domain и сохраняет FeedGeneration PENDING с полным
+GenerationDefinitionSnapshotVO схемы, настроек и calculation_engine_version.
+definition_snapshot.export_settings содержит явный product_mode=VARIABLE_TO_SINGLE и один
 format_settings с фиксированным format и всеми параметрами выбранного VO.
 Worker использует снимок задания, preview — выбранные настройки Feed;
 оба вызывают общую стратегию. Retry использует сохранённый код, а не текущий
@@ -1963,10 +2140,10 @@ RUNNING получает уникальный attempt_token/lease. При вне
 
 До первого resolve фиксируются as_of и валютный контекст. Для валютных зависимостей
 используется один immutable snapshot, а не текущий курс на каждую позицию.
-Существующая Currency-книга хранит текущие котировки, поэтому для retry недостаточно
-одного ID: используемый набор и metadata копируются в fx_rate_snapshot JSONB
-самой генерации. Это исторический контекст задания, не второй справочник валют.
-FX snapshot ID сохраняется как происхождение; прямой FK/чтение ORM Currency запрещены.
+Для retry недостаточно одного ID внешнего снимка: используемый набор и metadata
+копируются в fx_rate_snapshot JSONB самой генерации. Это исторический контекст
+задания, не второй справочник валют. FX snapshot ID сохраняется как происхождение;
+прямой FK и чтение ORM поставщика FX запрещены.
 
 Первый успешный захват расчётного контекста сохраняет as_of/FX атомарно до записи
 результатов. Retry использует их же. Для полностью ручных/одновалютных источников
@@ -1976,7 +2153,7 @@ FX snapshot ID сохраняется как происхождение; пря�
 
 ### **11.3. Выполнение и транзакционные границы**
 
-Worker читает точную версию схемы/AST/закупочных bindings, не текущий draft.
+Worker читает точный снимок схемы/AST/закупочных bindings из задания, не текущий draft.
 Пакеты ENABLED идут в стабильном keyset-порядке, начальный размер 500.
 Потребности контента/цен/категорий/закупки собираются пакетно, без N+1 по полям
 и узлам. Внутри одного вычисления наценка не применяется повторно; разные поля
@@ -2004,7 +2181,9 @@ UoW во внешнем worker bootstrap. Долгое чтение/расчёт
 
 - она принадлежит Feed и имеет SUCCEEDED;
 - единственный требуемый артефакт сохранён, проверен и соответствует формату снимка;
-- schema_version и configuration_version всё ещё текущие;
+- схема и настройки definition_snapshot соответствуют текущему определению
+  для выдачи; дополнительные версии конкурентной конфигурации будут введены
+  вместе с поведением Feed, а не с текущими фабриками объектов;
 - Feed допускает активацию, sequence не старее уже активной;
 - попытка не потеряла право завершения, публикация результата идемпотентна.
 
@@ -2033,9 +2212,13 @@ MVP не имеет единого transaction snapshot всех независ�
 
 Временные технические сбои повторяются с лимитом/backoff, ошибки бизнес-валидации
 не ретраятся автоматически. Cleanup удаляет незавершённый staging/осиротевшие файлы
-по retention с проверкой активных попыток/ссылок. Counts: total_items — обработано,
-rejected_items — позиции с blocking issues, exported_items — записи в полном
-успешном наборе; при FAILED exported_items=0. Первый срез не реализует эти процессы.
+по retention с проверкой активных попыток/ссылок. Counts: total_items — выбранное
+количество позиций прохода, rejected_items — позиции с blocking issues,
+exported_items — подготовленные корректные записи, включая staging.
+При FAILED частичные счётчики сохраняются для диагностики, но итоговый артефакт
+отсутствует. Счётчик не означает публичную выдачу. В SUCCEEDED учтены все
+выбранные позиции, а STRICT требует rejected_items=0. Объектный срез проверяет
+согласованность этих значений, но не исполняет перечисленные процессы.
 
 ### **11.5. Публичная раздача**
 
@@ -2444,6 +2627,39 @@ Unit-тесты обычного Python без PostgreSQL/FastAPI/HTTP:
 Это критерии именно первого среза. Исполнение if/арифметики и full publish-проверка
 не требуются до реализации соответствующих следующих срезов.
 
+#### **15.1.1. Объекты Publication, Generation и AccessKey**
+
+Тесты test_feed_builder_execution_domain.py дополняют проверки Feed:
+
+- FeedPublication.create создаёт ENABLED без overrides для SIMPLE и конкретного
+  VARIANT; restore сохраняет все поля для каждого статуса.
+- Ссылка требует типизированные различные ID; Domain не импортирует Catalog.
+- Строка, MoneyVO и явный None сохраняются; отсутствующий override не равен None.
+  Неподдержанные значения/повтор field_id/неверные даты отклоняются.
+- Входные списки overrides/FX копируются; изменение списка не меняет объект.
+- FeedGeneration.create формирует PENDING для CSV и XML с полным снимком
+  и режимом VARIABLE_TO_SINGLE. Restore сохраняет каждое поле всех четырёх статусов.
+- Несогласованные попытка/даты/контекст/счётчики/ошибка/файл отклоняются.
+  RUNNING допускает отсутствие ещё не зафиксированного контекста только до
+  обработки позиций. Истёкший lease восстанавливается без чтения часов.
+- Повторная попытка сохраняет прежние as_of и точный Decimal FX; дубли валютных
+  пар, нечисловые/нулевые/отрицательные/неконечные курсы запрещены.
+- SUCCEEDED требует полный STRICT-результат и один файл нужного формата.
+  FAILED сохраняет причину и может сохранять частичный прогресс без итогового файла.
+- Снимок не обходит уникальность полей и проверку Entity FieldDefinition:
+  обе фабрики генерации вызывают FeedSchemaStructurePolicy.
+- FeedArtifact.create/restore сохраняют все метаданные; размер/MIME/checksum/даты
+  и соответствие формата проверяются, файл не читается.
+- FeedAccessKey.create создаёт ACTIVE без revoked_at; restore сохраняет ACTIVE
+  и REVOKED, отвергает несогласованные статусы/даты и невалидный digest.
+  Только immutable bytes длиной 32; digest исключён из repr.
+- Строки/чужие enum вместо enum, сырые структуры вместо VO, bool вместо счётчиков
+  не принимаются. Все ID/время передаются явно.
+- Архитектурные проверки обходят все четыре корня и их зависимые Entity/VO:
+  только create/restore у Aggregate/Entity, __post_init__ только у VO,
+  пустые __init__.py, прямые импорты, аннотации/docstrings, отсутствие I/O,
+  ссылок на чужие Aggregate объекты, ревизий, внешних слоёв и репозиториев.
+
 ### **15.2. Поведение Domain и вычислитель следующих срезов**
 
 | Сценарий | Ожидание |
@@ -2515,7 +2731,7 @@ source IDs/offer IDs/FX snapshots/артефакты. Прямого чтени�
   не допускает второй артефакт той же генерации.
 - VARIABLE_TO_SINGLE даёт одну запись на публикацию без родителя и группировки;
   снимок задания содержит режим, retry не подменяет настройки текущими/defaults.
-- Один as_of, фиксированный FX набор; Currency-книга обновлена — retry не читает
+- Один as_of, фиксированный FX набор; источник курсов обновлён — retry не читает
   новые курсы вместо сохранённого JSONB контекста.
 - Изменён draft — активная схема прежняя; publish другой версии запрещает
   активацию старого результата, прежняя активная выдача сохраняется.
@@ -2584,6 +2800,19 @@ ExportFormat. Feed.create требует export_settings; формат авто�
 events, repository, Application, SQL, API или UI. Не создаются их пустые заготовки.
 Готовность: create/restore и структурные unit-тесты 15.1 проходят без внешних сервисов.
 
+#### **16.1.1. Domain Publication, Generation и AccessKey: текущий срез**
+
+FeedPublication с выбранной позицией/overrides; FeedGeneration с полным снимком,
+попыткой, расчётным контекстом и зависимым FeedArtifact; самостоятельный
+FeedAccessKey с digest и датой отзыва. Только create/restore и проверки.
+Общие ошибки/валидация находятся на уровне Domain; правила структуры схемы
+повторно используются фабриками Feed и FeedGeneration через чистую Policy.
+
+Готовность: все тесты 15.1.1 и существующие тесты Feed проходят. Ревизий,
+бизнес-методов, событий, контрактов хранения, evaluator и внешних слоёв нет.
+Наличие объектов не означает возможность реально привязать Catalog, собрать
+файл, выпустить секрет, отозвать доступ или переключить публичную выдачу.
+
 ### **16.2. Поведение Domain и жизненный цикл схемы**
 
 Редактирование полей/правил через корень, сохранение идентичности/порядка,
@@ -2628,7 +2857,7 @@ PreviewFieldCalculation и объяснение ошибок/ветвей. Дл�
 
 ### **16.6. Publication и проекции**
 
-Domain публикации, явная привязка SIMPLE/выбранных VARIANT с парой ID,
+Поведение уже созданного Domain публикации, явная привязка SIMPLE/выбранных VARIANT с парой ID,
 фиксированный выбор «Всех существующих» без автоподключения новых вариантов,
 overrides/reset, участие/readiness, FieldValueResolver/PublicationResolver,
 проекции с ревизиями позиции/использованного родителя и valid_until,
@@ -2639,7 +2868,7 @@ overrides/reset, участие/readiness, FieldValueResolver/PublicationResolve
 
 ### **16.7. Export Engine**
 
-Domain генерации и задачи, staging/serializers/ArtifactStorage, as_of,
+Поведение уже созданного Domain генерации и задачи, staging/serializers/ArtifactStorage, as_of,
 сохранённые Product Mode/FX snapshot, source revisions, engine version, lease/heartbeat/
 fencing/retry, counts/issues/history и условная активация одного артефакта.
 VARIABLE_TO_SINGLE создаёт одну плоскую запись на выбранную публикацию в заданном
@@ -2650,7 +2879,8 @@ CSV либо XML, без родительских строк/группиров�
 
 ### **16.8. Public Distribution**
 
-Public registry/admission, AccessKey lifecycle, отдельный public controller,
+Public registry/admission, поведение FeedAccessKey и его Application-сценарии,
+отдельные access_key controller/depends и public controller,
 ETag/Last-Modified, streaming без DB-транзакции, отзыв/ротация и экспортный экран.
 
 Готовность: постоянные HTTPS URL, проверка ключа/tenant и сохранение старой выдачи.
@@ -2658,7 +2888,7 @@ ETag/Last-Modified, streaming без DB-транзакции, отзыв/рот�
 ### **16.9. Stabilization**
 
 Integration/E2E/нагрузка/security, конкуренция, AST limits, права/derived data,
-время акций, Currency refresh во время запуска, восстановление задач/cleanup,
+время акций, обновление источника FX во время запуска, восстановление задач/cleanup,
 мобильный/доступный UI, observability и весь архитектурный перечень.
 
 Готовность: критерии раздела 18 и соответствующие проверки выполнены;
@@ -2711,6 +2941,20 @@ Feed с другим. Схема, публикация и итоговый ар�
 5. Restore сохраняет идентичность, порядок и настройки без генерации новых данных.
 6. Нет evaluator, методов редактирования/публикации/генерации, событий,
    репозиториев и внешних слоёв. Unit-тесты не требуют БД или HTTP.
+
+#### **18.1.1. Текущий объектный срез**
+
+1. FeedPublication, FeedGeneration, FeedAccessKey и зависимый FeedArtifact имеют
+   только create/restore; каждый VO находится в отдельном файле.
+2. SIMPLE/выбранный VARIANT представлены ссылкой, overrides типизированы,
+   уникальны по field_id и не зависят от загрузки текущей схемы при restore.
+3. Генерация содержит полный неизменяемый снимок одного CSV/XML без ревизий;
+   статус согласован с попыткой, контекстом, датами, счётчиками, ошибкой и файлом.
+4. Данные FX хранятся точно и неизменяемо; успех не подменяет активацию файла.
+5. Ключ — отдельный агрегат, хранит только 32-байтовый digest, а статус
+   соответствует дате отзыва. Выпуск/проверка секрета пока не реализуются.
+6. Тесты всех объектов и архитектурных границ проходят без БД/HTTP/часов/UUID
+   внутри Domain. Существующий контракт Feed сохранён.
 
 ### **18.2. Полный целевой MVP после последующих срезов**
 

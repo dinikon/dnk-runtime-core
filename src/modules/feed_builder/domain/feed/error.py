@@ -1,13 +1,8 @@
-from src.modules.shared.domain.domain_error import DomainError
+from src.modules.feed_builder.domain.error import FeedBuilderDomainError
 
 
-class FeedDomainError(DomainError):
+class FeedDomainError(FeedBuilderDomainError):
     """Описывает нарушение определения Feed с путём к проблемному значению."""
-
-    def __init__(self, message: str, *, path: tuple[str | int, ...] = ()) -> None:
-        """Сохраняет безопасное сообщение и структурный путь без HTTP-контекста."""
-        super().__init__(message)
-        self.path = path
 
 
 class InvalidFeedValueError(FeedDomainError):

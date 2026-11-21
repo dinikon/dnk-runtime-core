@@ -30,7 +30,7 @@ from uuid import UUID, uuid4
 from alembic import command
 
 from sqlalchemy import Column, MetaData, String, delete, func, inspect, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
@@ -152,14 +152,158 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.upgrade(connection, schema)
         return schema
 
-    async def test_destructive_head_rejects_downgrade_without_changing_tenants(
+    async def test_currency_removal_preserves_tenants_and_recreates_empty_tables(
+        self,
+    ) -> None:
+        """Удаление и откат книги сохраняют соседние схемы, public и валюту tenant."""
+        first, second = await self.new_schema(), await self.new_schema()
+        retired = {"currency_exchange_rate_books", "currency_exchange_rate_quotes"}
+        async with self.engine.begin() as connection:
+            public_tables = await connection.run_sync(
+                lambda conn: inspect(conn).get_table_names(schema="public")
+            )
+            await self.migrator.downgrade(
+                connection, first, "0016_channels_connections_only"
+            )
+            columns = await connection.run_sync(
+                lambda conn: inspect(conn).get_columns(
+                    "currency_exchange_rate_quotes", schema=first
+                )
+            )
+            rate = next(column for column in columns if column["name"] == "rate")
+            self.assertEqual((rate["type"].precision, rate["type"].scale), (38, 18))
+            self.assertFalse(rate["nullable"])
+            foreign_keys = await connection.run_sync(
+                lambda conn: inspect(conn).get_foreign_keys(
+                    "currency_exchange_rate_quotes", schema=first
+                )
+            )
+            self.assertEqual(foreign_keys[0]["referred_schema"], first)
+            self.assertEqual(foreign_keys[0]["options"]["ondelete"], "CASCADE")
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{first}".currency_exchange_rate_books '
+                    "VALUES ('nbu', :snapshot, CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {"snapshot": uuid4()},
+            )
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{first}".currency_exchange_rate_quotes '
+                    "VALUES ('nbu', 'USD', 'UAH', 41.123456789012345678)"
+                )
+            )
+            for statement in (
+                f'UPDATE "{first}".currency_exchange_rate_quotes SET rate=0',
+                f"UPDATE \"{first}\".currency_exchange_rate_quotes SET target_currency='USD'",
+                f"UPDATE \"{first}\".currency_exchange_rate_books SET source='bad'",
+            ):
+                with self.assertRaises(IntegrityError):
+                    async with connection.begin_nested():
+                        await connection.execute(text(statement))
+            await connection.execute(
+                text(
+                    f"UPDATE \"{first}\".tenant_currency_settings SET base_currency='USD'"
+                )
+            )
+            await self.migrator.upgrade(connection, first)
+            for schema in (first, second):
+                tables = set(
+                    await connection.run_sync(
+                        lambda conn: inspect(conn).get_table_names(schema=schema)
+                    )
+                )
+                self.assertEqual(
+                    tables, set(migration_metadata().tables) | {"alembic_version"}
+                )
+                self.assertTrue(retired.isdisjoint(tables))
+            self.assertEqual(
+                await connection.scalar(
+                    text(
+                        f'SELECT base_currency FROM "{first}".tenant_currency_settings'
+                    )
+                ),
+                "USD",
+            )
+            self.assertEqual(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema="public")
+                ),
+                public_tables,
+            )
+            await self.migrator.downgrade(
+                connection, first, "0016_channels_connections_only"
+            )
+            for table in retired:
+                self.assertEqual(
+                    await connection.scalar(
+                        text(f'SELECT count(*) FROM "{first}"."{table}"')
+                    ),
+                    0,
+                )
+            await self.migrator.upgrade(connection, first)
+            await self.migrator.upgrade(connection, first)
+
+    async def test_currency_removal_rolls_back_on_an_unexpected_foreign_key(
+        self,
+    ) -> None:
+        """Чужой FK блокирует удаление книги и откатывает удаление котировок."""
+        schema = await self.new_schema()
+        async with self.engine.begin() as connection:
+            await self.migrator.downgrade(
+                connection, schema, "0016_channels_connections_only"
+            )
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".currency_exchange_rate_books '
+                    "VALUES ('nbu', :snapshot, CURRENT_DATE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {"snapshot": uuid4()},
+            )
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".currency_exchange_rate_quotes '
+                    "VALUES ('nbu', 'USD', 'UAH', 41)"
+                )
+            )
+            await connection.execute(
+                text(
+                    f'CREATE TABLE "{schema}".external_rate_usage '
+                    f'(source VARCHAR(3) REFERENCES "{schema}".currency_exchange_rate_books(source))'
+                )
+            )
+            with self.assertRaises(DBAPIError):
+                async with connection.begin_nested():
+                    await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                await self.migrator.current(connection, schema),
+                ("0016_channels_connections_only",),
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(
+                        f'SELECT count(*) FROM "{schema}".currency_exchange_rate_quotes'
+                    )
+                ),
+                1,
+            )
+            self.assertTrue(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).has_table(
+                        "external_rate_usage", schema=schema
+                    )
+                )
+            )
+
+    async def test_failed_full_downgrade_rolls_back_without_changing_tenants(
         self,
     ) -> None:
         """Отказ необратимого отката сохраняет текущий tenant, соседние схемы и public."""
         first, second = await self.new_schema(), await self.new_schema()
         async with self.engine.begin() as connection:
             with self.assertRaisesRegex(RuntimeError, "необратима"):
-                await self.migrator.downgrade(connection, first, "base")
+                async with connection.begin_nested():
+                    await self.migrator.downgrade(connection, first, "base")
             self.assertEqual(
                 await self.migrator.current(connection, first), (self.migrator.head(),)
             )
@@ -250,7 +394,8 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 text(f'CREATE TABLE "{schema}".legacy_objects (id integer)')
             )
             with self.assertRaisesRegex(RuntimeError, "необратима"):
-                await self.migrator.downgrade(connection, schema, "base")
+                async with connection.begin_nested():
+                    await self.migrator.downgrade(connection, schema, "base")
             self.assertEqual(
                 await self.migrator.current(connection, schema), (self.migrator.head(),)
             )
@@ -400,7 +545,8 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     all(fk["referred_schema"] == schema for fk in foreign_keys)
                 )
             with self.assertRaisesRegex(RuntimeError, "необратима"):
-                await self.migrator.downgrade(connection, right, "base")
+                async with connection.begin_nested():
+                    await self.migrator.downgrade(connection, right, "base")
             self.assertEqual(
                 await self.migrator.current(connection, right), (self.migrator.head(),)
             )

@@ -2,12 +2,6 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.reference_data.application.currency.query.get_currency_validation_catalog.handler import (
-    GetCurrencyValidationCatalogHandler,
-)
-from src.modules.reference_data.infrastructure.currency.persistence.validation_catalog_repository import (
-    SqlAlchemyCurrencyValidationCatalogQueryRepository,
-)
 from src.modules.reference_data.application.currency.query.validate_currency.handler import (
     ValidateCurrencyHandler,
 )
@@ -52,19 +46,4 @@ def get_check_time_zone_handler(
 
 CheckTimeZoneHandlerDep = Annotated[
     CheckTimeZoneHandler, Depends(get_check_time_zone_handler)
-]
-
-
-def get_currency_validation_catalog_handler(
-    uow: UoWDep,
-) -> GetCurrencyValidationCatalogHandler:
-    """Собирает batch-проверку кодов на сессии общего UoW."""
-    return GetCurrencyValidationCatalogHandler(
-        SqlAlchemyCurrencyValidationCatalogQueryRepository(uow.session)
-    )
-
-
-GetCurrencyValidationCatalogHandlerDep = Annotated[
-    GetCurrencyValidationCatalogHandler,
-    Depends(get_currency_validation_catalog_handler),
 ]

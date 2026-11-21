@@ -3,7 +3,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 from src.modules.feed_builder.domain.feed.enum.feed_status import FeedStatus
-from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
+from src.modules.feed_builder.domain.feed.policy.schema_structure import (
+    FeedSchemaStructurePolicy,
+)
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
 from src.modules.feed_builder.domain.feed.value_object.feed_code import FeedCodeVO
@@ -11,12 +13,7 @@ from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSc
 from src.modules.feed_builder.domain.feed.value_object.feed_export_settings import (
     FeedExportSettingsVO,
 )
-from src.modules.feed_builder.domain.feed.error import (
-    DuplicateFieldIdentifierError,
-    DuplicateFieldKeyError,
-    DuplicateExportNameError,
-    InvalidFeedValueError,
-)
+from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,37 +86,7 @@ class Feed:
             raise InvalidFeedValueError(
                 "Изменение Feed не может предшествовать созданию."
             )
-        identifiers, keys, export_names = set(), set(), set()
-        restored_fields: list[FieldDefinition] = []
-        for index, definition in enumerate(schema.fields):
-            definition = FieldDefinition.restore(
-                identifier=definition.id,
-                key=definition.key,
-                label=definition.label,
-                type_definition=definition.type_definition,
-                export=definition.export,
-                ai_instruction=definition.ai_instruction,
-            )
-            if definition.id in identifiers:
-                raise DuplicateFieldIdentifierError(
-                    "Field ID повторяется в Feed.",
-                    path=("schema", "fields", index, "id"),
-                )
-            if definition.key in keys:
-                raise DuplicateFieldKeyError(
-                    "Ключ поля повторяется в Feed.",
-                    path=("schema", "fields", index, "key"),
-                )
-            if definition.export.name in export_names:
-                raise DuplicateExportNameError(
-                    "Экспортное имя повторяется в Feed.",
-                    path=("schema", "fields", index, "export", "name"),
-                )
-            identifiers.add(definition.id)
-            keys.add(definition.key)
-            export_names.add(definition.export.name)
-            restored_fields.append(definition)
-        schema = FeedSchemaVO(tuple(restored_fields), schema.schema_format_version)
+        schema = FeedSchemaStructurePolicy.validate(schema)
         return cls(
             id=identifier,
             name=name,

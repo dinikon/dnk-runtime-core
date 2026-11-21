@@ -229,9 +229,11 @@ class CurrencySliceOnePostgresTests(unittest.IsolatedAsyncioTestCase):
                     {"id": uuid4()},
                 )
         self.assertEqual(raised.exception.orig.sqlstate, "23514")
+        with self.assertRaisesRegex(RuntimeError, "необратима"):
+            async with self.engine.begin() as connection:
+                await apply_currency_migration(connection, schemas[0], downgrade=True)
         async with self.engine.begin() as connection:
-            await apply_currency_migration(connection, schemas[0], downgrade=True)
-            self.assertIsNone(
+            self.assertIsNotNone(
                 await connection.scalar(
                     text(f"SELECT to_regclass('{schemas[0]}.tenant_currency_settings')")
                 )

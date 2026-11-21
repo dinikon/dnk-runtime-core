@@ -1,4 +1,4 @@
-"""Архитектурные границы первого среза Feed без I/O и заготовок следующих слоёв."""
+"""Границы объектного Domain-среза FeedBuilder без поведения и внешних слоёв."""
 
 import ast
 import subprocess
@@ -8,7 +8,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODULE = PROJECT_ROOT / "src/modules/feed_builder"
-DOMAIN = MODULE / "domain/feed"
+DOMAIN = MODULE / "domain"
 
 
 class FeedBuilderArchitectureTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                 for path in (MODULE / "domain").iterdir()
                 if path.is_dir() and path.name != "__pycache__"
             },
-            {"feed"},
+            {"feed", "publication", "generation", "access_key"},
         )
         forbidden = {"repository.py", "evaluator.py", "events.py"}
         for path in MODULE.rglob("*.py"):
@@ -93,7 +93,10 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
 
     def test_aggregate_and_entities_only_declare_create_restore(self) -> None:
         """Не добавляет __post_init__, методы изменения, события и исполнение формул."""
-        paths = [DOMAIN / "aggregate.py", *sorted((DOMAIN / "entity").glob("*.py"))]
+        paths = [
+            *sorted(DOMAIN.glob("*/aggregate.py")),
+            *sorted(DOMAIN.glob("*/entity/*.py")),
+        ]
         for path in paths:
             for node in ast.parse(path.read_text()).body:
                 if isinstance(node, ast.ClassDef):
@@ -141,8 +144,27 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == "__post_init__":
                     self.assertEqual(path.parent.name, "value_object", str(path))
-        aliases = ast.parse((DOMAIN / "types.py").read_text())
-        self.assertFalse(any(isinstance(node, ast.ClassDef) for node in aliases.body))
+        for path in DOMAIN.rglob("types.py"):
+            aliases = ast.parse(path.read_text())
+            self.assertFalse(
+                any(isinstance(node, ast.ClassDef) for node in aliases.body)
+            )
+
+    def test_aggregate_links_use_ids_without_schema_revisions(self) -> None:
+        """Не связывает агрегаты объектными ссылками и не вводит ревизии схем."""
+        for path in DOMAIN.rglob("*.py"):
+            self.assertNotIn("revision", path.name, str(path))
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    self.assertFalse(node.module.endswith(".aggregate"), str(path))
+                if isinstance(node, ast.AnnAssign) and isinstance(
+                    node.target, ast.Name
+                ):
+                    self.assertNotIn(
+                        node.target.id,
+                        {"schema_version", "schema_revision_id", "activation_id"},
+                        str(path),
+                    )
 
     def test_methods_and_functions_have_annotations_and_docstrings(self) -> None:
         """Контракты явно описывают входы/результаты и назначение без универсального Any."""

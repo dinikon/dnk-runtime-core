@@ -84,9 +84,6 @@ import src.modules.catalog.infrastructure.persistence.models.product_type  # noq
 import src.modules.catalog.infrastructure.persistence.models.product_type_block  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.product_type_translation  # noqa: F401
 
-import src.modules.currency.infrastructure.persistence.models.exchange_rate_book  # noqa: F401
-import src.modules.currency.infrastructure.persistence.models.exchange_rate_quote  # noqa: F401
-
 import src.modules.crm.infrastructure.persistence.models.lead  # noqa: F401
 
 import src.modules.crm.infrastructure.persistence.models.deal  # noqa: F401

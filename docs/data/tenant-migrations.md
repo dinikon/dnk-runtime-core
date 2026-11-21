@@ -1,8 +1,9 @@
 # Tenant migrations
 
-The revision history below describes the current code. The current
-[Catalog simplification](../plan/catalog.md) requires recreated tenant schemas
-and onboarding; no Catalog data migration is provided.
+The current tenant chain starts at `0001_tenant_baseline` and ends at
+`0017_remove_currency`, after `0016_channels_connections_only`. Existing schemas
+upgrade to this head; new onboarding applies the same chain. The older numbered
+revisions described below are historical release notes, not the deployed chain.
 
 ## Ownership
 
@@ -28,7 +29,38 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 
 The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain, owner identity and cloud connection writes commit together. Any failure rolls everything back. The Control Plane installer records accepted-command errors in its durable attempt state and reconciles actual resources before declaring absence.
 
-## Revisions
+## Currency removal: 0017
+
+`0017_remove_currency` removes the retired module's `currency_exchange_rate_quotes`
+and then `currency_exchange_rate_books` from the selected tenant schema, without
+CASCADE. An unexpected external foreign key fails the migration and the caller's
+transaction rolls back both drops. The existing baseline is retained: fresh
+schemas create the historical tables and remove them before reaching head.
+Historical ownership names remain in `src/modules/tenant_persistence.py` so
+autogenerate can detect retired tables; the runtime models and CLI are removed.
+
+The global currency catalog in Reference Data, `tenant_currency_settings`,
+`users.display_currency` and shared monetary value objects remain supported.
+They do not require an exchange-rate book. No Currency jobs or rate HTTP API
+were implemented, so there are no scheduled Currency jobs to cancel.
+
+Before upgrading, finish and stop any invocation of the old `currency refresh`
+command. Use the new runtime image to run:
+
+```sh
+dnk-manage tenant-migrations upgrade --all
+dnk-manage tenant-migrations current --all
+```
+
+Every managed tenant must reach `0017_remove_currency`. The working database
+is not migrated by changing or importing the code. Retain a backup if saved
+quotes are needed: downgrade to `0016_channels_connections_only` recreates only
+empty book/quote tables, their same-schema FK and checks. It does not restore
+quotes, the removed CLI or runtime implementation. A further downgrade across
+the irreversible Channels cleanup still fails and must roll back its enclosing
+transaction.
+
+## Historical revisions
 
 Files live in `migrations/tenant/versions/`; each tenant schema has its own `alembic_version`. The first revision is
 `0001_warehouses`; `0002_identity_users` adds tenant-local `users` and `user_emails` with a same-schema foreign key.
@@ -50,8 +82,8 @@ The baseline contains no Catalog seed. `CatalogProvisioningFacade` creates the
 system type `default` and blocks `title` (required text) and `body` (optional rich text)
 only during tenant onboarding. Queries and item creation never seed missing data.
 
-Revision identity remains `0023_catalog_item`; `0024_currency_exchange_rates`
-still depends on it. Revision `0026_catalog_attribute_ids` is removed;
+In that historical chain, `0024_currency_exchange_rates` followed
+`0023_catalog_item`. Revision `0026_catalog_attribute_ids` was removed;
 `0027_remove_channels` now follows `0025_user_display_currency`. One tenant head
 remains. Unrelated module migrations are preserved. Downgrade to 0022 removes
 only Catalog; upgrade recreates its empty structure without system values.

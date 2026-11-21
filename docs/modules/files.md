@@ -480,8 +480,9 @@ CSRF/action permissions, атомарность file/job, concurrent purge reque
 
 Срез worker/recovery: 121 регрессионный тест прошёл с текущим Files поверх
 последнего коммита остальных модулей. Последний совместный workspace-прогон:
-107/108 успешны, включая Files/worker/jobs; отдельная ошибка Catalog/Currency
-migration downgrade затрагивает ожидаемые `currency_exchange_rate_books/quotes`.
+107/108 успешны, включая Files/worker/jobs; отдельная ошибка исторического
+теста отката Catalog/Currency затрагивала таблицы курсов. Модуль Currency
+впоследствии удалён; этот результат не описывает текущую миграционную цепочку.
 Предыдущий совместный прогон также выявил 13 ошибок tenant deletion (включая
 subtests): administrator role, отсутствующая cloud_identities и HTTP admission.
 Чужие изменения не исправлялись/не откатывались; полный workspace suite пока

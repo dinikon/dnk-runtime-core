@@ -1,6 +1,8 @@
 """Удалённые модули отсутствуют в API и новой начальной схеме."""
 
 import ast
+from contextlib import redirect_stderr
+import io
 import unittest
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from src.modules.shared.infrastructure.persistence.global_migrations import (
     GlobalMigrator,
 )
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migration_metadata import (
+    managed_table_names,
     migration_metadata,
 )
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
@@ -29,6 +32,10 @@ class ModuleRegistrationTests(unittest.TestCase):
         for relative in (
             "src/modules/warehousing",
             "src/modules/price_lists",
+            "src/modules/currency",
+            "src/management/commands/currency.py",
+            "src/modules/reference_data/application/currency/query/get_currency_validation_catalog",
+            "src/modules/reference_data/domain/currency/policy.py",
             "frontends/apps/console/src/modules/inventory",
             "frontends/apps/console/src/modules/price-lists",
             "src/config/feature/price_lists_config.py",
@@ -44,11 +51,12 @@ class ModuleRegistrationTests(unittest.TestCase):
             "/api/console/warehousing",
             "/api/console/price-lists",
             "/api/console/price-list-offers",
+            "/api/console/currency",
         ):
             self.assertFalse(any(path.startswith(prefix) for path in paths), prefix)
         self.assertEqual(
             {path for path in paths if path.startswith("/api/channels")},
-            {"/api/channels/content-media/{media_id}/image.{extension}"},
+            set(),
         )
         self.assertFalse(
             any(
@@ -72,13 +80,23 @@ class ModuleRegistrationTests(unittest.TestCase):
             "/api/console/channels",
             "/api/console/crm/contacts",
             "/api/console/crm/companies",
+            "/api/console/reference-data/currencies",
+            "/api/console/tenants/current/currency-settings",
+            "/api/console/auth/me",
         ):
             self.assertTrue(any(path.startswith(prefix) for path in paths), prefix)
 
-    def test_metadata_and_ownership_contain_only_current_tables(self) -> None:
-        """Новая история не содержит таблиц удалённых модулей."""
-        tables = set(migration_metadata().tables)
-        self.assertEqual(tables, HISTORICAL_TENANT_TABLE_NAMES)
+    def test_metadata_excludes_retired_tables_and_retains_their_ownership(self) -> None:
+        """Metadata содержит действующие таблицы, история сохраняет удалённые имена."""
+        metadata = migration_metadata()
+        tables = set(metadata.tables)
+        self.assertLessEqual(tables, HISTORICAL_TENANT_TABLE_NAMES)
+        retired_currency_tables = {
+            "currency_exchange_rate_books",
+            "currency_exchange_rate_quotes",
+        }
+        self.assertTrue(retired_currency_tables.isdisjoint(tables))
+        self.assertLessEqual(retired_currency_tables, managed_table_names(metadata))
         self.assertTrue(
             {
                 "catalog_item",
@@ -106,6 +124,21 @@ class ModuleRegistrationTests(unittest.TestCase):
             }.isdisjoint(tables)
         )
         self.assertFalse(any(name.startswith("warehousing_") for name in tables))
+
+    def test_currency_cli_is_removed_and_reference_data_sync_remains(self) -> None:
+        """CLI отвергает удалённую команду, сохраняя синхронизацию справочника."""
+        from src.management.cli import build_parser
+
+        parser = build_parser()
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+            parser.parse_args(["currency", "refresh"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(
+            parser.parse_args(
+                ["reference-data", "sync", "--dataset", "currencies"]
+            ).handler.__name__,
+            "handle_sync",
+        )
 
     def test_migrations_extend_independent_schema_baselines(self) -> None:
         """Каждая цепочка имеет свою baseline и линейные независимые продолжения."""

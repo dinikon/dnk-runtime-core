@@ -845,8 +845,9 @@ terminal/missing/scheduled/running, outages и failed commit, потерю lease
 Регрессия из 121 теста Files/PostgreSQL/MinIO/tenant migrations/registration/jobs/
 tenant deletion прошла на текущем Files поверх последнего коммита остальных
 модулей. Совместный прогон текущего workspace: 107 из 108 тестов успешны,
-включая все Files/worker/jobs; один новый Catalog/Currency migration test
-теряет ожидаемые `currency_exchange_rate_books/quotes` при downgrade.
+включая все Files/worker/jobs; один исторический тест отката Catalog/Currency
+терял таблицы курсов. Модуль Currency впоследствии удалён; этот результат
+не описывает текущую миграционную цепочку.
 Более ранний совместный прогон из 121 теста выявил 13 ошибок tenant deletion
 (включая subtests): `administrator_required`, отсутствующая `cloud_identities`
 и HTTP admission. Эти параллельно изменяемые модули не исправлялись и не
