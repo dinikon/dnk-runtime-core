@@ -10,6 +10,7 @@ import unittest
 from src.modules.shared.domain.value_object.currency import CurrencyVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.domain.value_object.money import MoneyVO
+from src.modules.feed_builder.domain.feed.value_object.price_amount import PriceAmountVO
 from test.test_feed_builder_domain import text_field, money_field
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.field_id import FieldIdVO
@@ -94,13 +95,6 @@ from src.modules.feed_builder.domain.generation.value_object.generation_attempt 
 from src.modules.feed_builder.domain.generation.value_object.generation_attempt_token import (
     GenerationAttemptTokenVO,
 )
-from src.modules.feed_builder.domain.generation.value_object.fx_rate import FxRateVO
-from src.modules.feed_builder.domain.generation.value_object.fx_rate_snapshot import (
-    FxRateSnapshotVO,
-)
-from src.modules.feed_builder.domain.generation.value_object.fx_rate_snapshot_id import (
-    FxRateSnapshotIdVO,
-)
 from src.modules.feed_builder.domain.generation.value_object.artifact_checksum import (
     ArtifactChecksumVO,
 )
@@ -115,7 +109,6 @@ NOW = datetime(2026, 11, 21, 10, tzinfo=UTC)
 STARTED = NOW + timedelta(minutes=1)
 FINISHED = NOW + timedelta(minutes=2)
 UAH = CurrencyVO("UAH")
-USD = CurrencyVO("USD")
 
 
 def properties(value: object) -> dict[str, object]:
@@ -243,7 +236,7 @@ class FeedPublicationDomainTests(unittest.TestCase):
         """История и явное пустое значение восстанавливаются без текущей схемы."""
         overrides = (
             FieldOverrideVO(FieldIdVO(uuid4()), "Длинный\nтекст"),
-            FieldOverrideVO(FieldIdVO(uuid4()), MoneyVO(Decimal("123.4567"), UAH)),
+            FieldOverrideVO(FieldIdVO(uuid4()), PriceAmountVO(Decimal("123.456789"))),
             FieldOverrideVO(FieldIdVO(uuid4()), None),
             FieldOverrideVO(FieldIdVO(uuid4()), ""),
         )
@@ -296,8 +289,16 @@ class FeedPublicationDomainTests(unittest.TestCase):
                     CatalogProductReferenceVO(item_id, variant_id)
 
     def test_override_rejects_untyped_values_and_mutable_structures(self) -> None:
-        """JSON, Decimal без валюты и неподдержанные скаляры не становятся override."""
-        for value in ([], {}, 12, Decimal("12"), True, object()):
+        """JSON, сырой Decimal, Shared MoneyVO и неподдержанные скаляры отклоняются."""
+        for value in (
+            [],
+            {},
+            12,
+            Decimal("12"),
+            True,
+            object(),
+            MoneyVO(Decimal("12"), UAH),
+        ):
             with (
                 self.subTest(value=value),
                 self.assertRaises(InvalidPublicationValueError),
@@ -360,6 +361,25 @@ class FeedPublicationDomainTests(unittest.TestCase):
             result.status = PublicationStatus.ENABLED
         with self.assertRaises(FrozenInstanceError):
             result.overrides[0].value = "Изменение"
+
+    def test_price_override_preserves_precision_without_own_currency(self) -> None:
+        """Ручная сумма не дублирует метку поля и не округляется shared MoneyVO."""
+        amount = PriceAmountVO(Decimal("123.456789"))
+        identifier = FieldIdVO(uuid4())
+        values = dict(
+            identifier=FeedPublicationIdVO(uuid4()),
+            feed_id=FeedIdVO(uuid4()),
+            product_reference=CatalogProductReferenceVO(EntityIdVO(uuid4())),
+            status=PublicationStatus.ENABLED,
+            overrides=(FieldOverrideVO(identifier, amount),),
+            created_at=NOW,
+            updated_at=FINISHED,
+        )
+        restored = FeedPublication.restore(**values)
+        self.assertEqual(restored.overrides[0].value.amount, Decimal("123.456789"))
+        self.assertEqual({item.name for item in fields(amount)}, {"amount"})
+        with self.assertRaises(FrozenInstanceError):
+            amount.amount = Decimal("0")
 
 
 class FeedAccessKeyDomainTests(unittest.TestCase):
@@ -480,6 +500,33 @@ class FeedGenerationDomainTests(unittest.TestCase):
             self.assertIs(
                 result.definition_snapshot.export_settings.product_mode,
                 FeedProductMode.VARIABLE_TO_SINGLE,
+            )
+
+    def test_snapshot_preserves_optional_currency_without_fx_for_both_factories(
+        self,
+    ) -> None:
+        """Снимок задания сохраняет None/код без валюты источника или конвертера."""
+        for currency in (None, UAH, CurrencyVO("USD")):
+            definition = snapshot()
+            first, price = definition.schema.fields
+            price = replace(
+                price, type_definition=replace(price.type_definition, currency=currency)
+            )
+            definition = replace(definition, schema=FeedSchemaVO((first, price)))
+            created = FeedGeneration.create(
+                identifier=FeedGenerationIdVO(uuid4()),
+                feed_id=FeedIdVO(uuid4()),
+                request_sequence=GenerationSequenceVO(1),
+                definition_snapshot=definition,
+                now=NOW,
+            )
+            values = properties(created)
+            values["identifier"] = values.pop("id")
+            restored = FeedGeneration.restore(**values)
+            self.assertEqual(restored, created)
+            self.assertEqual(
+                restored.definition_snapshot.schema.fields[1].type_definition.currency,
+                currency,
             )
 
     def test_restore_all_valid_states_preserves_every_field(self) -> None:
@@ -717,11 +764,8 @@ class FeedGenerationDomainTests(unittest.TestCase):
         self.assertEqual(FeedGeneration.restore(**values).requested_at, NOW)
 
     def test_context_is_reused_unchanged_between_attempts(self) -> None:
-        """Новая попытка сохраняет прежние as_of и точные валютные курсы."""
-        rates = [FxRateVO(USD, UAH, Decimal("41.123456789"))]
-        fx = FxRateSnapshotVO(FxRateSnapshotIdVO(uuid4()), STARTED, rates)
-        context = GenerationCalculationContextVO(STARTED, fx)
-        rates.clear()
+        """Новая попытка сохраняет прежнее as_of без валютного контекста."""
+        context = GenerationCalculationContextVO(STARTED)
         values = running_values() | {"calculation_context": context}
         first = FeedGeneration.restore(**values)
         retry = FeedGeneration.restore(
@@ -739,9 +783,9 @@ class FeedGenerationDomainTests(unittest.TestCase):
             )
         )
         self.assertIs(first.calculation_context, retry.calculation_context)
+        self.assertEqual(retry.calculation_context.as_of, STARTED)
         self.assertEqual(
-            retry.calculation_context.fx_rate_snapshot.rates[0].rate,
-            Decimal("41.123456789"),
+            {item.name for item in fields(retry.calculation_context)}, {"as_of"}
         )
         with self.assertRaises(FrozenInstanceError):
             retry.calculation_context.as_of = FINISHED
@@ -750,34 +794,16 @@ class FeedGenerationDomainTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             retry.status = GenerationStatus.FAILED
 
-    def test_fx_snapshot_rejects_invalid_rates_and_duplicate_pairs(self) -> None:
-        """Курсы остаются Decimal и не допускают неоднозначные валютные пары."""
-        for rate in (
-            0,
-            1.2,
-            Decimal("0"),
-            Decimal("-1"),
-            Decimal("NaN"),
-            Decimal("Infinity"),
-        ):
+    def test_context_only_accepts_explicit_aware_time(self) -> None:
+        """Расчётный контекст не принимает курсы или устаревшие FX-настройки."""
+        for value in (None, "now", STARTED.replace(tzinfo=None)):
             with (
-                self.subTest(rate=rate),
+                self.subTest(value=value),
                 self.assertRaises(InvalidGenerationValueError),
             ):
-                FxRateVO(USD, UAH, rate)
-        with self.assertRaises(InvalidGenerationValueError):
-            FxRateVO(UAH, UAH, Decimal("1"))
-        rate = FxRateVO(USD, UAH, Decimal("41"))
-        for rates in ((rate, rate), ({},), {}):
-            with (
-                self.subTest(rates=rates),
-                self.assertRaises(InvalidGenerationValueError),
-            ):
-                FxRateSnapshotVO(FxRateSnapshotIdVO(uuid4()), STARTED, rates)
-        with self.assertRaises(InvalidGenerationValueError):
-            FxRateSnapshotVO(EntityIdVO(uuid4()), STARTED, (rate,))
-        with self.assertRaises(InvalidGenerationValueError):
-            GenerationCalculationContextVO(STARTED, {})
+                GenerationCalculationContextVO(value)
+        with self.assertRaises(TypeError):
+            GenerationCalculationContextVO(STARTED, fx_rate_snapshot=None)
 
     def test_counts_reject_negative_boolean_and_overcount(self) -> None:
         """Счётчики не допускают bool, отрицательные и учёт сверх выбранных позиций."""

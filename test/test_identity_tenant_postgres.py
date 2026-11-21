@@ -214,8 +214,6 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                         UtcClock(),
                     ),
                 ),
-                currency_validator=AsyncMock(),
-                currency_settings_writer=AsyncMock(),
                 tenant_onboarding_service=TenantOnboardingService(
                     SqlAlchemyTenantRepository(uow.session),
                     SqlAlchemyTenantDomainRepository(uow.session),
@@ -374,13 +372,18 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                         )
                     )
 
-    async def test_identity_baseline_downgrade_and_upgrade(self) -> None:
+    async def test_rejected_full_downgrade_preserves_identity(self) -> None:
+        """Необратимая старая ревизия откатывает попытку downgrade без потери Identity."""
         tenant_id = await self.new_tenant_schema()
         schema = self.naming.schema_name(tenant_id)
         async with self.engine.begin() as connection:
-            await self.migrator.downgrade(connection, schema, "base")
-            self.assertEqual(await self.migrator.current(connection, schema), ())
-            self.assertFalse(
+            with self.assertRaisesRegex(RuntimeError, "необратима"):
+                async with connection.begin_nested():
+                    await self.migrator.downgrade(connection, schema, "base")
+            self.assertEqual(
+                await self.migrator.current(connection, schema), (self.migrator.head(),)
+            )
+            self.assertTrue(
                 await connection.run_sync(
                     lambda conn: inspect(conn).has_table("users", schema=schema)
                 )
@@ -404,13 +407,16 @@ class IdentityTenantPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_missing_schema_and_missing_tables_fail_without_fallback(self):
+    async def test_missing_schema_and_missing_tables_fail_without_fallback(
+        self,
+    ) -> None:
+        """Пустая тестовая схема моделирует отсутствие таблиц без отката чужих модулей."""
         missing = EntityIdVO.from_value(uuid4())
-        empty = await self.new_tenant_schema()
+        empty = EntityIdVO.from_value(uuid4())
+        schema = self.naming.schema_name(empty)
+        self.schemas.add(schema)
         async with self.engine.begin() as connection:
-            await self.migrator.downgrade(
-                connection, self.naming.schema_name(empty), "base"
-            )
+            await connection.execute(CreateSchema(schema))
         for tenant_id in (missing, empty):
             with self.assertRaises(ProgrammingError) as raised:
                 async with self.tenant_uow(tenant_id) as uow:

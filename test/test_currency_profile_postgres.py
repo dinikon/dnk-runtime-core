@@ -40,9 +40,6 @@ from src.modules.identity.infrastructure.user.persistence.query_repository impor
 from src.modules.identity.infrastructure.user.currency_validator import (
     ReferenceDataProfileCurrencyValidator,
 )
-from src.modules.identity.infrastructure.user.tenant_currency_settings import (
-    TenancyProfileCurrencySettingsAdapter,
-)
 from src.modules.identity.presentation.auth.http.router import router
 from src.modules.identity.presentation.auth.http.csrf_router import (
     router as csrf_router,
@@ -74,13 +71,6 @@ from src.modules.shared.infrastructure.tokens.in_memory_token_backend import (
 from src.modules.tenancy.application.tenant.tenant_schema_naming import (
     TenantSchemaNaming,
 )
-from src.modules.tenancy.application.tenant_currency_settings.query.get_tenant_currency_settings.handler import (
-    GetTenantCurrencySettingsHandler,
-)
-from src.modules.tenancy.infrastructure.tenant_currency_settings.persistence.query_repository import (
-    SqlAlchemyTenantCurrencySettingsQueryRepository,
-)
-from src.modules.tenancy.domain.tenant.value_object.tenant_id import TenantIdVO
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
     bind_tenant_schema,
 )
@@ -149,11 +139,6 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
                         verification_status="verified",
                     )
                 )
-            await connection.execute(
-                text(
-                    f"UPDATE \"{self.schema}\".tenant_currency_settings SET base_currency='USD'"
-                )
-            )
         for tenant in self.tenants:
             async with self.uow(tenant) as uow:
                 user = replace(
@@ -180,22 +165,12 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
             ) as uow:
                 yield uow
 
-    def settings(self, session, tenant):
-        return TenancyProfileCurrencySettingsAdapter(
-            GetTenantCurrencySettingsHandler(
-                SqlAlchemyTenantCurrencySettingsQueryRepository(
-                    session, TenantIdVO.from_value(tenant.uuid)
-                )
-            )
-        )
-
     def update_handler(self, session, tenant):
         return UpdateCurrentUserProfileHandler(
             SqlAlchemyUserRepository(session, self.naming),
             ReferenceDataProfileCurrencyValidator(
                 ValidateCurrencyHandler(SqlAlchemyCurrencyQueryRepository(session))
             ),
-            self.settings(session, tenant),
         )
 
     def command(self, tenant=None, **changes):
@@ -211,7 +186,6 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.uow(tenant) as uow:
             return await GetCurrentUserHandler(
                 SqlAlchemyUserProfileQueryRepository(uow.session, self.naming),
-                self.settings(uow.session, tenant),
             ).execute(GetCurrentUserQuery(tenant, self.user_id))
 
     async def update(self, tenant=None, **changes):
@@ -225,6 +199,13 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         async with self.engine.begin() as connection:
+            self.assertFalse(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).has_table(
+                        "tenant_currency_settings", schema=self.schema
+                    )
+                )
+            )
             self.assertIsNone(
                 await connection.scalar(text("SELECT to_regclass('public.users')"))
             )
@@ -256,10 +237,8 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_normalization_roundtrip_omission_reset_and_identical_ids_are_isolated(
         self,
     ) -> None:
-        self.assertEqual((await self.read()).effective_display_currency, "USD")
-        self.assertEqual(
-            (await self.read(self.tenants[1])).effective_display_currency, "UAH"
-        )
+        self.assertIsNone((await self.read()).display_currency)
+        self.assertIsNone((await self.read(self.tenants[1])).display_currency)
         await self.update(display_currency=" uah ", display_currency_provided=True)
         self.assertEqual((await self.read()).display_currency, "UAH")
         self.assertIsNone((await self.read(self.tenants[1])).display_currency)
@@ -267,7 +246,7 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.read()).display_currency, "UAH")
         await self.update(display_currency_provided=True)
         self.assertIsNone((await self.read()).display_currency)
-        self.assertEqual((await self.read()).effective_display_currency, "USD")
+        self.assertFalse(hasattr(await self.read(), "effective_display_currency"))
         async with self.uow() as uow:
             with self.assertRaisesRegex(RuntimeError, "not bound"):
                 await SqlAlchemyUserRepository(uow.session, self.naming).get_by_id(
@@ -393,7 +372,8 @@ class CurrencyProfilePostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
                 response = await client.get(endpoint)
                 self.assertEqual(response.status_code, 200, response.text)
-                self.assertEqual(response.json()["effective_display_currency"], "USD")
+                self.assertIsNone(response.json()["display_currency"])
+                self.assertNotIn("effective_display_currency", response.json())
                 self.assertEqual(
                     (await client.patch(endpoint, json=PROFILE)).status_code, 403
                 )

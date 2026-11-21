@@ -19,5 +19,4 @@ class GetCurrentUserResponseSchema(BaseModel):
     interface_theme: str
     timezone: str
     display_currency: str | None
-    effective_display_currency: str
     emails: list[GetCurrentUserEmailResponseSchema] = Field(default_factory=list)

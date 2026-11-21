@@ -15,7 +15,7 @@ from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
 
 @dataclass(frozen=True, slots=True)
 class MoneyValueDefinitionVO:
-    """Задаёт ровно один способ получения денег, не расширяя shared MoneyVO."""
+    """Задаёт ровно один способ получения числовой суммы без валютных преобразований."""
 
     kind: ClassVar[ValueDefinitionKind] = ValueDefinitionKind.MONEY
     mode: MoneyValueMode

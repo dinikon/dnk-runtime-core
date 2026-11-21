@@ -1,8 +1,6 @@
 from __future__ import annotations
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from src.modules.shared.domain.value_object.currency import CurrencyVO
 
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -443,15 +441,13 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
 
         repository = AsyncMock()
         repository.get_current_user.return_value = None
-        settings = AsyncMock()
-        use_case = GetCurrentUserHandler(repository, settings)
+        use_case = GetCurrentUserHandler(repository)
         with self.assertRaises(InvalidSessionError):
             await use_case.execute(
                 GetCurrentUserQuery(
                     tenant_id=self.tenant_id_vo, user_id=UserIdVO.from_value(uuid4())
                 )
             )
-        settings.get_base_currency.assert_not_awaited()
 
     async def test_update_current_user_profile_persists_changes(self) -> None:
         user = User.create_tenant_admin(
@@ -478,9 +474,6 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         use_case = UpdateCurrentUserProfileHandler(
             users_repository=users_repository,
             currency_validator=AsyncMock(),
-            settings=SimpleNamespace(
-                get_base_currency=AsyncMock(return_value=CurrencyVO("UAH"))
-            ),
         )
 
         result = await use_case.execute(
@@ -533,9 +526,6 @@ class IdentityUseCaseTests(unittest.IsolatedAsyncioTestCase):
         use_case = UpdateCurrentUserProfileHandler(
             users_repository=users_repository,
             currency_validator=AsyncMock(),
-            settings=SimpleNamespace(
-                get_base_currency=AsyncMock(return_value=CurrencyVO("UAH"))
-            ),
         )
 
         with self.assertRaises(DomainError):

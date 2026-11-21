@@ -47,7 +47,7 @@ class User:
         last_name: str,
         role: str = "member",
     ) -> "User":
-        """Создаёт пользователя с профилем и наследованием валюты Tenant."""
+        """Создаёт пользователя с профилем без выбранной валюты отображения."""
         normalized_first_name = first_name.strip()
         normalized_last_name = last_name.strip()
         # Bootstrap profiles may be incomplete; no name is inferred from email.
@@ -141,7 +141,7 @@ class User:
 
     @staticmethod
     def _ensure_display_currency(currency: CurrencyVO | None) -> None:
-        """Допускает нормализованную валюту либо наследование настроек Tenant."""
+        """Допускает нормализованную валюту либо отсутствие выбора."""
         if currency is not None and not isinstance(currency, CurrencyVO):
             raise DomainError("User display currency must be CurrencyVO or None.")
 

@@ -1,7 +1,7 @@
 # Tenant migrations
 
 The current tenant chain starts at `0001_tenant_baseline` and ends at
-`0017_remove_currency`, after `0016_channels_connections_only`. Existing schemas
+`0018_remove_currency_settings`, after `0017_remove_currency`. Existing schemas
 upgrade to this head; new onboarding applies the same chain. The older numbered
 revisions described below are historical release notes, not the deployed chain.
 
@@ -25,9 +25,38 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 
 ## New tenants
 
-`CreateTenantHandler` validates the requested base currency against active Reference Data before creating resources, creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, initializes `tenant_currency_settings` in that schema, then provisions the administrator and email and initializes Catalog through its public Application facade. Catalog writes use that administrator UUID for audit and generate separate UUIDv7 identifiers for Default and its title/body blocks. Repeated initialization preserves a complete existing schema and rejects an incomplete one. The currency-settings migration seeds existing schemas with UAH; new onboarding replaces that initial value with the validated selection in the same transaction. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
+`CreateTenantHandler` creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, then provisions the administrator and email and initializes Catalog through its public Application facade. It has no base-currency input or currency-catalog dependency. Catalog writes use that administrator UUID for audit and generate separate UUIDv7 identifiers for Default and its title/body blocks. Repeated initialization preserves a complete existing schema and rejects an incomplete one. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
 
 The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain, owner identity and cloud connection writes commit together. Any failure rolls everything back. The Control Plane installer records accepted-command errors in its durable attempt state and reconciles actual resources before declaring absence.
+
+## Tenant currency settings removal: 0018
+
+`0018_remove_currency_settings` drops `tenant_currency_settings` from the selected
+tenant schema without CASCADE. The existing baseline and the historical ownership
+name remain; fresh onboarding runs the full chain and finishes without this table.
+An unexpected external FK blocks the drop and the enclosing transaction rolls back.
+
+Tenant creation no longer accepts or validates `base_currency`; `create_tenant.py`
+rejects `--base-currency`. The settings endpoint is removed. Identity returns only
+the nullable explicit `display_currency` in GET/PATCH `/api/console/auth/me`;
+`effective_display_currency` and the inherited fallback are removed. Omitting the
+PATCH field preserves the choice; explicit null clears it. Existing non-null
+and null user preferences are preserved by this migration, without backfill.
+Reference Data and the shared monetary types remain available.
+
+Finish old onboarding/profile operations and stop the previous API and provisioning
+processes before applying the new image's tenant migrations:
+
+```sh
+dnk-manage tenant-migrations upgrade --all
+dnk-manage tenant-migrations current --all
+```
+
+Require `0018_remove_currency_settings` for each managed tenant before exposing
+the matching API. The working database is not changed by importing the code.
+Downgrade to `0017_remove_currency` recreates an empty historical table and its
+singleton check. It cannot recover the former base currencies; restore them from
+a backup before using an older runtime that requires these settings.
 
 ## Currency removal: 0017
 
@@ -39,9 +68,9 @@ schemas create the historical tables and remove them before reaching head.
 Historical ownership names remain in `src/modules/tenant_persistence.py` so
 autogenerate can detect retired tables; the runtime models and CLI are removed.
 
-The global currency catalog in Reference Data, `tenant_currency_settings`,
-`users.display_currency` and shared monetary value objects remain supported.
-They do not require an exchange-rate book. No Currency jobs or rate HTTP API
+The global currency catalog in Reference Data, `users.display_currency` and shared
+monetary value objects remain supported. The tenant settings that remained after
+0017 are retired by 0018. No Currency jobs or rate HTTP API
 were implemented, so there are no scheduled Currency jobs to cancel.
 
 Before upgrading, finish and stop any invocation of the old `currency refresh`
@@ -52,7 +81,7 @@ dnk-manage tenant-migrations upgrade --all
 dnk-manage tenant-migrations current --all
 ```
 
-Every managed tenant must reach `0017_remove_currency`. The working database
+Revision `0017_remove_currency` is retained in the chain. The working database
 is not migrated by changing or importing the code. Retain a backup if saved
 quotes are needed: downgrade to `0016_channels_connections_only` recreates only
 empty book/quote tables, their same-schema FK and checks. It does not restore

@@ -10,8 +10,18 @@ Tenancy не содержит системного списка языков и 
 без доступа к его SQL-моделям. Локаль конкретного сценария выбирает его потребитель.
 
 Tenant-таблицы обслуживаются миграциями в `migrations/tenant/`. Текущая ревизия —
-`0027_remove_channels`. Миграции не запускаются
+`0018_remove_currency_settings`. Миграции не запускаются
 автоматически при обычном HTTP-запросе.
+
+У tenant нет базовой валюты. Создание через Application, Control Plane и
+`create_tenant.py` не принимает валюту и не обращается к валютному справочнику.
+Таблица `tenant_currency_settings` и endpoint
+`GET /api/console/tenants/current/currency-settings` удалены.
+
+Профиль Identity хранит только собственное nullable-предпочтение `display_currency`.
+`GET/PATCH /api/console/auth/me` возвращают выбранную валюту либо `null`;
+`effective_display_currency` отсутствует. Пропуск поля в PATCH сохраняет выбор,
+явный `null` очищает его. Автоматической подстановки валюты tenant нет.
 
 ## Планируемое удаление через CLI
 

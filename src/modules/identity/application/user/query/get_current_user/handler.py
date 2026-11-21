@@ -7,23 +7,18 @@ from src.modules.identity.application.user.query.get_current_user.dto import (
 from src.modules.identity.application.user.port.query_repository import (
     UserProfileQueryRepositoryProtocol,
 )
-from src.modules.identity.application.user.port.tenant_currency_settings import (
-    ProfileTenantCurrencySettingsProtocol,
-)
 from src.modules.identity.domain.auth.error import InvalidSessionError
 
 
 class GetCurrentUserHandler:
-    """Возвращает проекцию профиля и вычисляет наследуемую валюту отображения."""
+    """Возвращает проекцию профиля с явно выбранной валютой отображения."""
 
     def __init__(
         self,
         repository: UserProfileQueryRepositoryProtocol,
-        settings: ProfileTenantCurrencySettingsProtocol,
     ) -> None:
-        """Получает порты чтения профиля и настроек Tenant на общем внешнем UoW."""
+        """Получает порт чтения профиля на общем внешнем UoW."""
         self._repository = repository
-        self._settings = settings
 
     async def execute(self, query: GetCurrentUserQuery) -> GetCurrentUserResultDTO:
         """Читает профиль по доверенному контексту, не загружая доменный агрегат."""
@@ -32,7 +27,6 @@ class GetCurrentUserHandler:
         )
         if result is None:
             raise InvalidSessionError()
-        base_currency = await self._settings.get_base_currency(query.tenant_id)
         return GetCurrentUserResultDTO(
             id=result.id,
             status=result.status,
@@ -45,6 +39,5 @@ class GetCurrentUserHandler:
             interface_theme=result.interface_theme,
             timezone=result.timezone,
             display_currency=result.display_currency,
-            effective_display_currency=result.display_currency or base_currency.value,
             emails=result.emails,
         )

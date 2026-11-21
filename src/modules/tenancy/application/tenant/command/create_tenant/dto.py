@@ -13,4 +13,3 @@ class CreateTenantResultDTO:
     tenant_status: str
     user_status: str
     tenant_domain_host: str
-    base_currency: str

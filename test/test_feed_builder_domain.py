@@ -123,9 +123,7 @@ from src.modules.feed_builder.domain.feed.value_object.manual_value_definition i
 from src.modules.feed_builder.domain.feed.value_object.money_ceil_step_parameters import (
     MoneyCeilStepParametersVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.money_literal import (
-    MoneyLiteralVO,
-)
+from src.modules.feed_builder.domain.feed.value_object.price_amount import PriceAmountVO
 from src.modules.feed_builder.domain.feed.value_object.money_value_definition import (
     MoneyValueDefinitionVO,
 )
@@ -411,7 +409,6 @@ class FeedConstructionTests(unittest.TestCase):
             ScalarLiteralVO(LiteralValueType.UUID, category_id),
         )
         calculation = PriceCalculationVO(
-            calculation_currency=UAH,
             default_expression=ParameterReferenceVO("price.regular"),
             rules=[rule(category, ParameterReferenceVO("price.purchase")), rule()],
             purchase_source=PurchasePriceSourceVO(EntityIdVO(uuid4())),
@@ -553,7 +550,7 @@ class FeedConstructionTests(unittest.TestCase):
         ]
         expression = FunctionExpressionVO(PriceFunction.MAX, arguments)
         rules = [rule()]
-        calculation = PriceCalculationVO(UAH, expression, rules)
+        calculation = PriceCalculationVO(expression, rules)
         schema_fields = [
             text_field(
                 type_definition=StringFieldTypeVO(
@@ -772,7 +769,7 @@ class FeedValuesTests(unittest.TestCase):
             context.prec = 2
             context.traps[Inexact] = True
             context.traps[Rounded] = True
-            self.assertEqual(MoneyLiteralVO(amount, UAH).amount, amount)
+            self.assertEqual(PriceAmountVO(amount).amount, amount)
             self.assertEqual(DecimalLiteralVO(amount).value, amount)
             self.assertEqual(
                 MoneyCeilStepParametersVO(Decimal("0.000001")).step, Decimal("0.000001")
@@ -789,6 +786,8 @@ class FeedValuesTests(unittest.TestCase):
         ):
             with self.subTest(bad=bad), self.assertRaises(InvalidFeedValueError):
                 DecimalLiteralVO(bad)
+            with self.subTest(bad=bad), self.assertRaises(InvalidFeedValueError):
+                PriceAmountVO(bad)
         for constructor, constraints in (
             (TextConstraintsVO, {"required": 1}),
             (TextConstraintsVO, {"min_length": True}),
@@ -862,7 +861,6 @@ class FeedValuesTests(unittest.TestCase):
             with self.assertRaises(TypeError):
                 constructor(ManualValueDefinitionVO(), currency=UAH)
         for changes in (
-            {"currency": None},
             {"currency": "UAH"},
             {"constraints": TextConstraintsVO(max_length=1)},
             {"transforms": (TransformDefinitionVO(TransformOperation.STRING_TRIM),)},
@@ -889,12 +887,15 @@ class FeedValuesTests(unittest.TestCase):
         ):
             with self.assertRaises(TypeError):
                 MoneyFieldTypeVO(
-                    UAH, MoneyValueDefinitionVO(MoneyValueMode.MANUAL), **forbidden
+                    currency=UAH,
+                    value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
+                    **forbidden,
                 )
-        with self.assertRaises(TypeError):
+        self.assertIsNone(
             MoneyFieldTypeVO(
                 value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL)
-            )
+            ).currency
+        )
 
     def test_field_owns_common_properties_and_a_single_closed_type_definition(
         self,
@@ -929,8 +930,8 @@ class FeedValuesTests(unittest.TestCase):
                 constructor(ManualValueDefinitionVO(), kind=FieldValueType.MONEY)
         with self.assertRaisesRegex(TypeError, "kind"):
             MoneyFieldTypeVO(
-                UAH,
-                MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
+                currency=UAH,
+                value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
                 kind=FieldValueType.STRING,
             )
 
@@ -962,10 +963,10 @@ class FeedValuesTests(unittest.TestCase):
                 ),
             ),
             MoneyFieldTypeVO(
-                UAH,
-                MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
-                MoneyConstraintsVO(True, Decimal("0"), Decimal("1000")),
-                (
+                currency=UAH,
+                value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
+                constraints=MoneyConstraintsVO(True, Decimal("0"), Decimal("1000")),
+                transforms=(
                     TransformDefinitionVO(
                         TransformOperation.MONEY_CEIL_STEP,
                         MoneyCeilStepParametersVO(Decimal("0.01")),
@@ -1051,7 +1052,7 @@ class FeedValuesTests(unittest.TestCase):
         source = SourceReferenceVO(
             SourceProvider.CATALOG, CatalogSourcePath.REGULAR_PRICE
         )
-        calc = PriceCalculationVO(UAH, ParameterReferenceVO("price.regular"))
+        calc = PriceCalculationVO(ParameterReferenceVO("price.regular"))
         for mode, src, calculation in (
             (MoneyValueMode.SOURCE, None, None),
             (MoneyValueMode.SOURCE, source, calc),
@@ -1284,7 +1285,6 @@ class FeedCalculationStructureTests(unittest.TestCase):
             right=DecimalLiteralVO(Decimal("1.25")),
         )
         definition = PriceCalculationVO(
-            UAH,
             ParameterReferenceVO("price.regular"),
             [rule(condition, expression)],
             PurchasePriceSourceVO(EntityIdVO(uuid4())),
@@ -1318,8 +1318,8 @@ class FeedCalculationStructureTests(unittest.TestCase):
                 )
         for expression in (None, {}, "price.regular"):
             with self.assertRaises(InvalidPriceCalculationDefinitionError):
-                PriceCalculationVO(UAH, expression)
-        valid = PriceCalculationVO(UAH, ParameterReferenceVO("price.regular"))
+                PriceCalculationVO(expression)
+        valid = PriceCalculationVO(ParameterReferenceVO("price.regular"))
         self.assertEqual(
             money_field(valid).type_definition.value_definition.calculation.rules, ()
         )
@@ -1333,7 +1333,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
             replace(original, expression=[]),
         ):
             calculation = PriceCalculationVO(
-                UAH, ParameterReferenceVO("price.regular"), (invalid,)
+                ParameterReferenceVO("price.regular"), (invalid,)
             )
             with self.assertRaises(InvalidPriceCalculationDefinitionError):
                 money_field(calculation)
@@ -1341,7 +1341,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
     def test_rule_identity_is_scoped_to_a_field_not_the_whole_feed(self) -> None:
         """Два независимых денежных поля могут использовать одинаковый снимок правил."""
         calculation = PriceCalculationVO(
-            UAH, ParameterReferenceVO("price.regular"), (rule(),)
+            ParameterReferenceVO("price.regular"), (rule(),)
         )
         first = money_field(calculation)
         second = money_field(
@@ -1351,6 +1351,66 @@ class FeedCalculationStructureTests(unittest.TestCase):
         )
         self.assertEqual(len(feed(FeedSchemaVO((first, second))).schema.fields), 2)
 
+    def test_currency_tag_does_not_change_source_amount_or_formula(self) -> None:
+        """SOURCE и формула не приобретают конвертацию при выборе или смене метки."""
+        source = MoneyValueDefinitionVO(
+            MoneyValueMode.SOURCE,
+            source=SourceReferenceVO(
+                SourceProvider.CATALOG, CatalogSourcePath.REGULAR_PRICE
+            ),
+        )
+        original = money_field(
+            type_definition=MoneyFieldTypeVO(value_definition=source)
+        )
+        labelled = replace(
+            original,
+            type_definition=replace(
+                original.type_definition, currency=CurrencyVO("usd")
+            ),
+        )
+        self.assertEqual(
+            original.type_definition.value_definition,
+            labelled.type_definition.value_definition,
+        )
+        self.assertIsNone(original.type_definition.currency)
+        self.assertEqual(labelled.type_definition.currency.value, "USD")
+        restored = feed(FeedSchemaVO((labelled,))).schema.fields[0]
+        self.assertEqual(restored, labelled)
+
+    def test_price_amount_preserves_zero_negative_and_precise_values(self) -> None:
+        """Сумма не округляется и не навязывает ограничения конкретного поля."""
+        for value in (Decimal("0"), Decimal("-0.000001"), Decimal("123.123456789")):
+            amount = PriceAmountVO(value)
+            self.assertEqual(amount.amount.as_tuple(), value.as_tuple())
+            with self.assertRaises(FrozenInstanceError):
+                amount.amount = Decimal("0")
+        with self.assertRaises(TypeError):
+            PriceAmountVO(Decimal("1"), currency=UAH)
+
+    def test_formula_preserves_manual_rate_and_markup_without_currency_context(
+        self,
+    ) -> None:
+        """Деление на пользовательский курс и умножение на наценку остаются AST."""
+        expression = ArithmeticExpressionVO(
+            ArithmeticOperator.MULTIPLY,
+            left=ArithmeticExpressionVO(
+                ArithmeticOperator.DIVIDE,
+                left=ParameterReferenceVO("price.regular"),
+                right=DecimalLiteralVO(Decimal("40.123456")),
+            ),
+            right=DecimalLiteralVO(Decimal("1.20")),
+        )
+        calculation = PriceCalculationVO(default_expression=expression)
+        field = money_field(calculation)
+        restored = feed(FeedSchemaVO((field,))).schema.fields[0]
+        self.assertEqual(
+            restored.type_definition.value_definition.calculation, calculation
+        )
+        self.assertEqual(
+            calculation.default_expression.left.right.value, Decimal("40.123456")
+        )
+        self.assertEqual(calculation.default_expression.right.value, Decimal("1.20"))
+
     def test_presence_dependency_also_requires_purchase_binding(self) -> None:
         """Даже EXISTS закупки является зависимостью, без молчаливого выбора источника."""
         conditional = rule(
@@ -1359,16 +1419,13 @@ class FeedCalculationStructureTests(unittest.TestCase):
             )
         )
         for definition in (
-            PriceCalculationVO(UAH, ParameterReferenceVO("price.purchase")),
-            PriceCalculationVO(
-                UAH, ParameterReferenceVO("price.regular"), (conditional,)
-            ),
+            PriceCalculationVO(ParameterReferenceVO("price.purchase")),
+            PriceCalculationVO(ParameterReferenceVO("price.regular"), (conditional,)),
         ):
             with self.assertRaises(InvalidPriceCalculationDefinitionError) as caught:
                 money_field(definition)
             self.assertEqual(caught.exception.path, ("purchase_source",))
         unused = PriceCalculationVO(
-            UAH,
             ParameterReferenceVO("price.regular"),
             purchase_source=PurchasePriceSourceVO(EntityIdVO(uuid4())),
         )
@@ -1379,14 +1436,14 @@ class FeedCalculationStructureTests(unittest.TestCase):
         """Повтор ID отклоняется, одинаковое содержимое с разными ID допускается."""
         original = rule()
         definition = PriceCalculationVO(
-            UAH, ParameterReferenceVO("price.regular"), (original, original)
+            ParameterReferenceVO("price.regular"), (original, original)
         )
         with self.assertRaises(DuplicatePriceRuleIdentifierError) as caught:
             money_field(definition)
         self.assertEqual(caught.exception.path, ("rules", 1, "id"))
         different_id = rule(original.condition, original.expression)
         valid = PriceCalculationVO(
-            UAH, ParameterReferenceVO("price.regular"), (original, different_id)
+            ParameterReferenceVO("price.regular"), (original, different_id)
         )
         self.assertEqual(
             money_field(valid).type_definition.value_definition.calculation.rules,
@@ -1396,10 +1453,12 @@ class FeedCalculationStructureTests(unittest.TestCase):
     def test_field_and_feed_restore_recheck_nested_calculation_policy(self) -> None:
         """Вложенный тип не позволяет восстановленной Entity обойти Policy расчёта."""
         original = money_field()
-        calculation = PriceCalculationVO(UAH, ParameterReferenceVO("price.purchase"))
+        calculation = PriceCalculationVO(ParameterReferenceVO("price.purchase"))
         invalid_type = MoneyFieldTypeVO(
-            UAH,
-            MoneyValueDefinitionVO(MoneyValueMode.CALCULATED, calculation=calculation),
+            currency=UAH,
+            value_definition=MoneyValueDefinitionVO(
+                MoneyValueMode.CALCULATED, calculation=calculation
+            ),
         )
         with self.assertRaises(InvalidPriceCalculationDefinitionError):
             FieldDefinition.restore(
@@ -1424,20 +1483,45 @@ class FeedCalculationStructureTests(unittest.TestCase):
                 updated_at=NOW,
             )
 
-    def test_result_currency_and_calculation_currency_remain_independent(self) -> None:
-        """Валюта результата принадлежит типу поля, валюта арифметики — расчёту."""
-        calculation = PriceCalculationVO(UAH, ParameterReferenceVO("price.regular"))
-        definition = MoneyFieldTypeVO(
-            CurrencyVO("USD"),
-            MoneyValueDefinitionVO(MoneyValueMode.CALCULATED, calculation=calculation),
+    def test_currency_is_optional_metadata_of_an_unchanged_formula(self) -> None:
+        """Код валюты не меняет формулу; расчёт не имеет собственной валюты."""
+        calculation = PriceCalculationVO(
+            default_expression=ArithmeticExpressionVO(
+                operator=ArithmeticOperator.DIVIDE,
+                left=ParameterReferenceVO("price.regular"),
+                right=DecimalLiteralVO(Decimal("40.123456")),
+            ),
         )
-        result = money_field(type_definition=definition)
-        restored = feed(FeedSchemaVO((result,))).schema.fields[0]
-        self.assertEqual(restored.type_definition.currency, CurrencyVO("USD"))
+        for currency in (None, UAH, CurrencyVO("USD")):
+            definition = MoneyFieldTypeVO(
+                value_definition=MoneyValueDefinitionVO(
+                    MoneyValueMode.CALCULATED, calculation=calculation
+                ),
+                currency=currency,
+            )
+            result = money_field(type_definition=definition)
+            original = feed(FeedSchemaVO((result,)))
+            restored = Feed.restore(
+                identifier=original.id,
+                **{
+                    item.name: getattr(original, item.name)
+                    for item in fields(original)
+                    if item.name != "id"
+                },
+            )
+            self.assertEqual(restored.schema, original.schema)
+            settings = restored.schema.fields[0].type_definition
+            self.assertEqual(settings.currency, currency)
+            self.assertEqual(settings.value_definition.calculation, calculation)
         self.assertEqual(
-            restored.type_definition.value_definition.calculation.calculation_currency,
-            UAH,
+            {item.name for item in fields(calculation)},
+            {"default_expression", "rules", "purchase_source"},
         )
+        with self.assertRaises(TypeError):
+            PriceCalculationVO(
+                default_expression=ParameterReferenceVO("price.regular"),
+                calculation_currency=UAH,
+            )
 
     def test_invalid_node_arities_and_literals_are_rejected(self) -> None:
         """Не смешивает бинарную/унарную форму, пустую логику и типы литералов."""
@@ -1509,7 +1593,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
             left=ParameterReferenceVO("custom.not_registered_yet"),
             right=DecimalLiteralVO(Decimal("0")),
         )
-        result = money_field(PriceCalculationVO(UAH, expression))
+        result = money_field(PriceCalculationVO(expression))
         self.assertIs(
             result.type_definition.value_definition.calculation.default_expression,
             expression,
@@ -1523,7 +1607,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
                 ArithmeticOperator.NEGATE, operand=expression
             )
         with self.assertRaises(DefinitionStructureLimitExceededError) as caught:
-            money_field(PriceCalculationVO(UAH, expression))
+            money_field(PriceCalculationVO(expression))
         self.assertEqual(caught.exception.path[0], "default_expression")
 
     def test_total_node_budget_counts_reused_subtrees(self) -> None:
@@ -1531,12 +1615,12 @@ class FeedCalculationStructureTests(unittest.TestCase):
         leaf = ParameterReferenceVO("price.regular")
         expression = FunctionExpressionVO(PriceFunction.MAX, (leaf,) * (MAX_AST_NODES))
         with self.assertRaises(DefinitionStructureLimitExceededError) as caught:
-            money_field(PriceCalculationVO(UAH, expression))
+            money_field(PriceCalculationVO(expression))
         self.assertEqual(caught.exception.path[:2], ("default_expression", "arguments"))
         valid = FunctionExpressionVO(PriceFunction.MAX, (leaf,) * (MAX_AST_NODES - 1))
         self.assertIs(
             money_field(
-                PriceCalculationVO(UAH, valid)
+                PriceCalculationVO(valid)
             ).type_definition.value_definition.calculation.default_expression,
             valid,
         )
@@ -1545,7 +1629,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
         """Состав ограничивается до обхода или создания лишних объектов."""
         with self.assertRaises(DefinitionStructureLimitExceededError):
             PriceCalculationVO(
-                UAH, ParameterReferenceVO("price.regular"), (rule(),) * (MAX_RULES + 1)
+                ParameterReferenceVO("price.regular"), (rule(),) * (MAX_RULES + 1)
             )
         with self.assertRaises(DefinitionStructureLimitExceededError):
             FeedSchemaVO((text_field(),) * (MAX_FIELDS + 1))

@@ -10,9 +10,6 @@ from src.modules.identity.application.user.command.update_current_user_profile.e
 from src.modules.identity.application.user.port.currency_validator import (
     ProfileCurrencyValidatorProtocol,
 )
-from src.modules.identity.application.user.port.tenant_currency_settings import (
-    ProfileTenantCurrencySettingsProtocol,
-)
 from src.modules.identity.domain.auth.error import InvalidSessionError
 from src.modules.identity.domain.user.error import UserLoginUnavailableError
 from src.modules.identity.domain.user.repository import UserRepositoryProtocol
@@ -26,12 +23,10 @@ class UpdateCurrentUserProfileHandler:
         self,
         users_repository: UserRepositoryProtocol,
         currency_validator: ProfileCurrencyValidatorProtocol,
-        settings: ProfileTenantCurrencySettingsProtocol,
     ) -> None:
-        """Принимает порты агрегата, проверки валюты и настроек Tenant без UoW."""
+        """Принимает порты агрегата и проверки выбранной валюты без UoW."""
         self._users = users_repository
         self._currency_validator = currency_validator
-        self._settings = settings
 
     async def execute(
         self, command: UpdateCurrentUserProfileCommand
@@ -41,7 +36,6 @@ class UpdateCurrentUserProfileHandler:
         if command.display_currency_provided and command.display_currency is not None:
             currency = CurrencyVO.from_value(command.display_currency)
             await self._currency_validator.ensure_supported(currency)
-        base = await self._settings.get_base_currency(command.tenant_id)
         user = await self._users.get_by_id(
             command.user_id, tenant_id=command.tenant_id, for_update=True
         )
@@ -75,7 +69,6 @@ class UpdateCurrentUserProfileHandler:
             interface_theme=user.interface_theme,
             timezone=user.timezone,
             display_currency=selected,
-            effective_display_currency=selected or base.value,
             emails=[
                 UpdateCurrentUserProfileEmailDTO(
                     id=email.id.uuid,

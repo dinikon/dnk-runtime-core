@@ -12,18 +12,6 @@ from src.modules.catalog.infrastructure.product_type.persistence.repository impo
 )
 from src.modules.shared.infrastructure.uuid.uuid7_generator import UUID7Generator
 from src.modules.shared.infrastructure.time.utc_clock import UtcClock
-from src.modules.reference_data.application.currency.query.validate_currency.handler import (
-    ValidateCurrencyHandler,
-)
-from src.modules.reference_data.infrastructure.currency.persistence.query_repository import (
-    SqlAlchemyCurrencyQueryRepository,
-)
-from src.modules.tenancy.infrastructure.adapter.currency_validator import (
-    ReferenceDataCurrencyValidator,
-)
-from src.modules.tenancy.infrastructure.adapter.tenant_currency_settings import (
-    TenantCurrencySettingsPersistenceAdapter,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.control_plane.infrastructure.models import InstallationModel
 from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
@@ -138,10 +126,6 @@ class TenancyAdapter:
             TenantSchemaBootstrapContextFactory(schema_prefix=self.schema_prefix),
             AlembicTenantSchemaBootstrapAdapter(self.session, self.migrator),
             FilesTenantStorageAdapter(self.session, self.naming),
-            ReferenceDataCurrencyValidator(
-                ValidateCurrencyHandler(SqlAlchemyCurrencyQueryRepository(self.session))
-            ),
-            TenantCurrencySettingsPersistenceAdapter(self.session, self.naming),
             CatalogProvisioningAdapter(
                 self.session,
                 self.naming,

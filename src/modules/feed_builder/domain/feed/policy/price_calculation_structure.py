@@ -36,9 +36,6 @@ from src.modules.feed_builder.domain.feed.value_object.scalar_literal import (
 from src.modules.feed_builder.domain.feed.value_object.decimal_literal import (
     DecimalLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.money_literal import (
-    MoneyLiteralVO,
-)
 
 if TYPE_CHECKING:
     from src.modules.feed_builder.domain.feed.value_object.price_calculation import (
@@ -109,9 +106,7 @@ class PriceCalculationStructurePolicy:
                 children = tuple(
                     (("items", index), child) for index, child in enumerate(node.items)
                 )
-            elif not isinstance(
-                node, (ScalarLiteralVO, DecimalLiteralVO, MoneyLiteralVO)
-            ):
+            elif not isinstance(node, (ScalarLiteralVO, DecimalLiteralVO)):
                 raise InvalidPriceCalculationDefinitionError(
                     "Неизвестный узел определения.", path=path
                 )

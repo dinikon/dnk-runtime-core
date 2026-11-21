@@ -36,6 +36,13 @@ class ModuleRegistrationTests(unittest.TestCase):
             "src/management/commands/currency.py",
             "src/modules/reference_data/application/currency/query/get_currency_validation_catalog",
             "src/modules/reference_data/domain/currency/policy.py",
+            "src/modules/tenancy/domain/tenant_currency_settings",
+            "src/modules/tenancy/application/tenant_currency_settings",
+            "src/modules/tenancy/infrastructure/tenant_currency_settings",
+            "src/modules/tenancy/presentation/tenant_currency_settings",
+            "src/modules/tenancy/infrastructure/persistence/models/tenant_currency_settings.py",
+            "src/modules/identity/application/user/port/tenant_currency_settings.py",
+            "src/modules/identity/infrastructure/user/tenant_currency_settings.py",
             "frontends/apps/console/src/modules/inventory",
             "frontends/apps/console/src/modules/price-lists",
             "src/config/feature/price_lists_config.py",
@@ -52,6 +59,7 @@ class ModuleRegistrationTests(unittest.TestCase):
             "/api/console/price-lists",
             "/api/console/price-list-offers",
             "/api/console/currency",
+            "/api/console/tenants/current/currency-settings",
         ):
             self.assertFalse(any(path.startswith(prefix) for path in paths), prefix)
         self.assertEqual(
@@ -81,7 +89,6 @@ class ModuleRegistrationTests(unittest.TestCase):
             "/api/console/crm/contacts",
             "/api/console/crm/companies",
             "/api/console/reference-data/currencies",
-            "/api/console/tenants/current/currency-settings",
             "/api/console/auth/me",
         ):
             self.assertTrue(any(path.startswith(prefix) for path in paths), prefix)
@@ -94,6 +101,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         retired_currency_tables = {
             "currency_exchange_rate_books",
             "currency_exchange_rate_quotes",
+            "tenant_currency_settings",
         }
         self.assertTrue(retired_currency_tables.isdisjoint(tables))
         self.assertLessEqual(retired_currency_tables, managed_table_names(metadata))
@@ -104,7 +112,6 @@ class ModuleRegistrationTests(unittest.TestCase):
                 "companies",
                 "files_registry",
                 "users",
-                "tenant_currency_settings",
                 "channels",
                 "channel_connections",
             }
@@ -139,6 +146,17 @@ class ModuleRegistrationTests(unittest.TestCase):
             ).handler.__name__,
             "handle_sync",
         )
+
+    def test_profile_api_exposes_only_the_explicit_currency_preference(self) -> None:
+        """OpenAPI профиля сохраняет nullable выбор и не обещает наследуемую валюту."""
+        schemas = create_app().openapi()["components"]["schemas"]
+        for name in (
+            "GetCurrentUserResponseSchema",
+            "UpdateCurrentUserProfileResponseSchema",
+        ):
+            properties = schemas[name]["properties"]
+            self.assertNotIn("effective_display_currency", properties)
+            self.assertIn({"type": "null"}, properties["display_currency"]["anyOf"])
 
     def test_migrations_extend_independent_schema_baselines(self) -> None:
         """Каждая цепочка имеет свою baseline и линейные независимые продолжения."""

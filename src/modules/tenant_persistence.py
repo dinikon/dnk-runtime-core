@@ -7,7 +7,6 @@ import src.modules.contact_points.infrastructure.persistence.models.contact_poin
 import src.modules.contact_points.infrastructure.persistence.models.contact_point_binding  # noqa: F401
 import src.modules.contact_points.infrastructure.persistence.models.contact_point_label  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user  # noqa: F401
-import src.modules.tenancy.infrastructure.persistence.models.tenant_currency_settings  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.user_email  # noqa: F401
 import src.modules.identity.infrastructure.persistence.models.cloud_identity
 import src.modules.identity.infrastructure.persistence.models.invitation  # noqa: F401

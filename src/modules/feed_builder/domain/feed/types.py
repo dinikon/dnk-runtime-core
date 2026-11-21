@@ -6,9 +6,6 @@ from src.modules.feed_builder.domain.feed.value_object.parameter_reference impor
 from src.modules.feed_builder.domain.feed.value_object.decimal_literal import (
     DecimalLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.money_literal import (
-    MoneyLiteralVO,
-)
 from src.modules.feed_builder.domain.feed.value_object.arithmetic_expression import (
     ArithmeticExpressionVO,
 )
@@ -52,7 +49,7 @@ from src.modules.feed_builder.domain.feed.value_object.xml_export_settings impor
     XmlExportSettingsVO,
 )
 
-type Expression = ParameterReferenceVO | DecimalLiteralVO | MoneyLiteralVO | ArithmeticExpressionVO | FunctionExpressionVO
+type Expression = ParameterReferenceVO | DecimalLiteralVO | ArithmeticExpressionVO | FunctionExpressionVO
 type ConditionOperand = Expression | ScalarLiteralVO | CollectionLiteralVO
 type Condition = ComparisonConditionVO | LogicalConditionVO | PresenceConditionVO
 type TextValueDefinition = SourceValueDefinitionVO | ManualValueDefinitionVO

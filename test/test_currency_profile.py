@@ -1,7 +1,6 @@
 """Доменные, Application и HTTP-проверки валюты собственного профиля."""
 
 from dataclasses import replace
-from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -32,9 +31,6 @@ from src.modules.identity.domain.user.error import UserLoginUnavailableError
 from src.modules.identity.infrastructure.user.currency_validator import (
     ReferenceDataProfileCurrencyValidator,
 )
-from src.modules.identity.infrastructure.user.tenant_currency_settings import (
-    TenancyProfileCurrencySettingsAdapter,
-)
 from src.modules.identity.presentation.auth.depends import (
     require_authenticated_request_context,
 )
@@ -58,9 +54,6 @@ from src.modules.shared.infrastructure.tokens.in_memory_token_backend import (
     InMemoryTokenBackend,
 )
 from src.modules.shared.presentation.tokens.depends import TokenManagerDep
-from src.modules.tenancy.domain.tenant_currency_settings.error import (
-    TenantCurrencySettingsNotFoundError,
-)
 
 PROFILE = dict(
     last_name="Tester",
@@ -97,11 +90,7 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
         self.repo = AsyncMock()
         self.repo.get_by_id.return_value = self.user
         self.validator = AsyncMock()
-        self.settings = AsyncMock()
-        self.settings.get_base_currency.return_value = CurrencyVO("USD")
-        self.handler = UpdateCurrentUserProfileHandler(
-            self.repo, self.validator, self.settings
-        )
+        self.handler = UpdateCurrentUserProfileHandler(self.repo, self.validator)
 
     def command(self, **changes: object) -> UpdateCurrentUserProfileCommand:
         return replace(
@@ -115,9 +104,7 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
         first = await self.handler.execute(
             self.command(display_currency=" uah ", display_currency_provided=True)
         )
-        self.assertEqual(
-            (first.display_currency, first.effective_display_currency), ("UAH", "UAH")
-        )
+        self.assertEqual(first.display_currency, "UAH")
         self.assertEqual(self.user.display_currency, CurrencyVO("UAH"))
         self.validator.ensure_supported.assert_awaited_once_with(CurrencyVO("UAH"))
         self.repo.get_by_id.assert_awaited_once_with(
@@ -128,9 +115,8 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unchanged.display_currency, "UAH")
         self.validator.ensure_supported.assert_not_awaited()
         reset = await self.handler.execute(self.command(display_currency_provided=True))
-        self.assertEqual(
-            (reset.display_currency, reset.effective_display_currency), (None, "USD")
-        )
+        self.assertIsNone(reset.display_currency)
+        self.assertFalse(hasattr(reset, "effective_display_currency"))
         self.validator.ensure_supported.assert_not_awaited()
 
     async def test_malformed_and_unsupported_codes_do_not_modify_profile(self) -> None:
@@ -151,14 +137,7 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.user.first_name, "Alice")
         self.repo.update_profile.assert_not_awaited()
 
-    async def test_missing_settings_and_missing_or_inactive_user(self) -> None:
-        self.settings.get_base_currency.side_effect = (
-            TenantCurrencySettingsNotFoundError("missing")
-        )
-        with self.assertRaises(TenantCurrencySettingsNotFoundError):
-            await self.handler.execute(self.command())
-        self.repo.update_profile.assert_not_awaited()
-        self.settings.get_base_currency.side_effect = None
+    async def test_missing_or_inactive_user_cannot_update_profile(self) -> None:
         self.repo.get_by_id.return_value = None
         with self.assertRaises(InvalidSessionError):
             await self.handler.execute(self.command())
@@ -206,39 +185,31 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(DomainError):
             self.user.add_email("other@example.com", is_primary=True)
 
-    async def test_query_uses_projection_and_settings_for_both_preferences(
+    async def test_query_returns_explicit_preference_without_a_fallback(
         self,
     ) -> None:
         repository = AsyncMock()
-        handler = GetCurrentUserHandler(repository, self.settings)
+        handler = GetCurrentUserHandler(repository)
         query = GetCurrentUserQuery(self.tenant_id, self.user.id)
-        for stored, expected in ((None, "USD"), ("UAH", "UAH")):
+        for stored in (None, "UAH"):
             repository.get_current_user.return_value = replace(
                 profile_record(self.user), display_currency=stored
             )
             result = await handler.execute(query)
-            self.assertEqual(
-                (result.display_currency, result.effective_display_currency),
-                (stored, expected),
-            )
+            self.assertEqual(result.display_currency, stored)
+            self.assertFalse(hasattr(result, "effective_display_currency"))
         repository.get_current_user.return_value = None
         with self.assertRaises(InvalidSessionError):
             await handler.execute(query)
 
-    async def test_adapters_call_public_scenarios(self) -> None:
+    async def test_currency_validator_calls_public_reference_data_scenario(
+        self,
+    ) -> None:
         public = AsyncMock()
         await ReferenceDataProfileCurrencyValidator(public).ensure_supported(
             CurrencyVO("UAH")
         )
         self.assertEqual(public.execute.call_args.args[0].code, "UAH")
-        public.execute.return_value = SimpleNamespace(base_currency="USD")
-        result = await TenancyProfileCurrencySettingsAdapter(public).get_base_currency(
-            self.tenant_id
-        )
-        self.assertEqual(result, CurrencyVO("USD"))
-        self.assertEqual(
-            public.execute.call_args.args[0].tenant_id.uuid, self.tenant_id.uuid
-        )
 
     async def test_request_preserves_three_currency_states(self) -> None:
         absent = UpdateCurrentUserProfileRequestSchema(**PROFILE)
@@ -276,7 +247,7 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
             lambda *args, **kwargs: profile_record(self.user)
         )
         app.dependency_overrides[get_current_user_handler] = (
-            lambda: GetCurrentUserHandler(query_repo, self.settings)
+            lambda: GetCurrentUserHandler(query_repo)
         )
 
         @app.get("/csrf")
@@ -291,7 +262,8 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
             ) as client:
                 response = await client.get("/auth/me")
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json()["effective_display_currency"], "USD")
+                self.assertIsNone(response.json()["display_currency"])
+                self.assertNotIn("effective_display_currency", response.json())
                 self.assertEqual(
                     (await client.patch("/auth/me", json=PROFILE)).status_code, 403
                 )
@@ -300,15 +272,14 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
                 for fields, expected in (
                     ({"display_currency": " uah "}, "UAH"),
                     ({}, "UAH"),
-                    ({"display_currency": None}, "USD"),
+                    ({"display_currency": None}, None),
                 ):
                     response = await client.patch(
                         "/auth/me", json={**PROFILE, **fields}, headers=headers
                     )
                     self.assertEqual(response.status_code, 200, response.text)
-                    self.assertEqual(
-                        response.json()["effective_display_currency"], expected
-                    )
+                    self.assertEqual(response.json()["display_currency"], expected)
+                    self.assertNotIn("effective_display_currency", response.json())
                 self.assertEqual(
                     (
                         await client.patch(
@@ -331,16 +302,6 @@ class CurrencyProfileTests(unittest.IsolatedAsyncioTestCase):
                         )
                     ).status_code,
                     422,
-                )
-                self.settings.get_base_currency.side_effect = (
-                    TenantCurrencySettingsNotFoundError("missing")
-                )
-                self.assertEqual((await client.get("/auth/me")).status_code, 503)
-                self.assertEqual(
-                    (
-                        await client.patch("/auth/me", json=PROFILE, headers=headers)
-                    ).status_code,
-                    503,
                 )
                 self.assertEqual(
                     (

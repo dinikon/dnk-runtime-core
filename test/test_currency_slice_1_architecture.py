@@ -8,33 +8,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = (
     "src/modules/reference_data/application/currency/query/validate_currency",
     "src/modules/tenancy/application/tenant/command/create_tenant",
-    "src/modules/tenancy/application/tenant_currency_settings/query/get_tenant_currency_settings",
 )
 SUBSYSTEMS = (
     *SCENARIOS,
     "src/modules/reference_data/application/currency/port",
     "src/modules/reference_data/infrastructure/currency/persistence",
     "src/modules/tenancy/application/tenant/port",
-    "src/modules/tenancy/application/tenant_currency_settings/port",
-    "src/modules/tenancy/domain/tenant_currency_settings",
-    "src/modules/tenancy/infrastructure/tenant_currency_settings",
-    "src/modules/tenancy/presentation/tenant_currency_settings/http/controller",
-    "src/modules/tenancy/presentation/tenant_currency_settings/http/response",
 )
 FILES = (
-    "src/modules/tenancy/presentation/tenant_currency_settings/depends.py",
-    "src/modules/tenancy/presentation/tenant_currency_settings/router.py",
     "src/modules/shared/domain/value_object/currency.py",
     "src/modules/shared/domain/value_object/money.py",
     "src/modules/shared/domain/value_object/money_error.py",
-    "src/modules/tenancy/domain/tenant_currency_settings/aggregate.py",
-    "src/modules/tenancy/domain/tenant_currency_settings/error.py",
     "src/modules/tenancy/application/tenant/onboarding.py",
-    "src/modules/tenancy/infrastructure/adapter/currency_validator.py",
-    "src/modules/tenancy/infrastructure/adapter/tenant_currency_settings.py",
-    "src/modules/tenancy/infrastructure/persistence/models/tenant_currency_settings.py",
-    "src/modules/tenancy/infrastructure/tenant_currency_settings/persistence/query_mapper.py",
-    "src/modules/tenancy/infrastructure/tenant_currency_settings/persistence/query_repository.py",
 )
 
 
@@ -59,10 +44,6 @@ class CurrencySliceOneArchitectureTests(unittest.TestCase):
         for directory in SUBSYSTEMS:
             for package in (ROOT / directory).rglob("__init__.py"):
                 self.assertEqual(package.read_text().strip(), "", str(package))
-        http = ROOT / "src/modules/tenancy/presentation/tenant_currency_settings/http"
-        self.assertTrue((http / "controller/get_tenant_currency_settings.py").is_file())
-        self.assertTrue((http / "response/get_tenant_currency_settings.py").is_file())
-        self.assertFalse((http / "request/get_tenant_currency_settings.py").exists())
 
     def test_annotations_docstrings_factories_and_vo_validation(self) -> None:
         for path in slice_files():
@@ -83,13 +64,6 @@ class CurrencySliceOneArchitectureTests(unittest.TestCase):
                         )
                 if node.name == "__post_init__":
                     self.assertIn("/value_object/", str(path))
-        from src.modules.tenancy.domain.tenant_currency_settings.aggregate import (
-            TenantCurrencySettings,
-        )
-
-        self.assertTrue(callable(TenantCurrencySettings.create))
-        self.assertTrue(callable(TenantCurrencySettings.restore))
-        self.assertIsNone(TenantCurrencySettings.base_currency.fset)
 
     def test_dependencies_point_inward_and_transactions_stay_external(self) -> None:
         for path in slice_files():

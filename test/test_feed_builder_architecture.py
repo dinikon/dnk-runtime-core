@@ -52,6 +52,8 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
             "subprocess",
             "socket",
             "pathlib",
+            "src.modules.shared.domain.value_object.money",
+            "src.modules.currency",
         )
         for path in DOMAIN.rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text())):
@@ -164,6 +166,26 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                         node.target.id,
                         {"schema_version", "schema_revision_id", "activation_id"},
                         str(path),
+                    )
+
+    def test_amount_model_has_no_fx_or_currency_arithmetic(self) -> None:
+        """Не возвращает удалённые денежные литералы, курсы и валюту вычислений."""
+        for path in DOMAIN.rglob("*.py"):
+            self.assertNotIn(
+                path.name,
+                {
+                    "money_literal.py",
+                    "fx_rate.py",
+                    "fx_rate_snapshot.py",
+                    "fx_rate_snapshot_id.py",
+                },
+            )
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.AnnAssign) and isinstance(
+                    node.target, ast.Name
+                ):
+                    self.assertNotIn(
+                        node.target.id, {"calculation_currency", "fx_rate_snapshot"}
                     )
 
     def test_methods_and_functions_have_annotations_and_docstrings(self) -> None:

@@ -60,9 +60,6 @@ def is_expression(value: object) -> bool:
     from src.modules.feed_builder.domain.feed.value_object.decimal_literal import (
         DecimalLiteralVO,
     )
-    from src.modules.feed_builder.domain.feed.value_object.money_literal import (
-        MoneyLiteralVO,
-    )
     from src.modules.feed_builder.domain.feed.value_object.arithmetic_expression import (
         ArithmeticExpressionVO,
     )
@@ -75,7 +72,6 @@ def is_expression(value: object) -> bool:
         (
             ParameterReferenceVO,
             DecimalLiteralVO,
-            MoneyLiteralVO,
             ArithmeticExpressionVO,
             FunctionExpressionVO,
         ),

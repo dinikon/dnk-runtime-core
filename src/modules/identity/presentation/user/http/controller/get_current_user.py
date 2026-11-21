@@ -17,9 +17,6 @@ from src.modules.identity.presentation.user.http.response.get_current_user_email
 from src.modules.identity.domain.user.value_object.user_id import UserIdVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.shared.domain.domain_error import DomainError
-from src.modules.tenancy.domain.tenant_currency_settings.error import (
-    TenantCurrencySettingsNotFoundError,
-)
 
 
 async def get_current_user(
@@ -41,10 +38,6 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except UserLoginUnavailableError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except TenantCurrencySettingsNotFoundError as exc:
-        raise HTTPException(
-            status_code=503, detail="Tenant currency settings unavailable."
-        ) from exc
     except DomainError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
@@ -61,7 +54,6 @@ async def get_current_user(
         interface_theme=result.interface_theme,
         timezone=result.timezone,
         display_currency=result.display_currency,
-        effective_display_currency=result.effective_display_currency,
         emails=[
             GetCurrentUserEmailResponseSchema(
                 id=email.id,

@@ -155,11 +155,6 @@ class RuntimePostgresTests(unittest.IsolatedAsyncioTestCase):
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         async with self.engine.begin() as connection:
             await GlobalMigrator().upgrade(connection)
-            await connection.execute(
-                text(
-                    "INSERT INTO public.ref_currencies(code,numeric_code,name,minor_units,active) VALUES ('UAH','980','Hryvnia',2,true) ON CONFLICT(code) DO UPDATE SET active=true"
-                )
-            )
         self.core_ids = []
 
     async def asyncTearDown(self):

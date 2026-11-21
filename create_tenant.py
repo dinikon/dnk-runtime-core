@@ -9,9 +9,6 @@ from src.modules.shared.infrastructure.persistence.database_helper import db_hel
 from src.modules.shared.infrastructure.persistence.unit_of_work.sqlalchemy import (
     UnitOfWork,
 )
-from src.modules.reference_data.presentation.depends import (
-    get_validate_currency_handler,
-)
 from src.modules.tenancy.application.tenant.command.create_tenant.command import (
     CreateTenantCommand,
 )
@@ -29,8 +26,7 @@ from src.modules.tenancy.presentation.depends.storage_management import (
 async def main() -> None:
     """Создаёт local tenant и активирует после подготовки приватного хранилища."""
     parser = argparse.ArgumentParser(description="Create a local Tenant.")
-    parser.add_argument("--base-currency", default="UAH")
-    args = parser.parse_args()
+    parser.parse_args()
     try:
         async with UnitOfWork(db_helper.session_factory) as uow:
             use_case = app.get_create_tenant_handler(
@@ -42,8 +38,6 @@ async def main() -> None:
                 app.get_tenant_schema_bootstrap_context_factory(),
                 app.get_tenant_schema_bootstrap_port(uow),
                 app.get_tenant_storage(uow),
-                app.get_currency_validator(get_validate_currency_handler(uow)),
-                app.get_currency_settings_writer(uow),
                 app.get_catalog_provisioning(uow),
             )
             result = await use_case.execute(
@@ -54,7 +48,6 @@ async def main() -> None:
                     user_first_name="Denis",
                     user_last_name="",
                     user_email="denis.inikon@gmail.com",
-                    base_currency=args.base_currency,
                 )
             )
         await prepare_tenant_storage(

@@ -9,6 +9,10 @@
 Документ фиксирует согласованную целевую модель и последовательность реализации.
 Все поля пользовательские и равноправные; обычный Feed начинается с пустой схемы.
 Наценки/условия/формулы находятся в определении конкретного денежного поля.
+Денежные значения FeedBuilder — точные числовые суммы. Необязательный код валюты
+принадлежит полю и служит меткой результата; он не выполняет конвертацию.
+Курс пользователь задаёт обычной константой своей формулы. Курсовых сервисов,
+автоматического наследования валюты источника и FX-контекста модуль не использует.
 Реализован объектный Domain-срез: Feed, FeedPublication, FeedGeneration и
 FeedAccessKey с create/restore и проверками. Бизнес-методы, ревизии схем,
 репозитории, исполнение генерации и остальные слои пока не реализуются.
@@ -40,9 +44,9 @@ FeedBuilder — самостоятельный bounded context, создающи
 | --- | --- | --- |
 | STRING | str | Локализованный или языконезависимый текст |
 | TEXT | str | Описание и длинный текст |
-| MONEY | MoneyVO с Decimal на выходе | Валюта поля, источник или формула |
+| MONEY | PriceAmountVO с Decimal; PriceValueVO для будущего результата | Необязательная валютная метка поля, источник или формула |
 
-Мультиязычность и мультивалютность задаются полям, не всему Feed. Денежная формула
+Локаль и необязательная валютная метка задаются полям, не всему Feed. Денежная формула
 может выбирать источник, применять процентную/фиксированную надбавку и рассчитывать
 маржу арифметическим выражением; отдельные типы политик для этого не требуются.
 
@@ -74,7 +78,8 @@ Title, description, price и currency в примерах — пользоват
 - Для публикации Generic CSV/XML требуется хотя бы одно экспортируемое поле;
   конкретных обязательных ключей нет.
 - После публикации нельзя менять смысл того же field_id несовместимым типом,
-  локалью или целевой валютой: создаётся новое поле либо отдельная будущая миграция.
+  либо локалью: создаётся новое поле либо отдельная будущая миграция.
+  Необязательную валютную метку можно менять без смены field_id и пересчёта суммы.
   Это правило одинаково для всех полей. Формулы и constraints могут изменяться
   новой версией схемы при сохранении идентичности и совместимого типа поля.
 
@@ -117,8 +122,7 @@ Feed остаётся в существующем контракте. Колле
 ```text
 Catalog: простые товары, родители/варианты, эффективный контент, regular/sale price, категории и ревизии
 Supplier Sourcing: явно выбранное закупочное предложение
-Поставщик FX: неизменяемый snapshot через FxRateSnapshotPort; интеграция отложена
-reference_data: поддерживаемые коды локалей и валют
+reference_data: поддерживаемые локали; форма валютной метки проверяется CurrencyVO
         ↓ публичные Application Ports
 FeedBuilder: схема → условный расчёт поля / override → проекция
         ↓
@@ -200,7 +204,7 @@ Override — индивидуальное значение конкретной 
 7. HTTP controller/request/response каждого метода — отдельные файлы; router
    регистрирует маршруты, Depends собирает зависимости. Identity/Tenancy работают
    через существующие доверенные границы; пользователь не выбирает SQL-схему.
-8. Application получает данные Catalog, категорий, закупочных источников, курсов
+8. Application получает данные Catalog, категорий, закупочных источников
    и справочников через порты; Domain не импортирует чужие агрегаты.
    Вычисление не обращается к текущим часам, БД или внешнему API.
 9. Frontend разделяет API/DTO/mapper, чистые модели, queries, mutations, page state,
@@ -227,7 +231,7 @@ src/modules/feed_builder/
   application/service/
   infrastructure/{feed,publication,generation,access_key}/persistence/
   infrastructure/persistence/models/<table>.py
-  infrastructure/{catalog,supplier_sourcing,fx,storage,serialization}/
+  infrastructure/{catalog,supplier_sourcing,storage,serialization}/
   presentation/{feed,publication,generation,access_key}/
     router.py, depends.py
     http/{controller,request,response}/<scenario>.py
@@ -355,12 +359,12 @@ FieldTypeDefinition — закрытое типизированное объед
 | --- | --- |
 | StringFieldTypeVO | kind=STRING, value_definition: TextValueDefinition, locale: LocaleCodeVO или None, fallback_policy: LocaleFallbackPolicyVO или None, constraints: TextConstraintsVO, transforms: tuple[TransformDefinitionVO, ...] |
 | TextFieldTypeVO | kind=TEXT, тот же состав текстовых настроек для длинного текста |
-| MoneyFieldTypeVO | kind=MONEY, обязательная currency: CurrencyVO, value_definition: MoneyValueDefinitionVO, constraints: MoneyConstraintsVO, transforms: tuple[TransformDefinitionVO, ...] |
+| MoneyFieldTypeVO | kind=MONEY, currency: CurrencyVO либо None (по умолчанию), value_definition: MoneyValueDefinitionVO, constraints: MoneyConstraintsVO, transforms: tuple[TransformDefinitionVO, ...] |
 
 kind — фиксированная ClassVar класса VO, не вход конструктора и не отдельный
 изменяемый enum поля. Например, SKU — StringFieldTypeVO с locale=None;
 локализованный заголовок — StringFieldTypeVO с locale; описание — TextFieldTypeVO;
-цена — MoneyFieldTypeVO с currency. Ключ не определяет тип или доступные настройки.
+цена — MoneyFieldTypeVO с необязательной currency. Ключ не определяет тип или доступные настройки.
 У текстовых VO нет currency, у денежного — locale/fallback_policy.
 
 TextValueDefinition — объединение SourceValueDefinitionVO и ManualValueDefinitionVO:
@@ -371,9 +375,10 @@ TextValueDefinition — объединение SourceValueDefinitionVO и Manual
   Принадлежит MoneyFieldTypeVO; содержит либо source, либо calculation, либо ни того
   ни другого для ручного ввода. Два автоматических способа одновременно запрещены.
 
-У MONEY целевая валюта обязательна. Для локализованного источника текста нужна
-locale; для языконезависимого текста допускается None. Форма locale/currency
-проверяется VO, поддержка кодов и языковые требования внешнего источника — будущим
+У MONEY currency необязательна и не влияет на сумму. Источник метку не заполняет.
+Для локализованного источника текста нужна locale; для языконезависимого
+допускается None. Форма locale/currency
+проверяется VO; языковые требования внешнего источника — будущим
 Application. Fallback требует целевую locale и не повторяет её в цепочке.
 value_definition внутри соответствующего типа задаёт один способ получения значения.
 
@@ -386,7 +391,7 @@ SourceProvider.CATALOG; допустимые пути закрыты Enum:
 | TITLE | item.title | Короткий локализованный текст |
 | DESCRIPTION | item.description | Длинный локализованный текст |
 | SKU | item.sku | Языконезависимая строка |
-| REGULAR_PRICE | item.regular_price | Обычная цена с валютой |
+| REGULAR_PRICE | item.regular_price | Числовая сумма обычной цены без наследования валюты |
 
 Пример Domain-ссылки:
 `SourceReferenceVO(provider=SourceProvider.CATALOG, path=CatalogSourcePath.TITLE)`.
@@ -406,7 +411,7 @@ Enum и проверки допустимой пары; пользователь
 Для будущих пользовательских характеристик вводится отдельная типизированная
 ссылка по ID характеристики в соответствующем срезе.
 
-PriceCalculationVO содержит calculation_currency, упорядоченный
+PriceCalculationVO содержит упорядоченный
 `tuple[ConditionalPriceRule, ...]`, обязательное default_expression и
 purchase_source: PurchasePriceSourceVO | None. При зависимости price.purchase
 источник закупки обязателен; в остальных расчётах он отсутствует.
@@ -470,7 +475,7 @@ src/modules/feed_builder/domain/feed/
     purchase_price_source.py         PurchasePriceSourceVO
     parameter_reference.py           ParameterReferenceVO
     decimal_literal.py               DecimalLiteralVO
-    money_literal.py                 MoneyLiteralVO
+    price_amount.py                  PriceAmountVO: точная сумма без валюты
     scalar_literal.py                ScalarLiteralVO
     collection_literal.py            CollectionLiteralVO
     arithmetic_expression.py         ArithmeticExpressionVO
@@ -502,7 +507,8 @@ src/modules/feed_builder/domain/feed/
   field_type_validation.py           Общие чистые проверки текстовых настроек/transforms
 ```
 
-CurrencyVO и MoneyVO переиспользуются из shared; FeedIdVO/FieldIdVO/PriceRuleIdVO
+CurrencyVO переиспользуется из shared как необязательная метка;
+MoneyVO в FeedBuilder не используется. FeedIdVO/FieldIdVO/PriceRuleIdVO
 строятся на существующем EntityIdVO. Новый LocaleCodeVO локален FeedBuilder и
 не импортирует внутренний LocaleVO/ошибки Catalog. DTO, repository, events,
 policies исполнения и evaluator пока не создаются. types.py не объединяет
@@ -537,11 +543,15 @@ Transforms MVP: string.trim, string.truncate, money.ceil_step. Порядок �
 MoneyCeilStepParametersVO и положительным конечным Decimal. Сейчас моделируются
 только определения, исполнение появится в вычислительном срезе.
 
-MoneyVO хранит итоговую сумму/валюту, не формулы. Исходная цена Catalog допускает
-до 6 дробных знаков, shared MoneyVO — 4. Поэтому будущий evaluator использует
-точные Decimal с валютой без раннего приведения к MoneyVO. Приведение до 4 знаков
-и валютное/полевое округление задаются явно на финальном шаге; финансовый контекст
-не зависит от ambient Decimal context. Float нигде не используется.
+PriceAmountVO хранит точный конечный Decimal без валюты и неявного округления.
+Применяется к ручным значениям публикации; типизированные выражения используют
+DecimalLiteralVO, а не PriceAmountVO в качестве узла AST. Общая проверка суммы
+ограничивает число значащих цифр до MAX_LITERAL_DIGITS=40 и модуль экспоненты до
+MAX_LITERAL_EXPONENT=128. Ноль и отрицательные суммы допустимы; границы задаёт поле.
+Исходные значения и все дробные разряды сохраняются, включая 6 знаков Catalog.
+Shared MoneyVO не используется внутри FeedBuilder и не изменяется.
+Будущий evaluator работает с Decimal, округление задаётся явным числовым
+контрактом/преобразованиями, а не валютной меткой или точностью Shared MoneyVO.
 
 ### **3.6. Состояние Feed в последующих срезах**
 
@@ -587,11 +597,11 @@ FeedPublication — отдельный Aggregate Root со ссылкой на F
 mode=MANUAL и value; отсутствие записи включает автоматическое определение поля.
 Для MANUAL-поля отсутствие override означает отсутствие значения.
 
-FieldOverrideVO содержит field_id: FieldIdVO и value: str | MoneyVO | None.
+FieldOverrideVO содержит field_id: FieldIdVO и value: str | PriceAmountVO | None.
 Единственный mode=OverrideMode.MANUAL фиксирован ClassVar и не передаётся
 конструктору. Явный None не равен отсутствию записи: автоматический источник
 не подменяет явно пустое значение. Пустой/многострочный текст допустим;
-совместимость с required/типом/валютой схемы проверяется будущим поведением.
+совместимость с required/типом схемы проверяется будущим поведением; валюта в override не дублируется.
 
 create требует ID, feed_id, ссылку и now, создаёт ENABLED без overrides.
 restore сохраняет все свойства, требует типизированный статус, timezone-aware
@@ -607,13 +617,13 @@ Readiness и проекции в текущем срезе не создаютс
 
 - NEEDS_INPUT: нет обязательного ручного/текстового значения, перевода либо
   MANUAL_REQUIRED требует ручного перевода, при отсутствии более серьёзных ошибок.
-- INVALID: ошибка вычисления, нужного параметра/курса, типа, валюты, transform
+- INVALID: ошибка вычисления, нужного параметра, типа, transform
   или constraints. Необязательность поля не скрывает ошибку выбранного расчёта.
 - READY: нет блокирующих issues, обязательные значения корректны.
 - STALE: сохранённая проекция устарела; не результат текущего вычисления.
 
 Источник технически недоступен — отдельный сбой зависимости, не пустое значение.
-Валидный override не требует получения параметров/курсов для автоматического
+Валидный override не требует получения параметров для автоматического
 расчёта этого поля. С STRICT ошибка ENABLED-публикации блокирует весь новый файл;
 молчаливое исключение товаров запрещено.
 
@@ -670,13 +680,11 @@ started_at сохраняет начало первой попытки, а не 
 Восстановление истёкшего lease допустимо: Domain не обращается к текущим часам.
 В завершённых состояниях current_attempt=None, число попыток сохраняется.
 
-GenerationCalculationContextVO: as_of и необязательный FxRateSnapshotVO.
-Снимок курсов содержит source_snapshot_id: FxRateSnapshotIdVO, captured_at
-и tuple[FxRateVO, ...]. Каждый FxRateVO содержит разные source_currency и
-target_currency, конечный положительный Decimal rate без округления MoneyVO.
-Направленные пары уникальны; исходный список копируется в tuple.
-Нет валютных зависимостей — fx_rate_snapshot=None; новый справочник курсов
-FeedBuilder не создаёт. Фиксация/получение контекста и retry появятся позже.
+GenerationCalculationContextVO содержит только as_of для временных условий
+и повторных попыток. Курсы, снимки котировок и валютный контекст отсутствуют.
+Пользовательский курс — DecimalLiteralVO в схеме, поэтому зафиксирован
+в GenerationDefinitionSnapshotVO вместе с остальными параметрами формулы.
+Фиксация времени и retry появятся в следующих срезах.
 
 GenerationCountsVO содержит total_items, exported_items и rejected_items.
 exported_items — подготовленные корректные экспортные записи, включая staging;
@@ -695,7 +703,7 @@ size_bytes и created_at. В ней нет содержимого файла, п
 
 Успех генерации и активация — разные действия. Изменившаяся схема/конфигурация
 или более новая активная sequence препятствуют активации старого результата.
-Повтор использует прежние as_of/FX/схему, новая конфигурация требует нового задания.
+Повтор использует прежние as_of/схему и константы формулы, новая конфигурация требует нового задания.
 Методы переходов, выделение sequence, fencing/heartbeat, активация и сравнение
 конфигураций появятся отдельным срезом; сейчас эти процессы не исполняются.
 
@@ -734,7 +742,6 @@ domain/
       generation_sequence.py, calculation_engine_version.py
       generation_definition_snapshot.py, generation_calculation_context.py
       generation_attempt.py, generation_counts.py, generation_failure.py
-      fx_rate.py, fx_rate_snapshot.py, fx_rate_snapshot_id.py
       artifact_storage_key.py, artifact_content_type.py, artifact_checksum.py
   access_key/
     aggregate.py, error.py
@@ -813,7 +820,6 @@ Default-выражение даёт +15% к regular; правило катего
             "kind": "MONEY",
             "mode": "CALCULATED",
             "calculation": {
-              "calculation_currency": "UAH",
               "rules": [
                 {
                   "id": "77777777-7777-4777-8777-777777777777",
@@ -909,6 +915,23 @@ Default-выражение даёт +15% к regular; правило катего
 {"kind": "MONEY", "mode": "SOURCE", "source": {"provider": "catalog", "path": "item.regular_price"}}
 ```
 
+Для суммы без валютной метки currency можно опустить либо передать null:
+
+```json
+{
+  "kind": "money",
+  "currency": null,
+  "value": {
+    "kind": "MONEY",
+    "mode": "SOURCE",
+    "source": {"provider": "catalog", "path": "item.regular_price"}
+  }
+}
+```
+
+Числовая сумма источника сохраняется; его валюта не наследуется. CurrencyVO
+нормализует трёхбуквенный код в верхний регистр; пустая строка не заменяет None.
+
 Для ручного MONEY: `{"kind":"MONEY","mode":"MANUAL"}`; для ручного текста:
 `{"kind":"MANUAL"}`. У текстового SOURCE источник находится в type_definition.value.source.
 Неактивные варианты source/calculation отсутствуют; неизвестные свойства и
@@ -929,7 +952,7 @@ CatalogSourcePath. На границе ввода они явно преобра
 | key / label | Уникальный внутренний ключ / подпись |
 | type_definition.kind | string / text / money; определяет класс VO |
 | type_definition.locale | Только STRING/TEXT, локаль либо null для языконезависимого текста |
-| type_definition.currency | Только MONEY, обязательная целевая валюта |
+| type_definition.currency | Только MONEY, необязательный код результата; null не наследует валюту источника |
 | type_definition.value | Один типизированный способ получения значения |
 | type_definition.fallback_policy | Только STRING/TEXT, явная политика отсутствующих переводов |
 | type_definition.constraints | Текстовые ограничения длины либо денежные границы по типу |
@@ -961,10 +984,10 @@ issues, например известный Domain-источник с ещё н
 При публикации полностью проверяются:
 
 - Совместимость типов источников/параметров с полем, условиями и выражениями.
-- Конечный тип формулы MONEY, выбранные валюта вычисления и денежные константы.
+- Конечный числовой Decimal результата; валютная метка не участвует в арифметике.
 - Известные операции, функции и точные схемы их параметров; обязательный ELSE.
-- Допустимость операций для коллекций, денег, чисел, UUID/строк/boolean.
-- Поддержка локалей/валют и прав на источник через справочники/Application Ports.
+- Допустимость операций для чисел, коллекций и UUID/строк/boolean.
+- Поддержка локалей и прав на источник через справочники/Application Ports; форма необязательного кода валюты — через CurrencyVO.
 - Валидность закупочной привязки для зависимости price.purchase.
 - Совместимость ранее опубликованных field_id и override-контрактов.
 - Хотя бы одно экспортируемое поле для Generic-профиля; безопасные XML-имена.
@@ -1171,8 +1194,7 @@ FK на внутренние таблицы Catalog не вводится. Ти�
   "33333333-3333-4333-8333-333333333333": {
     "mode": "MANUAL",
     "value": {
-      "amount": "650.00",
-      "currency": "UAH"
+      "amount": "650.00"
     }
   }
 }
@@ -1195,7 +1217,6 @@ CREATE TABLE fb_publication_projections (
 
     catalog_revision TEXT NULL,
     configuration_version BIGINT NOT NULL,
-    fx_rate_snapshot_id UUID NULL,
     source_revisions JSONB NOT NULL DEFAULT '{}',
     as_of TIMESTAMPTZ NOT NULL,
     valid_until TIMESTAMPTZ NULL,
@@ -1236,7 +1257,7 @@ ON fb_publication_projections(readiness);
 ```
 
 Проекция устаревает при несовпадении schema_version, publication_version,
-configuration_version, ревизий фактических источников, актуального набора FX
+configuration_version, ревизий фактических источников
 или при наступлении valid_until. Метаданные получаются через публичные порты,
 без JOIN к таблицам чужих контекстов. События ускоряют инвалидацию, а проверка
 ревизий/времени защищает от пропущенных событий. Для значений с override
@@ -1254,8 +1275,6 @@ CREATE TABLE fb_generations (
         REFERENCES fb_feeds(id),
 
     definition_snapshot JSONB NOT NULL,
-    fx_rate_snapshot_id UUID NULL,
-    fx_rate_snapshot JSONB NULL,
     as_of TIMESTAMPTZ NULL,
     request_sequence BIGINT NOT NULL,
 
@@ -1342,7 +1361,7 @@ REFERENCES fb_generations(feed_id, id);
 Это целевое хранение следующего среза, не созданная миграция.
 definition_snapshot сохраняет полную schema, export_settings и
 calculation_engine_version из GenerationDefinitionSnapshotVO, без обязательного
-FK к версии схемы. as_of и fx_rate_snapshot восстанавливаются в единый
+FK к версии схемы. as_of восстанавливается в
 GenerationCalculationContextVO; attempt_count/attempt_token/claimed_at/lease_until —
 в число попыток и текущий GenerationAttemptVO. После завершения токен и lease
 очищаются, число попыток сохраняется. failure восстанавливается в GenerationFailureVO.
@@ -1391,24 +1410,20 @@ SaveFeedSchemaDraft и PublishFeedSchema, без отдельных таблиц
 генерации — поддержанную семантику вычисления. Неподдерживаемая версия отклоняется.
 
 В fb_publication_projections дополнительно сохраняются as_of, valid_until,
-FX snapshot и source_revisions: JSONB с ревизиями фактически использованных
+source_revisions: JSONB с ревизиями фактически использованных
 Catalog/категорий/закупочных источников. valid_until — ближайшая известная граница
 акции/временной зависимости, если она есть; computed_at не заменяет as_of.
 На границе времени проекция STALE без ожидания события изменения товара.
 
 В staging сохраняются фактические зависимости каждой записи: item/revisions,
 идентификатор выбранного закупочного предложения, нужные временные границы,
-применённый rule_id и FX snapshot. Чувствительные суммы не копируются в общие логи.
+применённый rule_id и числовые шаги формулы. Чувствительные суммы не копируются в общие логи.
 
-FeedBuilder получает курсы через FxRateSnapshotPort, не создавая свой справочник.
-Модуль Currency удалён; поставщик и его Application-контракт должны быть определены
-отдельно до реализации конвертации. Snapshot содержит направление котировки,
-валюты, точный курс, источник и время действия. Генерация сохраняет также
-fx_rate_snapshot JSONB с использованным набором/metadata для retry; это снимок
-контекста конкретного задания, не управляемый FeedBuilder справочник.
-Контекст фиксируется до первого расчёта и сохраняется для retry. Отсутствующий курс
-не подставляется устаревшим/условным значением. Для полностью ручной/одновалютной
-генерации FX snapshot может не требоваться.
+FeedBuilder не имеет провайдера курсов, валюты вычислений или автоматической
+конвертации. as_of фиксируется до первого расчёта и сохраняется для retry.
+Пользовательский коэффициент хранится в AST: например, price.regular / 40 * 1.20.
+Изменение коэффициента требует нового определения/задания; retry использует
+прежний снимок формулы. Необязательная currency является только меткой поля.
 
 configuration_version изменяется для влияющих на экспорт настроек Feed;
 все определения полей/формул/порядка правил входят в schema_version. Row version
@@ -1438,8 +1453,7 @@ Domain своих корней и работают с агрегатами. Draf
 | CatalogProductReader | Batch простые позиции/выбранные варианты, принадлежность родителю, эффективный контент, regular/sale price, интервалы акций и ревизии |
 | ProductParameterReaderPort | Batch зарегистрированные категории/SKU/другие параметры |
 | PurchasePriceReaderPort | Batch закупочные цены по явной привязке источника |
-| FxRateSnapshotPort | Чтение/фиксация единого snapshot и ревизии текущей книги |
-| ReferenceDataReaderPort | Поддержка кодов локалей/валют |
+| ReferenceDataReaderPort | Поддержка локалей; код валютной метки не требует курсового сервиса |
 | ParameterRegistryPort | Типы, nullability, права, источники разрешённых параметров |
 | SourcePathRegistry / FieldTypeRegistry / TransformRegistry | Метаданные допустимых источников/типов/преобразований и выбор handlers |
 | PriceExpressionResolver | Application-координация входов, вызов чистого evaluator |
@@ -1452,7 +1466,7 @@ Domain своих корней и работают с агрегатами. Draf
 
 Source adapter скрывает конкретный модуль и возвращает immutable snapshot,
 не ORM/чужой агрегат. Метаданные вычислений не дают права читать закрытую цену.
-Пакеты Catalog, Supplier Sourcing и поставщика FX не импортируются во внутренний Domain Feed.
+Пакеты Catalog и Supplier Sourcing не импортируются во внутренний Domain Feed.
 Если необходимого публичного чтения ещё нет, согласовать минимальный owner-контракт;
 это не требует создания отдельного модуля прайс-листов.
 
@@ -1536,7 +1550,7 @@ row_version: Feed, draft и публикация. Для ORM возможен ve
 массовые UPDATE/DELETE явно проверяют expected version и число строк.
 Конфликт — VERSION_CONFLICT / 409, не перезапись последним запросом.
 
-schema_version включает условия, AST, валюты расчёта и закупочные bindings.
+schema_version включает условия, числовой AST и закупочные bindings; currency — метка определения поля.
 configuration_version — настройки экспорта/выдачи, не дублирование версии формулы.
 Повторная доставка задач идемпотентна, attempt_token защищает старый worker.
 Ревизии источников и временная актуальность проверяются независимо от row_version.
@@ -1551,12 +1565,16 @@ configuration_version — настройки экспорта/выдачи, не
 | catalog / item.description | Локализованный TEXT |
 | catalog / item.sku | Языконезависимый STRING |
 | catalog / item.regular_price | Денежный источник без наценки |
-| price.regular | Обычная продажная цена с валютой |
+| price.regular | Точная числовая сумма обычной продажной цены |
 | price.sale | Действующая акционная цена на as_of, либо отсутствие |
 | price.effective | Sale при действующей акции, иначе regular |
 | price.purchase | Закупочная цена из явного purchase_source |
 | product.category_ids | Набор явно назначенных UUID категорий |
 | product.sku / product.id | SKU / идентификатор товара |
+
+Все price.* передают числовые суммы как точные Decimal, без валютной размерности.
+Код валюты Catalog/закупочного предложения не переносится в метку поля и не
+вызывает автоматического пересчёта.
 
 Это целевой потребительский контракт FeedBuilder, а не утверждение о готовом API.
 Четыре прямых источника Catalog соответствуют SourceProvider.CATALOG и
@@ -1624,9 +1642,9 @@ ProductParameterReader и PurchasePriceReader работают пакетно. P
 
 ResolutionContext содержит tenant/feed/publication IDs, catalog_item_id,
 catalog_variant_id или null и ID выбранной продаваемой позиции, schema_version,
-configuration_version, as_of, calculation_engine_version, FX snapshot и generation_id
-при экспорте. Локаль берётся из StringFieldTypeVO/TextFieldTypeVO, целевая валюта —
-из MoneyFieldTypeVO; calculation_currency принадлежит PriceCalculationVO.
+configuration_version, as_of, calculation_engine_version и generation_id
+при экспорте. Локаль берётся из StringFieldTypeVO/TextFieldTypeVO, необязательная
+валютная метка — только из MoneyFieldTypeVO. Валюта источника не определяет результат.
 ID выбранной позиции выводится из пары: catalog_variant_id, если он задан,
 иначе catalog_item_id; отдельной изменяемой настройки выбранного ID нет.
 Тип определяется классом type_definition/kind без отдельного поля value_type.
@@ -1639,20 +1657,22 @@ Fallback отмечается явно в actual_locale/метаданных, н
 
 ### **7.4. Последовательность FieldValueResolver**
 
-1. Если есть override — взять ручное значение; автоматическое определение для
-   итогового результата не исполняется. Иначе перейти к type_definition.value_definition.
+1. Если есть override — взять ручное значение; автоматическое определение
+   не исполняется. Иначе перейти к type_definition.value_definition.
 2. MANUAL без override — отсутствующее значение. SOURCE — получить источник.
-   Для MONEY SOURCE при необходимости конвертировать в валюту поля через общий FX context.
-3. CALCULATED — собрать snapshot разрешённых параметров, выбрать правило/ELSE
-   и вызвать чистый evaluator по правилам раздела 8.
-4. Parse/проверка типа и валюты; apply type_definition.transforms в порядке схемы.
-5. Явное финальное округление/приведение к MoneyVO, затем type_definition.constraints.
+   Для MONEY используется точная сумма; валюта источника не наследуется.
+3. CALCULATED — собрать числовые параметры, выбрать правило/ELSE и вызвать
+   чистый evaluator. Пользовательский курс вычисляется как обычная арифметика.
+4. Проверить тип, применить type_definition.transforms в порядке схемы,
+   затем числовой контракт и type_definition.constraints без Shared MoneyVO.
+5. Для MONEY сформировать будущий PriceValueVO(amount, currency), где currency
+   взята только из определения поля. None остаётся отсутствием метки.
 6. Вернуть значение/origin/trace/issues; PublicationResolver собирает readiness.
 
-Валидный manual MONEY должен уже иметь валюту поля: иначе CURRENCY_MISMATCH,
-без скрытой конвертации или повторной наценки. Для диагностического сравнения
-preview может дополнительно читать источник; сбой такого необязательного чтения
-не делает корректный override ошибочным.
+Manual MONEY содержит PriceAmountVO без своей валюты. Формула/наценка источника
+не применяются повторно; transforms и constraints продолжают действовать.
+Для диагностического сравнения preview может отдельно читать источник;
+сбой необязательного чтения не делает корректный override ошибочным.
 
 ### **7.5. Локализация и отсутствующие значения**
 
@@ -1675,19 +1695,19 @@ float и несовместимые типы не допускаются. Спи
 Для ceil_step: units=ceil(amount/step), result=units*step, step>0. Валюта сохраняется.
 590.21 при step=0.1 даёт 590.3; представление 590.30 допустимо без потери значащих
 разрядов. Serializer не округляет скрыто до двух знаков. Формат/финальное округление
-должны учитывать точность shared MoneyVO и выбранную валюту.
+должны учитывать числовой контракт FeedBuilder; валютная метка не задаёт точность.
 
 ### **7.7. PublicationResolver и актуальность**
 
 Snapshot товара и параметры читаются пакетно для всех нужных полей/локалей.
 Идентичные зависимости можно кешировать в рамках контекста; key включает tenant,
-пару item/variant IDs, фактические source revisions, определение, валюты, as_of и FX.
+пару item/variant IDs, фактические source revisions, определение, валютную метку и as_of.
 Кеши соседних вариантов не смешиваются; родительская revision учитывается при
 наследовании. Разные поля могут иметь разные
 формулы; общей наценки Feed поверх результата не существует.
 
 Проекция хранит версии схемы/публикации/конфигурации, source revisions, as_of,
-valid_until и FX. При условном upsert старый worker не перезаписывает новый.
+valid_until. При условном upsert старый worker не перезаписывает новый.
 Текущий список читает проекции, preview и экспорт вычисляют результат заново.
 Зависимости override и неприменённых ветвей не включаются как нужные для результата.
 Сведения для EXISTS/IS_MISSING и проверенных условий также являются зависимостями:
@@ -1703,10 +1723,11 @@ valid_until и FX. При условном upsert старый worker не пе�
 акционную цену и цену в другой валюте. Ключ поля не влияет на семантику.
 
 MoneyValueDefinitionVO имеет режим SOURCE, MANUAL или CALCULATED. Последний
-содержит PriceCalculationVO: calculation_currency, rules, default_expression
+содержит PriceCalculationVO: rules, default_expression
 и optional purchase_source при зависимости price.purchase. Процент/фиксированная
 надбавка в UI — удобный способ построить выражение конечной цены.
-Самостоятельный объект MoneyVO по-прежнему содержит только сумму/валюту.
+PriceAmountVO содержит только сумму. Необязательная currency принадлежит полю;
+будущий PriceValueVO объединит сумму и выбранную метку при разрешении значения.
 
 ### **8.2. Выбор IF / ELSE IF / ELSE**
 
@@ -1734,7 +1755,7 @@ ALL/ANY используют короткое замыкание слева на
 | Оператор | Семантика |
 | --- | --- |
 | EQ / NE | Равенство/неравенство совместимых типов |
-| GT / GTE / LT / LTE | Упорядоченное сравнение чисел или денег |
+| GT / GTE / LT / LTE | Упорядоченное сравнение числовых сумм и других Decimal-параметров |
 | IN / NOT_IN | Скаляр принадлежит явно заданной однородной коллекции |
 | CONTAINS | Коллекция слева содержит скаляр справа |
 | EXISTS / IS_MISSING | Явная проверка наличия, 0/False/пустая коллекция не равны отсутствию |
@@ -1752,30 +1773,30 @@ ALL/ANY используют короткое замыкание слева на
 | --- | --- |
 | +20% к обычной цене | price.regular × 1.20 |
 | +30% к закупочной | price.purchase × 1.30 |
-| Фиксированная надбавка | price.regular + Money(50, UAH) |
+| Фиксированная надбавка | price.regular + 50 |
 | −5% от акционной | price.sale × 0.95 |
 | Цена не ниже закупки с наценкой | max(price.sale, price.purchase × 1.15) |
 | Маржа 25% от закупки | price.purchase / (1 − 0.25) |
 
-Все примеры имеют конечный тип MONEY; функция max не подменяет отсутствующую
-sale price — соответствующий пример требует EXISTS или явной ветви ELSE.
-Значение «20» в UI не угадывается как процент: операция «+20%» строит множитель 1.20.
+Все формулы возвращают конечный числовой Decimal суммы MONEY-поля.
+MAX не подменяет отсутствующую sale price: нужен EXISTS или явная ветвь ELSE.
+UI «+20%» строит множитель 1.20. Пересчёт пользователь задаёт явно:
+price.regular / 40 для деления на курс или price.regular * 1.20 / 40
+для пересчёта с наценкой. CurrencyVO("USD") сам по себе сумму не изменяет.
 
-Допустимы ADD/SUBTRACT/MULTIPLY/DIVIDE, унарный NEGATE и функции min/max/abs.
-Скобки отображаются структурой AST. Деньги ± деньги дают деньги, деньги × число
-и деньги / число — деньги, деньги / деньги одной валюты — число; деньги × деньги
-и деньги + число запрещены. Денежная константа всегда имеет явную валюту.
-Min/max работают с однородными типами; корень формулы обязан вернуть деньги.
-Все нужные денежные значения сравниваются/вычисляются в calculation_currency.
+Допустимы ADD/SUBTRACT/MULTIPLY/DIVIDE, унарный NEGATE и MIN/MAX/ABS над числами.
+Все цены и числовые константы участвуют как Decimal; отдельной валютной
+размерности и денежных литералов нет. Параметры категории/UUID/строки/boolean
+применяются только в подходящих условиях, не подменяют числовые операнды.
 
-AST содержит ParameterReferenceVO, DecimalLiteralVO, MoneyLiteralVO,
-ArithmeticExpressionVO, FunctionExpressionVO; ScalarLiteralVO нужен для UUID,
-строк и boolean, CollectionLiteralVO — для конечных однородных tuples литералов
-условий. Literal не исполняет код.
-В JSON Decimal — строка, literal boolean — настоящий boolean, UUID проверяется явно.
-Каждый вид узла и параметры имеют конкретный контракт/арность; unknown fields
-или операции отклоняются. Первая версия не имеет циклов, пользовательских функций,
-внешних вызовов и ссылок на результаты других вычисляемых полей Feed.
+AST содержит ParameterReferenceVO, DecimalLiteralVO, ArithmeticExpressionVO,
+FunctionExpressionVO; ScalarLiteralVO нужен для UUID/строк/boolean,
+CollectionLiteralVO — для однородных tuples литералов условий.
+В JSON Decimal — строка; boolean и UUID проверяются явно. Каждый вид узла
+имеет конкретный контракт/арность; неизвестные свойства/операции отклоняются.
+Пользовательские функции, внешний код и ссылки на вычисляемые поля не входят в MVP.
+MoneyLiteralVO удалён; schema_format_version остаётся 1 до выпуска persistence/API,
+совместимые aliases прежнего денежного AST не вводятся.
 
 Канонические свойства узлов:
 
@@ -1783,7 +1804,6 @@ ArithmeticExpressionVO, FunctionExpressionVO; ScalarLiteralVO нужен для 
 | --- | --- |
 | parameter | parameter: зарегистрированный ID |
 | decimal | value: конечная десятичная строка |
-| money | amount: десятичная строка, currency: код |
 | scalar | value_type: uuid/string/boolean, value соответствующего типа |
 | collection | item_type и items одного скалярного типа |
 | arithmetic | operator и left/right; для NEGATE только operand |
@@ -1795,29 +1815,27 @@ ArithmeticExpressionVO, FunctionExpressionVO; ScalarLiteralVO нужен для 
 MIN/MAX принимают минимум два аргумента, ABS — один. Неупомянутые альтернативные
 свойства узла отсутствуют, а не игнорируются. Группы ALL/ANY непустые.
 
-### **8.5. Валюты, точность и время**
+### **8.5. Валютная метка, точность и время**
 
-Один as_of определяет действие всех акций. Источники денег, участвующие в
-условии или выбранной формуле, приводятся к calculation_currency по одному FX
-snapshot. Результат переводится в currency поля, затем transforms и явное
-финальное округление до поддерживаемой точности, MoneyVO и constraints.
-Для SOURCE достаточно конвертации исходной суммы в currency поля.
-Ручной override уже окончателен в целевой валюте и не проходит эти расчёты.
+Один as_of определяет действие всех акций. Арифметика использует числовые суммы
+источников без автоматического пересчёта или наследования валюты.
+Курс/коэффициент находится в пользовательской формуле и фиксируется её снимком.
+currency: CurrencyVO | None = None задаёт только код результата, например USD.
+Смена метки не меняет сумму, не требует нового field_id и инвалидирует
+конфигурацию результата как изменение настроек поля.
 
 Рабочий Decimal context фиксируется версией evaluator (начально precision=40,
-ROUND_HALF_UP для деления); не зависит от настроек процесса. Промежуточные суммы
-не квантуются в 4 знака на каждом узле. Финальное приведение к shared MoneyVO
-(4 знака, ROUND_HALF_UP) явно отражается в trace и применяется до constraints.
-Округление с шагом выполняется до этого приведения. Ограничения сложности/диапазона
-предотвращают выход за поддерживаемые числа; недопустимый результат — issue,
-а не скрытое обнуление. Отрицательность суммы проверяется constraints поля,
-например min_amount=0, а не специальным именем price.
+ROUND_HALF_UP для деления), не зависит от настроек процесса. На входе/каждом узле
+нет квантования до 4 знаков. Результат должен соответствовать числовому бюджету;
+округление с шагом задаётся явным MONEY_CEIL_STEP. Нет округления по коду валюты.
+Недопустимый результат возвращает issue, а не скрытое обнуление.
+Отрицательность проверяет min_amount поля, а не название price.
 
-Нужный курс не заменяется условным/устаревшим. Отсутствующий курс неисполненной
-ветви не блокирует результат, но сам AST всех ветвей проходит publish-проверку.
-Необходимые курсы/источники могут предзагружаться batch без объявления отсутствия
-неиспользованной зависимости ошибкой. Snapshot фиксирует доступные направления,
-а evaluator запрашивает только реально нужные преобразования.
+PriceAmountVO — сумма override без валюты. Будущий PriceValueVO — разрешённый
+результат с amount и необязательной currency из поля; валютная метка не дублируется
+в override. Ни один из этих объектов не выполняет конвертацию.
+Деление на ноль/отсутствующий параметр обрабатываются как ошибки выбранной ветви;
+неисполненные ветви не создают зависимостей или курсовых запросов.
 
 ### **8.6. Ошибки и объяснимость**
 
@@ -1831,14 +1849,13 @@ IF purchase EXISTS → purchase*1.25, ELSE regular*1.10.
 | PURCHASE_PRICE_AMBIGUOUS | Закупочный источник не дал единственного предложения |
 | INVALID_EXPRESSION_TYPE | Несовместимая операция или конечный тип |
 | DIVISION_BY_ZERO | Нулевой делитель |
-| FX_RATE_MISSING | Нет реально необходимого курса snapshot |
 | NUMERIC_RANGE_EXCEEDED | Недопустимый диапазон/результат |
 | CALCULATION_LIMIT_EXCEEDED | Превышен лимит исполнения |
 | UNSUPPORTED_CALCULATION_VERSION | Не поддерживается семантика/формат дерева |
 
 Issue содержит field_id, optional rule_id и path узла. Trace: выбранное правило
 либо ELSE, проверенные условия, реально использованные параметры/ревизии,
-конвертация, округление и конечный результат. Исходная закупочная цена и
+числовые операции, округление и конечный результат. Исходная закупочная цена и
 производные промежуточные суммы показываются только при соответствующих правах.
 
 ### **8.7. Ответственность слоёв и будущая редактура**
@@ -1909,12 +1926,12 @@ Catalog позднее удалены, несовместимо изменены
 ### **9.2. Установка и сброс override**
 
 SetPublicationOverride проверяет expected_version, field_id активной схемы и
-базовый входной тип, вызывает Domain публикации и сохраняет её/инвалидацию в одной
-транзакции. Непарсящаяся сумма отклоняется, Decimal/валюта сохраняются явно.
-Нарушение max_length/min_amount или корректно представленная неверная валюта
-может сохраняться как ввод с INVALID, чтобы пользователь не терял данные.
-Ручная цена окончательна: формула/наценка/конвертация источника не исполняются,
-но transforms, валютная совместимость и constraints проверяются.
+базовый входной тип, вызывает Domain публикации и сохраняет её/инвалидацию
+в одной транзакции. Сумма передаётся Decimal-строкой и создаёт PriceAmountVO;
+валюту override не принимает. Пустое/некорректное представление числа отклоняется.
+Нарушение max_length/min_amount может сохраняться как ввод с INVALID.
+Ручная цена не проходит формулу/наценку источника, но transforms и constraints
+проверяются. Currency результата берётся только из определения поля.
 
 Reset удаляет запись override отдельным действием с версией публикации.
 После сброса снова применяется type_definition.value_definition поля.
@@ -1933,7 +1950,7 @@ PreviewFieldCalculation проверяет выбранную пару catalog_i
 структурной проверки. Для варианта preview использует тот же эффективный контекст,
 что публикация и экспорт; ID родителя не подменяет выбранную позицию.
 
-Preview ничего не публикует и не создаёт бизнес-draft. Общие as_of/FX обеспечивают
+Preview ничего не публикует и не создаёт бизнес-draft. Общие as_of и снимки определений обеспечивают
 согласованное сравнение результатов одного запроса; повторный preview может взять
 новое время/исходные ревизии. Trace фильтруется правами; режим тестирования не
 позволяет обойти закрытые закупочные данные или проверить произвольный код.
@@ -2024,7 +2041,9 @@ CsvFeedSerializer создаёт header из schema.exported_fields, затем 
 - Разделитель `,` по умолчанию.
 - Колонки формируются в порядке схемы.
 - Строковые значения корректно экранируются при наличии запятых, кавычек и переносов.
-- Цена сериализуется в десятичном формате без валютного символа.
+- MONEY с currency=None сериализуется как десятичная сумма без валютной метки.
+  С заданной меткой Generic CSV добавляет её через пробел: 25.00 USD.
+  Само числовое значение и его точность сериализатор не меняет.
 - Для значений, которые могут восприниматься электронными таблицами как формулы, предусмотрена отдельная политика безопасности CSV, не искажающая машинный импорт молча.
 
 ### **10.3. XML Serializer**
@@ -2032,6 +2051,9 @@ CsvFeedSerializer создаёт header из schema.exported_fields, затем 
 XmlFeedSerializer потоково записывает XML declaration, корневой элемент,
 элемент каждой публикации и теги exported cells. root_name/item_name берутся
 из переданного XmlExportSettingsVO зафиксированного снимка.
+MONEY записывается десятичной суммой; заданная метка становится атрибутом
+currency: <price currency="USD">25.00</price>. При currency=None атрибут отсутствует:
+<price>25.00</price>. Это представление значения, не дополнительное поле схемы.
 Для отсутствующего необязательного значения
 Generic CSV записывает пустую ячейку, Generic XML опускает элемент; профиль
 может явно задать другое представление, не меняя FieldValueResolver.
@@ -2044,7 +2066,7 @@ Generic CSV записывает пустую ячейку, Generic XML опус
 
 ```csv
 title_uk,title_ru,description_uk,price_uah,price_usd
-"Хлорофіл NOW Foods","Хлорофилл NOW Foods","Рідкий хлорофіл",1200.00,30.00
+"Хлорофіл NOW Foods","Хлорофилл NOW Foods","Рідкий хлорофіл",1200.00 UAH,30.00 USD
 ```
 
 ```xml
@@ -2054,17 +2076,18 @@ title_uk,title_ru,description_uk,price_uah,price_usd
     <title_uk>Хлорофіл NOW Foods</title_uk>
     <title_ru>Хлорофилл NOW Foods</title_ru>
     <description_uk>Рідкий хлорофіл</description_uk>
-    <price_uah>1200.00</price_uah>
-    <price_usd>30.00</price_usd>
+    <price_uah currency="UAH">1200.00</price_uah>
+    <price_usd currency="USD">30.00</price_usd>
   </product>
 </catalog>
 ```
 
 Это альтернативные представления одной схемы: конкретный Feed создаёт только
 CSV либо XML согласно format_settings. Оба примера не означают два файла одной
-генерации; для обоих нужны отдельные Feed. Деньги сохраняют валюту в
-Domain и preview; в Generic CSV/XML числовое значение не содержит символ валюты,
-а назначение валюты определяется явной схемой и экспортным именем поля.
+генерации; для обоих нужны отдельные Feed. В примере обоим MONEY-полям заданы
+валютные метки. Если currency=None, CSV передаёт только сумму, XML — сумму без
+атрибута currency. Метка не зависит от имени price_uah/price_usd и не выполняет
+пересчёт. Сериализаторы и PriceValueVO будут реализованы в следующих срезах.
 
 ### **10.5. FeedSchema и FormatProfile**
 
@@ -2107,7 +2130,7 @@ Serializer не выполняет арифметику, дополнитель�
 ```text
 RequestFeedGeneration: PENDING + полный снимок schema/export settings/engine version
   → claim: RUNNING, attempt_token, lease
-  → однократная фиксация as_of и нужного FX-контекста
+  → однократная фиксация as_of; пользовательский курс уже записан в AST
   → выбранные ENABLED-публикации SIMPLE/VARIANT по снимку Product Mode
   → batch выбранных позиций, нужного контекста родителей и разрешённых параметров
   → override либо выбор IF/ELSE и выражение → transforms → constraints
@@ -2138,18 +2161,10 @@ PostgreSQL может быть очередью: PENDING захватывает�
 RUNNING получает уникальный attempt_token/lease. При внешнем брокере постановка
 идёт через Outbox в общей транзакции. Repo не выполняет commit.
 
-До первого resolve фиксируются as_of и валютный контекст. Для валютных зависимостей
-используется один immutable snapshot, а не текущий курс на каждую позицию.
-Для retry недостаточно одного ID внешнего снимка: используемый набор и metadata
-копируются в fx_rate_snapshot JSONB самой генерации. Это исторический контекст
-задания, не второй справочник валют. FX snapshot ID сохраняется как происхождение;
-прямой FK и чтение ORM поставщика FX запрещены.
-
-Первый успешный захват расчётного контекста сохраняет as_of/FX атомарно до записи
-результатов. Retry использует их же. Для полностью ручных/одновалютных источников
-курсы не требуются; если нужна только ветвь без конвертации, отсутствие курса
-неприменённой ветви не блокирует расчёт. Проверка нужных зависимостей выполняется
-в Application/evaluator по ленивой семантике, не ошибкой всех предзагруженных полей.
+До первого resolve атомарно фиксируется as_of. Retry использует то же время,
+снимок схемы/AST и числовые константы, включая пользовательский курс.
+Валютных провайдеров, FX-снимков и валюты расчёта нет. Необходимые исходные
+цены/параметры получаются через Application по ленивой семантике выражений.
 
 ### **11.3. Выполнение и транзакционные границы**
 
@@ -2159,10 +2174,11 @@ Worker читает точный снимок схемы/AST/закупочны�
 и узлам. Внутри одного вычисления наценка не применяется повторно; разные поля
 имеют независимые определения. Override исключает ненужные входы своего поля.
 
-Чистый evaluator получает as_of/все доступные snapshots, не вызывает I/O. Если
-нужен дополнительный вход, Application получает его в рамках зафиксированного
-контекста до соответствующего чистого шага; новые курсы не подмешиваются в
-зафиксированный FX snapshot. Обновлённый context требует нового задания.
+Чистый evaluator получает as_of и доступные snapshots, не выполняет I/O.
+Если нужен дополнительный вход, Application получает его в рамках
+зафиксированного контекста до чистого шага. Новая формула или изменение
+коэффициента курса требует нового задания; текущая попытка использует
+прежний снимок определения.
 
 При STRICT и issue у ENABLED-публикации — FAILED с issues/counts, без переключения
 выдачи. Иначе ExportRecord сохраняются в staging, затем единственный сериализатор
@@ -2199,14 +2215,14 @@ lease завершённой попытки. После сбоя между comp
 запрос не заменяет уже активный более новый; ещё не завершившийся новый запрос
 сам по себе не запрещает активировать более ранний успешный результат.
 
-FX обновился или акция завершилась после capture — это не отменяет результат
-с зафиксированным as_of/FX. Следующая генерация получит новый контекст.
-При ожидании долгого задания UI показывает as_of и время создания, не обещает
-актуальность на момент скачивания. Автоматическая перегенерация — будущее расписание.
+Завершение акции после capture не отменяет результат с зафиксированным as_of.
+Новая формула или пользовательский коэффициент не подменяют снимок запущенного
+задания. Следующая генерация получит новую конфигурацию/время.
+UI показывает as_of и время создания. Автоматическая перегенерация — будущее расписание.
 
 MVP не имеет единого transaction snapshot всех независимых источников и набора
 публикаций на начало прохода. Используются данные фактически прочитанных ревизий;
-они сохраняются по записи. Retry сохраняет конфигурацию/as_of/FX, но может прочитать
+они сохраняются по записи. Retry сохраняет конфигурацию/as_of и константы формулы, но может прочитать
 более новые ревизии Catalog/закупки. Полное побитовое воспроизведение из внешних
 источников не обещается; CSV/XML одной попытки одинаково опираются на staging.
 
@@ -2271,7 +2287,7 @@ router только регистрирует маршруты/статусы/Dep
 CreateFeed принимает name/code/export_settings и optional definition; без неё
 создаётся пустой draft. Поле передаёт общие свойства и type_definition с
 дискриминатором kind по разделу 4. STRING/TEXT принимают locale/fallback,
-MONEY — обязательную currency; неизвестные/чужие свойства отклоняются, в том числе
+MONEY — необязательную currency (null или код); неизвестные/чужие свойства отклоняются, в том числе
 старые плоские value_type/locale/currency. export_settings.product_mode принимает
 только VARIABLE_TO_SINGLE и по умолчанию получает это значение при создании.
 GetFeed возвращает его явно; null/неизвестные коды отклоняются. Вход преобразуется
@@ -2330,11 +2346,14 @@ mapping каждой пары catalog_item_id/catalog_variant_id в publication_
 
 Backend возвращает publication_id, catalog_item_id/catalog_variant_id,
 status/readiness, schema/config versions,
-as_of, FX metadata и поля. Пример одного поля ниже: trace без разрешения на
+as_of, метаданные расчёта и поля. Пример одного поля ниже: trace без разрешения на
 закупочные данные, поэтому исходные защищённые суммы в нём отсутствуют.
 value_type/currency здесь — производные свойства DTO результата из
 FieldDefinition.type_definition.kind/currency, а не вторая копия настроек в Domain
 или входная форма схемы. То же относится к типу ExportCell.
+При отсутствии метки currency в определении равна null, а в результате/экспорте
+код не передаётся: resolved_value содержит только {"amount": "1250.0000"}.
+Override принимает только {"amount": "..."} без собственной currency.
 
 ```json
 {
@@ -2359,7 +2378,7 @@ FieldDefinition.type_definition.kind/currency, а не вторая копия �
 ```
 
 С разрешением trace раскрывает пройденные условия, параметры/ревизии,
-использованную формулу, FX и числовые шаги. Доступ только к конечной цене
+использованную формулу и числовые шаги. Доступ только к конечной цене
 не даёт автоматически доступ к исходной закупке. Политика разрешения формул
 с защищёнными входами описана в разделе 14; финальная цена может сама раскрывать
 производные сведения, это учитывается правами на настройку/экспорт.
@@ -2370,7 +2389,7 @@ Transport envelope: code, message, field_id?, rule_id?, expression_path?,
 details, request_id. Он не заменяет DTO успешных результатов разных use cases.
 Коды включают FEED_NOT_FOUND, SCHEMA_NOT_PUBLISHED, INVALID_SCHEMA,
 UNKNOWN_FIELD, UNKNOWN_SOURCE_PATH, SOURCE_TYPE_MISMATCH,
-REQUIRED_VALUE_MISSING, MAX_LENGTH_EXCEEDED, CURRENCY_MISMATCH,
+REQUIRED_VALUE_MISSING, MAX_LENGTH_EXCEEDED,
 TRANSLATION_MANUAL_REQUIRED, VERSION_CONFLICT, SOURCE_UNAVAILABLE,
 UNKNOWN_CALCULATION_PARAMETER и вычислительные коды раздела 8.6.
 
@@ -2428,11 +2447,10 @@ string/text содержат текстовые настройки, money — д
 
 ```text
 MoneyFieldInspector
-  ├── ResultCurrency
+  ├── CurrencyLabel: optional
   ├── ValueMode: SOURCE / CALCULATED / MANUAL
   ├── SourceSettings (SOURCE)
   ├── CalculationEditor (CALCULATED)
-  │    ├── CalculationCurrency
   │    ├── PurchaseSourceBinding
   │    ├── DefaultExpressionEditor (ELSE)
   │    └── OrderedRuleList
@@ -2449,14 +2467,14 @@ MoneyFieldInspector
 показывается, не решается случайным первым предложением.
 
 Кнопки «+процент», «+сумма», «формула» строят типизированный AST. Числа/суммы
-хранятся Decimal-строками, денежный literal имеет валюту. Визуальный редактор
+хранятся Decimal-строками без валюты. Пользовательский курс — обычная числовая константа. Визуальный редактор
 поддерживает скобки, операции и разрешённые функции; не исполняет Python/JS.
 Если есть текстовое представление, оно разбирается ограниченной грамматикой в тот
 же AST; при отсутствии такого parser UI остаётся визуальным. Единственный
 сохраняемый источник истины — дерево, не две расходящиеся версии строки и AST.
 
 Preview показывает выбранную ветвь/ELSE, условия, формулу, разрешённые параметры,
-конвертацию, округление и результат. Ошибки привязаны к field_id/rule_id/path.
+деление/умножение и другие операции, округление и результат. Ошибки привязаны к field_id/rule_id/path.
 Backend исполняет арифметику; frontend может проверять форму, но не рассчитывает
 вторую независимую «правильную цену». Несохранённый AST проверяется через preview
 override без изменения опубликованной схемы.
@@ -2604,7 +2622,7 @@ Unit-тесты обычного Python без PostgreSQL/FastAPI/HTTP:
 - FieldDefinition содержит только общие свойства и type_definition; прежних
   плоских настроек нет. kind фиксирован классом VO и не принимается конструктором.
 - Все три типа сохраняют свой полный состав через FieldDefinition.create/restore
-  и Feed.create/restore. SKU без locale допустим; currency у MONEY обязательна.
+  и Feed.create/restore. SKU без locale допустим; currency у MONEY может отсутствовать или быть None.
 - SourceReferenceVO принимает SourceProvider.CATALOG и четыре CatalogSourcePath;
   коды catalog/item.title/item.description/item.sku/item.regular_price стабильны.
   Сырые строки, неизвестные значения, чужие Enum с совпадающими кодами и
@@ -2634,16 +2652,21 @@ Unit-тесты обычного Python без PostgreSQL/FastAPI/HTTP:
 - FeedPublication.create создаёт ENABLED без overrides для SIMPLE и конкретного
   VARIANT; restore сохраняет все поля для каждого статуса.
 - Ссылка требует типизированные различные ID; Domain не импортирует Catalog.
-- Строка, MoneyVO и явный None сохраняются; отсутствующий override не равен None.
+- Строка, PriceAmountVO и явный None сохраняются; отсутствующий override не равен None.
   Неподдержанные значения/повтор field_id/неверные даты отклоняются.
-- Входные списки overrides/FX копируются; изменение списка не меняет объект.
+- Входные списки overrides копируются; изменение списка не меняет объект.
 - FeedGeneration.create формирует PENDING для CSV и XML с полным снимком
   и режимом VARIABLE_TO_SINGLE. Restore сохраняет каждое поле всех четырёх статусов.
 - Несогласованные попытка/даты/контекст/счётчики/ошибка/файл отклоняются.
   RUNNING допускает отсутствие ещё не зафиксированного контекста только до
   обработки позиций. Истёкший lease восстанавливается без чтения часов.
-- Повторная попытка сохраняет прежние as_of и точный Decimal FX; дубли валютных
-  пар, нечисловые/нулевые/отрицательные/неконечные курсы запрещены.
+- Повторная попытка сохраняет прежнее as_of и снимок числовой формулы.
+- PriceAmountVO сохраняет точность без валюты/округления; NaN/Infinity/float/bool
+  и превышение структурного бюджета отклоняются. Ноль/отрицательное число допустимы.
+- Валюта MONEY необязательна: отсутствие/None/код проходят create/restore,
+  не меняют формулу и не наследуют код источника. Ручной Shared MoneyVO отклоняется.
+- Calculation currency, MoneyLiteralVO и FX-объекты удалены; старые kwargs
+  отклоняются без compatibility aliases.
 - SUCCEEDED требует полный STRICT-результат и один файл нужного формата.
   FAILED сохраняет причину и может сохранять частичный прогресс без итогового файла.
 - Снимок не обходит уникальность полей и проверку Entity FieldDefinition:
@@ -2682,14 +2705,14 @@ Unit-тесты обычного Python без PostgreSQL/FastAPI/HTTP:
 | Purchase=800 UAH, множитель 1.25 | 1000 UAH, Catalog не изменён |
 | Sale вне/на границах [from,to) | Корректное отсутствие/выбор effective по as_of |
 | Типы денег/чисел, деление на ноль | Предсказуемые результаты/ошибки, без float |
-| Разные исходные валюты | Конвертация в calculation_currency по общему snapshot |
+| Разные исходные валюты | В арифметику входят только суммы; пересчёт задан пользователем в формуле |
 | Два денежных поля | Независимые формулы, без общей повторной наценки |
-| Ручной override | Без формулы/конвертации, затем transforms/constraints |
-| Источник имеет 6 знаков | Нет ранней потери точности, финальные 4 знака явные |
+| Ручной override | Сумма без собственной валюты и без формулы; затем transforms/constraints |
+| Источник имеет 6 знаков | Все знаки сохраняются, нет автоматического приведения к Shared MoneyVO |
 | Неподдержанный AST/версия/операция/цикл ссылок | Отклонение до выполнения |
 | Превышен лимит | Структурная или CALCULATION_LIMIT_EXCEEDED ошибка |
 
-Вычислитель проверяется чистыми fixtures snapshots/as_of/FX. Проверяется весь
+Вычислитель проверяется чистыми fixtures snapshots/as_of и числовых формул. Проверяется весь
 trace по фактическим ветвям и отсутствие скрытого доступа к источнику/часам.
 
 Проверки выбора и плоского представления в срезах публикаций/экспорта:
@@ -2714,11 +2737,11 @@ PostgreSQL/SQLAlchemy tests: JSONB AST/VO round-trip, Decimal без float,
 round-trip product_mode в настройках/снимке генерации, optimistic versions Feed/draft/
 publication, общий UoW и атомарный Outbox. Restore не подменяется mapper-инвариантами.
 Проверить schema_translate_map, public routing и два tenant, включая закупочные
-source IDs/offer IDs/FX snapshots/артефакты. Прямого чтения чужих таблиц нет.
+source IDs/offer IDs/артефакты. Прямого чтения чужих таблиц нет.
 
 Проверить условную запись проекций по ревизиям/времени, valid_until на границе
 акции без update-события, появление ранее отсутствующей зависимости, invalidation
-по изменению AST/категории/закупочной цены/курса. EXPLAIN/query count и batch
+по изменению AST/категории/закупочной цены/коэффициента формулы. EXPLAIN/query count и batch
 исключают N+1 на каждый товар/поле/AST-узел.
 
 ### **15.4. Генерация и сериализация**
@@ -2731,8 +2754,8 @@ source IDs/offer IDs/FX snapshots/артефакты. Прямого чтени�
   не допускает второй артефакт той же генерации.
 - VARIABLE_TO_SINGLE даёт одну запись на публикацию без родителя и группировки;
   снимок задания содержит режим, retry не подменяет настройки текущими/defaults.
-- Один as_of, фиксированный FX набор; источник курсов обновлён — retry не читает
-  новые курсы вместо сохранённого JSONB контекста.
+- Один as_of и снимок формулы; изменение пользовательского курса в новом
+  определении не меняет retry уже запрошенной генерации.
 - Изменён draft — активная схема прежняя; publish другой версии запрещает
   активацию старого результата, прежняя активная выдача сохраняется.
 - Старый запрос завершился позднее нового — sequence не откатывает выдачу.
@@ -2742,7 +2765,7 @@ source IDs/offer IDs/FX snapshots/артефакты. Прямого чтени�
   его одним новым. URL-расширение и Content-Type соответствуют активной генерации,
   исторический файл не становится вторым активным артефактом.
 - Источники недоступны технически — ограниченный retry; ошибка формулы — FAILED без retry.
-- Полностью ручные поля не требуют ненужных цен/курсов.
+- Полностью ручные поля не требуют ненужных исходных цен.
 - Отзыв/ротация ключа работают с HTTP cache; streaming не держит DB-транзакцию.
 - Большой Catalog: ограниченные память/staging, keyset, heartbeat и cleanup.
 
@@ -2793,8 +2816,8 @@ PriceCalculationStructurePolicy, SourceProvider/CatalogSourcePath и настр�
 format_settings: CsvExportSettingsVO либо XmlExportSettingsVO с фиксированным
 ExportFormat. Feed.create требует export_settings; формат автоматически не выбирается.
 Коллекции formats и общих csv/xml-свойств нет.
-Существующие CurrencyVO/MoneyVO/EntityIdVO
-переиспользуются, чужие внутренние агрегаты не импортируются.
+Существующие CurrencyVO/EntityIdVO переиспользуются, локальный PriceAmountVO
+сохраняет суммы без валюты и округления; Shared MoneyVO не изменяется, чужие внутренние агрегаты не импортируются.
 
 Не реализуются внутренние методы поведения, evaluator, policies исполнения,
 events, repository, Application, SQL, API или UI. Не создаются их пустые заготовки.
@@ -2848,11 +2871,11 @@ Export Settings/API/DTO явно сохраняют единственный pro
 
 Чистые evaluator/типизация/лимиты/Decimal context, Application resolver,
 batch простые позиции/выбранные варианты Catalog с эффективным контекстом родителей,
-категории/закупка по выбранной позиции, Registry/ReferenceData, FX adapter,
+категории/закупка по выбранной позиции, Registry/ReferenceData,
 PreviewFieldCalculation и объяснение ошибок/ветвей. Для закупки реализуется
 явный source selector, для акции — единый as_of.
 
-Готовность: IF/ELSE, обычная/акционная/закупочная цена, валюты и точность
+Готовность: IF/ELSE, обычная/акционная/закупочная цена, необязательные метки и точность
 проверены, ненужные ветви не исполняются, protected inputs/trace защищены.
 
 ### **16.6. Publication и проекции**
@@ -2869,13 +2892,13 @@ overrides/reset, участие/readiness, FieldValueResolver/PublicationResolve
 ### **16.7. Export Engine**
 
 Поведение уже созданного Domain генерации и задачи, staging/serializers/ArtifactStorage, as_of,
-сохранённые Product Mode/FX snapshot, source revisions, engine version, lease/heartbeat/
+сохранённые Product Mode/числовые константы формулы, source revisions, engine version, lease/heartbeat/
 fencing/retry, counts/issues/history и условная активация одного артефакта.
 VARIABLE_TO_SINGLE создаёт одну плоскую запись на выбранную публикацию в заданном
 CSV либо XML, без родительских строк/группировки и повторного раскрытия Catalog.
 
 Готовность: один файл согласно снимку format_settings, старый/ошибочный результат
-не заменяет активный, retry сохраняет формат/параметры и временной/валютный контекст.
+не заменяет активный, retry сохраняет формат/параметры и временной контекст и определение формулы.
 
 ### **16.8. Public Distribution**
 
@@ -2888,7 +2911,7 @@ ETag/Last-Modified, streaming без DB-транзакции, отзыв/рот�
 ### **16.9. Stabilization**
 
 Integration/E2E/нагрузка/security, конкуренция, AST limits, права/derived data,
-время акций, обновление источника FX во время запуска, восстановление задач/cleanup,
+время акций, смена формулы с пользовательским курсом во время запуска, восстановление задач/cleanup,
 мобильный/доступный UI, observability и весь архитектурный перечень.
 
 Готовность: критерии раздела 18 и соответствующие проверки выполнены;
@@ -2915,7 +2938,7 @@ Integration/E2E/нагрузка/security, конкуренция, AST limits, �
 | Совместное использование правил вне Feed | Новый явный публичный контракт, если появится такой сценарий |
 
 Плоская выгрузка простых товаров/выбранных вариантов в VARIABLE_TO_SINGLE,
-условия по категориям, арифметика на regular/sale/purchase и валютная конвертация
+условия по категориям, арифметика на regular/sale/purchase и явный пересчёт пользовательской формулой
 уже входят в целевой MVP, а не откладываются как зависимость от другого модуля.
 Предустановка пресета не делает поля особыми и не связывает изменение одного
 Feed с другим. Схема, публикация и итоговый артефакт сохраняют отдельный смысл.
@@ -2950,7 +2973,7 @@ Feed с другим. Схема, публикация и итоговый ар�
    уникальны по field_id и не зависят от загрузки текущей схемы при restore.
 3. Генерация содержит полный неизменяемый снимок одного CSV/XML без ревизий;
    статус согласован с попыткой, контекстом, датами, счётчиками, ошибкой и файлом.
-4. Данные FX хранятся точно и неизменяемо; успех не подменяет активацию файла.
+4. Числовые константы и as_of хранятся точно и неизменяемо; успех не подменяет активацию файла.
 5. Ключ — отдельный агрегат, хранит только 32-байтовый digest, а статус
    соответствует дате отзыва. Выпуск/проверка секрета пока не реализуются.
 6. Тесты всех объектов и архитектурных границ проходят без БД/HTTP/часов/UUID
@@ -2959,24 +2982,24 @@ Feed с другим. Схема, публикация и итоговый ар�
 ### **18.2. Полный целевой MVP после последующих срезов**
 
 1. Пользователь создаёт пустой Feed и сам задаёт поля/порядок/экспорт.
-2. Текстовые поля имеют независимые locale/fallback, MONEY — валюты результата.
-3. В MONEY выбираются source/manual/calculated, валюта вычисления, ELSE и
+2. Текстовые поля имеют независимые locale/fallback, MONEY — необязательные валютные метки результата.
+3. В MONEY выбираются source/manual/calculated, необязательная валютная метка, ELSE и
    упорядоченные IF-правила категории/других зарегистрированных параметров.
 4. Формулы используют regular/sale/effective/purchase, операции и разрешённые
    функции. Закупочный источник выбран явно и проверен по tenant/правам.
 5. Preview показывает первую совпавшую ветвь/ELSE, разрешённые данные и errors
    по field/rule/path. Нет скрытой подстановки отсутствия нулём/другой ценой.
-6. Приоритет manual исключает повторную наценку/конвертацию; reset возвращает
+6. Приоритет manual исключает повторную наценку/формулу; reset возвращает
    автоматическое определение, остальные поля не затрагиваются.
 7. Схема публикуется неизменяемой версией; изменение draft не меняет текущую выдачу.
 8. Привязка простых товаров и выбранных вариантов идемпотентна по паре ID;
    выбор только белого топика даёт одну публикацию, родитель и остальные варианты
    не экспортируются. Новые варианты не подключаются автоматически. Проекции
-   учитывают категории/закупку/курсы/версии/время акции и используемые ревизии
+   учитывают категории/закупку/числовые формулы/версии/время акции и используемые ревизии
    позиции/родителя; устаревание видно пользователю.
 9. После устранения blocking issues ENABLED-позиции готовы; Generation создаёт
    один выбранный Generic CSV либо XML из staging, с фиксированным format_settings,
-   product_mode/as_of/FX/engine version. VARIABLE_TO_SINGLE даёт по одной
+   product_mode/as_of/engine version и числовыми константами формулы. VARIABLE_TO_SINGLE даёт по одной
    самостоятельной записи на публикацию, без строки VARIABLE и группировки;
    схема полей общая для SIMPLE/VARIANT.
 10. Источники сохраняют собственные цены: FeedBuilder их не изменяет и не требует
@@ -2992,7 +3015,7 @@ Feed с другим. Схема, публикация и итоговый ар�
 
 ```text
 Выбранные SIMPLE/VARIANT Catalog + нужный контекст родителей + закупочный источник
-  + параметры + as_of + FX snapshot
+  + числовые параметры + as_of
   → Feed.export_settings.product_mode = VARIABLE_TO_SINGLE
   → FeedSchema: общие поля и AST каждого денежного расчёта
   → FeedPublication override либо IF/ELSE/expression

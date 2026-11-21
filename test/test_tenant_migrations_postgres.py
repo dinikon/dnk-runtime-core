@@ -152,10 +152,125 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.upgrade(connection, schema)
         return schema
 
+    async def test_currency_settings_removal_preserves_explicit_user_preferences(
+        self,
+    ) -> None:
+        """Удаление настроек сохраняет выбранные и пустые валюты профилей двух tenant."""
+        first, second = await self.new_schema(), await self.new_schema()
+        chosen_id, unset_id = uuid4(), uuid4()
+        async with self.engine.begin() as connection:
+            await self.migrator.downgrade(connection, first, "0017_remove_currency")
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{first}".tenant_currency_settings '
+                    "VALUES ('00000000-0000-0000-0000-000000000001', 'USD', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+            )
+            for schema in (first, second):
+                for user_id, currency in ((chosen_id, "EUR"), (unset_id, None)):
+                    await connection.execute(
+                        text(
+                            f'INSERT INTO "{schema}".users '
+                            "(id,user_type,last_name,first_name,interface_language,interface_theme,timezone,last_active_at,display_currency) "
+                            "VALUES (:id,'user','Tester','Alice','en','dark','Europe/Kyiv',CURRENT_TIMESTAMP,:currency)"
+                        ),
+                        {"id": user_id, "currency": currency},
+                    )
+            public_tables = await connection.run_sync(
+                lambda conn: inspect(conn).get_table_names(schema="public")
+            )
+            await self.migrator.upgrade(connection, first)
+            for schema in (first, second):
+                self.assertFalse(
+                    await connection.run_sync(
+                        lambda conn: inspect(conn).has_table(
+                            "tenant_currency_settings", schema=schema
+                        )
+                    )
+                )
+                values = dict(
+                    (
+                        await connection.execute(
+                            text(f'SELECT id,display_currency FROM "{schema}".users')
+                        )
+                    ).all()
+                )
+                self.assertEqual(values, {chosen_id: "EUR", unset_id: None})
+                self.assertEqual(
+                    await self.migrator.current(connection, schema),
+                    (self.migrator.head(),),
+                )
+            self.assertEqual(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema="public")
+                ),
+                public_tables,
+            )
+            await self.migrator.downgrade(connection, first, "0017_remove_currency")
+            self.assertEqual(
+                await connection.scalar(
+                    text(f'SELECT count(*) FROM "{first}".tenant_currency_settings')
+                ),
+                0,
+            )
+            with self.assertRaises(IntegrityError):
+                async with connection.begin_nested():
+                    await connection.execute(
+                        text(
+                            f'INSERT INTO "{first}".tenant_currency_settings '
+                            "VALUES (:id, 'USD', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                        ),
+                        {"id": uuid4()},
+                    )
+            await self.migrator.upgrade(connection, first)
+            await self.migrator.upgrade(connection, first)
+
+    async def test_currency_settings_removal_rejects_an_unexpected_foreign_key(
+        self,
+    ) -> None:
+        """Удаление без CASCADE сохраняет настройки и версию при неожиданном FK."""
+        schema = await self.new_schema()
+        async with self.engine.begin() as connection:
+            await self.migrator.downgrade(connection, schema, "0017_remove_currency")
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".tenant_currency_settings '
+                    "VALUES ('00000000-0000-0000-0000-000000000001', 'USD', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                )
+            )
+            await connection.execute(
+                text(
+                    f'CREATE TABLE "{schema}".external_settings_usage '
+                    f'(id UUID REFERENCES "{schema}".tenant_currency_settings(id))'
+                )
+            )
+            with self.assertRaises(DBAPIError):
+                async with connection.begin_nested():
+                    await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                await self.migrator.current(connection, schema),
+                ("0017_remove_currency",),
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(
+                        f'SELECT base_currency FROM "{schema}".tenant_currency_settings'
+                    )
+                ),
+                "USD",
+            )
+            self.assertTrue(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).has_table(
+                        "external_settings_usage", schema=schema
+                    )
+                )
+            )
+
     async def test_currency_removal_preserves_tenants_and_recreates_empty_tables(
         self,
     ) -> None:
-        """Удаление и откат книги сохраняют соседние схемы, public и валюту tenant."""
+        """Удаление и откат книги сохраняют соседние схемы, public и данные tenant."""
         first, second = await self.new_schema(), await self.new_schema()
         retired = {"currency_exchange_rate_books", "currency_exchange_rate_quotes"}
         async with self.engine.begin() as connection:
@@ -203,7 +318,7 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                         await connection.execute(text(statement))
             await connection.execute(
                 text(
-                    f"UPDATE \"{first}\".tenant_currency_settings SET base_currency='USD'"
+                    f"UPDATE \"{first}\".contact_point_labels SET name='Migration test' WHERE type='email'"
                 )
             )
             await self.migrator.upgrade(connection, first)
@@ -220,10 +335,10 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 await connection.scalar(
                     text(
-                        f'SELECT base_currency FROM "{first}".tenant_currency_settings'
+                        f"SELECT count(*) FROM \"{first}\".contact_point_labels WHERE name='Migration test'"
                     )
                 ),
-                "USD",
+                3,
             )
             self.assertEqual(
                 await connection.run_sync(
@@ -372,24 +487,10 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(str(labels[0].id), "01997b20-0000-7000-8000-000000000001")
             self.assertEqual(
                 await connection.scalar(
-                    text(
-                        f'SELECT base_currency FROM "{schema}".tenant_currency_settings'
-                    )
-                ),
-                "UAH",
-            )
-            self.assertEqual(
-                await connection.scalar(
                     text(f'SELECT count(*) FROM "{schema}".catalog_product_types')
                 ),
                 0,
             )
-            with self.assertRaises(IntegrityError):
-                async with connection.begin_nested():
-                    await connection.execute(
-                        text(f'UPDATE "{schema}".tenant_currency_settings SET id=:id'),
-                        {"id": uuid4()},
-                    )
             await connection.execute(
                 text(f'CREATE TABLE "{schema}".legacy_objects (id integer)')
             )
@@ -585,8 +686,6 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                         UtcClock(),
                     ),
                 ),
-                currency_validator=AsyncMock(),
-                currency_settings_writer=AsyncMock(),
                 tenant_onboarding_service=TenantOnboardingService(
                     SqlAlchemyTenantRepository(uow.session),
                     SqlAlchemyTenantDomainRepository(uow.session),

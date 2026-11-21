@@ -22,23 +22,23 @@ from src.modules.feed_builder.domain.feed.value_object.transform_definition impo
 
 @dataclass(frozen=True, slots=True)
 class MoneyFieldTypeVO:
-    """Хранит обязательную валюту и настройки получения/проверки денежного значения."""
+    """Хранит получение суммы и необязательную валютную метку результата."""
 
     kind: ClassVar[FieldValueType] = FieldValueType.MONEY
-    currency: CurrencyVO
     value_definition: MoneyValueDefinitionVO
+    currency: CurrencyVO | None = None
     constraints: MoneyConstraintsVO = field(default_factory=MoneyConstraintsVO)
     transforms: tuple[TransformDefinitionVO, ...] = ()
 
     def __post_init__(self) -> None:
         """Проверяет собственные денежные настройки без локали и исполнения расчёта."""
         if (
-            not isinstance(self.currency, CurrencyVO)
+            (self.currency is not None and not isinstance(self.currency, CurrencyVO))
             or not isinstance(self.value_definition, MoneyValueDefinitionVO)
             or not isinstance(self.constraints, MoneyConstraintsVO)
         ):
             raise InvalidFieldDefinitionError(
-                "Денежный тип требует CurrencyVO, MoneyValueDefinitionVO и MoneyConstraintsVO."
+                "Нужны MoneyValueDefinitionVO, MoneyConstraintsVO и CurrencyVO либо None."
             )
         transforms = validate_transforms(
             self.transforms, allowed=frozenset((TransformOperation.MONEY_CEIL_STEP,))

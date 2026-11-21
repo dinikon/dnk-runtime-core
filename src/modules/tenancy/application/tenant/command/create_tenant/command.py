@@ -13,4 +13,3 @@ class CreateTenantCommand:
     user_first_name: str
     user_email: str
     reserved_tenant_id: UUID | None = None
-    base_currency: str = "UAH"

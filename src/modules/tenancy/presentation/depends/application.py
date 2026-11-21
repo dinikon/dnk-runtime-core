@@ -4,20 +4,6 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.modules.reference_data.presentation.depends import ValidateCurrencyHandlerDep
-from src.modules.tenancy.application.tenant.port.currency_validator import (
-    CurrencyValidatorProtocol,
-)
-from src.modules.tenancy.infrastructure.adapter.currency_validator import (
-    ReferenceDataCurrencyValidator,
-)
-from src.modules.tenancy.application.tenant.port.currency_settings_writer import (
-    TenantCurrencySettingsWriterProtocol,
-)
-from src.modules.tenancy.infrastructure.adapter.tenant_currency_settings import (
-    TenantCurrencySettingsPersistenceAdapter,
-)
-
 from src.config import dnk_config
 from src.modules.tenancy.application.ports.files import TenantStorageProtocol
 from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageAdapter
@@ -68,30 +54,6 @@ def get_tenant_storage(uow: UoWDep) -> TenantStorageProtocol:
 TenantStorageDep = Annotated[TenantStorageProtocol, Depends(get_tenant_storage)]
 
 
-def get_currency_validator(
-    handler: ValidateCurrencyHandlerDep,
-) -> CurrencyValidatorProtocol:
-    """Соединяет публичную проверку Reference Data с портом Tenancy."""
-    return ReferenceDataCurrencyValidator(handler)
-
-
-CurrencyValidatorDep = Annotated[
-    CurrencyValidatorProtocol, Depends(get_currency_validator)
-]
-
-
-def get_currency_settings_writer(uow: UoWDep) -> TenantCurrencySettingsWriterProtocol:
-    """Собирает запись настроек после bootstrap в общей транзакции onboarding."""
-    return TenantCurrencySettingsPersistenceAdapter(
-        uow.session, TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
-    )
-
-
-TenantCurrencySettingsWriterDep = Annotated[
-    TenantCurrencySettingsWriterProtocol, Depends(get_currency_settings_writer)
-]
-
-
 from src.modules.tenancy.application.tenant.port.catalog_provisioning import (
     CatalogProvisioningPort,
 )
@@ -130,8 +92,6 @@ def get_create_tenant_handler(
     tenant_schema_bootstrap_context_factory: "TenantSchemaBootstrapContextFactoryDep",
     tenant_schema_bootstrap_port: "TenantSchemaBootstrapPortDep",
     tenant_storage: TenantStorageDep,
-    currency_validator: CurrencyValidatorDep,
-    currency_settings_writer: TenantCurrencySettingsWriterDep,
     catalog_provisioning: CatalogProvisioningDep,
 ) -> CreateTenantHandler:
     """Создает use case полного tenant onboarding."""
@@ -142,8 +102,6 @@ def get_create_tenant_handler(
         tenant_schema_bootstrap_context_factory=tenant_schema_bootstrap_context_factory,
         tenant_schema_bootstrap_port=tenant_schema_bootstrap_port,
         tenant_storage=tenant_storage,
-        currency_validator=currency_validator,
-        currency_settings_writer=currency_settings_writer,
         catalog_provisioning=catalog_provisioning,
     )
 

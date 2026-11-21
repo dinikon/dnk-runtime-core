@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock
+from dataclasses import asdict
 from uuid import uuid4
 
 from src.modules.tenancy.application.ports.schema_bootstrap import (
@@ -72,8 +72,6 @@ class CreateTenantHandlerTests(unittest.IsolatedAsyncioTestCase):
         self_tenant = self
         use_case = CreateTenantHandler(
             catalog_provisioning=CatalogProvisioningStub(),
-            currency_validator=AsyncMock(),
-            currency_settings_writer=AsyncMock(),
             tenant_onboarding_service=TenantOnboardingServiceStub(),
             identity_provisioning_service=IdentityProvisioningServiceStub(),
             tenant_schema_bootstrap_context_factory=TenantSchemaBootstrapContextFactory(
@@ -102,3 +100,17 @@ class CreateTenantHandlerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.tenant_id, tenant.id.uuid)
         self.assertEqual(result.user_id, created_user_id)
+        self.assertNotIn("base_currency", asdict(result))
+
+    def test_command_rejects_the_removed_base_currency(self) -> None:
+        """Сценарий создания tenant больше не принимает базовую валюту."""
+        with self.assertRaises(TypeError):
+            CreateTenantCommand(
+                tenant_name="Tenant",
+                external_id="tenant-1",
+                tenant_domain_host="tenant.example.com",
+                user_last_name="Doe",
+                user_first_name="John",
+                user_email="john@example.com",
+                base_currency="USD",
+            )
