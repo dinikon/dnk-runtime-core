@@ -15,7 +15,6 @@ from src.modules.catalog.application.catalog_item.port.content_schema import (
 from src.modules.catalog.application.catalog_item.port.files import (
     CatalogImageFilesPort,
 )
-from src.modules.catalog.application.port.currencies import CurrencyPort
 from src.modules.catalog.application.port.locales import LocalePort
 from src.modules.catalog.application.port.rich_text import RichTextSanitizerPort
 from src.modules.catalog.domain.value_object.locale import LocaleVO
@@ -49,7 +48,6 @@ class CatalogItemUpdateService:
         locales: LocalePort,
         schemas: CatalogItemContentSchemaPort,
         sanitizer: RichTextSanitizerPort,
-        currencies: CurrencyPort,
         files: CatalogImageFilesPort,
     ) -> None:
         """Принимает порты одного внешнего tenant UoW, без управления транзакцией."""
@@ -58,7 +56,6 @@ class CatalogItemUpdateService:
         self._locales = locales
         self._schemas = schemas
         self._sanitizer = sanitizer
-        self._currencies = currencies
         self._files = files
 
     async def apply(
@@ -91,14 +88,6 @@ class CatalogItemUpdateService:
                 code: self._sanitizer.clean(value) if code in rich_codes else value
                 for code, value in command.content.values.items()
             }
-        if (
-            "price_specification" in command.fields
-            and command.price_specification is not None
-        ):
-            await field_result(
-                "price_specification",
-                self._currencies.ensure_active(command.price_specification.currency),
-            )
         if "gallery" in command.fields and command.gallery is not None:
             await field_result(
                 "gallery",

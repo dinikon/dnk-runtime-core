@@ -51,7 +51,7 @@ watch(
 );
 const validation = computed(() =>
   props.section === "price" && !draft.value.price_specification
-    ? "Укажите цену и валюту."
+    ? "Укажите корректную цену."
     : sectionError(props.section, draft.value),
 );
 function change(patch: ProductPatch): void {

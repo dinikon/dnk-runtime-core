@@ -442,7 +442,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
         schema = self.schemas[0]
         for assignment in [
             "kind='variant',parent_id=id,product_type_id=NULL",
-            "regular_price=1,currency=NULL",
+            "regular_price=NULL,sale_price=1",
             "weight='NaN'::numeric,weight_unit='g'",
             "manage_stock=true,stock_quantity=0,backorders=NULL",
             "weight=1,weight_unit=NULL",
@@ -628,7 +628,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             ("status", {"status": "active"}),
             ("virtual", {"virtual": True}),
             ("sku", {"sku": " ZERO "}),
-            ("price", {"price": {"regular_price": "0", "currency": "UAH"}}),
+            ("price", {"price": {"regular_price": "0"}}),
             (
                 "content/en",
                 {
@@ -806,7 +806,7 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             {
                 "sku": "atomic",
                 "virtual": True,
-                "price_specification": {"regular_price": "0", "currency": "UAH"},
+                "price_specification": {"regular_price": "0"},
                 "content": {
                     "expected_schema_version": 1,
                     "values": {"title": "Saved", "body": ""},
@@ -963,7 +963,6 @@ class CatalogPostgresTests(unittest.IsolatedAsyncioTestCase):
             "virtual": False,
             "price_specification": {
                 "regular_price": "123.456789",
-                "currency": "UAH",
                 "sale_price": "100",
                 "date_on_sale_from": "2026-01-01T00:00:00Z",
                 "date_on_sale_to": "2027-01-01T00:00:00Z",

@@ -33,11 +33,10 @@ test("catalog price presentation retains zero, decimal precision and variant sem
     sku: null,
     status: "active",
     price: "123456789012345678.123456",
-    currency: "USD",
     availableForSale: true,
   };
-  assert.equal(catalogListPrice(item), "123456789012345678.123456 USD");
-  assert.equal(catalogListPrice({ ...item, price: "0" }), "0 USD");
+  assert.equal(catalogListPrice(item), "123456789012345678.123456");
+  assert.equal(catalogListPrice({ ...item, price: "0" }), "0");
   assert.equal(catalogListPrice({ ...item, price: null }), "Цена не задана");
   assert.equal(
     catalogListPrice({
@@ -46,7 +45,7 @@ test("catalog price presentation retains zero, decimal precision and variant sem
       min_price: "0.00",
       max_price: "100.123456",
     }),
-    "0–100.123456 USD",
+    "0–100.123456",
   );
   assert.equal(
     catalogListPrice({
@@ -55,11 +54,7 @@ test("catalog price presentation retains zero, decimal precision and variant sem
       min_price: "10.0",
       max_price: "10.00",
     }),
-    "10 USD",
-  );
-  assert.equal(
-    catalogListPrice({ ...item, kind: "variable", mixed_currencies: true }),
-    "Разные валюты",
+    "10",
   );
   assert.equal(
     catalogListPrice({ ...item, kind: "variable", min_price: null }),
@@ -84,10 +79,8 @@ test("list mapper keeps the image, stock status and exact price from the existin
     variant_count: 0,
     min_price: null,
     max_price: null,
-    mixed_currencies: false,
     status: "draft",
     price: "0.123456",
-    currency: "USD",
     stock_status: "in_stock",
     manage_stock: true,
     stock_quantity: 0,
@@ -119,7 +112,6 @@ test("table stock distinguishes zero, manual availability, variants and a shared
     sku: null,
     status: "active",
     price: null,
-    currency: null,
     availableForSale: false,
     manageStock: true,
     stockQuantity: 0,

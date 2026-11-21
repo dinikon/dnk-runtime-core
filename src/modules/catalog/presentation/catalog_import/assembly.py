@@ -43,16 +43,9 @@ from src.modules.catalog.infrastructure.catalog_import.files import (
 )
 from src.modules.catalog.infrastructure.mutation_lock import PostgresCatalogMutationLock
 from src.modules.catalog.infrastructure.locales import ReferenceDataLocales
-from src.modules.catalog.infrastructure.currencies import ReferenceDataCurrencies
 from src.modules.catalog.infrastructure.rich_text import Nh3RichTextSanitizer
 from src.modules.reference_data.infrastructure.persistence.repository import (
     SqlAlchemyCatalogRepository,
-)
-from src.modules.reference_data.infrastructure.currency.persistence.query_repository import (
-    SqlAlchemyCurrencyQueryRepository,
-)
-from src.modules.reference_data.application.currency.query.validate_currency.handler import (
-    ValidateCurrencyHandler,
 )
 from src.modules.files.infrastructure.assembly import (
     build_files_handlers,
@@ -90,15 +83,10 @@ def build_process_import_row(
     mutations = CatalogItemMutationService(
         items,
         PostgresCatalogMutationLock(session),
-        CatalogStockEvents(
-            SqlAlchemyOutboxRepository(session), build_scheduled_job_repository(session)
-        ),
+        CatalogStockEvents(SqlAlchemyOutboxRepository(session)),
     )
     schemas = SqlAlchemyProductTypeSchemas(session)
     locales = ReferenceDataLocales(SqlAlchemyCatalogRepository(session))
-    currencies = ReferenceDataCurrencies(
-        ValidateCurrencyHandler(SqlAlchemyCurrencyQueryRepository(session))
-    )
     sanitizer = Nh3RichTextSanitizer()
     handlers = build_files_handlers(session)
     files = FilesCatalogImportImages(
@@ -109,7 +97,6 @@ def build_process_import_row(
     creation = CatalogItemCreationService(
         schemas,
         locales,
-        currencies,
         SqlAlchemyCatalogItemSku(session),
         sanitizer,
         files,
@@ -117,7 +104,7 @@ def build_process_import_row(
         uuid,
     )
     updates = CatalogItemUpdateService(
-        mutations, clock, locales, schemas, sanitizer, currencies, files
+        mutations, clock, locales, schemas, sanitizer, files
     )
     return ProcessCatalogImportRowHandler(
         EntityIdVO(tenant_id),

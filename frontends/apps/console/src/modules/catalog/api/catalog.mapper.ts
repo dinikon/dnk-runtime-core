@@ -27,12 +27,10 @@ export function listItemFromDto(value: ListItemDTO): CatalogListItem {
     variant_count: value.variant_count,
     min_price: value.min_price,
     max_price: value.max_price,
-    mixed_currencies: value.mixed_currencies,
     status: value.status,
     sku: value.sku,
     title: value.title,
     price: value.price,
-    currency: value.currency,
     availableForSale: value.available_for_sale,
     stockStatus:
       value.stock_status === "in_stock" ||

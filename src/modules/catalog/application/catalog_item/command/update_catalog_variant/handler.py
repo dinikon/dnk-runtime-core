@@ -14,7 +14,6 @@ from src.modules.catalog.application.catalog_item.port.files import (
     CatalogImageFilesPort,
 )
 from src.modules.catalog.application.port.locales import LocalePort
-from src.modules.catalog.application.port.currencies import CurrencyPort
 from src.modules.catalog.application.port.rich_text import RichTextSanitizerPort
 from src.modules.catalog.domain.value_object.locale import LocaleVO
 from src.modules.catalog.domain.error import (
@@ -32,15 +31,13 @@ class UpdateCatalogVariantHandler:
         mutations: CatalogItemMutationService,
         schemas: CatalogItemContentSchemaPort,
         locales: LocalePort,
-        currencies: CurrencyPort,
         sanitizer: RichTextSanitizerPort,
         files: CatalogImageFilesPort,
         clock: ClockPort,
     ) -> None:
         """Получает только порты и сервис записи общего tenant UoW."""
         self._mutations, self._schemas, self._locales = mutations, schemas, locales
-        self._currencies, self._sanitizer, self._files, self._clock = (
-            currencies,
+        self._sanitizer, self._files, self._clock = (
             sanitizer,
             files,
             clock,
@@ -69,11 +66,6 @@ class UpdateCatalogVariantHandler:
                 k: self._sanitizer.clean(v) if k in rich_codes else v
                 for k, v in command.content.values.items()
             }
-        if (
-            "price_specification" in command.fields
-            and command.price_specification is not None
-        ):
-            await self._currencies.ensure_active(command.price_specification.currency)
         if "gallery" in command.fields and command.gallery is not None:
             await self._files.ensure_images(
                 command.tenant_id.uuid,

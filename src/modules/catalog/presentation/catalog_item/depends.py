@@ -46,9 +46,6 @@ from src.modules.catalog.application.catalog_item.port.files import (
 )
 from src.modules.catalog.infrastructure.catalog_item.files import FilesCatalogImages
 from src.modules.files.infrastructure.assembly import build_files_handlers
-from src.modules.catalog.application.port.currencies import CurrencyPort
-from src.modules.catalog.infrastructure.currencies import ReferenceDataCurrencies
-from src.modules.reference_data.presentation.depends import ValidateCurrencyHandlerDep
 from src.modules.catalog.application.catalog_item.command.create_catalog_item.handler import (
     CreateCatalogItemHandler,
 )
@@ -114,14 +111,6 @@ def get_schemas(uow: UoWDep) -> CatalogItemContentSchemaPort:
 SchemasDep = Annotated[CatalogItemContentSchemaPort, Depends(get_schemas)]
 
 
-def get_currencies(handler: ValidateCurrencyHandlerDep) -> CurrencyPort:
-    """Собирает порт currencies конкретного процесса."""
-    return ReferenceDataCurrencies(handler)
-
-
-CurrenciesDep = Annotated[CurrencyPort, Depends(get_currencies)]
-
-
 def get_files(uow: UoWDep) -> CatalogImageFilesPort:
     """Собирает публичные Files handlers на сессии Catalog UoW."""
     handlers = build_files_handlers(uow.session)
@@ -160,7 +149,6 @@ def get_creation_service(
     clock: ClockDep,
     uuid: UuidDep,
     locales: LocalesDep,
-    currencies: CurrenciesDep,
     sanitizer: SanitizerDep,
     files: FilesDep,
     uow: UoWDep,
@@ -169,7 +157,6 @@ def get_creation_service(
     return CatalogItemCreationService(
         schemas,
         locales,
-        currencies,
         SqlAlchemyCatalogItemSku(uow.session),
         sanitizer,
         files,
@@ -268,12 +255,11 @@ def get_update_catalog_item_handler(
     locales: LocalesDep,
     schemas: SchemasDep,
     sanitizer: SanitizerDep,
-    currencies: CurrenciesDep,
     files: FilesDep,
 ) -> UpdateCatalogItemHandler:
     """Собирает единый сценарий изменения на портах общего UoW."""
     return UpdateCatalogItemHandler(
-        mutations, clock, locales, schemas, sanitizer, currencies, files
+        mutations, clock, locales, schemas, sanitizer, files
     )
 
 
@@ -298,14 +284,13 @@ def get_update_catalog_variant_handler(
     mutations: MutationsDep,
     schemas: SchemasDep,
     locales: LocalesDep,
-    currencies: CurrenciesDep,
     sanitizer: SanitizerDep,
     files: FilesDep,
     clock: ClockDep,
 ) -> UpdateCatalogVariantHandler:
     """Собирает конкретный сценарий на портах одного внешнего UoW."""
     return UpdateCatalogVariantHandler(
-        mutations, schemas, locales, currencies, sanitizer, files, clock
+        mutations, schemas, locales, sanitizer, files, clock
     )
 
 

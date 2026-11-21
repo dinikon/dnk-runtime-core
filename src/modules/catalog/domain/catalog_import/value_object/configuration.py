@@ -9,7 +9,6 @@ TARGETS = (
     "title",
     "body",
     "regular_price",
-    "currency",
     "sale_price",
     "discount",
     "date_on_sale_from",

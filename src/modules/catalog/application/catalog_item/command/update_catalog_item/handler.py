@@ -13,7 +13,6 @@ from src.modules.catalog.application.catalog_item.port.content_schema import (
 from src.modules.catalog.application.catalog_item.port.files import (
     CatalogImageFilesPort,
 )
-from src.modules.catalog.application.port.currencies import CurrencyPort
 from src.modules.catalog.application.port.locales import LocalePort
 from src.modules.catalog.application.port.rich_text import RichTextSanitizerPort
 from src.modules.catalog.application.catalog_item.update_service import (
@@ -32,12 +31,11 @@ class UpdateCatalogItemHandler:
         locales: LocalePort,
         schemas: CatalogItemContentSchemaPort,
         sanitizer: RichTextSanitizerPort,
-        currencies: CurrencyPort,
         files: CatalogImageFilesPort,
     ) -> None:
         """Подключает сервис той же транзакции без вложенного handler."""
         self._service = CatalogItemUpdateService(
-            mutations, clock, locales, schemas, sanitizer, currencies, files
+            mutations, clock, locales, schemas, sanitizer, files
         )
 
     async def execute(

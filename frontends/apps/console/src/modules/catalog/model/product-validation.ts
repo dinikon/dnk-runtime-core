@@ -33,8 +33,8 @@ export function sectionError(
     const price = patch.price_specification;
     const regular = decimal(price.regular_price),
       sale = price.sale_price === null ? null : decimal(price.sale_price);
-    if (regular === null || regular < 0n || !/^[A-Z]{3}$/.test(price.currency))
-      return "Укажите неотрицательную цену до 6 знаков и код валюты.";
+    if (regular === null || regular < 0n)
+      return "Укажите неотрицательную цену с точностью до 6 знаков.";
     if (
       price.sale_price !== null &&
       (sale === null || sale < 0n || sale > regular)

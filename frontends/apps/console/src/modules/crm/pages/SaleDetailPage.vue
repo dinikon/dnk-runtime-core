@@ -268,15 +268,9 @@ async function addCatalog(itemId: string) {
       name: item.title,
       kind: item.kind,
       sku: item.sku,
-      unitPrice:
-        item.currency === draft.value.currency && item.price !== null
-          ? item.price
-          : "",
     });
     catalogOpen.value = false;
-    if (item.currency !== draft.value.currency || item.price === null)
-      notice.value =
-        "Укажите цену позиции в валюте продажи. Валюта цены каталога не определена или отличается.";
+    notice.value = "Укажите цену позиции в валюте продажи.";
   } catch (e) {
     if (context !== scope.value.join("|") || savedId !== id.value) return;
     error.value = getApiErrorMessage(e, "Не удалось выполнить действие.");

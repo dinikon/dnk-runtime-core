@@ -20,7 +20,6 @@ from src.modules.catalog.application.catalog_item.port.files import (
     CatalogImageFilesPort,
 )
 from src.modules.catalog.application.port.locales import LocalePort
-from src.modules.catalog.application.port.currencies import CurrencyPort
 from src.modules.catalog.application.port.rich_text import RichTextSanitizerPort
 from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
@@ -46,7 +45,6 @@ class CatalogItemCreationService:
         self,
         schemas: CatalogItemContentSchemaPort,
         locales: LocalePort,
-        currencies: CurrencyPort,
         skus: CatalogItemSkuPort,
         sanitizer: RichTextSanitizerPort,
         files: CatalogImageFilesPort,
@@ -54,12 +52,7 @@ class CatalogItemCreationService:
         uuid: UUIdGeneratorProtocol,
     ) -> None:
         """Получает порты внешнего UoW; не сохраняет товар и не завершает транзакцию."""
-        self.schemas, self.locales, self.currencies, self.skus = (
-            schemas,
-            locales,
-            currencies,
-            skus,
-        )
+        self.schemas, self.locales, self.skus = schemas, locales, skus
         self.sanitizer, self.files, self.clock, self.uuid = (
             sanitizer,
             files,
@@ -80,15 +73,6 @@ class CatalogItemCreationService:
         sku = SkuCodeVO(values.sku) if values.sku is not None else None
         if sku and await self.skus.in_use(sku.value):
             raise CatalogConflictError("SKU уже используется.", ("sku",))
-        if values.price_specification is not None:
-            try:
-                await self.currencies.ensure_active(values.price_specification.currency)
-            except CatalogDependencyUnavailableError:
-                raise
-            except CatalogError as error:
-                raise InvalidCatalogValueError(
-                    str(error), ("price_specification",)
-                ) from error
         now = self.clock.now()
         if values.kind is CatalogItemKind.SIMPLE:
             if values.variants:
@@ -207,8 +191,6 @@ class CatalogItemCreationService:
         sku = SkuCodeVO(values.sku) if values.sku is not None else None
         if sku and await self.skus.in_use(sku.value):
             raise CatalogConflictError("SKU уже используется.", ("sku",))
-        if values.price_specification:
-            await self.currencies.ensure_active(values.price_specification.currency)
         now = self.clock.now()
         variant = CatalogVariant.create(
             identifier=CatalogItemIdVO(self.uuid.new()),

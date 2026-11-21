@@ -28,8 +28,6 @@ export interface CatalogItem {
   variant_count?: number;
   min_price?: string | null;
   max_price?: string | null;
-  currency?: string | null;
-  mixed_currencies?: boolean;
   effective_content?: Record<string, string> | null;
   effective_gallery?: ProductGallery | null;
   effective_stock?: ProductStock | null;
@@ -67,13 +65,11 @@ export interface CatalogListItem {
   variant_count?: number;
   min_price?: string | null;
   max_price?: string | null;
-  mixed_currencies?: boolean;
   id: string;
   status: import("./product.types").ProductStatus;
   sku: string | null;
   title: string | null;
   price: string | null;
-  currency: string | null;
   availableForSale: boolean;
   stockStatus?: ProductStock["stock_status"];
   primaryImage?: ProductGallery["images"][number] | null;

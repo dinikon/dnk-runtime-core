@@ -1,22 +1,20 @@
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-import re
 from src.modules.catalog.domain.error import InvalidCatalogValueError
 
 
 @dataclass(frozen=True, slots=True)
 class PriceSpecificationVO:
-    """Цена и скидка в одной валюте с полуоткрытым UTC-интервалом."""
+    """Цена и скидка с полуоткрытым UTC-интервалом."""
 
     regular_price: Decimal
-    currency: str
     sale_price: Decimal | None = None
     date_on_sale_from: datetime | None = None
     date_on_sale_to: datetime | None = None
 
     def __post_init__(self) -> None:
-        """Проверяет точные суммы, валюту и согласованность периода скидки."""
+        """Проверяет точные суммы и согласованность периода скидки."""
         prices = (
             (self.regular_price,)
             if self.sale_price is None
@@ -32,8 +30,6 @@ class PriceSpecificationVO:
             raise InvalidCatalogValueError(
                 "Цена должна быть конечным неотрицательным Decimal с точностью до 6 знаков."
             )
-        if not re.fullmatch(r"[A-Z]{3}", self.currency):
-            raise InvalidCatalogValueError("Нужен ISO-код валюты.")
         if self.sale_price is not None and self.sale_price > self.regular_price:
             raise InvalidCatalogValueError("Цена скидки превышает обычную цену.")
         bounds = (self.date_on_sale_from, self.date_on_sale_to)

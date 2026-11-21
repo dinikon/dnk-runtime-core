@@ -134,7 +134,6 @@ class CatalogProductTypeTests(unittest.IsolatedAsyncioTestCase):
                 schemas,
                 AsyncMock(),
                 AsyncMock(),
-                AsyncMock(),
                 Nh3RichTextSanitizer(),
                 AsyncMock(),
                 clock,

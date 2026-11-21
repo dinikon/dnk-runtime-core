@@ -5,6 +5,7 @@ from src.modules.tenancy.infrastructure.adapter.files import FilesTenantStorageA
 
 import asyncio
 import contextlib
+from decimal import Decimal
 import io
 import os
 import shutil
@@ -32,6 +33,7 @@ from alembic import command
 from sqlalchemy import Column, MetaData, String, delete, func, inspect, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     async_sessionmaker,
     create_async_engine,
 )
@@ -152,13 +154,116 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.migrator.upgrade(connection, schema)
         return schema
 
+    async def upgrade_to_revision(
+        self, connection: AsyncConnection, schema: str, revision: str
+    ) -> None:
+        """Подготавливает схему на конкретной исторической версии для проверки миграции."""
+        await self.migrator._migrate(connection, schema, command.upgrade, revision)
+
+    async def test_catalog_price_migration_preserves_amounts_and_import_mappings(
+        self,
+    ) -> None:
+        """Удаляет метки, сохраняя цены, периоды и полезные сопоставления импорта."""
+        schema = await self.new_schema(upgrade=False)
+        actor = uuid4()
+        async with self.engine.begin() as connection:
+            await self.upgrade_to_revision(
+                connection, schema, "0018_remove_currency_settings"
+            )
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".catalog_product_types (id,code,revision,schema_version,is_system,created_by,updated_by) '
+                    "VALUES (:id,'custom',1,1,false,:actor,:actor)"
+                ),
+                {"id": actor, "actor": actor},
+            )
+            await connection.execute(
+                text(
+                    f'INSERT INTO "{schema}".catalog_item (id,kind,product_type_id,status,revision,virtual,'
+                    "regular_price,currency,sale_price,date_on_sale_from,manage_stock,stock_status,backorders,created_by,updated_by) "
+                    "VALUES (:id,'simple',:actor,'draft',1,false,123.456789,'USD',0,'2026-01-01T00:00:00Z',false,'in_stock','no',:actor,:actor)"
+                ),
+                {"id": uuid4(), "actor": actor},
+            )
+            for key, status, mappings in (
+                (
+                    "mixed",
+                    "mapping",
+                    '[{"target":"currency"},{"target":"regular_price"}]',
+                ),
+                ("retired", "queued", '[{"target":"currency"}]'),
+            ):
+                await connection.execute(
+                    text(
+                        f'INSERT INTO "{schema}".catalog_imports '
+                        "(id,actor_id,idempotency_key,fingerprint,source_name,configuration,analysis,status,version,"
+                        "prepared_version,total,processed,created,updated,skipped,errors,warnings,created_at,updated_at) "
+                        "VALUES (:id,:actor,:key,'fingerprint','test.csv',jsonb_build_object('mappings',CAST(:mappings AS jsonb)),"
+                        """'{"mapped_samples":[{"currency":["USD"],"regular_price":["0"]}]}'::jsonb,"""
+                        ":status,1,0,0,0,0,0,0,0,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)"
+                    ),
+                    {
+                        "id": uuid4(),
+                        "actor": actor,
+                        "key": key,
+                        "mappings": mappings,
+                        "status": status,
+                    },
+                )
+        async with self.engine.begin() as connection:
+            await self.migrator.upgrade(connection, schema)
+            self.assertFalse(
+                await connection.run_sync(
+                    lambda conn: any(
+                        c["name"] == "currency"
+                        for c in inspect(conn).get_columns(
+                            "catalog_item", schema=schema
+                        )
+                    )
+                )
+            )
+            price = (
+                await connection.execute(
+                    text(
+                        f'SELECT regular_price,sale_price,date_on_sale_from FROM "{schema}".catalog_item'
+                    )
+                )
+            ).one()
+            self.assertEqual(
+                (price.regular_price, price.sale_price),
+                (Decimal("123.456789"), Decimal(0)),
+            )
+            self.assertEqual(
+                price.date_on_sale_from.isoformat(), "2026-01-01T00:00:00+00:00"
+            )
+            mixed, retired = (
+                await connection.execute(
+                    text(
+                        f'SELECT configuration,analysis,status FROM "{schema}".catalog_imports ORDER BY idempotency_key'
+                    )
+                )
+            ).all()
+            self.assertEqual(
+                mixed.configuration, {"mappings": [{"target": "regular_price"}]}
+            )
+            self.assertEqual(
+                mixed.analysis, {"mapped_samples": [{"regular_price": ["0"]}]}
+            )
+            self.assertEqual(
+                (retired.configuration, retired.status), ({"mappings": []}, "failed")
+            )
+
     async def test_currency_settings_removal_preserves_explicit_user_preferences(
         self,
     ) -> None:
         """Удаление настроек сохраняет выбранные и пустые валюты профилей двух tenant."""
-        first, second = await self.new_schema(), await self.new_schema()
+        first = await self.new_schema(upgrade=False)
+        second = await self.new_schema()
         chosen_id, unset_id = uuid4(), uuid4()
         async with self.engine.begin() as connection:
+            await self.upgrade_to_revision(
+                connection, first, "0018_remove_currency_settings"
+            )
             await self.migrator.downgrade(connection, first, "0017_remove_currency")
             await connection.execute(
                 text(
@@ -179,7 +284,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             public_tables = await connection.run_sync(
                 lambda conn: inspect(conn).get_table_names(schema="public")
             )
-            await self.migrator.upgrade(connection, first)
+            await self.upgrade_to_revision(
+                connection, first, "0018_remove_currency_settings"
+            )
             for schema in (first, second):
                 self.assertFalse(
                     await connection.run_sync(
@@ -198,7 +305,13 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(values, {chosen_id: "EUR", unset_id: None})
                 self.assertEqual(
                     await self.migrator.current(connection, schema),
-                    (self.migrator.head(),),
+                    (
+                        (
+                            "0018_remove_currency_settings"
+                            if schema == first
+                            else self.migrator.head()
+                        ),
+                    ),
                 )
             self.assertEqual(
                 await connection.run_sync(
@@ -229,8 +342,11 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         """Удаление без CASCADE сохраняет настройки и версию при неожиданном FK."""
-        schema = await self.new_schema()
+        schema = await self.new_schema(upgrade=False)
         async with self.engine.begin() as connection:
+            await self.upgrade_to_revision(
+                connection, schema, "0018_remove_currency_settings"
+            )
             await self.migrator.downgrade(connection, schema, "0017_remove_currency")
             await connection.execute(
                 text(
@@ -246,7 +362,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             with self.assertRaises(DBAPIError):
                 async with connection.begin_nested():
-                    await self.migrator.upgrade(connection, schema)
+                    await self.upgrade_to_revision(
+                        connection, schema, "0018_remove_currency_settings"
+                    )
             self.assertEqual(
                 await self.migrator.current(connection, schema),
                 ("0017_remove_currency",),
@@ -271,11 +389,15 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         """Удаление и откат книги сохраняют соседние схемы, public и данные tenant."""
-        first, second = await self.new_schema(), await self.new_schema()
+        first = await self.new_schema(upgrade=False)
+        second = await self.new_schema()
         retired = {"currency_exchange_rate_books", "currency_exchange_rate_quotes"}
         async with self.engine.begin() as connection:
             public_tables = await connection.run_sync(
                 lambda conn: inspect(conn).get_table_names(schema="public")
+            )
+            await self.upgrade_to_revision(
+                connection, first, "0018_remove_currency_settings"
             )
             await self.migrator.downgrade(
                 connection, first, "0016_channels_connections_only"
@@ -321,7 +443,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     f"UPDATE \"{first}\".contact_point_labels SET name='Migration test' WHERE type='email'"
                 )
             )
-            await self.migrator.upgrade(connection, first)
+            await self.upgrade_to_revision(
+                connection, first, "0018_remove_currency_settings"
+            )
             for schema in (first, second):
                 tables = set(
                     await connection.run_sync(
@@ -363,8 +487,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         """Чужой FK блокирует удаление книги и откатывает удаление котировок."""
-        schema = await self.new_schema()
+        schema = await self.new_schema(upgrade=False)
         async with self.engine.begin() as connection:
+            await self.upgrade_to_revision(connection, schema, "0017_remove_currency")
             await self.migrator.downgrade(
                 connection, schema, "0016_channels_connections_only"
             )
@@ -389,7 +514,9 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             with self.assertRaises(DBAPIError):
                 async with connection.begin_nested():
-                    await self.migrator.upgrade(connection, schema)
+                    await self.upgrade_to_revision(
+                        connection, schema, "0017_remove_currency"
+                    )
             self.assertEqual(
                 await self.migrator.current(connection, schema),
                 ("0016_channels_connections_only",),

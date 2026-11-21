@@ -138,7 +138,6 @@ export interface CatalogChoice {
   id: string;
   title: string;
   price: string | null;
-  currency: string | null;
   kind: "product" | "service";
   sku: string | null;
 }

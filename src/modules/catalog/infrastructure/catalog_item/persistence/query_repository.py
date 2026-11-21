@@ -187,8 +187,6 @@ class SqlAlchemyCatalogItemQueryRepository:
                     variant_count=family.variant_count,
                     min_price=family.min_price,
                     max_price=family.max_price,
-                    currency=family.currency,
-                    mixed_currencies=family.mixed_currencies,
                 )
             items.append(result)
         return ListCatalogItemsResultDTO(

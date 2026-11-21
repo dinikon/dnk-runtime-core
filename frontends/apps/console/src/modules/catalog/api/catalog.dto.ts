@@ -5,7 +5,6 @@ export interface LocaleDTO {
 export type ItemStatus = "draft" | "active" | "archived";
 export interface PriceDTO {
   regular_price: string;
-  currency: string;
   sale_price: string | null;
   date_on_sale_from: string | null;
   date_on_sale_to: string | null;
@@ -47,8 +46,6 @@ export interface ReadItemDTO {
   variant_count: number;
   min_price: string | null;
   max_price: string | null;
-  currency: string | null;
-  mixed_currencies: boolean;
   effective_content: Record<string, string> | null;
   effective_gallery: GalleryDTO | null;
   effective_stock: StockDTO | null;
@@ -135,14 +132,12 @@ export interface ListItemDTO {
   variant_count: number;
   min_price: string | null;
   max_price: string | null;
-  mixed_currencies: boolean;
   id: string;
 
   status: ItemStatus;
   sku: string | null;
   title: string | null;
   price: string | null;
-  currency: string | null;
   stock_status: string | null;
   primary_image: ImageDTO | null;
   weight: WeightDTO | null;

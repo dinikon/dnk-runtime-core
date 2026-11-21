@@ -72,7 +72,6 @@ class CatalogItemMapper:
         price = (
             PriceSpecificationVO(
                 row["regular_price"],
-                row["currency"],
                 row["sale_price"],
                 row["date_on_sale_from"],
                 row["date_on_sale_to"],
@@ -225,7 +224,6 @@ class CatalogItemMapper:
             virtual=item.virtual,
             regular_price=price.regular_price if price else None,
             sale_price=price.sale_price if price else None,
-            currency=price.currency if price else None,
             date_on_sale_from=price.date_on_sale_from if price else None,
             date_on_sale_to=price.date_on_sale_to if price else None,
             weight=item.weight.value if item.weight else None,

@@ -107,7 +107,6 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
                     "status": "active",
                     "price_specification": {
                         "regular_price": "12.345678",
-                        "currency": "UAH",
                     },
                 },
                 201,
@@ -176,7 +175,7 @@ class CatalogVariantsPostgresTests(CatalogPostgresTests):
         await self.request(
             "PATCH",
             f"/items/{root}",
-            {"price_specification": {"regular_price": "5", "currency": "UAH"}},
+            {"price_specification": {"regular_price": "5"}},
             422,
         )
         result = await self.request("GET", "/items?locale=en&search=CHILD")

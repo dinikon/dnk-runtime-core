@@ -53,8 +53,6 @@ class CatalogItemDetailsResponse(BaseModel):
     variant_count: int = 0
     min_price: Decimal | None = None
     max_price: Decimal | None = None
-    currency: str | None = None
-    mixed_currencies: bool = False
     effective_content: dict[str, str] | None = None
     effective_gallery: GalleryValue | None = None
     effective_stock: StockValue | None = None

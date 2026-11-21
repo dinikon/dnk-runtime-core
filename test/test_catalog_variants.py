@@ -345,7 +345,7 @@ class CatalogVariantDomainTests(unittest.TestCase):
                 fields=frozenset({"price_specification"}),
                 actor=self.actor,
                 now=self.now,
-                price_specification=PriceSpecificationVO(Decimal("1"), "UAH"),
+                price_specification=PriceSpecificationVO(Decimal("1")),
             )
         self.assertIsNone(self.root.price)
 
@@ -354,7 +354,7 @@ class CatalogVariantDomainTests(unittest.TestCase):
         variant = replace(
             self.variant,
             status=CatalogItemStatus.ACTIVE,
-            price=PriceSpecificationVO(Decimal("99999.123456"), "UAH"),
+            price=PriceSpecificationVO(Decimal("99999.123456")),
         )
         self.assertFalse(
             CatalogItemValuesPolicy.calculate(

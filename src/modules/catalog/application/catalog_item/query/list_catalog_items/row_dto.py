@@ -31,7 +31,6 @@ class CatalogItemListRowDTO:
     sku: str | None
     title: str | None
     price: Decimal | None
-    currency: str | None
     stock_status: str | None
     primary_image: CatalogItemListImageDTO | None
     available_for_sale: bool
@@ -42,7 +41,6 @@ class CatalogItemListRowDTO:
     variant_count: int = 0
     min_price: Decimal | None = None
     max_price: Decimal | None = None
-    mixed_currencies: bool = False
     manage_stock: bool = False
     stock_quantity: int | None = None
     stock_source: str = "own"

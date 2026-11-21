@@ -188,7 +188,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
     def test_price_boundaries_and_zero_availability(self) -> None:
         """Скидка действует в интервале [from,to); нулевая цена допускает продажу."""
         price = PriceSpecificationVO(
-            Decimal("10"), "UAH", Decimal("0"), self.now, self.now + timedelta(hours=1)
+            Decimal("10"), Decimal("0"), self.now, self.now + timedelta(hours=1)
         )
         self.item.update(
             fields=frozenset({"price_specification"}),
@@ -223,7 +223,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         )
         for regular in (Decimal("-1"), Decimal("NaN"), Decimal("0.0000001")):
             with self.assertRaises(InvalidCatalogValueError):
-                PriceSpecificationVO(regular, "UAH")
+                PriceSpecificationVO(regular)
 
     def test_stock_policies_and_virtuality(self) -> None:
         """Наличие определяется только своим количеством/статусом и не зависит от virtual."""
@@ -231,7 +231,7 @@ class CatalogSimpleDomainTests(unittest.TestCase):
             fields=frozenset({"price_specification"}),
             actor=self.actor,
             now=self.now,
-            price_specification=PriceSpecificationVO(Decimal("0"), "UAH"),
+            price_specification=PriceSpecificationVO(Decimal("0")),
         )
         self.item.update(
             fields=frozenset({"status"}),

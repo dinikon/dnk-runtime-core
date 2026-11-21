@@ -54,7 +54,7 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
             name="ck_catalog_item_variable_values",
         ),
         sa.CheckConstraint(
-            "(regular_price IS NOT NULL AND regular_price>=0 AND currency IS NOT NULL AND currency ~ '^[A-Z]{3}$') OR (regular_price IS NULL AND currency IS NULL AND sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL)",
+            "(regular_price IS NOT NULL AND regular_price>=0) OR (regular_price IS NULL AND sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL)",
             name="ck_catalog_item_price",
         ),
         sa.CheckConstraint(
@@ -118,7 +118,6 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
     weight_unit: Mapped[str | None] = mapped_column(sa.String(2), nullable=True)
     regular_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     sale_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
-    currency: Mapped[str | None] = mapped_column(sa.String(3), nullable=True)
     date_on_sale_from: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), nullable=True
     )

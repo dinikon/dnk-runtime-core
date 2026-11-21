@@ -133,7 +133,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         for item in self.patches:
             item.start()
         self.worker = CatalogImportJobHandler(self.sessions)
-        self.csv = b"sku,title,regular_price,currency\nA,One,10,UAH\n"
+        self.csv = b"sku,title,regular_price\nA,One,10\n"
         self.downloads = []
 
         async def download(url, limit, timeout):
@@ -339,7 +339,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
             self.base + "/items",
             json={
                 "sku": "A",
-                "price_specification": {"regular_price": "100", "currency": "UAH"},
+                "price_specification": {"regular_price": "100"},
                 "translations": {
                     "ru": {
                         "expected_schema_version": 1,
@@ -722,7 +722,10 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
             (await self.client.get(self.base + "/items?locale=ru")).json()["total"], 1
         )
 
-    async def test_limit_migration_refuses_unsafe_downgrade_and_preserves_imports(self):
+    async def test_catalog_price_migration_refuses_downgrade_and_preserves_imports(
+        self,
+    ) -> None:
+        """Необратимая миграция сохраняет версию схемы и запланированные импорты."""
         from src.config import dnk_config
         from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
             TenantMigrator,
@@ -739,28 +742,18 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(dnk_config.CATALOG_IMPORT, "max_active_per_tenant", 2):
             await self.start_import(first)
             await self.start_import(second)
-        with self.assertRaisesRegex(RuntimeError, "multiple imports are active"):
+        with self.assertRaisesRegex(RuntimeError, "Миграция цен каталога необратима"):
             async with self.engine.begin() as connection:
                 await TenantMigrator().downgrade(
-                    connection, self.schemas[0], "0004_catalog_import_resume"
+                    connection, self.schemas[0], "0018_remove_currency_settings"
                 )
         async with self.engine.begin() as connection:
             self.assertEqual(
                 await TenantMigrator().current(connection, self.schemas[0]),
                 original_version,
             )
-        await self.client.post(
-            f"{self.base}/imports/{second}/cancel", headers=self.headers
-        )
-        await self.execute_current(second)
-        async with self.engine.begin() as connection:
-            await TenantMigrator().downgrade(
-                connection, self.schemas[0], "0004_catalog_import_resume"
-            )
-        async with self.engine.begin() as connection:
-            await TenantMigrator().upgrade(connection, self.schemas[0])
         self.assertEqual((await self.get_import(first))["run"]["status"], "queued")
-        self.assertEqual((await self.get_import(second))["run"]["status"], "cancelled")
+        self.assertEqual((await self.get_import(second))["run"]["status"], "queued")
 
     async def test_source_retention_and_results_cleanup_do_not_delete_product(self):
         from src.modules.catalog.application.catalog_import.command.maintain_catalog_imports.command import (

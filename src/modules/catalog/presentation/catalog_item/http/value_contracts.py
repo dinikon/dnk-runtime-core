@@ -28,7 +28,6 @@ class PriceValue(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     regular_price: Decimal
-    currency: str
     sale_price: Decimal | None = None
     date_on_sale_from: datetime | None = None
     date_on_sale_to: datetime | None = None
@@ -37,7 +36,6 @@ class PriceValue(BaseModel):
         """Сохраняет Decimal и явные границы интервала."""
         return PriceSpecificationVO(
             self.regular_price,
-            self.currency,
             self.sale_price,
             self.date_on_sale_from,
             self.date_on_sale_to,
@@ -170,7 +168,6 @@ class ListItemResponse(BaseModel):
     variant_count: int = 0
     min_price: Decimal | None = None
     max_price: Decimal | None = None
-    mixed_currencies: bool = False
     manage_stock: bool
     stock_quantity: int | None
     stock_source: Literal["own", "parent"]
@@ -179,7 +176,6 @@ class ListItemResponse(BaseModel):
     sku: str | None
     title: str | None
     price: Decimal | None
-    currency: str | None
     stock_status: str | None
     primary_image: ImageValue | None
     available_for_sale: bool

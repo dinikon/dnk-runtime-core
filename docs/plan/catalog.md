@@ -60,15 +60,15 @@ Console lint/typecheck/build, тесты очереди и браузер deskto
 
 Создаётся самостоятельный простой CatalogItem с status=Draft и
 product_type_code=default. Копируются доступные подтверждённые titles, SKU,
-**базовая и акционная цена в известной валюте**, количество/ручное наличие.
+**обычная и акционная суммы**, количество/ручное наличие.
 Title использует явную locale; переводы не генерируются. Body, изображения,
 категории, характеристики и metadata не переносятся этим сценарием. Сам Catalog
 сохраняет свой текущий набор возможностей и ProductType lifecycle.
 
-Preview показывает исходные значения и проблемы: неизвестную валюту,
+Preview показывает исходные значения и проблемы:
 некорректную скидку/точность, коллизию SKU, дробное количество, противоречие
 quantity/status, неизвестное наличие или отсутствие title. Пользователь явно
-исправляет вход; нет float, скрытого округления, подстановки currency/default
+исправляет вход; нет float, скрытого округления, подстановки default
 in_stock или объединения товаров по SKU. При известном целочисленном количестве
 используется manage_stock=true с явной политикой backorders; иначе пользователь
 подтверждает допустимое ручное наличие без количества. Domain Catalog проверяет
@@ -263,7 +263,7 @@ item ID/изменённых разделов; Catalog revisions для этог
 - Ротация credentials сохраняет bindings того же ресурса; смена ресурса создаёт
   новый Channel с Connection без переназначения Catalog IDs.
 - Явный Draft переносит title/SKU/regular+sale/stock без body/images; create+bind
-  атомарны, SKU/currency/stock conflicts и idempotent replay не оставляют дублей.
+  атомарны, SKU/stock conflicts и idempotent replay не оставляют дублей.
 - Usage/delete race, отсутствие ORM imports, общий tenant UoW/Outbox,
   rollback/commit failure, isolation двух tenant и повторная проверка snapshot.
 
@@ -463,10 +463,10 @@ weight и каждого dimensions.length/width/height. Масса точно �
 разрядов канонической единицы; округления и float нет. SQL хранит только
 собственные исходные числа и их единицы, канонические копии не сохраняются.
 
-PriceSpecificationVO сохраняет regular/sale price, currency и UTC-интервал
+PriceSpecificationVO сохраняет обычную и акционную суммы и UTC-интервал
 [from,to). Суммы неотрицательны, sale не выше regular; период требует sale.
 Цена 0 допустима. Clock передаёт as_of; Domain не читает системные часы.
-У семьи одна валюта. VARIABLE возвращает min/max цен активных детей и
+VARIABLE возвращает min/max цен активных детей и
 price_incomplete, если у активного ребёнка отсутствует цена. У неактивной семьи
 диапазон отсутствует. Цена родителя никогда не подставляется варианту.
 Virtual не меняет наличие; измерения можно хранить, но shipping-проекция
@@ -827,7 +827,7 @@ Write port работает с корнем CatalogItem; query port принад
 и возвращает DTO конкретных use cases. Owner lookup возвращает только root ID
 и role, schema/definition/reference ports — immutable snapshots.
 Files port использует потребительские DTO и stream contract, не Files Entity.
-Locale/currency adapters используют публичные Application-контракты reference_data.
+Адаптер локалей использует публичные Application-контракты reference_data.
 Usage port нужен для удаления/переходов; пока внешних связей нет, адаптер
 возвращает пустой набор. При появлении связей он проверяет публичный контракт
 потребителя. HTTP-контракты не подменяют межмодульный snapshot.
@@ -1142,7 +1142,7 @@ API registration и frontend routes пересматриваются в том �
 | Domain / roles | SIMPLE без ребёнка, VARIABLE ≥ 2 VARIANT, parent kind/depth, полные уникальные selection, default |
 | Inheritance | same locale, set/clear/inherit, false/0/empty optional text, no sibling inheritance, изменение defaults проверяет детей |
 | Default content | Только title/body, read-only схема, own marker, schema version, rich text sanitizer |
-| Price | Decimal/currency, интервал UTC и границы, full-spec override/clear, min/max, price as_of и устаревание |
+| Price | Decimal, интервал UTC и границы, full-spec override/clear, min/max, price as_of и устаревание |
 | Stock | Boolean, общий source без удвоения, отрицательное/нулевое количество, manual backorder, семейная сводка и available_for_sale |
 | Measurements / metadata | value/unit пары, точные преобразования, независимое наследование размеров, типы/keys/order/clear, отсутствие native payload в Catalog |
 | Media / Files | Main принадлежит набору, порядок, localized replace/empty/inherit, tenant/file validation, upload rollback, stream close |

@@ -22,7 +22,6 @@ export interface ProductDimensions {
 }
 export interface ProductPrice {
   regular_price: string;
-  currency: string;
   sale_price: string | null;
   date_on_sale_from: string | null;
   date_on_sale_to: string | null;

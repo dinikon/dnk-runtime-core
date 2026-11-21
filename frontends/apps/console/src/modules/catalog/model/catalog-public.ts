@@ -19,7 +19,6 @@ export interface SalesCatalogChoice {
   id: string;
   title: string;
   price: string | null;
-  currency: string | null;
   kind: "product" | "service";
   sku: string | null;
 }
@@ -42,7 +41,6 @@ export async function searchSalesCatalog(
       id: i.id,
       title: i.title ?? "",
       price: i.price ?? null,
-      currency: i.currency ?? null,
       kind: "product",
       sku: i.sku ?? null,
     }));
@@ -58,7 +56,6 @@ export async function readSalesCatalog(
     id: item.id,
     title: item.title ?? "",
     price: item.price ?? null,
-    currency: item.price_specification?.currency ?? null,
     kind: item.virtual ? "service" : "product",
     sku: item.sku ?? null,
   };

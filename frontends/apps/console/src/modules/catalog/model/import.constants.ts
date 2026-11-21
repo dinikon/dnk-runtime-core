@@ -18,7 +18,6 @@ export const importTargets = [
   ["status", "Статус товара"],
   ["virtual", "Услуга / virtual"],
   ["regular_price", "Обычная цена"],
-  ["currency", "Валюта"],
   ["sale_price", "Акционная цена"],
   ["discount", "Скидка Prom"],
   ["date_on_sale_from", "Начало скидки"],

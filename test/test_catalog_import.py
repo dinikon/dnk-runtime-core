@@ -207,9 +207,7 @@ class CatalogImportValuesTests(unittest.TestCase):
             fields=frozenset({"price_specification", "dimensions"}),
             actor=self.actor,
             now=self.now,
-            price_specification=PriceSpecificationVO(
-                Decimal("100"), "UAH", Decimal("90")
-            ),
+            price_specification=PriceSpecificationVO(Decimal("100"), Decimal("90")),
             dimensions=DimensionsVO(length=LengthVO(Decimal("5"), LengthUnit.CM)),
         )
 
@@ -254,14 +252,13 @@ class CatalogImportValuesTests(unittest.TestCase):
                 self.configuration,
                 {
                     "regular_price": ["100.123456"],
-                    "currency": ["UAH"],
                     "discount": ["10%"],
                 },
             )
         self.assertEqual(
             product_values(
                 self.configuration,
-                {"regular_price": ["100"], "currency": ["UAH"], "discount": ["10%"]},
+                {"regular_price": ["100"], "discount": ["10%"]},
             ).product.price_specification.sale_price,
             Decimal(90),
         )

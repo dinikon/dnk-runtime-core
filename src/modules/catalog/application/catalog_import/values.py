@@ -40,7 +40,6 @@ STOCK = frozenset({"manage_stock", "stock_quantity", "stock_status", "backorders
 PRICE = frozenset(
     {
         "regular_price",
-        "currency",
         "sale_price",
         "discount",
         "date_on_sale_from",
@@ -271,11 +270,6 @@ def product_values(
                     raise InvalidCatalogValueError(
                         "Цена требует обычную цену.", ("regular_price",)
                     )
-                currency = (
-                    scalar(values, "currency")
-                    if "currency" in values
-                    else (before.currency if before else "")
-                )
                 sale = (
                     scalar(values, "sale_price")
                     if "sale_price" in values
@@ -321,7 +315,6 @@ def product_values(
                     start = end = None
                 price = PriceSpecificationVO(
                     amount,
-                    currency or "",
                     decimal_value(sale, "sale_price") if sale else None,
                     start,
                     end,

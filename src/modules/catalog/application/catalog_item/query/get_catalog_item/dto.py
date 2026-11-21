@@ -80,8 +80,6 @@ class CatalogItemDetailsDTO:
     variant_count: int = 0
     min_price: Decimal | None = None
     max_price: Decimal | None = None
-    currency: str | None = None
-    mixed_currencies: bool = False
     effective_content: dict[str, str] | None = None
     effective_gallery: CatalogItemDetailsGalleryDTO | None = None
     effective_stock: StockSpecificationVO | None = None

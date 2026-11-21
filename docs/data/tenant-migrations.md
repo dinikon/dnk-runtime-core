@@ -1,7 +1,7 @@
 # Tenant migrations
 
 The current tenant chain starts at `0001_tenant_baseline` and ends at
-`0018_remove_currency_settings`, after `0017_remove_currency`. Existing schemas
+`0019_catalog_price_amounts`, after `0018_remove_currency_settings`. Existing schemas
 upgrade to this head; new onboarding applies the same chain. The older numbered
 revisions described below are historical release notes, not the deployed chain.
 
@@ -29,6 +29,19 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 
 The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain, owner identity and cloud connection writes commit together. Any failure rolls everything back. The Control Plane installer records accepted-command errors in its durable attempt state and reconciles actual resources before declaring absence.
 
+## Catalog price amounts (0019)
+
+`0019_catalog_price_amounts` drops the currency column from `catalog_item`.
+It preserves the exact regular and sale amounts, including zero, and the sale
+dates. It removes the currency target from saved Catalog import mappings and
+previews. Imports that were queued or running with currency as their sole
+target are marked failed. A new import can map the amount columns directly.
+
+Stop old API and Catalog import workers before upgrading tenant schemas. Apply
+the migration with `dnk-manage tenant-migrations upgrade --all`, then start the
+matching backend, worker and Console. The dropped currency labels can only be
+recovered from a backup.
+
 ## Tenant currency settings removal: 0018
 
 `0018_remove_currency_settings` drops `tenant_currency_settings` from the selected
@@ -52,8 +65,7 @@ dnk-manage tenant-migrations upgrade --all
 dnk-manage tenant-migrations current --all
 ```
 
-Require `0018_remove_currency_settings` for each managed tenant before exposing
-the matching API. The working database is not changed by importing the code.
+At that release, `0018_remove_currency_settings` was the required tenant revision. The working database is not changed by importing the code.
 Downgrade to `0017_remove_currency` recreates an empty historical table and its
 singleton check. It cannot recover the former base currencies; restore them from
 a backup before using an older runtime that requires these settings.

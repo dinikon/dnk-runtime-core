@@ -29,7 +29,6 @@ const emit = defineEmits<{ change: [value: ProductPrice | null] }>();
 function emptyPrice(): ProductPrice {
   return {
     regular_price: "",
-    currency: "UAH",
     sale_price: null,
     date_on_sale_from: null,
     date_on_sale_to: null,
@@ -109,18 +108,6 @@ function dateField(
             :aria-describedby="error ? `${id}-price-error` : undefined"
             @update:model-value="field('regular_price', decimalInput($event))"
         /></Field>
-        <Field class="product-property-field"
-          ><FieldLabel :for="`${id}-currency`">Валюта</FieldLabel
-          ><Input
-            :id="`${id}-currency`"
-            :model-value="price.currency"
-            maxlength="3"
-            required
-            autocapitalize="characters"
-            @update:model-value="
-              field('currency', String($event).toUpperCase())
-            "
-        /></Field>
       </FieldGroup>
       <Collapsible v-model:open="saleOpen"
         ><CollapsibleTrigger
@@ -129,7 +116,7 @@ function dateField(
           <span
             v-if="price.sale_price !== null"
             class="ml-auto text-muted-foreground"
-            >{{ price.sale_price }} {{ price.currency }}</span
+            >{{ price.sale_price }}</span
           ><ChevronDown
             class="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" /></CollapsibleTrigger
         ><CollapsibleContent force-mount v-show="saleOpen" class="pt-3"
@@ -167,8 +154,7 @@ function dateField(
       ></Collapsible>
       <ProductFieldError :id="`${id}-price-error`" :error="error" />
       <FieldDescription class="sr-only"
-        >Подтверждённая цена: {{ current ?? "Не задана" }}
-        {{ value?.currency }}</FieldDescription
+        >Подтверждённая цена: {{ current ?? "Не задана" }}</FieldDescription
       >
       <FieldDescription v-if="!filled"
         >Без цены товар недоступен для продажи.</FieldDescription

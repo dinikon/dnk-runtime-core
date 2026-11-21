@@ -24,8 +24,6 @@ ALIASES: dict[str, tuple[str, str | None]] = {
     "ціна": ("regular_price", None),
     "цена": ("regular_price", None),
     "price": ("regular_price", None),
-    "валюта": ("currency", None),
-    "currencyid": ("currency", None),
     "наявність": ("stock_status", None),
     "наличие": ("stock_status", None),
     "available": ("stock_status", None),

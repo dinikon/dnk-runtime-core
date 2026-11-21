@@ -518,11 +518,21 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_incremental_migration_preserves_existing_crm(self) -> None:
         """Продолжает populated baseline, сохраняя Contact/Company, отношения и points."""
+        from alembic import command
+        from sqlalchemy.schema import CreateSchema, DropSchema
         from src.modules.crm.presentation.contact.router import router as contact_router
         from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
             TenantMigrator,
         )
 
+        migrator = TenantMigrator()
+        schema = self.schemas[0]
+        async with self.engine.begin() as connection:
+            await connection.execute(DropSchema(schema, cascade=True))
+            await connection.execute(CreateSchema(schema))
+            await migrator._migrate(
+                connection, schema, command.upgrade, "0001_tenant_baseline"
+            )
         self.app.include_router(contact_router, prefix="/api/console")
         contact = await self.client.post(
             "/api/console/crm/contacts",
@@ -547,11 +557,7 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
             json={"phones": [], "emails": [{"value": "old@example.com"}]},
         )
         self.assertEqual(points.status_code, 200, points.text)
-        migrator = TenantMigrator()
         async with self.engine.begin() as connection:
-            await migrator.downgrade(
-                connection, self.schemas[0], "0001_tenant_baseline"
-            )
             self.assertEqual(
                 await migrator.current(connection, self.schemas[0]),
                 ("0001_tenant_baseline",),

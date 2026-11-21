@@ -54,7 +54,7 @@ defineEmits<{
             @click="$emit('select', item.id)"
             ><span>{{ item.title || item.sku || "Позиция каталога" }}</span
             ><span
-              >{{ item.price ?? "Цена не задана" }} {{ item.currency }}</span
+              >{{ item.price ?? "Цена не задана" }}</span
             ></Button
           >
         </div></SalesFeedback

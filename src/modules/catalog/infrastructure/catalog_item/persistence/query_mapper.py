@@ -123,7 +123,6 @@ class CatalogItemQueryMapper:
             sku=item.sku,
             title=item.translations.get(locale, {}).get("title"),
             price=computed.price,
-            currency=item.price.currency if item.price else None,
             stock_status=computed.stock_status.value,
             primary_image=(
                 CatalogItemListImageDTO(
@@ -196,7 +195,7 @@ class CatalogItemQueryMapper:
         children: tuple[CatalogItemValuesSnapshot, ...],
         as_of: datetime,
     ) -> CatalogItemDetailsDTO:
-        """Вычисляет диапазон без пересчёта валют и продажи контейнера."""
+        """Вычисляет диапазон цен активных вариантов."""
         if item.kind != "variable":
             return item
         prices = [
@@ -204,18 +203,11 @@ class CatalogItemQueryMapper:
             for v in children
             if v.status.value == "active" and v.price is not None
         ]
-        currencies = {
-            v.price.currency
-            for v in children
-            if v.status.value == "active" and v.price is not None
-        }
         return replace(
             item,
             variant_count=len(children),
-            min_price=min(prices) if prices and len(currencies) == 1 else None,
-            max_price=max(prices) if prices and len(currencies) == 1 else None,
-            currency=next(iter(currencies)) if len(currencies) == 1 else None,
-            mixed_currencies=len(currencies) > 1,
+            min_price=min(prices) if prices else None,
+            max_price=max(prices) if prices else None,
             available_for_publication=item.status.value == "active"
             and any(v.status.value != "archived" for v in children),
         )
