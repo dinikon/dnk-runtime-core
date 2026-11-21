@@ -1,0 +1,10 @@
+"""Явные структурные бюджеты определения, не параметры исполнения формул."""
+
+MAX_FIELDS = 200
+MAX_RULES = 100
+MAX_AST_DEPTH = 32
+MAX_AST_NODES = 4096
+MAX_COLLECTION_ITEMS = 500
+MAX_LITERAL_DIGITS = 40
+MAX_LITERAL_EXPONENT = 128
+MAX_TRANSFORMS = 128
