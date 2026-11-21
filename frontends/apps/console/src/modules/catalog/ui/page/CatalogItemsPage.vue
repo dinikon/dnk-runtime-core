@@ -1,74 +1,144 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { InventorySkuPicker } from "@/modules/inventory";
+import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../../api/catalog.api";
+import type { CatalogListItem } from "../../model/catalog.types";
+import { CATALOG_PAGE_SIZE } from "../../model/catalog-list-state";
 import { useCreateCatalogItem } from "../../model/use-create-catalog-item";
-import type { ProductStatus } from "../../model/product.types";
+import { useCatalogItemsPageState } from "../../model/use-catalog-items-page-state";
+import { useCatalogItemsQuery } from "../../model/use-catalog-items-query";
+import { useDeleteCatalogItem } from "../../model/use-delete-catalog-item";
 import CatalogHeader from "../CatalogHeader.vue";
-import CatalogToolbar from "../CatalogToolbar.vue";
-import CatalogSearchBar from "../CatalogSearchBar.vue";
 import CatalogFooter from "../CatalogFooter.vue";
+import CatalogItemsToolbar from "../results/CatalogItemsToolbar.vue";
+import CatalogItemsBody from "../results/CatalogItemsBody.vue";
+import DeleteCatalogItemDialog from "../results/DeleteCatalogItemDialog.vue";
 import ProductCreateDialog from "../product/ProductCreateDialog.vue";
-const pending = ref(false),
-  error = ref(""),
-  cache = useQueryClient();
-const creation = useCreateCatalogItem(false, () => pending.value);
+import CatalogQuickEditDialog from "../product/CatalogQuickEditDialog.vue";
+import { useExpandedCatalogVariants } from "../../model/use-expanded-catalog-variants";
+import { useCatalogQuickEdit } from "../../model/use-catalog-quick-edit";
+
+const busy = ref(false);
+const creation = useCreateCatalogItem(false, () => busy.value);
 const { ctx } = creation;
-const search = computed(() => String(ctx.route.query.search ?? "")),
-  page = computed(() => Math.max(1, Number(ctx.route.query.page) || 1)),
-  status = computed(() =>
-    ["draft", "active", "archived"].includes(String(ctx.route.query.status))
-      ? (ctx.route.query.status as ProductStatus)
-      : undefined,
-  );
-const items = useQuery({
-  queryKey: computed(() =>
-    ctx.key("list-items", search.value, page.value, status.value),
-  ),
-  enabled: computed(() => !!ctx.locale.value && !!ctx.tenantId.value),
-  queryFn: async ({ signal }) => {
-    const d = await catalogApi.listItems(
-      ctx.locale.value,
-      search.value,
-      (page.value - 1) * 20,
-      20,
-      status.value,
-      signal,
-    );
-    return d;
+const pageState = useCatalogItemsPageState();
+const { params } = pageState;
+const quick = useCatalogQuickEdit(
+  ctx.tenantId,
+  ctx.sessionKey,
+  ctx.locale,
+  ctx.active,
+);
+const items = useCatalogItemsQuery(
+  ctx.tenantId,
+  ctx.sessionKey,
+  ctx.locale,
+  params,
+);
+const expandedScope = computed(() =>
+  JSON.stringify([
+    params.value,
+    items.data.value?.items.map((item) => item.id),
+  ]),
+);
+const variants = useExpandedCatalogVariants(
+  ctx.tenantId,
+  ctx.sessionKey,
+  ctx.locale,
+  expandedScope,
+);
+const deletion = useDeleteCatalogItem(ctx.tenantId, ctx.sessionKey);
+const deleteTarget = ref<CatalogListItem | null>(null);
+const canCreate = computed(
+  () =>
+    ctx.active.value && !creation.state.pending && !deletion.isPending.value,
+);
+const queryError = computed(() =>
+  items.isError.value
+    ? getApiErrorMessage(items.error.value, "Не удалось загрузить товары")
+    : "",
+);
+const deleteError = computed(() =>
+  deletion.isError.value
+    ? getApiErrorMessage(deletion.error.value, "Не удалось удалить товар")
+    : "",
+);
+
+watch(
+  deletion.isPending,
+  (pending) => {
+    busy.value = pending;
   },
+  { flush: "sync" },
+);
+watch(ctx.sessionKey, () => {
+  deleteTarget.value = null;
 });
-function filter(values: Record<string, string | number | undefined>) {
-  void ctx.router.replace({ query: { ...ctx.route.query, ...values } });
+
+function open(id: string, variantId?: string): void {
+  void ctx.router.push({
+    path: `/catalog/items/${encodeURIComponent(id)}`,
+    query: {
+      locale: ctx.locale.value,
+      tab: variantId ? "variants" : undefined,
+      variant: variantId,
+    },
+  });
 }
-async function remove(id: string) {
-  if (!window.confirm("Удалить товар и все его варианты?")) return;
-  pending.value = true;
-  error.value = "";
+function imageUrl(item: CatalogListItem): string | undefined {
+  if (item.kind === "variant" && item.parent_id && item.primaryImage)
+    return catalogApi.variantImageUrl(
+      item.parent_id,
+      item.id,
+      ctx.locale.value,
+      item.primaryImage.id,
+    );
+  return item.primaryImage
+    ? catalogApi.imageUrl(item.id, ctx.locale.value, item.primaryImage.id)
+    : undefined;
+}
+function askDelete(item: CatalogListItem): void {
+  deletion.reset();
+  deleteTarget.value = item;
+}
+function closeDelete(): void {
+  if (deletion.isPending.value) return;
+  deleteTarget.value = null;
+  deletion.reset();
+}
+async function remove(): Promise<void> {
+  if (!deleteTarget.value || deletion.isPending.value) return;
+  const current = ctx.captureSession();
   try {
-    await catalogApi.deleteItem(id);
-    await cache.invalidateQueries({
-      queryKey: ["catalog", ctx.tenantId.value],
-    });
-  } catch (e) {
-    error.value = getApiErrorMessage(e, "Не удалось выполнить операцию");
-  } finally {
-    pending.value = false;
+    await deletion.mutateAsync(deleteTarget.value.id);
+    if (!current()) return;
+    deleteTarget.value = null;
+    if (!items.data.value?.items.length && params.value.page > 1)
+      pageState.page(params.value.page - 1);
+  } catch {
+    // The mutation owns the error; the dialog preserves the selected record for retry.
   }
 }
 </script>
+
 <template>
-  <div class="min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto p-6">
+  <section
+    class="flex min-h-0 min-w-0 flex-1 flex-col gap-4"
+    aria-label="Каталог товаров"
+  >
     <CatalogHeader
       title="Товары"
       description="Товары, их цены и наличие"
       action="Создать товар"
-      :disabled="!ctx.active.value || pending"
+      :disabled="!canCreate"
       @create="creation.show"
-      ><template #actions
-        ><Button
+    >
+      <template #actions>
+        <Button
+          type="button"
           variant="outline"
           :disabled="!ctx.tenantId.value"
           @click="
@@ -78,7 +148,9 @@ async function remove(id: string) {
             })
           "
           >Импортировать позиции</Button
-        ><Button
+        >
+        <Button
+          type="button"
           variant="ghost"
           @click="
             ctx.router.push({
@@ -87,100 +159,108 @@ async function remove(id: string) {
             })
           "
           >Журнал импортов</Button
-        ></template
-      ></CatalogHeader
-    ><CatalogToolbar
+        >
+      </template>
+    </CatalogHeader>
+    <CatalogItemsToolbar
+      :search="params.search"
+      :status="params.status"
       :locale="ctx.locale.value"
-      :options="ctx.options.value"
+      :locales="ctx.options.value"
+      @search="pageState.search"
+      @status="pageState.status"
       @locale="ctx.selectLocale"
     />
-    <div class="flex flex-wrap gap-3">
-      <CatalogSearchBar
-        :value="search"
-        @search="(value) => filter({ search: value, page: undefined })"
-      /><select
-        aria-label="Статус"
-        class="rounded border bg-background p-2"
-        :value="status ?? ''"
-        @change="
-          filter({
-            status: ($event.target as HTMLSelectElement).value || undefined,
-            page: undefined,
-          })
-        "
-      >
-        <option value="">Все статусы</option>
-        <option value="draft">Черновик</option>
-        <option value="active">Активный</option>
-        <option value="archived">Архив</option>
-      </select>
-    </div>
-    <p v-if="error || items.isError.value" role="alert">
-      {{
-        error ||
-        getApiErrorMessage(items.error.value, "Не удалось выполнить операцию")
-      }}
-    </p>
-    <p v-if="items.isPending.value">Загрузка…</p>
-    <div class="divide-y rounded-lg border">
-      <div
-        v-for="item in items.data.value?.items ?? []"
-        :key="item.id"
-        class="flex flex-wrap items-center justify-between gap-3 p-4"
-      >
-        <button
-          class="min-w-0 text-left"
-          @click="
-            ctx.router.push({
-              path: `/catalog/items/${item.id}`,
-              query: { locale: ctx.locale.value },
-            })
-          "
-        >
-          <span class="font-medium">{{ item.title ?? "Без перевода" }}</span>
-          <p class="text-sm text-muted-foreground">
-            {{ item.status }} · {{ item.sku ?? "Без SKU" }} ·
-            {{
-              item.kind === "variable"
-                ? item.mixed_currencies
-                  ? "Разные валюты"
-                  : item.min_price != null
-                    ? item.min_price +
-                      (item.max_price !== item.min_price
-                        ? "–" + item.max_price
-                        : "")
-                    : "Цена вариантов не задана"
-                : (item.price ?? "Цена не задана")
-            }}
-            {{ item.currency }}
-            <span v-if="item.kind === 'variable'">
-              · Вариантов: {{ item.variant_count }}</span
-            >
-          </p></button
-        ><Button variant="ghost" :disabled="pending" @click="remove(item.id)"
-          >Удалить</Button
-        >
-      </div>
-      <p
-        v-if="!items.isPending.value && !items.data.value?.items.length"
-        class="p-8 text-muted-foreground"
-      >
-        Товары не найдены.
-      </p>
-    </div>
+    <span
+      v-if="items.isFetching.value && !items.isPending.value"
+      class="sr-only"
+      role="status"
+      ><Spinner />Обновление товаров</span
+    >
+    <CatalogItemsBody
+      :items="items.data.value?.items ?? []"
+      :loading="items.isPending.value"
+      :error="queryError"
+      :filtered="!!params.search || !!params.status"
+      :out-of-range="params.page > 1 && (items.data.value?.total ?? 0) > 0"
+      :disabled="deletion.isPending.value"
+      :can-create="canCreate"
+      :image-url="imageUrl"
+      :expanded="variants.expanded.value"
+      :can-quick-edit="ctx.active.value"
+      @toggle="variants.toggle"
+      @variant-page="variants.page"
+      @variant-retry="variants.retry"
+      @open-variant="open"
+      @quick-edit="quick.open"
+      @open="open($event)"
+      @remove="askDelete"
+      @retry="items.refetch()"
+      @reset="pageState.clear"
+      @create="creation.show"
+      @first-page="pageState.page(1)"
+    />
     <CatalogFooter
-      :page="page"
-      :total="items.data.value?.total ?? 0"
-      :page-size="20"
-      @page="(value) => filter({ page: value })"
+      v-if="items.data.value"
+      :page="params.page"
+      :total="items.data.value.total"
+      :page-size="CATALOG_PAGE_SIZE"
+      class="shrink-0"
+      @page="pageState.page"
     />
     <ProductCreateDialog
       :open="creation.open.value"
       :state="creation.state"
+      :preset="creation.preset.value"
       :disabled="!ctx.active.value"
       @choose="creation.choose"
+      @confirm="creation.confirm"
+      @back="creation.back"
       @close="creation.close"
       @check="creation.checkCatalog"
+    >
+      <template #sku>
+        <InventorySkuPicker
+          id="create-catalog-sku"
+          :search="creation.skuSearch.search.value"
+          :options="creation.skuSearch.options.value"
+          :loading="creation.skuSearch.loading.value"
+          :error="creation.skuSearch.error.value"
+          :total="creation.skuSearch.total.value"
+          :selected-code="creation.skuCode.value"
+          :selected-id="creation.skuId.value"
+          :disabled="!creation.ctx.active.value || creation.state.uncertain"
+          :pending="creation.state.pending"
+          @search="creation.skuSearch.search.value = $event"
+          @select="creation.selectSku"
+          @create="creation.createSku"
+          @clear="creation.clearSku"
+          @retry="creation.skuSearch.retry"
+        />
+      </template>
+    </ProductCreateDialog>
+    <CatalogQuickEditDialog
+      v-if="quick.selection.value"
+      :key="quick.key.value"
+      :section="quick.selection.value.section"
+      :item="quick.draftSource.value?.item ?? null"
+      :shared="quick.draftSource.value?.shared ?? false"
+      :loading="quick.query.isFetching.value"
+      :pending="quick.mutation.isPending.value"
+      :blocked="!ctx.active.value || quick.query.isError.value"
+      :error="quick.error.value"
+      @dirty="quick.dirty.value = $event"
+      @close="quick.close"
+      @save="quick.save"
+      @retry="quick.query.refetch()"
     />
-  </div>
+    <DeleteCatalogItemDialog
+      v-if="deleteTarget"
+      :item="deleteTarget"
+      :pending="deletion.isPending.value"
+      :error="deleteError"
+      @close="closeDelete"
+      @confirm="remove"
+    />
+  </section>
 </template>

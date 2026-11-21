@@ -6,6 +6,7 @@ from src.modules.files.domain.error import InvalidFileError
 from src.modules.files.domain.stored_file.error import (
     FileStateConflictError,
     FileTrashExpiredError,
+    FileInUseError,
 )
 from src.modules.files.domain.stored_file.status import StoredFileStatus
 from src.modules.files.domain.value_object.file_name import FileNameVO
@@ -166,6 +167,13 @@ class StoredFile:
         self.deleted_by = actor_id
         self.purge_after = instant + timedelta(days=30)
         self.status = StoredFileStatus.TRASHED
+
+    def ensure_unused(self, *, in_use: bool) -> None:
+        """Принимает факт потребителей до любого удаления под блокировкой файла."""
+        if type(in_use) is not bool:
+            raise InvalidFileError("Invalid file usage facts.")
+        if in_use:
+            raise FileInUseError("file_in_use")
 
     def ensure_can_restore(self, now: datetime) -> None:
         """Проверяет возможность восстановления без изменения состояния перед внешним I/O."""

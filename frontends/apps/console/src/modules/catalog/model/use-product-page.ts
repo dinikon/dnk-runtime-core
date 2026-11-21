@@ -1,17 +1,63 @@
-import { computed, reactive, ref, watch, onBeforeUnmount, type Ref } from "vue";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import {
+  useInventorySkuSearch,
+  type InventorySkuSearch,
+} from "@/modules/inventory";
+import { useSetCatalogSku } from "./use-set-catalog-sku";
+import type { CatalogSkuSelection } from "./catalog-sku.types";
+import {
+  computed,
+  reactive,
+  ref,
+  watch,
+  onBeforeUnmount,
+  type Ref,
+  type ComputedRef,
+} from "vue";
+import {
+  useQuery,
+  useQueryClient,
+  type UseQueryReturnType,
+} from "@tanstack/vue-query";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { catalogApi } from "../api/catalog.api";
 import { useCatalogContext } from "./use-catalog-context";
-import type { ProductSection, ProductTab } from "./product.types";
+import type { ProductSection } from "./product.types";
 import axios from "axios";
 import type { ProductPatch } from "./product.types";
 import { ProductAutosave, type AutosaveState } from "./product-autosave";
 import { sectionError, fieldSections } from "./product-validation";
-import { productTabs } from "./product-presentation";
 import { useProductContentDraft } from "./use-product-content-draft";
 
-export function useProductPage(editing: boolean, variantId?: Ref<string>) {
+interface ProductPageState {
+  ctx: ReturnType<typeof useCatalogContext>;
+  id: ComputedRef<string>;
+  scope: ComputedRef<string>;
+  item: UseQueryReturnType<import("./catalog.types").CatalogItem, Error>;
+  schema: UseQueryReturnType<import("./catalog.types").CatalogSchema, Error>;
+  skuSearch: InventorySkuSearch;
+  skuMutation: ReturnType<typeof useSetCatalogSku>;
+  setSku(selection: CatalogSkuSelection): Promise<void>;
+  pending: ComputedRef<boolean>;
+  error: ComputedRef<string>;
+  blocked: ComputedRef<boolean>;
+  uploading: Ref<boolean>;
+  resets: Partial<Record<ProductSection, number>>;
+  contentValues: ComputedRef<Record<string, string>>;
+  contentOverrides: ReturnType<typeof useProductContentDraft>["values"];
+  changeContent: ReturnType<typeof useProductContentDraft>["change"];
+  isDirty(section: ProductSection): boolean;
+  resetFor(section: ProductSection): number;
+  fieldError(section: ProductSection): string;
+  save(section: ProductSection, value: Record<string, unknown>): void;
+  upload(file: File, main: boolean): Promise<void>;
+  reload(): Promise<void>;
+  retry(): Promise<void>;
+  flush(): Promise<boolean>;
+  imageUrl(imageId: string): string;
+  saveStatus: ComputedRef<string>;
+}
+
+export function useProductPage(variantId?: Ref<string>): ProductPageState {
   const state = reactive<AutosaveState>({
     entries: {},
     pending: false,
@@ -29,56 +75,80 @@ export function useProductPage(editing: boolean, variantId?: Ref<string>) {
     uploading.value = false;
     reloading.value = false;
     uploadWork = null;
+    skuSearch.reset();
+    skuMutation.reset();
   }
   const ctx = useCatalogContext(
     () => Object.keys(state.entries).length > 0 || state.paused,
-    () => state.pending || uploading.value || reloading.value,
+    () =>
+      state.pending ||
+      uploading.value ||
+      reloading.value ||
+      skuMutation.isPending.value,
     clear,
     async () => {
       await autosave.flush();
       if (uploadWork) await uploadWork;
       return (
-        !Object.keys(state.entries).length && !uploading.value && !state.paused
+        !Object.keys(state.entries).length &&
+        !uploading.value &&
+        !state.paused &&
+        !skuMutation.isPending.value
       );
     },
   );
   const id = computed(() => String(ctx.route.params.itemId));
-  const enabled = computed(() => !!ctx.locale.value && !!ctx.tenantId.value);
+  const enabled = computed(() => ctx.ready.value && !!ctx.locale.value);
   const item = useQuery({
     queryKey: computed(() =>
       ctx.key("get-item", id.value, variantId?.value ?? ""),
     ),
     enabled,
     refetchOnWindowFocus: false,
-    queryFn: ({ signal }) =>
-      variantId?.value
-        ? catalogApi.getVariant(
-            id.value,
-            variantId.value,
-            ctx.locale.value,
-            signal,
-          )
-        : catalogApi.getItem(id.value, ctx.locale.value, signal),
+    queryFn: ({ queryKey, signal }) => {
+      const rootId = String(queryKey[4]),
+        childId = String(queryKey[5]),
+        locale = String(queryKey[6]);
+      return childId
+        ? catalogApi.getVariant(rootId, childId, locale, signal)
+        : catalogApi.getItem(rootId, locale, signal);
+    },
   });
   const schema = useQuery({
     queryKey: computed(() => ctx.key("product-schema")),
-    enabled: computed(() => enabled.value && editing),
-    queryFn: ({ signal }) => catalogApi.defaultSchema(ctx.locale.value, signal),
+    enabled,
+    queryFn: ({ queryKey, signal }) =>
+      catalogApi.defaultSchema(String(queryKey[4]), signal),
   });
-  const tab = computed<ProductTab>(() =>
-    productTabs.some((t) => t.id === ctx.route.query.tab)
-      ? (ctx.route.query.tab as ProductTab)
-      : "general",
+  const skuScope = computed(
+    () =>
+      `${ctx.sessionKey.value}:${id.value}:${variantId?.value ?? ""}:${ctx.locale.value}`,
   );
-  function selectTab(value: string) {
-    void ctx.router.replace({ query: { ...ctx.route.query, tab: value } });
-  }
+  const skuSearch = useInventorySkuSearch(
+    computed(() => enabled.value && item.data.value?.kind !== "variable"),
+    skuScope,
+  );
+  const skuMutation = useSetCatalogSku(
+    ctx.tenantId,
+    ctx.sessionKey,
+    skuSearch.invalidate,
+  );
+  watch(skuScope, () => skuMutation.reset(), { flush: "sync" });
   const isDirty = (section: ProductSection) => !!state.entries[section];
   const resetFor = (section: ProductSection) => resets[section] ?? 0;
-  const fieldError = (section: ProductSection) =>
-    state.entries[section]?.error ?? "";
+  const fieldError = (section: ProductSection): string =>
+    section === "sku" && skuMutation.error.value
+      ? getApiErrorMessage(
+          skuMutation.error.value,
+          "Не удалось сохранить SKU. Повторите выбор.",
+        )
+      : (state.entries[section]?.error ?? "");
   const pending = computed(
-    () => state.pending || uploading.value || reloading.value,
+    () =>
+      state.pending ||
+      uploading.value ||
+      reloading.value ||
+      skuMutation.isPending.value,
   );
   const error = computed(() => state.error);
   const blocked = computed(
@@ -167,6 +237,23 @@ export function useProductPage(editing: boolean, variantId?: Ref<string>) {
   );
   watch(() => [id.value, variantId?.value, ctx.locale.value], clear);
   onBeforeUnmount(clear);
+  async function setSku(selection: CatalogSkuSelection): Promise<void> {
+    if (blocked.value || skuMutation.isPending.value) return;
+    const captured = skuScope.value;
+    const current = ctx.captureSession();
+    try {
+      await skuMutation.mutateAsync({
+        id: id.value,
+        variantId: variantId?.value,
+        tenant: ctx.tenantId.value,
+        session: ctx.sessionKey.value,
+        selection,
+      });
+      if (current() && captured === skuScope.value) skuSearch.reset();
+    } catch {
+      /* The explicit selection and search remain available beside the field error. */
+    }
+  }
   function save(section: ProductSection, value: Record<string, unknown>) {
     let patch: ProductPatch;
     if (section === "content")
@@ -291,10 +378,11 @@ export function useProductPage(editing: boolean, variantId?: Ref<string>) {
   return {
     ctx,
     id,
+    skuSearch,
+    skuMutation,
+    setSku,
     item,
     schema,
-    tab,
-    selectTab,
     pending,
     error,
     blocked,
@@ -323,7 +411,10 @@ export function useProductPage(editing: boolean, variantId?: Ref<string>) {
       await autosave.flush();
       if (uploadWork) await uploadWork;
       return (
-        !Object.keys(state.entries).length && !uploading.value && !state.paused
+        !Object.keys(state.entries).length &&
+        !uploading.value &&
+        !state.paused &&
+        !skuMutation.isPending.value
       );
     },
     changeContent: contentDraft.change,

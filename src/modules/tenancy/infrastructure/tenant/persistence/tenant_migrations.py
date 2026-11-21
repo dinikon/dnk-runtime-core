@@ -12,7 +12,8 @@ from src.modules.shared.infrastructure.persistence.alembic_lock import (
 from alembic import command
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from alembic.script import ScriptDirectory
+from alembic.script import ScriptDirectory, Script
+from alembic.script.base import Script
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -64,6 +65,7 @@ class TenantMigrator:
     """Запускает Alembic на соединении и транзакции вызывающего кода."""
 
     def __init__(self, script_location: Path = MIGRATIONS_PATH) -> None:
+        """Выбирает граф миграций, сохраняя управление транзакцией за вызывающим кодом."""
         self._script_location = script_location
 
     def config(self, schema_name: str) -> Config:
@@ -98,17 +100,20 @@ class TenantMigrator:
         action: Callable[[Config, str], None],
         revision: str,
     ) -> None:
+        """Применяет весь путь атомарно внутри внешней транзакции через savepoint."""
         await lock_tenant_schema(connection, schema_name)
         await self.require_schema(connection, schema_name)
         config = self.config(schema_name)
 
         def run(sync_connection: Connection) -> None:
+            """Запускает Alembic на том же соединении и в текущей транзакции."""
             config.attributes["connection"] = sync_connection
             action(config, revision)
 
         # DB lock берётся первым: ожидание чужого commit не удерживает proxy lock.
         async with serialized_alembic():
-            await connection.run_sync(run)
+            async with connection.begin_nested():
+                await connection.run_sync(run)
 
     async def require_schema(
         self, connection: AsyncConnection, schema_name: str
@@ -124,22 +129,26 @@ class TenantMigrator:
     ) -> tuple[str, ...]:
         """Читает версию без создания таблицы версий и выполнения DDL."""
         await self.require_schema(connection, schema_name)
-        return await connection.run_sync(
-            lambda conn: MigrationContext.configure(
-                conn, opts={"version_table_schema": schema_name}
+
+        def read_heads(sync_connection: Connection) -> tuple[str, ...]:
+            """Читает текущие ревизии через синхронное представление соединения."""
+            return MigrationContext.configure(
+                sync_connection, opts={"version_table_schema": schema_name}
             ).get_current_heads()
-        )
+
+        return await connection.run_sync(read_heads)
 
     async def revision(
         self, connection: AsyncConnection, schema_name: str, message: str
-    ):
+    ) -> Script | None | list[Script | None]:
         """Генерирует ревизию; connection должен принадлежать отдельному engine."""
         await lock_tenant_schema(connection, schema_name)
         await self.require_schema(connection, schema_name)
         config = self.config(schema_name)
         config.attributes["autogenerate"] = True
 
-        def run(sync_connection):
+        def run(sync_connection: Connection) -> Script | None | list[Script | None]:
+            """Генерирует файл ревизии из метаданных выделенного соединения."""
             config.attributes["connection"] = sync_connection
             return command.revision(config, message=message, autogenerate=True)
 

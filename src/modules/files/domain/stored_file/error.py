@@ -7,3 +7,7 @@ class FileStateConflictError(FilesError):
 
 class FileTrashExpiredError(FileStateConflictError):
     """Срок восстановления файла из корзины истёк."""
+
+
+class FileInUseError(FileStateConflictError):
+    """Живые ссылки или передача потребителя запрещают удаление файла."""

@@ -1,0 +1,73 @@
+from src.modules.inventory.domain.error import InventoryError
+
+
+class InventoryItemError(InventoryError):
+    """Базовая ошибка складской номенклатуры."""
+
+
+class InvalidInventoryItemValueError(InventoryItemError):
+    """Сообщает о некорректных типах состояния позиции или её Entity."""
+
+
+class InvalidSkuError(InventoryItemError):
+    """Сообщает о недопустимом вручную заданном SKU."""
+
+
+class InvalidBarcodeError(InventoryItemError):
+    """Сообщает о недопустимом значении штрихкода."""
+
+
+class InvalidTrackingConfigurationError(InventoryItemError):
+    """Сообщает о несовместимости прослеживаемости, срока годности, единицы и количества."""
+
+
+class InvalidInventoryItemTrackingSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке настроек прослеживаемости товара."""
+
+
+class InvalidInventoryItemStockSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке учётных настроек товара."""
+
+
+class InvalidInventoryItemDocumentSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке товара для плановой строки документа."""
+
+
+class InvalidInventoryItemExecutionSnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке правил фактического исполнения товара."""
+
+
+class InvalidInventoryItemAvailabilitySnapshotError(InventoryItemError):
+    """Сообщает о некорректном снимке правил доступности товара."""
+
+
+class InventoryItemConflictError(InventoryItemError):
+    """Сообщает о дубликатах или конфликте зависимых частей агрегата."""
+
+
+class InventoryItemNotFoundError(InventoryItemError):
+    """Сообщает об отсутствии позиции в текущем tenant."""
+
+
+class InventoryItemSkuAlreadyExistsError(InventoryItemConflictError):
+    """Сообщает, что канонический SKU уже занят в текущем tenant."""
+
+
+class InventoryItemBarcodeAlreadyExistsError(InventoryItemConflictError):
+    """Сообщает, что штрихкод уже принадлежит позиции текущего tenant."""
+
+
+class InventoryItemComponentNotFoundError(InventoryItemError):
+    """Сообщает об отсутствии дочернего объекта в данной позиции."""
+
+
+class InvalidPackagingQuantityError(InventoryItemError):
+    """Сообщает о некорректном количестве содержимого упаковки."""
+
+
+class InventoryItemInUseError(InventoryItemConflictError):
+    """Запрещает удаление позиции, на которую ссылается каталог."""
+
+
+class InventoryItemSettingsInUseError(InventoryItemInUseError):
+    """Запрещает переопределить измерения уже учтённого физического запаса."""

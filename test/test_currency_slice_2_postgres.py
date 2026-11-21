@@ -12,7 +12,12 @@ from contextlib import asynccontextmanager
 import httpx
 from sqlalchemy import event, inspect, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.schema import CreateSchema, DropSchema
 
 from src.modules.currency.domain.error import OlderExchangeRateSnapshotError
 from src.modules.currency.infrastructure.nbu.error import NbuResponseError
@@ -50,15 +55,13 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
     TenantMigrator,
 )
 from src.modules.tenancy.application.tenant.tenant_admission import TenantUnavailable
+from test.tenant_migrations_support import tenant_migrations_through
 
 
-async def apply_book_migration(connection, schema, *, downgrade=False):
+async def apply_book_migration(connection: AsyncConnection, schema: str) -> None:
     """Применяет актуальную tenant baseline во внешней транзакции."""
     migrator = TenantMigrator()
-    if downgrade:
-        await migrator.downgrade(connection, schema, "base")
-    else:
-        await migrator.upgrade(connection, schema)
+    await migrator.upgrade(connection, schema)
 
 
 class CurrencySliceTwoPostgresTests(unittest.IsolatedAsyncioTestCase):
@@ -144,42 +147,48 @@ class CurrencySliceTwoPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_migration_columns_constraints_downgrade_and_reupgrade(self) -> None:
+        """Проверяет обратимую валютную baseline отдельно от актуального графа ревизий."""
         async with self.engine.begin() as connection:
-            columns = await connection.run_sync(
-                lambda conn: inspect(conn).get_columns(
-                    "currency_exchange_rate_quotes", schema=self.schema
-                )
-            )
-            rate = next(column for column in columns if column["name"] == "rate")
-            self.assertEqual((rate["type"].precision, rate["type"].scale), (38, 18))
-            self.assertFalse(rate["nullable"])
-            tables = await connection.run_sync(
-                lambda conn: inspect(conn).get_table_names(schema=self.schema)
-            )
-            self.assertIn("currency_exchange_rate_books", tables)
-            await apply_book_migration(connection, self.schema, downgrade=True)
-            self.assertIsNone(
-                await connection.scalar(
-                    text(
-                        f"SELECT to_regclass('{self.schema}.currency_exchange_rate_books')"
+            await connection.execute(DropSchema(self.schema, cascade=True))
+            await connection.execute(CreateSchema(self.schema))
+            with tenant_migrations_through("0001_tenant_baseline") as baseline:
+                await baseline.upgrade(connection, self.schema)
+                columns = await connection.run_sync(
+                    lambda conn: inspect(conn).get_columns(
+                        "currency_exchange_rate_quotes", schema=self.schema
                     )
                 )
-            )
-            self.assertEqual(
-                await connection.scalar(
-                    text("SELECT count(*) FROM public.ref_currencies")
-                ),
-                4,
-            )
+                rate = next(column for column in columns if column["name"] == "rate")
+                self.assertEqual((rate["type"].precision, rate["type"].scale), (38, 18))
+                self.assertFalse(rate["nullable"])
+                tables = await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema=self.schema)
+                )
+                self.assertIn("currency_exchange_rate_books", tables)
+                await baseline.downgrade(connection, self.schema, "base")
+                self.assertIsNone(
+                    await connection.scalar(
+                        text(
+                            f"SELECT to_regclass('{self.schema}.currency_exchange_rate_books')"
+                        )
+                    )
+                )
+                self.assertEqual(
+                    await connection.scalar(
+                        text("SELECT count(*) FROM public.ref_currencies")
+                    ),
+                    4,
+                )
+                await baseline.upgrade(connection, self.schema)
+                self.assertEqual(
+                    await connection.scalar(
+                        text(
+                            f'SELECT count(*) FROM "{self.schema}".currency_exchange_rate_books'
+                        )
+                    ),
+                    0,
+                )
             await apply_book_migration(connection, self.schema)
-            self.assertEqual(
-                await connection.scalar(
-                    text(
-                        f'SELECT count(*) FROM "{self.schema}".currency_exchange_rate_books'
-                    )
-                ),
-                0,
-            )
         result = await self.refresh()
         self.assertIsNotNone(result.snapshot_id)
         from sqlalchemy.exc import IntegrityError

@@ -1,0 +1,713 @@
+from src.modules.inventory.domain.stock_document.return_error import (
+    InvalidStockReturnError,
+)
+from src.modules.inventory.domain.stock_execution.return_origin_snapshot import (
+    StockReturnOriginSnapshot,
+    StockReturnUsageSnapshot,
+    StockReturnFactSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_return import StockReturnPolicy
+from src.modules.inventory.domain.stock_document.value_object.return_direction import (
+    ReturnDirection,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_issue_route import (
+    ReturnIssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_details import (
+    StockReturnDetailsVO,
+)
+from src.modules.inventory.domain.policy.return_details import ReturnDetailsPolicy
+from src.modules.inventory.domain.stock_execution.value_object.status_change_route import (
+    StatusChangeExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.status_change_details import (
+    StockStatusChangeDetailsVO,
+)
+from src.modules.inventory.domain.policy.status_change_details import (
+    StatusChangeDetailsPolicy,
+)
+from src.modules.inventory.domain.stock_execution.value_object.write_off_route import (
+    WriteOffExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_document.value_object.write_off_reason import (
+    WriteOffReasonVO,
+)
+from src.modules.inventory.domain.policy.write_off_reason import WriteOffReasonPolicy
+from src.modules.inventory.domain.stock_execution.entity.receipt_cost_evidence import (
+    ReceiptCostEvidence,
+)
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Self
+
+from src.modules.inventory.domain.error import StockAdjustmentError
+from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
+    InventoryCountAdjustmentSourceSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.baseline_snapshot import (
+    InventoryCountBaselineSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.result_snapshot import (
+    InventoryCountResultSnapshot,
+)
+from src.modules.inventory.domain.inventory_item.document_snapshot import (
+    InventoryItemDocumentSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_execution import (
+    StockAdjustmentExecutionPolicy,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_routes import (
+    StockAdjustmentRoutesPolicy,
+)
+from src.modules.inventory.domain.stock_document.adjustment_execution_snapshot import (
+    StockDocumentAdjustmentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.adjustment_snapshot import (
+    StockAdjustmentExecutionSnapshot,
+    StockAdjustmentExecutionLineSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.value_object.adjustment_line_binding import (
+    StockAdjustmentExecutionLineBindingVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.adjustment_route import (
+    StockAdjustmentExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_position.counting_snapshot import (
+    StockPositionCountingSnapshot,
+)
+from src.modules.inventory.domain.stock_serial.presence_snapshot import (
+    StockSerialPresenceSnapshot,
+)
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
+from src.modules.inventory.domain.stock_execution.transfer_document_snapshot import (
+    StockExecutionTransferDocumentSnapshot,
+    StockExecutionTransferDocumentLineSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.transfer_snapshot import (
+    StockExecutionTransferLineSnapshot,
+    StockExecutionTransferSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.shipment_snapshot import (
+    StockExecutionShipmentLineSnapshot,
+    StockExecutionShipmentSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.reservation_snapshot import (
+    StockExecutionReservationLineSnapshot,
+    StockExecutionReservationSnapshot,
+)
+from src.modules.inventory.domain.inventory_item.execution_snapshot import (
+    InventoryItemExecutionSnapshot,
+)
+from src.modules.inventory.domain.policy.quantity_arithmetic import (
+    QuantityArithmeticPolicy,
+)
+from src.modules.inventory.domain.policy.stock_execution_context import (
+    StockExecutionContextPolicy,
+)
+from src.modules.inventory.domain.policy.stock_execution_document import (
+    StockExecutionDocumentPolicy,
+)
+from src.modules.inventory.domain.stock_document.error import (
+    InvalidStockDocumentExecutionSnapshotError,
+)
+from src.modules.inventory.domain.stock_document.execution_snapshot import (
+    StockDocumentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_document.value_object.identifier import (
+    StockDocumentIdVO,
+)
+from src.modules.inventory.domain.stock_execution.document_snapshot import (
+    StockExecutionDocumentSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.posting_snapshot import (
+    StockExecutionPostingSnapshot,
+    StockExecutionPostingLineSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.entity.stock_execution_line import (
+    StockExecutionLine,
+)
+from src.modules.inventory.domain.stock_execution.error import (
+    DuplicateStockExecutionLineError,
+    DuplicateStockExecutionSerialError,
+    InvalidStockExecutionContextError,
+    InvalidStockExecutionRouteError,
+    InvalidStockExecutionValueError,
+    StockExecutionTimeError,
+    InvalidStockExecutionTransferSnapshotError,
+    InvalidStockExecutionTransferDocumentSnapshotError,
+)
+from src.modules.inventory.domain.stock_execution.value_object.document_line_quantity import (
+    ExecutedDocumentLineQuantityVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.identifier import (
+    StockExecutionIdVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.internal_move_route import (
+    InternalMoveExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.issue_route import (
+    IssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.receipt_route import (
+    ReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
+from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
+    StockOperationType,
+)
+from src.modules.inventory.domain.value_object.stock_owner_id import StockOwnerIdVO
+from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
+from src.modules.inventory.domain.warehouse.value_object.identifier import WarehouseIdVO
+
+
+@dataclass(frozen=True, slots=True)
+class StockExecution:
+    """Неизменяемый фактический состав исполнения по версии плана без проведения и изменения остатков."""
+
+    id: StockExecutionIdVO
+    document_id: StockDocumentIdVO
+    document_version: int
+    operation_type: StockOperationType
+    warehouse_id: WarehouseIdVO
+    owner_id: StockOwnerIdVO
+    executed_at: datetime
+    lines: tuple[StockExecutionLine, ...]
+    receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = ()
+    write_off_reason: WriteOffReasonVO | None = None
+    status_change_details: StockStatusChangeDetailsVO | None = None
+    return_details: StockReturnDetailsVO | None = None
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        identifier: StockExecutionIdVO,
+        document: StockDocumentExecutionSnapshot,
+        executed_at: datetime,
+        lines: tuple[StockExecutionLine, ...],
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemExecutionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+        receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = (),
+        return_origin: StockReturnOriginSnapshot | None = None,
+        return_usage: tuple[StockReturnUsageSnapshot, ...] = (),
+    ) -> Self:
+        """Фиксирует исполнение после проверки текущего плана, активных адресов, количества и прослеживаемости."""
+        if not isinstance(document, StockDocumentExecutionSnapshot):
+            raise InvalidStockDocumentExecutionSnapshotError(
+                "Нужен снимок плана для создания исполнения."
+            )
+        document.ensure_valid()
+        execution = cls.restore(
+            identifier=identifier,
+            document_id=document.id,
+            document_version=document.version,
+            operation_type=document.operation_type,
+            warehouse_id=document.warehouse_id,
+            owner_id=document.owner_id,
+            executed_at=executed_at,
+            lines=lines,
+            receipt_cost_evidence=receipt_cost_evidence,
+            write_off_reason=document.write_off_reason,
+            status_change_details=document.status_change_details,
+            return_details=document.return_details,
+        )
+        if execution.return_details is not None:
+            StockReturnPolicy.ensure_facts(
+                details=execution.return_details,
+                warehouse_id=execution.warehouse_id,
+                owner_id=execution.owner_id,
+                facts=tuple(
+                    StockReturnFactSnapshot(
+                        line.route.origin_line_id,
+                        line.route.dimensions[0],
+                        line.quantity,
+                        line.base_uom,
+                    )
+                    for line in execution.lines
+                    if isinstance(
+                        line.route,
+                        (ReturnReceiptExecutionRouteVO, ReturnIssueExecutionRouteVO),
+                    )
+                ),
+                origin=return_origin,
+                usage=return_usage,
+            )
+            if (
+                return_origin is not None
+                and execution.executed_at < return_origin.executed_at
+            ):
+                raise InvalidStockReturnError(
+                    "Возврат не может предшествовать исходному исполнению."
+                )
+        StockExecutionDocumentPolicy.ensure_compatible(
+            document=document, execution=execution.snapshot_for_document()
+        )
+        StockExecutionContextPolicy.ensure_compatible(
+            operation_type=execution.operation_type,
+            warehouse_id=execution.warehouse_id,
+            lines=execution.lines,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            locations=locations,
+            lots=lots,
+            serials=serials,
+        )
+        return execution
+
+    @classmethod
+    def create_from_inventory_count_adjustment(
+        cls,
+        *,
+        identifier: StockExecutionIdVO,
+        document: StockDocumentAdjustmentExecutionSnapshot,
+        bindings: tuple[StockAdjustmentExecutionLineBindingVO, ...],
+        executed_at: datetime,
+        inventory_count: InventoryCountAdjustmentSourceSnapshot,
+        result: InventoryCountResultSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        positions: tuple[StockPositionCountingSnapshot, ...],
+        presence: tuple[StockSerialPresenceSnapshot, ...],
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+    ) -> Self:
+        """Фиксирует все поправки целиком после проверки зарегистрированного результата, полного основания и SERIAL."""
+        normalized = cls._normalize_time(executed_at)
+        snapshot = StockAdjustmentExecutionPolicy.build_snapshot(
+            identifier=identifier,
+            document=document,
+            bindings=bindings,
+            executed_at=normalized,
+        )
+        StockAdjustmentExecutionPolicy.ensure_current(
+            execution=snapshot,
+            document=document,
+            inventory_count=inventory_count,
+            result=result,
+            baseline=baseline,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            locations=locations,
+            positions=positions,
+            as_of=normalized,
+            presence=presence,
+            lots=lots,
+            serials=serials,
+        )
+        return cls.restore(
+            identifier=snapshot.id,
+            document_id=snapshot.document_id,
+            document_version=snapshot.document_version,
+            operation_type=StockOperationType.ADJUSTMENT,
+            warehouse_id=snapshot.warehouse_id,
+            owner_id=snapshot.owner_id,
+            executed_at=snapshot.executed_at,
+            lines=tuple(row.as_line() for row in snapshot.lines),
+        )
+
+    @classmethod
+    def restore(
+        cls,
+        *,
+        identifier: StockExecutionIdVO,
+        document_id: StockDocumentIdVO,
+        document_version: int,
+        operation_type: StockOperationType,
+        warehouse_id: WarehouseIdVO,
+        owner_id: StockOwnerIdVO,
+        executed_at: datetime,
+        lines: tuple[StockExecutionLine, ...],
+        receipt_cost_evidence: tuple[ReceiptCostEvidence, ...] = (),
+        write_off_reason: WriteOffReasonVO | None = None,
+        status_change_details: StockStatusChangeDetailsVO | None = None,
+        return_details: StockReturnDetailsVO | None = None,
+    ) -> Self:
+        """Восстанавливает полное собственное состояние без актуального плана и снимков физического контекста."""
+        execution = cls(
+            identifier,
+            document_id,
+            document_version,
+            operation_type,
+            warehouse_id,
+            owner_id,
+            cls._normalize_time(executed_at),
+            lines,
+            receipt_cost_evidence,
+            write_off_reason,
+            status_change_details,
+            return_details,
+        )
+        execution._validate()
+        return execution
+
+    def transfer_document_snapshot(self) -> StockExecutionTransferDocumentSnapshot:
+        """Передаёт проверенный физический факт вместе с основанием и версией документа для автоматической регистрации отправки."""
+        self._validate()
+        if self.operation_type not in (
+            StockOperationType.ISSUE,
+            StockOperationType.RECEIPT,
+        ):
+            raise InvalidStockExecutionTransferDocumentSnapshotError(
+                "Документный снимок перемещения поддерживает только ISSUE и RECEIPT."
+            )
+        return StockExecutionTransferDocumentSnapshot(
+            self.id,
+            self.document_id,
+            self.document_version,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionTransferDocumentLineSnapshot(
+                    line.id,
+                    line.document_line_id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                    line.route.dimensions[0],
+                )
+                for line in self.lines
+            ),
+        )
+
+    def transfer_snapshot(self) -> StockExecutionTransferSnapshot:
+        """Передаёт проверенный расход/приход с физическими измерениями без исходного пересчёта и полного маршрута."""
+        self._validate()
+        if self.operation_type not in (
+            StockOperationType.ISSUE,
+            StockOperationType.RECEIPT,
+        ):
+            raise InvalidStockExecutionTransferSnapshotError(
+                "Для пары перемещения нужен ISSUE или RECEIPT, а не INTERNAL_MOVE."
+            )
+        return StockExecutionTransferSnapshot(
+            self.id,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionTransferLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                    line.route.dimensions[0],
+                )
+                for line in self.lines
+            ),
+        )
+
+    def shipment_snapshot(self) -> StockExecutionShipmentSnapshot:
+        """Передаёт проверенные фактические строки с ID/версией документа для автоматического назначения Shipment."""
+        self._validate()
+        self._ensure_ordinary_projection()
+        return StockExecutionShipmentSnapshot(
+            self.id,
+            self.document_id,
+            self.document_version,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionShipmentLineSnapshot(
+                    line.id,
+                    line.document_line_id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                )
+                for line in self.lines
+            ),
+        )
+
+    def reservation_snapshot(self) -> StockExecutionReservationSnapshot:
+        """Возвращает проверенные базовые строки, область и время без передачи Entity погашению резервов."""
+        self._validate()
+        self._ensure_ordinary_projection()
+        return StockExecutionReservationSnapshot(
+            self.id,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(
+                StockExecutionReservationLineSnapshot(
+                    line.id, line.inventory_item_id, line.base_uom, line.quantity
+                )
+                for line in self.lines
+            ),
+        )
+
+    def posting_snapshot(self) -> StockExecutionPostingSnapshot:
+        """Возвращает проверенные физические маршруты и исходные пересчёты без группировки по плану."""
+        self._validate()
+        self._ensure_ordinary_projection()
+        lines: list[StockExecutionPostingLineSnapshot] = []
+        for line in self.lines:
+            if isinstance(line.route, StockAdjustmentExecutionRouteVO):
+                raise StockAdjustmentError(
+                    "Корректировка не предоставляет обычную проекцию проведения."
+                )
+            lines.append(
+                StockExecutionPostingLineSnapshot(
+                    line.id,
+                    line.inventory_item_id,
+                    line.base_uom,
+                    line.quantity,
+                    line.conversion,
+                    line.route,
+                )
+            )
+        return StockExecutionPostingSnapshot(
+            self.id,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(lines),
+            self.write_off_reason,
+            self.status_change_details,
+            self.return_details,
+        )
+
+    def snapshot_for_document(self) -> StockExecutionDocumentSnapshot:
+        """Суммирует положительные количества по плановым строкам, считая перемещение один раз."""
+        self._validate()
+        self._ensure_ordinary_projection()
+        grouped = {}
+        for line in self.lines:
+            previous = grouped.get(line.document_line_id)
+            quantity = (
+                line.quantity
+                if previous is None
+                else QuantityArithmeticPolicy.add(previous.quantity, line.quantity)
+            )
+            grouped[line.document_line_id] = ExecutedDocumentLineQuantityVO(
+                line.document_line_id,
+                line.inventory_item_id,
+                line.base_uom,
+                quantity,
+                (
+                    line.route.origin_line_id
+                    if isinstance(
+                        line.route,
+                        (ReturnReceiptExecutionRouteVO, ReturnIssueExecutionRouteVO),
+                    )
+                    else None
+                ),
+            )
+        return StockExecutionDocumentSnapshot(
+            self.id,
+            self.document_id,
+            self.document_version,
+            self.operation_type,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(grouped.values()),
+            self.write_off_reason,
+            self.status_change_details,
+            self.return_details,
+        )
+
+    def adjustment_snapshot(self) -> StockAdjustmentExecutionSnapshot:
+        """Передаёт полный проверенный факт корректировки с целями и позициями для Ledger и документа."""
+        self._validate()
+        if self.operation_type is not StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError("Нужен факт ADJUSTMENT.")
+        lines: list[StockAdjustmentExecutionLineSnapshot] = []
+        for line in self.lines:
+            if not isinstance(line.route, StockAdjustmentExecutionRouteVO):
+                raise InvalidStockExecutionRouteError("Нужен маршрут корректировки.")
+            lines.append(
+                StockAdjustmentExecutionLineSnapshot(
+                    line.id,
+                    line.document_line_id,
+                    line.base_uom,
+                    line.route,
+                )
+            )
+        snapshot = StockAdjustmentExecutionSnapshot(
+            self.id,
+            self.document_id,
+            self.document_version,
+            self.warehouse_id,
+            self.owner_id,
+            self.executed_at,
+            tuple(lines),
+        )
+        snapshot.ensure_valid()
+        return snapshot
+
+    def _ensure_ordinary_projection(self) -> None:
+        """Закрывает упрощённые снимки, теряющие знаки корректировки, и погашение резервов этим видом операции."""
+        if self.operation_type is StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError(
+                "Для ADJUSTMENT нужен adjustment_snapshot; обычные проекции не поддерживаются."
+            )
+
+    def _validate(self) -> None:
+        """Проверяет собственный состав, вид маршрута, владельца и уникальность фактических экземпляров."""
+        ReturnDetailsPolicy.ensure_compatible(self.operation_type, self.return_details)
+        StatusChangeDetailsPolicy.ensure_compatible(
+            self.operation_type, self.status_change_details
+        )
+        WriteOffReasonPolicy.ensure_compatible(
+            self.operation_type, self.write_off_reason
+        )
+        if (
+            not isinstance(self.id, StockExecutionIdVO)
+            or not isinstance(self.document_id, StockDocumentIdVO)
+            or type(self.document_version) is not int
+            or self.document_version < 0
+            or not isinstance(self.operation_type, StockOperationType)
+            or not isinstance(self.warehouse_id, WarehouseIdVO)
+            or not isinstance(self.owner_id, StockOwnerIdVO)
+            or not isinstance(self.lines, tuple)
+            or not self.lines
+        ):
+            raise InvalidStockExecutionValueError(
+                "Нужны типизированные реквизиты, версия плана и непустой tuple фактических строк."
+            )
+        if not isinstance(self.receipt_cost_evidence, tuple) or (
+            self.receipt_cost_evidence
+            and self.operation_type is not StockOperationType.RECEIPT
+        ):
+            raise InvalidStockExecutionValueError(
+                "Стоимостные основания допустимы только для поступления."
+            )
+        evidence_ids = set()
+        line_ids = {
+            line.id for line in self.lines if isinstance(line, StockExecutionLine)
+        }
+        for evidence in self.receipt_cost_evidence:
+            if (
+                not isinstance(evidence, ReceiptCostEvidence)
+                or evidence.id in evidence_ids
+            ):
+                raise InvalidStockExecutionValueError(
+                    "Основания стоимости должны иметь уникальные ID."
+                )
+            evidence.ensure_valid()
+            evidence_ids.add(evidence.id)
+            if any(
+                allocation.execution_line_id not in line_ids
+                for allocation in evidence.allocations
+            ):
+                raise InvalidStockExecutionValueError(
+                    "Стоимость ссылается на чужую фактическую строку."
+                )
+        self._normalize_time(self.executed_at)
+        if self.executed_at.utcoffset() != timedelta(0):
+            raise StockExecutionTimeError(
+                "Сохранённое время исполнения должно быть в UTC."
+            )
+        route_type = {
+            StockOperationType.RETURN: (
+                ReturnReceiptExecutionRouteVO,
+                ReturnIssueExecutionRouteVO,
+            ),
+            StockOperationType.RECEIPT: ReceiptExecutionRouteVO,
+            StockOperationType.ISSUE: IssueExecutionRouteVO,
+            StockOperationType.WRITE_OFF: WriteOffExecutionRouteVO,
+            StockOperationType.STATUS_CHANGE: StatusChangeExecutionRouteVO,
+            StockOperationType.INTERNAL_MOVE: InternalMoveExecutionRouteVO,
+            StockOperationType.ADJUSTMENT: StockAdjustmentExecutionRouteVO,
+        }.get(self.operation_type)
+        if self.status_change_details is not None:
+            for line in self.lines:
+                if (
+                    not isinstance(line.route, StatusChangeExecutionRouteVO)
+                    or line.route.destination.stock_status
+                    != self.status_change_details.target_status
+                ):
+                    raise InvalidStockExecutionRouteError(
+                        "Маршруты должны соответствовать целевому состоянию документа."
+                    )
+        if self.return_details is not None:
+            expected = (
+                ReturnReceiptExecutionRouteVO
+                if self.return_details.direction is ReturnDirection.FROM_RECIPIENT
+                else ReturnIssueExecutionRouteVO
+            )
+            if not all(isinstance(line.route, expected) for line in self.lines):
+                raise InvalidStockExecutionRouteError(
+                    "Маршруты не соответствуют направлению возврата."
+                )
+        ids, serials = set(), set()
+        planned_items = {}
+        for line in self.lines:
+            if not isinstance(line, StockExecutionLine):
+                raise InvalidStockExecutionValueError(
+                    "Нужны фактические StockExecutionLine."
+                )
+            line.ensure_valid()
+            if line.id in ids:
+                raise DuplicateStockExecutionLineError(
+                    "ID фактических строк должны быть уникальны."
+                )
+            ids.add(line.id)
+            if route_type is None or not isinstance(line.route, route_type):
+                raise InvalidStockExecutionRouteError(
+                    "Маршрут не соответствует виду операции."
+                )
+            identity = (line.inventory_item_id, line.base_uom)
+            if line.document_line_id in planned_items and (
+                self.operation_type is StockOperationType.ADJUSTMENT
+                or planned_items[line.document_line_id] != identity
+            ):
+                raise InvalidStockExecutionContextError(
+                    "Одна плановая строка не может исполняться разными товарами или базовыми единицами."
+                )
+            planned_items[line.document_line_id] = identity
+            line_serials = set()
+            for dimensions in line.route.dimensions:
+                if dimensions.owner_id != self.owner_id:
+                    raise InvalidStockExecutionContextError(
+                        "Владелец маршрута должен соответствовать документу."
+                    )
+                if dimensions.serial_id is not None:
+                    line_serials.add(dimensions.serial_id)
+            if (
+                self.operation_type is not StockOperationType.ADJUSTMENT
+                and serials.intersection(line_serials)
+            ):
+                raise DuplicateStockExecutionSerialError(
+                    "Один серийный экземпляр нельзя повторять в разных фактических строках."
+                )
+            serials.update(line_serials)
+        if self.operation_type is StockOperationType.ADJUSTMENT:
+            routes: list[StockAdjustmentExecutionRouteVO] = []
+            for line in self.lines:
+                if not isinstance(line.route, StockAdjustmentExecutionRouteVO):
+                    raise InvalidStockExecutionRouteError(
+                        "Нужен маршрут корректировки."
+                    )
+                routes.append(line.route)
+            StockAdjustmentRoutesPolicy.ensure_valid(tuple(routes))
+
+    @staticmethod
+    def _normalize_time(value: datetime) -> datetime:
+        """Требует явное aware datetime и нормализует время в UTC без обращения к часам."""
+        if not isinstance(value, datetime) or value.utcoffset() is None:
+            raise StockExecutionTimeError(
+                "Время исполнения должно содержать часовой пояс."
+            )
+        try:
+            return value.astimezone(UTC)
+        except (ValueError, OverflowError) as exc:
+            raise StockExecutionTimeError(
+                "Время исполнения невозможно представить в UTC."
+            ) from exc

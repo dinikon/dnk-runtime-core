@@ -3,7 +3,7 @@ import { useQuery, type UseQueryReturnType } from "@tanstack/vue-query";
 import { channelApi } from "../api/channel.api";
 import { useChannelScope } from "./use-channel-scope";
 import { channelKeys } from "./channel.query-keys";
-import { shouldPoll } from "./channel.schema";
+import { shouldPoll } from "./channel.verification";
 import type {
   Channel,
   ChannelPage,

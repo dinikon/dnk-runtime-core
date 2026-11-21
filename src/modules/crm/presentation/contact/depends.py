@@ -114,6 +114,7 @@ def get_delete_contact_handler(
     repository: ContactRepositoryDep,
     points: ContactContactPointsDep,
 ) -> DeleteContactHandler:
+    """Собирает удаление контакта и его контактных данных на общем UoW."""
     return DeleteContactHandler(repository, points)
 
 

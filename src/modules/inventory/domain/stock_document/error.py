@@ -1,0 +1,203 @@
+from src.modules.inventory.domain.error import InventoryError
+from src.modules.inventory.domain.stock_document.value_object.line_id import (
+    StockDocumentLineIdVO,
+)
+from src.modules.inventory.domain.value_object.quantity import QuantityVO
+from src.modules.inventory.domain.value_object.uom_code import UomCodeVO
+
+
+class StockDocumentError(InventoryError):
+    """Базовая ошибка планового складского документа."""
+
+
+class InvalidStockAdjustmentLineError(StockDocumentError):
+    """Отклоняет неверные измерения, основание или нулевую дельту корректировки."""
+
+
+class InventoryCountAdjustmentMismatchError(StockDocumentError):
+    """Отклоняет несоответствие документа зарегистрированному результату инвентаризации."""
+
+
+class StockAdjustmentDocumentImmutableError(StockDocumentError):
+    """Запрещает ручное редактирование строк документа, производного от результата пересчёта."""
+
+
+class InvalidStockDocumentValueError(StockDocumentError):
+    """Сообщает о некорректном собственном составе документа."""
+
+
+class InvalidStockDocumentLineError(StockDocumentError):
+    """Сообщает о неверных типах или неположительном количестве строки."""
+
+
+class InvalidDocumentSourceError(StockDocumentError):
+    """Сообщает о некорректной внешней ссылке основания документа."""
+
+
+class StockDocumentNotDraftError(StockDocumentError):
+    """Запрещает редактировать, подтверждать или отменять завершённый план."""
+
+
+class EmptyStockDocumentError(StockDocumentError):
+    """Запрещает подтверждение пустого плана."""
+
+
+class StockDocumentLineConflictError(StockDocumentError):
+    """Сообщает о повторном идентификаторе плановой строки."""
+
+
+class StockDocumentLineNotFoundError(StockDocumentError):
+    """Сообщает об отсутствии строки в данном документе."""
+
+
+class InvalidStockDocumentContextError(StockDocumentError):
+    """Сообщает о несовпадении склада или набора снимков товаров с документом."""
+
+
+class StockDocumentItemMismatchError(StockDocumentError):
+    """Запрещает проверять строку по снимку другого товара."""
+
+
+class StockDocumentUomMismatchError(StockDocumentError):
+    """Запрещает переинтерпретировать количество строки в новой базовой единице."""
+
+
+class StockDocumentTimeError(InvalidStockDocumentValueError):
+    """Сообщает о некорректном времени или нарушении хронологии документа."""
+
+
+class InvalidStockDocumentExecutionSnapshotError(StockDocumentError):
+    """Сообщает о некорректном снимке плана и накопленного исполнения."""
+
+
+class StockDocumentExecutionNotAllowedError(StockDocumentError):
+    """Запрещает регистрировать исполнение в неподходящем состоянии документа."""
+
+
+class StaleStockDocumentVersionError(StockDocumentError):
+    """Отклоняет изменение или исполнение, подготовленное по другой версии плана."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        expected_version: int | None = None,
+        actual_version: int | None = None,
+    ) -> None:
+        """Сохраняет версии для явного разрешения конфликта вызывающим сценарием."""
+        super().__init__(message)
+        self.expected_version = expected_version
+        self.actual_version = actual_version
+
+
+class StockDocumentOverExecutionError(StockDocumentError):
+    """Запрещает превышение остатка конкретной строки и передаёт величины для сверки."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        document_line_id: StockDocumentLineIdVO,
+        requested_quantity: QuantityVO,
+        remaining_quantity: QuantityVO,
+        base_uom: UomCodeVO,
+    ) -> None:
+        """Сохраняет проверенные доменные значения без транспортного представления."""
+        super().__init__(message)
+        self.document_line_id = document_line_id
+        self.requested_quantity = requested_quantity
+        self.remaining_quantity = remaining_quantity
+        self.base_uom = base_uom
+
+
+class InvalidDocumentLineSourceError(StockDocumentError):
+    """Сообщает о некорректной универсальной ссылке основания строки документа."""
+
+
+class InvalidShipmentDocumentLineBindingError(StockDocumentError):
+    """Требует типизированное однократное назначение новых ID строк документа строкам отправления."""
+
+
+class StockDocumentShipmentMismatchError(StockDocumentError):
+    """Отклоняет несовместимые основание отправления, область и состав его расходного документа."""
+
+
+class StaleShipmentDocumentSourceError(StockDocumentError):
+    """Отклоняет подтверждение документа по изменившейся версии отправления."""
+
+
+class StockDocumentShipmentQuantityExceededError(StockDocumentError):
+    """Запрещает планировать по строке отправления больше её текущего остатка."""
+
+
+class InvalidStockDocumentShipmentSnapshotError(StockDocumentError):
+    """Сообщает о некорректном снимке происхождения и прогресса расходного документа Shipment."""
+
+
+class InvalidStockTransferDispatchDocumentLineBindingError(StockDocumentError):
+    """Требует однократное назначение новых ID строк обеих сторон строкам перемещения."""
+
+
+class InvalidStockDocumentTransferDispatchSnapshotError(StockDocumentError):
+    """Сообщает о неверном снимке плана документа отправки перемещения."""
+
+
+class StockDocumentTransferDispatchMismatchError(StockDocumentError):
+    """Отклоняет несовместимые основания, роли, склады или строки документов отправки."""
+
+
+class StaleStockTransferDocumentSourceError(StockDocumentError):
+    """Отклоняет подтверждение по изменившейся версии основания перемещения."""
+
+
+class StockDocumentTransferDispatchQuantityExceededError(StockDocumentError):
+    """Запрещает план документа сверх текущего остатка к отправке."""
+
+
+class UnbalancedStockTransferDispatchDocumentsError(
+    StockDocumentTransferDispatchMismatchError
+):
+    """Запрещает различие плановых строк и количеств расхода A и прихода T."""
+
+
+class InvalidStockTransferReceiptDocumentLineBindingError(StockDocumentError):
+    """Требует уникальные новые ID обеих сторон приёмки для всех открытых строк транзита."""
+
+
+class InvalidStockDocumentTransferReceiptSnapshotError(StockDocumentError):
+    """Сообщает о некорректном снимке документа приёмки StockTransfer."""
+
+
+class StockDocumentTransferReceiptMismatchError(StockDocumentError):
+    """Отклоняет несовместимые основания, роли, склады или строки документов приёмки."""
+
+
+class StockDocumentTransferReceiptQuantityExceededError(StockDocumentError):
+    """Запрещает план приёмки сверх отправленного, но ещё не принятого количества."""
+
+
+class UnbalancedStockTransferReceiptDocumentsError(
+    StockDocumentTransferReceiptMismatchError
+):
+    """Запрещает разные планы расхода T и прихода B по строкам перемещения."""
+
+
+class StockDocumentNotFoundError(StockDocumentError):
+    """Документ поступления отсутствует в текущем tenant."""
+
+
+class StockDocumentOwnerNotFoundError(StockDocumentError):
+    """Компания-владелец запаса отсутствует в текущем tenant."""
+
+
+class StockDocumentCreationConflictError(StockDocumentError):
+    """Ключ повторной отправки уже относится к другому составу документа."""
+
+
+class StockDocumentLineCreationError(StockDocumentError):
+    """Указывает позицию плановой строки, которую не удалось создать по доменным правилам."""
+
+    def __init__(self, position: int, message: str) -> None:
+        """Сохраняет порядок строки для отображения отказа вызывающим сценарием."""
+        super().__init__(message)
+        self.position = position

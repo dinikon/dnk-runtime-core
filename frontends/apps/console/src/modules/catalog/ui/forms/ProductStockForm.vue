@@ -67,7 +67,7 @@ function quantity(value: string | number): void {
 <template>
   <fieldset :disabled="disabled" class="min-w-0">
     <legend class="sr-only">Наличие</legend>
-    <FieldGroup class="gap-4">
+    <FieldGroup class="gap-3">
       <Field orientation="horizontal"
         ><FieldContent
           ><FieldLabel :for="`${id}-manage-stock`">{{
@@ -77,7 +77,7 @@ function quantity(value: string | number): void {
                 ? "Учитывать общее количество"
                 : "Учитывать количество"
           }}</FieldLabel
-          ><FieldDescription>{{
+          ><FieldDescription class="sr-only">{{
             kind === "variable"
               ? "Общее количество для вариантов без собственного учёта."
               : kind === "variant"
@@ -91,7 +91,10 @@ function quantity(value: string | number): void {
             :disabled="disabled"
             @update:model-value="managed" /></label
       ></Field>
-      <Field v-if="stock.manage_stock" :data-invalid="!!error || undefined"
+      <Field
+        class="product-property-field"
+        v-if="stock.manage_stock"
+        :data-invalid="!!error || undefined"
         ><FieldLabel :for="`${id}-quantity`">Количество</FieldLabel
         ><Input
           :id="`${id}-quantity`"
@@ -104,7 +107,7 @@ function quantity(value: string | number): void {
           :aria-describedby="error ? `${id}-stock-error` : undefined"
           @update:model-value="quantity"
       /></Field>
-      <Field v-else-if="mode === 'manual'"
+      <Field class="product-property-field" v-else-if="mode === 'manual'"
         ><FieldLabel :for="`${id}-stock-status`">Наличие</FieldLabel
         ><Select
           :model-value="stock.stock_status ?? 'in_stock'"
@@ -137,7 +140,7 @@ function quantity(value: string | number): void {
         {{ parentStock?.stock_quantity }}. Включите собственный учёт, чтобы
         задать количество этого варианта.
       </FieldDescription>
-      <Field v-if="stock.manage_stock"
+      <Field class="product-property-field" v-if="stock.manage_stock"
         ><FieldLabel :for="`${id}-backorders`">Предзаказ</FieldLabel
         ><Select
           :model-value="stock.backorders"
@@ -162,7 +165,7 @@ function quantity(value: string | number): void {
       <ProductFieldError
         :id="`${id}-stock-error`"
         :error="error"
-      /><FieldDescription v-if="mode !== 'variants'"
+      /><FieldDescription class="sr-only" v-if="mode !== 'variants'"
         >Подтверждённое наличие:
         {{ stockLabels[current] ?? "Не задано" }}</FieldDescription
       >

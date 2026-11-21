@@ -1,28 +1,56 @@
-import { computed, watch, onBeforeUnmount } from "vue";
+import { computed, watch, onBeforeUnmount, type ComputedRef } from "vue";
 import {
   useRoute,
   useRouter,
   onBeforeRouteLeave,
   onBeforeRouteUpdate,
 } from "vue-router";
-import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import {
+  useQuery,
+  useQueryClient,
+  type UseQueryReturnType,
+} from "@tanstack/vue-query";
 import { useTenantStore } from "@/app/stores/tenant";
 import { useUserStore } from "@/app/stores/user";
 import { catalogApi } from "../api/catalog.api";
 import type { LocaleOption } from "./catalog.types";
+export interface CatalogContext {
+  route: ReturnType<typeof useRoute>;
+  router: ReturnType<typeof useRouter>;
+  tenantId: ComputedRef<string>;
+  sessionKey: ComputedRef<string>;
+  locale: ComputedRef<string>;
+  locales: UseQueryReturnType<LocaleOption[], Error>;
+  options: ComputedRef<LocaleOption[]>;
+  active: ComputedRef<boolean>;
+  ready: ComputedRef<boolean>;
+  key(scenario: string, ...parts: unknown[]): readonly unknown[];
+  selectLocale(value: string): void;
+  captureSession(): () => boolean;
+}
+
 export function useCatalogContext(
   dirty: () => boolean = () => false,
   pending: () => boolean = () => false,
   clear: () => void = () => {},
   flush?: () => Promise<boolean>,
-) {
+): CatalogContext {
   const route = useRoute(),
     router = useRouter(),
     tenant = useTenantStore(),
     user = useUserStore(),
     cache = useQueryClient();
   const tenantId = computed(() => tenant.tenant?.tenant_id ?? "");
-  const sessionKey = computed(() => `${tenantId.value}:${user.user?.id ?? ""}`);
+  const sessionKey = computed(
+    () => `${tenantId.value}:${user.user?.id ?? ""}:${user.sessionRevision}`,
+  );
+  const ready = computed(
+    () =>
+      !!tenantId.value &&
+      !!user.user?.id &&
+      tenant.isTenantAvailable &&
+      user.sessionStatus === "ready",
+  );
   const locale = computed(() =>
     typeof route.query.locale === "string"
       ? route.query.locale
@@ -37,7 +65,7 @@ export function useCatalogContext(
     ]),
     queryFn: ({ signal }) => catalogApi.locales(signal),
     select: (items) => items.map((i) => ({ ...i, active: true })),
-    enabled: computed(() => !!tenantId.value),
+    enabled: ready,
   });
   const options = computed<LocaleOption[]>(() => {
     const all = locales.data.value ?? [];
@@ -55,11 +83,14 @@ export function useCatalogContext(
       : all;
   });
   const active = computed(
-    () => locales.data.value?.some((i) => i.code === locale.value) ?? false,
+    () =>
+      ready.value &&
+      (locales.data.value?.some((i) => i.code === locale.value) ?? false),
   );
   async function canLeave() {
     if (flush) {
       if (await flush()) return true;
+      if (pending()) return false;
     } else if (pending()) return false;
     return (
       !dirty() ||
@@ -92,7 +123,7 @@ export function useCatalogContext(
     window.removeEventListener("beforeunload", beforeUnload);
   });
   watch(
-    () => [tenantId.value, user.user?.id],
+    () => [tenantId.value, user.user?.id, user.sessionRevision],
     (_next, previous) => {
       if (previous[0]) {
         void cache.cancelQueries({ queryKey: ["catalog", previous[0]] });
@@ -100,6 +131,7 @@ export function useCatalogContext(
       }
       clear();
     },
+    { flush: "sync" },
   );
   const key = (scenario: string, ...parts: unknown[]) => [
     "catalog",
@@ -123,6 +155,7 @@ export function useCatalogContext(
     locales,
     options,
     active,
+    ready,
     key,
     selectLocale,
     captureSession,

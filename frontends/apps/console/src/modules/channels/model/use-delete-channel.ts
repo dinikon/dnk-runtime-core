@@ -12,9 +12,11 @@ export function useDeleteChannel(): ChannelAction<
     cache = useQueryClient();
   return useChannelAction(
     async (input: { id: string; revision: number }, signal) => {
-      const key = channelKeys.detail(scope.value, input.id);
+      const captured = scope.value;
+      const key = channelKeys.detail(captured, input.id);
       await channelApi.delete(input.id, input.revision, signal);
       cache.removeQueries({ queryKey: key, exact: true });
     },
+    "none",
   );
 }

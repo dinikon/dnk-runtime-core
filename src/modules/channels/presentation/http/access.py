@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from src.modules.channels.application.error import ChannelInputError
-from src.modules.channels.domain.channel.error import (
+from src.modules.channels.domain.error import (
     ChannelError,
     ChannelNotFoundError,
     ChannelRevisionConflictError,

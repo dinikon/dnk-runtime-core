@@ -12,11 +12,12 @@ const props = defineProps<{
   title: string;
   summary?: string;
   collapsible?: boolean;
+  defaultOpen?: boolean;
   dirty?: boolean;
   error?: string;
   reveal?: number;
 }>();
-const open = ref(!props.collapsible);
+const open = ref(!props.collapsible || props.defaultOpen === true);
 watch(
   () => [props.error, props.reveal] as const,
   ([error, reveal], previous) => {

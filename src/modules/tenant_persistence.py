@@ -1,6 +1,12 @@
 """Регистрация статических tenant-моделей и их исторических имён."""
 
 import src.modules.crm.infrastructure.persistence.models.company  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.inventory_item  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.item_barcode  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.item_packaging  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.warehouse  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_location  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.packaging_type  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact  # noqa: F401
 import src.modules.crm.infrastructure.persistence.models.contact_company  # noqa: F401
 import src.modules.contact_points.infrastructure.persistence.models.contact_point  # noqa: F401
@@ -30,6 +36,8 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "catalog_product_types",
         "cloud_identities",
         "companies",
+        "supplier_sources",
+        "supplier_source_fulfillment_modes",
         "contact_companies",
         "contact_point_bindings",
         "contact_point_labels",
@@ -37,8 +45,15 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "contacts",
         "channels",
         "channel_connections",
+        "channel_catalog_binding_groups",
+        "channel_catalog_binding_items",
         "channel_sync_runs",
         "channel_external_publications",
+        "channel_stock_sync_states",
+        "channel_product_representations",
+        "channel_content_media",
+        "channel_content_deliveries",
+        "channel_content_feeds",
         "crm_position_history",
         "crm_leads",
         "crm_deals",
@@ -54,6 +69,15 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
         "files_providers",
         "files_registry",
         "invitations",
+        "stock_documents",
+        "stock_document_lines",
+        "stock_document_creation_requests",
+        "inventory_items",
+        "inventory_item_barcodes",
+        "inventory_item_packagings",
+        "warehouses",
+        "stock_locations",
+        "packaging_types",
         "tenant_currency_settings",
         "user_emails",
         "users",
@@ -102,7 +126,87 @@ import src.modules.catalog.infrastructure.persistence.models.catalog_import_medi
 
 import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F401
 import src.modules.channels.infrastructure.persistence.models.connection  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.sync_run  # noqa: F401
-import src.modules.channels.infrastructure.persistence.models.external_publication  # noqa: F401
 
 import src.modules.crm.infrastructure.persistence.models.position_history  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_lot  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_serial  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_document_line  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_document_creation_request  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_positions  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_executions  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_lines  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_receipt_cost_evidence  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_receipt_cost_allocations  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_postings  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_ledger_entries  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_ledger_links  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_receipt_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {
+        "stock_executions",
+        "stock_postings",
+        "stock_ledger_entries",
+        "stock_receipt_posting_requests",
+        "stock_receipt_cost_allocations",
+        "stock_receipt_cost_evidence",
+        "stock_execution_lines",
+        "stock_execution_ledger_links",
+        "stock_positions",
+    }
+)
+
+import src.modules.inventory.infrastructure.persistence.models.stock_issue_creation_request  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_issue_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {"stock_issue_posting_requests"}
+)
+
+import src.modules.inventory.infrastructure.persistence.models.stock_internal_move_creation_request  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_internal_move_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {"stock_internal_move_posting_requests"}
+)
+
+import src.modules.inventory.infrastructure.persistence.models.stock_write_off_creation_request  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_write_off_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {"stock_write_off_posting_requests"}
+)
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document_status_change  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_status_change  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_status_change_creation_request  # noqa: F401
+import src.modules.inventory.infrastructure.persistence.models.stock_status_change_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {"stock_execution_status_changes", "stock_status_change_posting_requests"}
+)
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document_return  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_return  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_document_return_line  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_execution_return_line  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_return_creation_request  # noqa: F401
+
+import src.modules.inventory.infrastructure.persistence.models.stock_return_posting_requests  # noqa: F401
+
+HISTORICAL_TENANT_TABLE_NAMES = HISTORICAL_TENANT_TABLE_NAMES.union(
+    {
+        "stock_execution_returns",
+        "stock_execution_return_lines",
+        "stock_return_posting_requests",
+    }
+)

@@ -7,7 +7,6 @@ import {
   FieldDescription,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -95,9 +94,11 @@ function dateField(
     :aria-describedby="error ? `${id}-price-error` : undefined"
   >
     <legend class="sr-only">Цена</legend>
-    <FieldGroup class="gap-4">
-      <FieldGroup class="grid min-w-0 grid-cols-[minmax(0,1fr)_6rem] gap-3">
-        <Field :data-invalid="!!error || undefined"
+    <FieldGroup class="gap-3">
+      <FieldGroup class="gap-3">
+        <Field
+          class="product-property-field"
+          :data-invalid="!!error || undefined"
           ><FieldLabel :for="`${id}-regular-price`">Обычная цена</FieldLabel
           ><Input
             :id="`${id}-regular-price`"
@@ -108,7 +109,7 @@ function dateField(
             :aria-describedby="error ? `${id}-price-error` : undefined"
             @update:model-value="field('regular_price', decimalInput($event))"
         /></Field>
-        <Field
+        <Field class="product-property-field"
           ><FieldLabel :for="`${id}-currency`">Валюта</FieldLabel
           ><Input
             :id="`${id}-currency`"
@@ -132,7 +133,7 @@ function dateField(
           ><ChevronDown
             class="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" /></CollapsibleTrigger
         ><CollapsibleContent force-mount v-show="saleOpen" class="pt-3"
-          ><FieldGroup class="gap-4">
+          ><FieldGroup class="gap-3">
             <Field
               ><FieldLabel :for="`${id}-sale-price`">Акционная цена</FieldLabel
               ><Input
@@ -144,7 +145,7 @@ function dateField(
                   field('sale_price', decimalInput($event) || null)
                 "
             /></Field>
-            <FieldGroup class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2"
+            <FieldGroup class="grid min-w-0 grid-cols-1 gap-3"
               ><Field
                 v-for="entry in [
                   {
@@ -165,21 +166,12 @@ function dateField(
             ></FieldGroup> </FieldGroup></CollapsibleContent
       ></Collapsible>
       <ProductFieldError :id="`${id}-price-error`" :error="error" />
-      <FieldDescription
+      <FieldDescription class="sr-only"
         >Подтверждённая цена: {{ current ?? "Не задана" }}
         {{ value?.currency }}</FieldDescription
       >
       <FieldDescription v-if="!filled"
         >Без цены товар недоступен для продажи.</FieldDescription
-      >
-      <Button
-        v-else
-        type="button"
-        variant="ghost"
-        class="self-start"
-        :disabled="disabled"
-        @click="change(emptyPrice())"
-        >Убрать цену</Button
       >
     </FieldGroup>
   </fieldset>

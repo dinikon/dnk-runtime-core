@@ -1,3 +1,4 @@
+from src.modules.crm.domain.company.error import CompanyNotFoundError
 from sqlalchemy import delete, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +43,11 @@ class SqlAlchemyCompanyRepository:
         )
 
     async def delete(self, company: CompanyEntity) -> None:
-        await self._session.execute(
-            delete(CompanyModel).where(CompanyModel.id == company.id.uuid)
+        """Удаляет существующую компанию после бизнес-проверки вызывающего сценария."""
+        statement = (
+            delete(CompanyModel)
+            .where(CompanyModel.id == company.id.uuid)
+            .returning(CompanyModel.id)
         )
+        if await self._session.scalar(statement) is None:
+            raise CompanyNotFoundError("Компания не найдена.")

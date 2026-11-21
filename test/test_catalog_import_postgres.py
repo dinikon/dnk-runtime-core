@@ -302,7 +302,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.json()["total"], 1)
         report = await self.client.get(f"{self.base}/imports/{identifier}/report.csv")
         self.assertEqual(report.status_code, 200)
-        self.assertIn("BAD", report.text)
+        self.assertIn("bad", report.text)
         self.assertEqual(len(self.downloads), 1)
         async with self.runtime_class(
             self.sessions, self.other.uuid
@@ -338,7 +338,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         original = await self.client.post(
             self.base + "/items",
             json={
-                "sku": "A",
+                "inventory_item": {"mode": "create", "sku": "A"},
                 "price_specification": {"regular_price": "100", "currency": "UAH"},
                 "translations": {
                     "ru": {
@@ -459,7 +459,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         rows = (await self.client.get(f"{self.base}/imports/{second}/rows")).json()[
             "items"
         ]
-        new_id = next(r["item_id"] for r in rows if r["sku"] == "B")
+        new_id = next(r["item_id"] for r in rows if r["sku"] == "b")
         new_item = (
             await self.client.get(f"{self.base}/items/{new_id}?locale=uk")
         ).json()["item"]
@@ -728,6 +728,36 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
             TenantMigrator,
         )
 
+        import importlib.util
+        from pathlib import Path
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+
+        migration_path = (
+            Path(__file__).resolve().parents[1]
+            / "migrations/tenant/versions/0005_catalog_import_limits.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "catalog_import_limits_guard", migration_path
+        )
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+
+        async def run_legacy(action: str) -> None:
+            """Проверяет guard конкретной миграции без пересечения необратимой очистки Channels."""
+            async with self.engine.begin() as connection:
+                await connection.execute(
+                    text("SELECT set_config('search_path', :schema, true)"),
+                    {"schema": self.schemas[0]},
+                )
+
+                def run(sync) -> None:
+                    """Выполняет исторические операции в текущей tenant-схеме."""
+                    with Operations.context(MigrationContext.configure(sync)):
+                        getattr(migration, action)()
+
+                await connection.run_sync(run)
+
         async with self.engine.connect() as connection:
             original_version = await TenantMigrator().current(
                 connection, self.schemas[0]
@@ -740,10 +770,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.start_import(first)
             await self.start_import(second)
         with self.assertRaisesRegex(RuntimeError, "multiple imports are active"):
-            async with self.engine.begin() as connection:
-                await TenantMigrator().downgrade(
-                    connection, self.schemas[0], "0004_catalog_import_resume"
-                )
+            await run_legacy("downgrade")
         async with self.engine.begin() as connection:
             self.assertEqual(
                 await TenantMigrator().current(connection, self.schemas[0]),
@@ -753,12 +780,8 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
             f"{self.base}/imports/{second}/cancel", headers=self.headers
         )
         await self.execute_current(second)
-        async with self.engine.begin() as connection:
-            await TenantMigrator().downgrade(
-                connection, self.schemas[0], "0004_catalog_import_resume"
-            )
-        async with self.engine.begin() as connection:
-            await TenantMigrator().upgrade(connection, self.schemas[0])
+        await run_legacy("downgrade")
+        await run_legacy("upgrade")
         self.assertEqual((await self.get_import(first))["run"]["status"], "queued")
         self.assertEqual((await self.get_import(second))["run"]["status"], "cancelled")
 
@@ -869,7 +892,7 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         original = await self.client.post(
             self.base + "/items",
             json={
-                "sku": "A",
+                "inventory_item": {"mode": "create", "sku": "A"},
                 "translations": {
                     "ru": {"expected_schema_version": 1, "values": {"title": "Keep"}}
                 },
@@ -894,8 +917,10 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
 
         async def edit_after_lookup(repository, sku):
             found = await find_item(repository, sku)
-            response = await self.client.patch(
-                f"{self.base}/items/{item_id}", json={"sku": "B"}, headers=self.headers
+            response = await self.client.put(
+                f"{self.base}/items/{item_id}/sku",
+                json={"mode": "create", "sku": "B"},
+                headers=self.headers,
             )
             self.assertEqual(response.status_code, 200, response.text)
             return found
@@ -907,4 +932,23 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         item = (await self.client.get(f"{self.base}/items/{item_id}?locale=ru")).json()[
             "item"
         ]
-        self.assertEqual((item["sku"], item["content"]["title"]), ("B", "Keep"))
+        self.assertEqual((item["sku"], item["content"]["title"]), ("b", "Keep"))
+
+    async def test_casefold_duplicates_include_a_failed_first_row(self) -> None:
+        """Канонические повторы пропускаются и после rollback ошибочной строки."""
+        data = (
+            "sku,title,regular_price,currency\n"
+            "Straße,First,10,UAH\nSTRASSE,Duplicate,20,UAH\n"
+            "CaseFail,Broken,oops,UAH\nCASEFAIL,Skipped,30,UAH\n"
+        ).encode("utf-8-sig")
+        identifier = await self.create_import(data)
+        await self.execute_current(identifier)
+        await self.start_import(identifier)
+        await self.execute_current(identifier)
+        run = (await self.get_import(identifier))["run"]
+        self.assertEqual((run["created"], run["skipped"], run["errors"]), (1, 2, 1))
+        response = await self.client.get(f"{self.base}/imports/{identifier}/rows")
+        self.assertEqual(
+            [row["sku"] for row in response.json()["items"]],
+            ["strasse", "strasse", "casefail", "casefail"],
+        )

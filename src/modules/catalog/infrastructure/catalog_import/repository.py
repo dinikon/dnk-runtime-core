@@ -1,3 +1,6 @@
+from src.modules.catalog.application.catalog_item.port.inventory import (
+    CatalogInventoryItemPort,
+)
 from dataclasses import asdict
 from datetime import timedelta
 from src.config import dnk_config
@@ -105,9 +108,12 @@ class SqlAlchemyCatalogImportRepository:
 class SqlAlchemyImportRows:
     """Сохраняет staging и результаты; не реализует инварианты товара."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, inventory: CatalogInventoryItemPort
+    ) -> None:
         """Получает общую сессию без управления транзакцией."""
         self.session = session
+        self.inventory = inventory
 
     async def reset(self, identifier: UUID) -> None:
         """Очищает незапущенную staging-проекцию."""
@@ -200,10 +206,13 @@ class SqlAlchemyImportRows:
             text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
             {"key": schema + ":catalog-import-sku:" + sku},
         )
+        inventory_id = await self.inventory.find_id(sku)
+        if inventory_id is None:
+            return None
         row = (
             await self.session.execute(
                 select(CatalogItemModel.id, CatalogItemModel.kind).where(
-                    CatalogItemModel.sku == sku
+                    CatalogItemModel.inventory_item_id == inventory_id
                 )
             )
         ).one_or_none()

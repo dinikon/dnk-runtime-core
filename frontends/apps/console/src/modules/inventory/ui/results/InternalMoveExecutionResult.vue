@@ -1,0 +1,75 @@
+<script setup lang="ts">
+import type { InternalMoveExecutionResult } from "../../model/internal-move-execution-result.types";
+defineProps<{ result: InternalMoveExecutionResult }>();
+</script>
+<template>
+  <section
+    class="min-w-0 rounded-lg border p-4"
+    aria-label="Первоначальный результат перемещения"
+  >
+    <h2 class="text-lg font-semibold">Первоначальный результат перемещения</h2>
+    <p class="mt-2 text-sm text-muted-foreground">
+      Исторические количества до и после этого перемещения. Текущий остаток
+      может отличаться.
+    </p>
+    <p class="mt-1 text-sm">
+      Версия документа: {{ result.versionBefore }} → {{ result.versionAfter }}
+    </p>
+    <ul class="mt-3 space-y-2 text-sm" aria-label="Маршруты перемещения">
+      <li
+        v-for="line in result.lines"
+        :key="line.id"
+        class="rounded-md border p-3"
+      >
+        <p class="break-words font-medium">
+          {{ line.sku }} · {{ line.locationCode }} →
+          {{ line.destinationLocationCode }}
+        </p>
+        <p>
+          {{ line.quantity }} {{ line.baseUom
+          }}<span v-if="line.lotNumber"> · Партия {{ line.lotNumber }}</span
+          ><span v-if="line.serialNumber">
+            · Серия {{ line.serialNumber }}</span
+          >
+        </p>
+        <p class="mt-1 break-all text-xs text-muted-foreground">
+          Расход: {{ line.sourceLedgerEntryId }}<br />Приход:
+          {{ line.destinationLedgerEntryId }}
+        </p>
+      </li>
+    </ul>
+    <div class="mt-3 overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead>
+          <tr>
+            <th class="p-2">Позиция</th>
+            <th class="p-2">Было</th>
+            <th class="p-2">Изменение</th>
+            <th class="p-2">Стало</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="position in result.positions"
+            :key="position.id"
+            class="border-t"
+          >
+            <td class="max-w-48 break-all p-2 font-mono text-xs">
+              {{ position.id }}
+            </td>
+            <td class="whitespace-nowrap p-2">
+              {{ position.before }} {{ position.baseUom }}
+            </td>
+            <td class="whitespace-nowrap p-2">
+              {{ position.delta.startsWith("-") ? "Расход" : "Приход" }}:
+              {{ position.delta }} {{ position.baseUom }}
+            </td>
+            <td class="whitespace-nowrap p-2">
+              {{ position.after }} {{ position.baseUom }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</template>

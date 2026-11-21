@@ -15,6 +15,7 @@ from src.modules.funnel.presentation.router import router as funnels
 from src.modules.crm.infrastructure.persistence.models.contact import ContactModel
 from src.modules.crm.infrastructure.persistence.models.company import CompanyModel
 from src.modules.crm.infrastructure.persistence.models.deal import DealModel
+from test.tenant_migrations_support import tenant_migrations_through
 
 
 @unittest.skipUnless(TEST_URL, "Требуется отдельная TEST_POSTGRES_URL.")
@@ -469,7 +470,10 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
         item = await self.client.post(
             "/api/console/catalog/items",
             headers=self.headers,
-            json={"virtual": True, "sku": "SERVICE-001"},
+            json={
+                "virtual": True,
+                "inventory_item": {"mode": "create", "sku": "SERVICE-001"},
+            },
         )
         self.assertEqual(item.status_code, 201, item.text)
         item_id = item.json()["id"]
@@ -494,13 +498,20 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
         first = (await self.client.get(path)).json()
         self.assertEqual(first["basket"]["total"], "1.02")
         self.assertEqual(first["basket"]["items"][0]["kind"], "service")
-        self.assertEqual(first["basket"]["items"][0]["sku"], "SERVICE-001")
+        self.assertEqual(first["basket"]["items"][0]["sku"], "service-001")
         changed = await self.client.patch(
             "/api/console/catalog/items/" + item_id,
             headers=self.headers,
-            json={"virtual": False, "sku": "PRODUCT-002"},
+            json={"virtual": False},
         )
         self.assertEqual(changed.status_code, 200, changed.text)
+        changed_sku = await self.client.put(
+            "/api/console/catalog/items/" + item_id + "/sku",
+            headers=self.headers,
+            json={"mode": "create", "sku": "PRODUCT-002"},
+        )
+        self.assertEqual(changed_sku.status_code, 200, changed_sku.text)
+        self.assertEqual(changed_sku.json()["sku"], "product-002")
         self.assertEqual(
             (await self.client.get(path)).json()["basket"], first["basket"]
         )
@@ -522,6 +533,15 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
         from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
             TenantMigrator,
         )
+        from sqlalchemy.schema import CreateSchema, DropSchema
+
+        # Историческая проверка начинается на baseline, до необратимой очистки Channels.
+        async with self.engine.begin() as connection:
+            schema = self.schemas[0]
+            await connection.execute(DropSchema(schema, cascade=True))
+            await connection.execute(CreateSchema(schema))
+            with tenant_migrations_through("0001_tenant_baseline") as baseline:
+                await baseline.upgrade(connection, schema)
 
         self.app.include_router(contact_router, prefix="/api/console")
         contact = await self.client.post(
@@ -549,9 +569,6 @@ class CrmSalesPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(points.status_code, 200, points.text)
         migrator = TenantMigrator()
         async with self.engine.begin() as connection:
-            await migrator.downgrade(
-                connection, self.schemas[0], "0001_tenant_baseline"
-            )
             self.assertEqual(
                 await migrator.current(connection, self.schemas[0]),
                 ("0001_tenant_baseline",),

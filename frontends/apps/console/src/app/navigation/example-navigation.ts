@@ -1,4 +1,4 @@
-import { Inbox, PanelTop } from "@lucide/vue";
+import { Building2, Inbox, PanelTop } from "@lucide/vue";
 import type { Component } from "vue";
 
 export interface ExampleNavigationItem {
@@ -15,7 +15,14 @@ export interface ExampleNavigationGroup {
 export const exampleNavigation: readonly ExampleNavigationGroup[] = [
   {
     title: "Example",
-    items: [{ title: "EmptyState", url: "/example/empty-state", icon: Inbox }],
+    items: [
+      { title: "EmptyState", url: "/example/empty-state", icon: Inbox },
+      {
+        title: "Companies Example",
+        url: "/example/companies",
+        icon: Building2,
+      },
+    ],
   },
   {
     title: "Headers",

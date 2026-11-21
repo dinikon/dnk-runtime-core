@@ -171,9 +171,13 @@ class ListItemResponse(BaseModel):
     min_price: Decimal | None = None
     max_price: Decimal | None = None
     mixed_currencies: bool = False
+    manage_stock: bool
+    stock_quantity: int | None
+    stock_source: Literal["own", "parent"]
     id: UUID
     status: Literal["draft", "active", "archived"]
     sku: str | None
+    inventory_item_id: UUID | None = None
     title: str | None
     price: Decimal | None
     currency: str | None

@@ -10,13 +10,44 @@ import {
   useCatalogVariantMutations,
 } from "../../model/use-catalog-variants";
 import { useCatalogVariantsPageState } from "../../model/use-catalog-variants-page-state";
-import CatalogVariantsList from "../product/CatalogVariantsList.vue";
+import { catalogApi } from "../../api/catalog.api";
+import type { CatalogListItem } from "../../model/catalog.types";
+import CatalogVariantsBody from "../product/CatalogVariantsBody.vue";
 import DeleteCatalogVariantDialog from "../product/DeleteCatalogVariantDialog.vue";
 import CatalogVariantEditorPage from "./CatalogVariantEditorPage.vue";
 import type { ProductStock } from "../../model/product.types";
-const props = defineProps<{ rootId: string; parentStock: ProductStock }>();
+import type { CatalogQuickEditSection } from "../../model/catalog-table.types";
+import { useCatalogQuickEdit } from "../../model/use-catalog-quick-edit";
+import CatalogQuickEditDialog from "../product/CatalogQuickEditDialog.vue";
+const props = defineProps<{
+  rootId: string;
+  parentStock: ProductStock;
+  prepareEdit?: () => Promise<boolean>;
+}>();
 const ctx = useCatalogContext(),
   rootId = toRef(props, "rootId");
+const quick = useCatalogQuickEdit(
+  ctx.tenantId,
+  ctx.sessionKey,
+  ctx.locale,
+  ctx.active,
+);
+watch(rootId, quick.close);
+async function edit(
+  item: CatalogListItem,
+  section: CatalogQuickEditSection,
+): Promise<void> {
+  const current = ctx.captureSession(),
+    capturedRoot = rootId.value,
+    capturedLocale = ctx.locale.value;
+  if (props.prepareEdit && !(await props.prepareEdit())) return;
+  if (
+    current() &&
+    rootId.value === capturedRoot &&
+    ctx.locale.value === capturedLocale
+  )
+    quick.open(item, section);
+}
 const state = useCatalogVariantsPageState(rootId, ctx.locale);
 const query = useCatalogVariants(
   rootId,
@@ -46,7 +77,23 @@ async function add(): Promise<void> {
 }
 async function remove(): Promise<void> {
   const target = deleting.value;
-  if (target && (await actions.remove(target))) deleting.value = null;
+  if (target && (await actions.remove(target))) {
+    deleting.value = null;
+    const { offset, limit } = state.pagination.value;
+    if (offset > 0 && !query.data.value?.items.length) {
+      state.setPage({ page: offset / limit, limit });
+    }
+  }
+}
+function imageUrl(item: CatalogListItem): string | undefined {
+  return item.primaryImage
+    ? catalogApi.variantImageUrl(
+        rootId.value,
+        item.id,
+        ctx.locale.value,
+        item.primaryImage.id,
+      )
+    : undefined;
 }
 async function reload(): Promise<void> {
   const result = await query.refetch();
@@ -54,8 +101,11 @@ async function reload(): Promise<void> {
 }
 </script>
 <template>
-  <section class="flex min-w-0 flex-col gap-4" aria-label="Варианты карточки">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+  <section
+    class="flex min-h-0 min-w-0 flex-1 flex-col gap-4"
+    aria-label="Варианты карточки"
+  >
+    <div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
       <h2 class="text-lg font-semibold">
         Варианты{{ query.data.value ? " · " + query.data.value.total : "" }}
       </h2>
@@ -65,7 +115,10 @@ async function reload(): Promise<void> {
         >Добавить вариант</Button
       >
     </div>
-    <Alert v-if="actions.error.value && !deleting" variant="destructive"
+    <Alert
+      v-if="actions.error.value && !deleting"
+      variant="destructive"
+      class="shrink-0"
       ><AlertDescription class="flex flex-wrap items-center gap-3"
         >{{ actions.error.value
         }}<Button
@@ -76,9 +129,9 @@ async function reload(): Promise<void> {
         ></AlertDescription
       ></Alert
     >
-    <CatalogVariantsList
+    <CatalogVariantsBody
       :items="query.data.value?.items ?? []"
-      :pending="query.isPending.value"
+      :loading="query.isPending.value"
       :error="
         query.error.value
           ? getApiErrorMessage(
@@ -88,12 +141,22 @@ async function reload(): Promise<void> {
           : ''
       "
       :disabled="actions.pending.value"
+      :can-create="!actions.pending.value && !actions.uncertain.value"
+      :out-of-range="state.pagination.value.offset > 0"
+      :image-url="imageUrl"
+      :can-quick-edit="ctx.active.value"
+      @quick-edit="edit"
       @open="state.open"
       @remove="deleting = $event"
       @retry="reload"
+      @create="add"
+      @first-page="
+        state.setPage({ page: 1, limit: state.pagination.value.limit })
+      "
     />
     <OffsetPagination
       v-if="query.data.value"
+      class="shrink-0"
       :page="
         Math.floor(
           state.pagination.value.offset / state.pagination.value.limit,
@@ -111,6 +174,21 @@ async function reload(): Promise<void> {
       :variant-id="state.selected.value"
       :parent-stock="parentStock"
       @close="state.close"
+    />
+    <CatalogQuickEditDialog
+      v-if="quick.selection.value"
+      :key="quick.key.value"
+      :section="quick.selection.value.section"
+      :item="quick.draftSource.value?.item ?? null"
+      :shared="quick.draftSource.value?.shared ?? false"
+      :loading="quick.query.isFetching.value"
+      :pending="quick.mutation.isPending.value"
+      :blocked="!ctx.active.value || quick.query.isError.value"
+      :error="quick.error.value"
+      @dirty="quick.dirty.value = $event"
+      @close="quick.close"
+      @save="quick.save"
+      @retry="quick.query.refetch()"
     />
     <DeleteCatalogVariantDialog
       :open="!!deleting"

@@ -6,7 +6,6 @@ from src.modules.catalog.domain.catalog_item.value_object.identifier import (
 from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
@@ -38,7 +37,6 @@ class UpdateCatalogItemCommand:
     fields: frozenset[str]
     locale: str | None = None
     status: CatalogItemStatus | None = None
-    sku: SkuCodeVO | None = None
     virtual: bool | None = None
     price_specification: PriceSpecificationVO | None = None
     stock: StockSpecificationVO | None = None

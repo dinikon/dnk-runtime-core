@@ -1,0 +1,202 @@
+from src.modules.inventory.application.stock_posting.query.list_stock_postings.dto import (
+    ListStockPostingsItemDTO,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_executions import (
+    StockExecutionModel as E,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_postings import (
+    StockPostingModel as T,
+)
+from src.modules.inventory.infrastructure.persistence.models.stock_document import (
+    StockDocumentModel as D,
+)
+from src.modules.inventory.infrastructure.persistence.models.warehouse import (
+    WarehouseModel as W,
+)
+from src.modules.inventory.infrastructure.accounting.persistence.fact_projection import (
+    StockFactProjection,
+)
+from src.modules.inventory.application.stock_posting.query.get_stock_posting_details.dto import (
+    GetStockPostingDetailsResultDTO,
+    GetStockPostingDetailsLineDTO,
+    GetStockPostingDetailsEntryDTO,
+    GetStockPostingDetailsCostDTO,
+    GetStockPostingDetailsAllocationDTO,
+)
+
+
+class StockPostingQueryMapper:
+    """Создаёт собственный контракт факта, отделяя текущие подписи от исторических."""
+
+    @staticmethod
+    def details(value: StockFactProjection) -> GetStockPostingDetailsResultDTO:
+        """Берёт количества, связи и стоимость только из нормализованного хранения."""
+        execution, posting, document, warehouse = (
+            value.execution,
+            value.posting,
+            value.document,
+            value.warehouse,
+        )
+        historical = (
+            {line.id: line for line in value.historical.lines}
+            if value.historical
+            else {}
+        )
+        return GetStockPostingDetailsResultDTO(
+            id=posting.id if posting else execution.id,
+            execution_id=execution.id,
+            posting_id=posting.id if posting else None,
+            document_id=document.id,
+            document_version_at_execution=execution.document_version,
+            document_current_version=document.version,
+            document_current_status=document.status,
+            operation_type=execution.operation_type,
+            return_direction=(
+                value.return_details.direction if value.return_details else None
+            ),
+            origin_execution_id=(
+                value.return_details.origin_execution_id
+                if value.return_details
+                else None
+            ),
+            write_off_reason=execution.write_off_reason,
+            operation_reason=(
+                value.return_details.reason
+                if value.return_details
+                else (
+                    value.status_change.reason
+                    if value.status_change
+                    else execution.write_off_reason
+                )
+            ),
+            target_status=(
+                value.status_change.target_status if value.status_change else None
+            ),
+            executed_at=execution.executed_at,
+            posted_at=posting.posted_at if posting else None,
+            warehouse_id=warehouse.id,
+            warehouse_code=warehouse.code,
+            warehouse_name=warehouse.name,
+            owner_id=execution.owner_id,
+            owner_name=None,
+            has_receipt_result=value.historical is not None,
+            lines=tuple(
+                GetStockPostingDetailsLineDTO(
+                    id=line.id,
+                    document_line_id=line.document_line_id,
+                    inventory_item_id=line.inventory_item_id,
+                    sku=item.sku,
+                    sku_at_document=plan.sku,
+                    base_uom=line.base_uom,
+                    quantity=line.quantity,
+                    source_quantity=line.source_quantity,
+                    source_uom=line.source_uom,
+                    factor_to_base=line.factor_to_base,
+                    location_id=line.location_id,
+                    location_code=location.code,
+                    destination_location_id=line.destination_location_id,
+                    destination_location_code=destination.code if destination else None,
+                    source_ledger_entry_id=next(
+                        (
+                            link.ledger_entry_id
+                            for link in value.links
+                            if link.execution_line_id == line.id
+                            and link.role == "SOURCE"
+                        ),
+                        None,
+                    ),
+                    destination_ledger_entry_id=next(
+                        (
+                            link.ledger_entry_id
+                            for link in value.links
+                            if link.execution_line_id == line.id
+                            and link.role == "DESTINATION"
+                        ),
+                        None,
+                    ),
+                    lot_id=line.lot_id,
+                    lot_number=lot.number if lot else None,
+                    serial_id=line.serial_id,
+                    serial_number=serial.number if serial else None,
+                    stock_status=line.stock_status,
+                    origin_execution_line_id=next(
+                        (
+                            link.origin_execution_line_id
+                            for link in value.return_lines
+                            if link.execution_line_id == line.id
+                        ),
+                        None,
+                    ),
+                    destination_stock_status=line.destination_stock_status,
+                    ledger_entry_ids=tuple(
+                        link.ledger_entry_id
+                        for link in value.links
+                        if link.execution_line_id == line.id
+                    ),
+                    sku_at_receipt=(
+                        historical[line.id].sku if line.id in historical else None
+                    ),
+                    serial_number_at_receipt=(
+                        historical[line.id].serial_number
+                        if line.id in historical
+                        else None
+                    ),
+                    location_code_at_receipt=(
+                        historical[line.id].location_code
+                        if line.id in historical
+                        else None
+                    ),
+                )
+                for line, item, location, lot, serial, plan, destination in value.lines
+            ),
+            ledger=tuple(
+                GetStockPostingDetailsEntryDTO(
+                    entry.id,
+                    entry.position_id,
+                    entry.quantity_delta,
+                    entry.base_uom,
+                    tuple(
+                        link.execution_line_id
+                        for link in value.links
+                        if link.ledger_entry_id == entry.id
+                    ),
+                )
+                for entry in value.entries
+            ),
+            costs=tuple(
+                GetStockPostingDetailsCostDTO(
+                    cost.id,
+                    cost.total_amount,
+                    cost.currency,
+                    cost.basis_kind,
+                    cost.source_system,
+                    cost.source_reference,
+                    tuple(
+                        GetStockPostingDetailsAllocationDTO(
+                            allocation.execution_line_id, allocation.amount
+                        )
+                        for allocation in value.allocations
+                        if allocation.evidence_id == cost.id
+                    ),
+                )
+                for cost in value.costs
+            ),
+        )
+
+    @staticmethod
+    def to_list_item(t: T, e: E, d: D, w: W, count: int) -> ListStockPostingsItemDTO:
+        """Преобразует типизированный заголовок и счётчик в DTO собственного списка."""
+        return ListStockPostingsItemDTO(
+            t.id,
+            e.id,
+            d.id,
+            d.status,
+            w.id,
+            w.code,
+            w.name,
+            e.owner_id,
+            None,
+            t.operation_type,
+            t.posted_at,
+            count,
+        )

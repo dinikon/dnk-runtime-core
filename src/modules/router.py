@@ -1,4 +1,25 @@
+from src.modules.inventory.presentation.stock_serial.router import (
+    router as inventory_stock_serials_router,
+)
+from src.modules.inventory.presentation.stock_lot.router import (
+    router as inventory_stock_lots_router,
+)
 from src.modules.catalog.presentation.router import router as catalog_router
+from src.modules.inventory.presentation.uom.router import (
+    router as inventory_uoms_router,
+)
+from src.modules.inventory.presentation.inventory_item.router import (
+    router as inventory_items_router,
+)
+from src.modules.inventory.presentation.warehouse.router import (
+    router as inventory_warehouses_router,
+)
+from src.modules.inventory.presentation.stock_location.router import (
+    router as inventory_stock_locations_router,
+)
+from src.modules.inventory.presentation.packaging_type.router import (
+    router as inventory_packaging_types_router,
+)
 from fastapi import APIRouter
 
 from src.modules.crm.presentation.contact.router import router as contacts_router
@@ -16,6 +37,11 @@ from src.modules.reference_data.presentation.router import (
 router = APIRouter(prefix="/api/console")
 
 router.include_router(catalog_router)
+router.include_router(inventory_items_router)
+router.include_router(inventory_warehouses_router)
+router.include_router(inventory_stock_locations_router)
+router.include_router(inventory_packaging_types_router)
+router.include_router(inventory_uoms_router)
 from src.modules.files.presentation.router import router as files_router
 
 router.include_router(files_router)
@@ -41,3 +67,44 @@ router.include_router(funnel_router)
 from src.modules.channels.presentation.router import router as channels_router
 
 router.include_router(channels_router)
+
+router.include_router(inventory_stock_lots_router)
+router.include_router(inventory_stock_serials_router)
+
+from src.modules.crm.presentation.counterparty_reference.router import (
+    router as counterparty_references_router,
+)
+
+router.include_router(counterparty_references_router)
+
+from src.modules.inventory.presentation.stock_document.router import (
+    router as stock_documents_router,
+)
+
+router.include_router(stock_documents_router)
+
+from src.modules.inventory.presentation.stock_execution.router import (
+    router as stock_executions_router,
+)
+from src.modules.inventory.presentation.stock_posting.router import (
+    router as stock_postings_router,
+)
+
+router.include_router(stock_executions_router)
+router.include_router(stock_postings_router)
+
+from src.modules.inventory.presentation.stock_position.router import (
+    router as stock_positions_router,
+)
+from src.modules.inventory.presentation.stock_posting.router import (
+    movements_router as stock_movements_router,
+)
+
+router.include_router(stock_positions_router)
+router.include_router(stock_movements_router)
+
+from src.modules.inventory.presentation.stock_position.router import (
+    balances_router as stock_balances_router,
+)
+
+router.include_router(stock_balances_router)

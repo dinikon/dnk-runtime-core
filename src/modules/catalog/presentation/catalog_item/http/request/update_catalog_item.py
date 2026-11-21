@@ -32,7 +32,6 @@ class UpdateCatalogItemRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     status: CatalogItemStatus | None = None
-    sku: str | None = None
     virtual: StrictBool | None = None
     price_specification: PriceValue | None = None
     stock: StockValue | None = None

@@ -39,6 +39,7 @@ export interface CatalogItem {
   product_type_id: string;
   status: "draft" | "active" | "archived";
   sku: string | null;
+  inventoryItemId: string | null;
   virtual: boolean;
   price_specification: ProductPrice | null;
   price: string | null;
@@ -59,6 +60,9 @@ export interface CatalogItem {
 }
 
 export interface CatalogListItem {
+  manageStock?: boolean;
+  stockQuantity?: number | null;
+  stockSource?: "own" | "parent";
   kind?: "simple" | "variable" | "variant";
   parent_id?: string | null;
   variant_count?: number;
@@ -68,10 +72,13 @@ export interface CatalogListItem {
   id: string;
   status: import("./product.types").ProductStatus;
   sku: string | null;
+  inventoryItemId: string | null;
   title: string | null;
   price: string | null;
   currency: string | null;
   availableForSale: boolean;
+  stockStatus?: ProductStock["stock_status"];
+  primaryImage?: ProductGallery["images"][number] | null;
 }
 export interface CatalogItemsPage {
   items: CatalogListItem[];

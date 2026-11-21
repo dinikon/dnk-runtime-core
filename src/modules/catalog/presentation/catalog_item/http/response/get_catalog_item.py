@@ -47,6 +47,7 @@ class CatalogItemDetailsResponse(BaseModel):
     updated_at: datetime
     created_by: UUID
     updated_by: UUID
+    inventory_item_id: UUID | None = None
     kind: Literal["simple", "variable", "variant"] = "simple"
     parent_id: UUID | None = None
     stock_source: Literal["own", "parent"] = "own"

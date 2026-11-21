@@ -2,7 +2,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Self
 
-from src.modules.crm.domain.contact.error import InvalidContactNameError
+from src.modules.crm.domain.contact.error import (
+    InvalidContactNameError,
+)
 from src.modules.crm.domain.contact.value_object.identifier import ContactIdVO
 from src.modules.crm.domain.contact.value_object.name import ContactNameVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO

@@ -25,11 +25,13 @@ export function useChannelsPageState(): ChannelsPageState {
   function setFilter(key: "q" | "platform" | "status", value: string): void {
     void router.replace({
       query: { ...route.query, [key]: value || undefined, offset: undefined },
+      hash: route.hash,
     });
   }
   function setOffset(offset: number): void {
     void router.replace({
       query: { ...route.query, offset: Math.max(0, offset) || undefined },
+      hash: route.hash,
     });
   }
   return { filters, setFilter, setOffset };

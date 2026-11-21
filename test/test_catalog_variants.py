@@ -20,7 +20,6 @@ from src.modules.catalog.domain.catalog_item.value_object.kind import (
 from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
@@ -328,17 +327,23 @@ class CatalogVariantDomainTests(unittest.TestCase):
             )
         with self.assertRaises(CatalogNotFoundError):
             self.root.variant(CatalogItemIdVO(uuid4()))
-        self.root.update(
-            fields=frozenset({"sku"}),
+        linked = self.variant.changed(
+            fields=frozenset({"inventory_item_id"}),
+            inventory_item_id=EntityIdVO(uuid4()),
             actor=self.actor,
             now=self.now,
-            sku=SkuCodeVO("PARENT"),
         )
+        self.root.change_variant(variant=linked, actor=self.actor, now=self.now)
         with self.assertRaises(CatalogConflictError):
-            self.root.change_variant(
-                variant=replace(self.variant, sku=SkuCodeVO("PARENT")),
+            self.root.add_variant(
+                variant=replace(
+                    self.variant,
+                    id=CatalogItemIdVO(uuid4()),
+                    inventory_item_id=linked.inventory_item_id,
+                ),
                 actor=self.actor,
                 now=self.now,
+                schema=self.schema,
             )
         with self.assertRaises(InvalidCatalogValueError):
             self.root.update(

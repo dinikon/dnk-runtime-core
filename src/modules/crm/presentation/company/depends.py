@@ -1,3 +1,12 @@
+from src.modules.crm.application.company.port.stock_owner_usage import (
+    CompanyStockOwnerUsagePort,
+)
+from src.modules.crm.infrastructure.company.stock_owner_usage import (
+    InventoryCompanyStockOwnerUsage,
+)
+from src.modules.inventory.infrastructure.stock_document.persistence.owner_usage import (
+    SqlAlchemyStockOwnerUsage,
+)
 from typing import Annotated
 
 from fastapi import Depends
@@ -108,11 +117,23 @@ UpdateCompanyHandlerDep = Annotated[
 ]
 
 
+def get_company_stock_owner_usage(uow: UoWDep) -> CompanyStockOwnerUsagePort:
+    """Компонует публичную проверку Inventory на том же внешнем UoW."""
+    return InventoryCompanyStockOwnerUsage(SqlAlchemyStockOwnerUsage(uow.session))
+
+
+CompanyStockOwnerUsageDep = Annotated[
+    CompanyStockOwnerUsagePort, Depends(get_company_stock_owner_usage)
+]
+
+
 def get_delete_company_handler(
     repository: CompanyRepositoryDep,
     points: CompanyContactPointsDep,
+    stock_owners: CompanyStockOwnerUsageDep,
 ) -> DeleteCompanyHandler:
-    return DeleteCompanyHandler(repository, points)
+    """Собирает удаление с проверкой владения складскими документами."""
+    return DeleteCompanyHandler(repository, points, stock_owners)
 
 
 DeleteCompanyHandlerDep = Annotated[

@@ -7,10 +7,10 @@ from src.modules.channels.infrastructure.platforms.url import normalize_endpoint
 
 
 class WooCommerceSettings(StrictModel):
-    """Единственная валюта и язык интерпретации контента магазина."""
+    """Одна валюта и один язык интерпретации контента канала."""
 
-    currency: Literal["UAH", "USD", "EUR"] = Field(default="UAH", title="Валюта")
-    locale: Literal["uk", "ru", "en"] = Field(default="uk", title="Язык")
+    currency: Literal["UAH", "EUR", "USD"] = Field(default="UAH", title="Валюта")
+    locale: Literal["uk", "ru", "en"] = Field(default="uk", title="Язык контента")
 
 
 class WooCommerceConfig(StrictModel):

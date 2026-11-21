@@ -1,11 +1,11 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
 import {
   draftFor,
   saveDraft,
-  schemaFields,
-  shouldPoll,
-} from "../src/modules/channels/model/channel.schema.ts";
+} from "../src/modules/channels/model/channel.draft.ts";
+import { shouldPoll } from "../src/modules/channels/model/channel.verification.ts";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { schemaFields } from "../src/modules/channels/model/channel.schema.ts";
 import {
   createPayload,
   updatePayload,
@@ -28,22 +28,36 @@ const platform: Platform = {
     },
     $defs: {
       Settings: {
-        properties: { username: { title: "Логин", type: "string" } },
-        required: ["username"],
+        properties: {
+          currency: { const: "UAH", default: "UAH", title: "Валюта" },
+          locales: {
+            type: "array",
+            default: ["ru", "uk"],
+            readOnly: true,
+            title: "Языки контента",
+            description: "Русский — основной, Українська — дополнительный.",
+          },
+        },
+        additionalProperties: false,
       },
     },
   },
   credentialsSchema: {
     properties: {
-      password: { type: "string", format: "password", writeOnly: true },
+      token: { type: "string", format: "password", writeOnly: true },
     },
-    required: ["password"],
+    required: ["token"],
   },
 };
 test("Forms resolve platform-owned nested schemas and password metadata", () => {
+  const fields = schemaFields(platform.configSchema, "settings");
+  assert.equal(fields.length, 2);
+  assert.equal(fields[0]?.readOnly, true);
+  assert.equal(fields[1]?.readOnly, true);
+  assert.deepEqual(fields[1]?.defaultValue, ["ru", "uk"]);
   assert.equal(
-    schemaFields(platform.configSchema, "settings")[0]?.key,
-    "username",
+    fields[1]?.description,
+    "Русский — основной, Українська — дополнительный.",
   );
   assert.equal(schemaFields(platform.credentialsSchema)[0]?.secret, true);
   assert.equal(schemaFields(platform.configSchema)[0]?.readOnly, true);
@@ -51,12 +65,11 @@ test("Forms resolve platform-owned nested schemas and password metadata", () => 
 test("Create serializes a complete independent secret snapshot; editing omits retained credentials", () => {
   const draft = draftFor(platform);
   draft.name = "Store";
-  draft.settings.username = "seller";
-  draft.credentials.password = "one-time-secret";
+  draft.credentials.token = "one-time-secret";
   const value = saveDraft(draft, platform);
-  draft.credentials.password = "later-input";
+  draft.credentials.token = "later-input";
   const body = createPayload(value);
-  assert.equal(body.credentials.password, "one-time-secret");
+  assert.equal(body.credentials.token, "one-time-secret");
   assert.equal(body.platform_kind, "rozetka");
   draft.replaceCredentials = false;
   assert.equal(
@@ -73,7 +86,7 @@ test("Reading configuration never populates secret fields; interrupted jobs stop
     config: {
       version: 1,
       endpoint: "https://api-seller.rozetka.com.ua",
-      settings: { username: "seller" },
+      settings: {},
     },
     config_revision: 2,
     identity: null,
@@ -90,8 +103,14 @@ test("Reading configuration never populates secret fields; interrupted jobs stop
     recovery_required: false,
   });
   const draft = draftFor(platform, channel);
-  assert.deepEqual(draft.credentials, { password: "" });
+  assert.deepEqual(draft.credentials, { token: "" });
   assert.equal(draft.replaceCredentials, false);
+  const saved = updatePayload(saveDraft(draft, platform), channel.revision);
+  assert.deepEqual(saved.config.settings, {
+    currency: "UAH",
+    locales: ["ru", "uk"],
+  });
+  assert.deepEqual(channel.config.settings, {});
   assert.equal(shouldPoll(channel), true);
   assert.equal(shouldPoll({ ...channel, recoveryRequired: true }), false);
   assert.equal(
@@ -102,4 +121,60 @@ test("Reading configuration never populates secret fields; interrupted jobs stop
     false,
   );
   assert.equal("credentials" in (channel as Channel), false);
+});
+
+const woo: Platform = {
+  ...platform,
+  kind: "woocommerce",
+  title: "WooCommerce",
+  configSchema: {
+    properties: {
+      endpoint: { type: "string" },
+      settings: { $ref: "#/$defs/WooCommerceSettings" },
+    },
+    $defs: {
+      WooCommerceSettings: {
+        properties: {
+          currency: {
+            enum: ["UAH", "EUR", "USD"],
+            default: "UAH",
+            title: "Валюта",
+          },
+          locale: {
+            enum: ["uk", "ru", "en"],
+            default: "uk",
+            title: "Язык контента",
+          },
+        },
+      },
+    },
+  },
+};
+test("Woo uses independent scalar choices; platform defaults replace previous settings", () => {
+  const fixed = draftFor(platform);
+  assert.deepEqual(fixed.settings, { currency: "UAH", locales: ["ru", "uk"] });
+  const selected = draftFor(woo);
+  assert.deepEqual(selected.settings, { currency: "UAH", locale: "uk" });
+  const fields = schemaFields(woo.configSchema, "settings");
+  assert.deepEqual(
+    fields.map((field) => field.options),
+    [
+      ["UAH", "EUR", "USD"],
+      ["uk", "ru", "en"],
+    ],
+  );
+  assert.ok(fields.every((field) => !field.readOnly));
+  selected.settings.currency = "EUR";
+  selected.settings.locale = "en";
+  const value = saveDraft(selected, woo);
+  selected.settings.locale = "ru";
+  assert.deepEqual(value.config.settings, { currency: "EUR", locale: "en" });
+});
+test("Fixed locales remain an array and saved settings are isolated from drafts", () => {
+  const first = draftFor(platform),
+    second = draftFor(platform);
+  const value = saveDraft(first, platform);
+  (first.settings.locales as string[]).push("en");
+  assert.deepEqual(value.config.settings.locales, ["ru", "uk"]);
+  assert.deepEqual(second.settings.locales, ["ru", "uk"]);
 });

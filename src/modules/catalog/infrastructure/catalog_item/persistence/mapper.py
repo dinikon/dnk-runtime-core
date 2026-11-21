@@ -42,7 +42,6 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     LengthVO,
     LengthUnit,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
 )
@@ -133,7 +132,12 @@ class CatalogItemMapper:
             id=CatalogItemIdVO(identifier),
             product_type_id=product_type_id or EntityIdVO(row["product_type_id"]),
             status=CatalogItemStatus(row["status"]),
-            sku=row["sku"],
+            sku=row.get("sku"),
+            inventory_item_id=(
+                EntityIdVO(row["inventory_item_id"])
+                if row.get("inventory_item_id")
+                else None
+            ),
             virtual=row["virtual"],
             price=price,
             weight=(
@@ -164,7 +168,7 @@ class CatalogItemMapper:
             identifier=CatalogItemIdVO.from_value(value.id),
             product_type_id=value.product_type_id,
             status=value.status,
-            sku=SkuCodeVO(value.sku) if value.sku else None,
+            inventory_item_id=value.inventory_item_id,
             virtual=value.virtual,
             price=value.price,
             weight=value.weight,
@@ -192,7 +196,7 @@ class CatalogItemMapper:
             created_by=value.created_by,
             updated_by=value.updated_by,
             status=value.status,
-            sku=SkuCodeVO(value.sku) if value.sku is not None else None,
+            inventory_item_id=value.inventory_item_id,
             virtual=value.virtual,
             price=value.price,
             stock=value.stock,
@@ -217,7 +221,9 @@ class CatalogItemMapper:
                 None if isinstance(item, CatalogVariant) else item.product_type_id.uuid
             ),
             status=item.status.value,
-            sku=item.sku.value if item.sku else None,
+            inventory_item_id=(
+                item.inventory_item_id.uuid if item.inventory_item_id else None
+            ),
             created_at=item.created_at,
             updated_at=item.updated_at,
             created_by=item.created_by.uuid,

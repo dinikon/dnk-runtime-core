@@ -1,0 +1,576 @@
+from src.modules.inventory.domain.stock_document.return_error import (
+    InvalidStockReturnError,
+)
+from src.modules.inventory.domain.stock_document.value_object.return_direction import (
+    ReturnDirection,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_receipt_route import (
+    ReturnReceiptExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.value_object.return_issue_route import (
+    ReturnIssueExecutionRouteVO,
+)
+from src.modules.inventory.domain.stock_execution.return_origin_snapshot import (
+    StockReturnOriginSnapshot,
+    StockReturnUsageSnapshot,
+    StockReturnFactSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_return import StockReturnPolicy
+from src.modules.inventory.domain.policy.stock_status_change_balance import (
+    StockStatusChangeBalancePolicy,
+)
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Self
+
+from src.modules.inventory.domain.inventory_item.snapshot import (
+    InventoryItemTrackingSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_posting_tracking import (
+    StockPostingTrackingPolicy,
+)
+from src.modules.inventory.domain.policy.stock_receipt_valuation import (
+    StockReceiptValuationPolicy,
+)
+from src.modules.inventory.domain.policy.stock_issue_valuation import (
+    StockIssueValuationPolicy,
+)
+from src.modules.inventory.domain.policy.stock_movement_valuation import (
+    StockMovementValuationPolicy,
+)
+from src.modules.inventory.domain.stock_posting.movement_valuation_snapshot import (
+    StockMovementValuationSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.value_object.movement_entry_pair import (
+    StockMovementEntryPairVO,
+)
+from src.modules.inventory.domain.policy.stock_posting_fifo import (
+    StockPostingFifoPolicy,
+)
+from src.modules.inventory.domain.stock_posting.posting_fifo_plan_snapshot import (
+    StockPostingFifoPlanSnapshot,
+)
+from src.modules.inventory.domain.valuation_layer.fifo_snapshot import (
+    ValuationLayerFifoSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.issue_valuation_snapshot import (
+    StockIssueValuationSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.receipt_valuation_snapshot import (
+    StockReceiptValuationSnapshot,
+)
+from src.modules.inventory.domain.error import StockAdjustmentError
+from src.modules.inventory.domain.inventory_count.adjustment_source_snapshot import (
+    InventoryCountAdjustmentSourceSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.baseline_snapshot import (
+    InventoryCountBaselineSnapshot,
+)
+from src.modules.inventory.domain.inventory_count.result_snapshot import (
+    InventoryCountResultSnapshot,
+)
+from src.modules.inventory.domain.inventory_item.document_snapshot import (
+    InventoryItemDocumentSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_execution import (
+    StockAdjustmentExecutionPolicy,
+)
+from src.modules.inventory.domain.policy.stock_adjustment_posting import (
+    StockAdjustmentPostingPolicy,
+)
+from src.modules.inventory.domain.stock_document.adjustment_execution_snapshot import (
+    StockDocumentAdjustmentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_execution.adjustment_snapshot import (
+    StockAdjustmentExecutionSnapshot,
+)
+from src.modules.inventory.domain.stock_position.counting_snapshot import (
+    StockPositionCountingSnapshot,
+)
+from src.modules.inventory.domain.stock_posting.adjustment_entry_snapshot import (
+    StockAdjustmentEntrySnapshot,
+)
+from src.modules.inventory.domain.stock_serial.snapshot import StockSerialSnapshot
+from src.modules.inventory.domain.stock_serial.presence_snapshot import (
+    StockSerialPresenceSnapshot,
+)
+from src.modules.inventory.domain.stock_lot.snapshot import StockLotSnapshot
+from src.modules.inventory.domain.warehouse.snapshot import WarehouseSnapshot
+from src.modules.inventory.domain.policy.stock_execution_posting import (
+    StockExecutionPostingPolicy,
+)
+from src.modules.inventory.domain.stock_execution.error import (
+    InvalidStockExecutionPostingSnapshotError,
+)
+from src.modules.inventory.domain.stock_execution.posting_snapshot import (
+    StockExecutionPostingSnapshot,
+)
+from src.modules.inventory.domain.policy.stock_movement_balance import (
+    StockMovementBalancePolicy,
+)
+from src.modules.inventory.domain.policy.stock_posting import StockPostingPolicy
+from src.modules.inventory.domain.stock_location.snapshot import StockLocationSnapshot
+from src.modules.inventory.domain.stock_position.snapshot import StockPositionSnapshot
+from src.modules.inventory.domain.stock_posting.entity.stock_ledger_entry import (
+    StockLedgerEntry,
+)
+from src.modules.inventory.domain.stock_posting.error import (
+    InvalidPostingContextError,
+    InvalidStockPostingSnapshotError,
+    InvalidStockReversalError,
+    StockPostingExecutionTimeError,
+)
+from src.modules.inventory.domain.stock_posting.snapshot import StockPostingSnapshot
+from src.modules.inventory.domain.stock_posting.value_object.identifier import (
+    StockPostingIdVO,
+)
+from src.modules.inventory.domain.stock_posting.value_object.entry_binding import (
+    StockPostingEntryBindingVO,
+)
+from src.modules.inventory.domain.stock_posting.value_object.ledger_entry_id import (
+    StockLedgerEntryIdVO,
+)
+from src.modules.inventory.domain.stock_posting.value_object.operation_type import (
+    StockOperationType,
+)
+from src.modules.inventory.domain.stock_posting.value_object.posting_source import (
+    PostingSourceVO,
+)
+from src.modules.inventory.domain.value_object.stock_delta import StockDeltaVO
+
+
+@dataclass(frozen=True, slots=True)
+class StockPosting:
+    """Неизменяемый факт проведения, владеющий журналом без прямого изменения позиций."""
+
+    id: StockPostingIdVO
+    source: PostingSourceVO
+    operation_type: StockOperationType
+    posted_at: datetime
+    entries: tuple[StockLedgerEntry, ...]
+    reversal_of_id: StockPostingIdVO | None
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        source: PostingSourceVO,
+        operation_type: StockOperationType,
+        posted_at: datetime,
+        entries: tuple[StockLedgerEntry, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        inventory_items: tuple[InventoryItemTrackingSnapshot, ...] = (),
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+        locations: tuple[StockLocationSnapshot, ...] = (),
+    ) -> Self:
+        """Создаёт завершённое обычное проведение по снимкам позиций и системному пересчёту."""
+        if operation_type in (
+            StockOperationType.RETURN,
+            StockOperationType.WRITE_OFF,
+            StockOperationType.STATUS_CHANGE,
+        ):
+            raise InvalidStockExecutionPostingSnapshotError(
+                "Операция проводится только из проверенного исполнения с обязательными реквизитами."
+            )
+        if operation_type is StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError(
+                "Корректировка проводится только из полного факта с повторной проверкой основания."
+            )
+        posting = cls.restore(
+            identifier=identifier,
+            source=source,
+            operation_type=operation_type,
+            posted_at=posted_at,
+            entries=entries,
+            reversal_of_id=None,
+        )
+        for entry in posting.entries:
+            entry.ensure_current_conversion()
+        posting._ensure_context(positions=positions, locations=locations)
+        StockPostingTrackingPolicy.ensure_compatible(
+            operation_type=operation_type,
+            positions=positions,
+            inventory_items=inventory_items,
+            lots=lots,
+            serials=serials,
+        )
+        return posting
+
+    @classmethod
+    def create_from_execution(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        execution: StockExecutionPostingSnapshot,
+        posted_at: datetime,
+        positions: tuple[StockPositionSnapshot, ...],
+        inventory_items: tuple[InventoryItemTrackingSnapshot, ...] = (),
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+        locations: tuple[StockLocationSnapshot, ...],
+        entry_bindings: tuple[StockPostingEntryBindingVO, ...],
+        return_origin: StockReturnOriginSnapshot | None = None,
+        return_usage: tuple[StockReturnUsageSnapshot, ...] = (),
+    ) -> Self:
+        """Выводит основание и записи из исполнения, сохраняя один однонаправленный итог на позицию."""
+        if not isinstance(execution, StockExecutionPostingSnapshot):
+            raise InvalidStockExecutionPostingSnapshotError(
+                "Нужен снимок исполнения для построения журнала."
+            )
+        execution.ensure_valid()
+        if execution.return_details is not None:
+            StockReturnPolicy.ensure_facts(
+                details=execution.return_details,
+                warehouse_id=execution.warehouse_id,
+                owner_id=execution.owner_id,
+                facts=tuple(
+                    StockReturnFactSnapshot(
+                        line.route.origin_line_id,
+                        line.route.dimensions[0],
+                        line.quantity,
+                        line.base_uom,
+                    )
+                    for line in execution.lines
+                    if isinstance(
+                        line.route,
+                        (ReturnReceiptExecutionRouteVO, ReturnIssueExecutionRouteVO),
+                    )
+                ),
+                origin=return_origin,
+                usage=return_usage,
+            )
+            if (
+                return_origin is not None
+                and execution.executed_at < return_origin.executed_at
+            ):
+                raise InvalidStockReturnError(
+                    "Возврат не может предшествовать исходному исполнению."
+                )
+        normalized = StockPostingPolicy.normalize_time(posted_at)
+        if normalized < execution.executed_at:
+            raise StockPostingExecutionTimeError(
+                "Проведение не может быть раньше фактического исполнения."
+            )
+        entries = StockExecutionPostingPolicy.build_entries(
+            execution=execution,
+            positions=positions,
+            locations=locations,
+            entry_bindings=entry_bindings,
+        )
+        if execution.operation_type in (
+            StockOperationType.RETURN,
+            StockOperationType.WRITE_OFF,
+            StockOperationType.STATUS_CHANGE,
+        ):
+            posting = cls.restore(
+                identifier=identifier,
+                source=PostingSourceVO(execution.id),
+                operation_type=execution.operation_type,
+                posted_at=normalized,
+                entries=entries,
+                reversal_of_id=None,
+            )
+            for entry in posting.entries:
+                entry.ensure_current_conversion()
+            posting._ensure_context(
+                positions=positions,
+                locations=(
+                    locations
+                    if execution.operation_type is StockOperationType.STATUS_CHANGE
+                    else ()
+                ),
+            )
+            StockPostingTrackingPolicy.ensure_compatible(
+                operation_type=(
+                    StockOperationType.RECEIPT
+                    if execution.return_details is not None
+                    and execution.return_details.direction
+                    is ReturnDirection.FROM_RECIPIENT
+                    else execution.operation_type
+                ),
+                positions=positions,
+                inventory_items=inventory_items,
+                lots=lots,
+                serials=serials,
+            )
+            return posting
+        return cls.create(
+            identifier=identifier,
+            source=PostingSourceVO(execution.id),
+            operation_type=execution.operation_type,
+            posted_at=normalized,
+            entries=entries,
+            positions=positions,
+            inventory_items=inventory_items,
+            lots=lots,
+            serials=serials,
+            locations=(
+                locations
+                if execution.operation_type is StockOperationType.INTERNAL_MOVE
+                else ()
+            ),
+        )
+
+    @classmethod
+    def create_from_adjustment_execution(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        execution: StockAdjustmentExecutionSnapshot,
+        document: StockDocumentAdjustmentExecutionSnapshot,
+        posted_at: datetime,
+        inventory_count: InventoryCountAdjustmentSourceSnapshot,
+        result: InventoryCountResultSnapshot,
+        baseline: InventoryCountBaselineSnapshot,
+        warehouse: WarehouseSnapshot,
+        inventory_items: tuple[InventoryItemDocumentSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+        positions: tuple[StockPositionCountingSnapshot, ...],
+        found_positions: tuple[StockPositionCountingSnapshot, ...],
+        entry_bindings: tuple[StockPostingEntryBindingVO, ...],
+        presence: tuple[StockSerialPresenceSnapshot, ...],
+        lots: tuple[StockLotSnapshot, ...] = (),
+        serials: tuple[StockSerialSnapshot, ...] = (),
+    ) -> Self:
+        """Строит полный Ledger корректировки по заново проверенному исходному запасу и новым нулевым FOUND-позициям."""
+        normalized = StockPostingPolicy.normalize_time(posted_at)
+        StockAdjustmentExecutionPolicy.ensure_current(
+            execution=execution,
+            document=document,
+            inventory_count=inventory_count,
+            result=result,
+            baseline=baseline,
+            warehouse=warehouse,
+            inventory_items=inventory_items,
+            locations=locations,
+            positions=positions,
+            as_of=normalized,
+            presence=presence,
+            lots=lots,
+            serials=serials,
+        )
+        entries = StockAdjustmentPostingPolicy.build_entries(
+            execution=execution,
+            positions=positions,
+            found_positions=found_positions,
+            entry_bindings=entry_bindings,
+        )
+        return cls.restore(
+            identifier=identifier,
+            source=PostingSourceVO(execution.id),
+            operation_type=StockOperationType.ADJUSTMENT,
+            posted_at=normalized,
+            entries=entries,
+            reversal_of_id=None,
+        )
+
+    @classmethod
+    def restore(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        source: PostingSourceVO,
+        operation_type: StockOperationType,
+        posted_at: datetime,
+        entries: tuple[StockLedgerEntry, ...],
+        reversal_of_id: StockPostingIdVO | None,
+    ) -> Self:
+        """Восстанавливает полный исторический состав без текущих снимков и новых коэффициентов."""
+        posting = cls(
+            identifier,
+            source,
+            operation_type,
+            StockPostingPolicy.normalize_time(posted_at),
+            entries,
+            reversal_of_id,
+        )
+        posting._validate()
+        return posting
+
+    @classmethod
+    def create_reversal(
+        cls,
+        *,
+        identifier: StockPostingIdVO,
+        source: PostingSourceVO,
+        posted_at: datetime,
+        original: StockPostingSnapshot,
+        entry_ids: tuple[StockLedgerEntryIdVO, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...] = (),
+    ) -> Self:
+        """Создаёт точную компенсацию всех записей с новыми ID и основанием без правки оригинала."""
+        if not isinstance(original, StockPostingSnapshot):
+            raise InvalidStockPostingSnapshotError("Нужен снимок исходного проведения.")
+        original.ensure_valid()
+        if original.operation_type is StockOperationType.ADJUSTMENT:
+            raise StockAdjustmentError(
+                "Сторно корректировки требует отдельного сценария с новым основанием."
+            )
+        normalized = StockPostingPolicy.normalize_time(posted_at)
+        if (
+            not isinstance(identifier, StockPostingIdVO)
+            or identifier == original.id
+            or not isinstance(source, PostingSourceVO)
+            or source.execution_id == original.source.execution_id
+            or normalized < original.posted_at
+            or not isinstance(entry_ids, tuple)
+            or len(entry_ids) != len(original.entries)
+        ):
+            raise InvalidStockReversalError(
+                "Компенсация требует новых ID и основания, полного состава и времени не раньше исходного."
+            )
+        original_ids = {entry.id for entry in original.entries}
+        entries = []
+        for entry_id, entry in zip(entry_ids, original.entries, strict=True):
+            if (
+                not isinstance(entry_id, StockLedgerEntryIdVO)
+                or entry_id in original_ids
+            ):
+                raise InvalidStockReversalError(
+                    "Каждая компенсирующая запись требует нового StockLedgerEntryIdVO."
+                )
+            entries.append(
+                StockLedgerEntry.restore(
+                    identifier=entry_id,
+                    position_id=entry.position_id,
+                    quantity_delta=StockDeltaVO(
+                        entry.quantity_delta.value.copy_negate()
+                    ),
+                    base_uom=entry.base_uom,
+                    conversion=entry.conversion,
+                )
+            )
+        posting = cls.restore(
+            identifier=identifier,
+            source=source,
+            operation_type=original.operation_type,
+            posted_at=normalized,
+            entries=tuple(entries),
+            reversal_of_id=original.id,
+        )
+        posting._ensure_context(positions=positions, locations=locations)
+        return posting
+
+    def adjustment_entries(
+        self, execution: StockAdjustmentExecutionSnapshot
+    ) -> tuple[StockAdjustmentEntrySnapshot, ...]:
+        """Выдаёт адресные снимки для физических позиций после полного сопоставления Ledger с фактом."""
+        return StockAdjustmentPostingPolicy.application_snapshots(
+            posting=self.snapshot(), execution=execution
+        )
+
+    def receipt_valuation_snapshot(
+        self,
+        *,
+        ledger_entry_id: StockLedgerEntryIdVO,
+        position: StockPositionSnapshot,
+        location: StockLocationSnapshot,
+    ) -> StockReceiptValuationSnapshot:
+        """Выделяет историческое основание стоимости одной записи прихода без цены, новых движений или изменения позиции."""
+        return StockReceiptValuationPolicy.build_snapshot(
+            posting=self.snapshot(),
+            ledger_entry_id=ledger_entry_id,
+            position=position,
+            location=location,
+        )
+
+    def issue_valuation_snapshot(
+        self,
+        *,
+        ledger_entry_id: StockLedgerEntryIdVO,
+        position: StockPositionSnapshot,
+        location: StockLocationSnapshot,
+    ) -> StockIssueValuationSnapshot:
+        """Выделяет основание стоимости конкретного ISSUE без потребления слоя или изменения физической позиции."""
+        return StockIssueValuationPolicy.build_snapshot(
+            posting=self.snapshot(),
+            ledger_entry_id=ledger_entry_id,
+            position=position,
+            location=location,
+        )
+
+    def issue_fifo_plan(
+        self,
+        *,
+        candidates: tuple[ValuationLayerFifoSnapshot, ...],
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> StockPostingFifoPlanSnapshot:
+        """Строит полное FIFO-основание всех записей расхода без изменения физического журнала или слоёв."""
+        posting = self.snapshot()
+        plan = StockPostingFifoPlanSnapshot(
+            posting,
+            StockPostingFifoPolicy.build_plans(
+                posting=posting,
+                candidates=candidates,
+                positions=positions,
+                locations=locations,
+            ),
+        )
+        plan.ensure_valid()
+        return plan
+
+    def movement_valuation_snapshot(
+        self,
+        *,
+        pair: StockMovementEntryPairVO,
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> StockMovementValuationSnapshot:
+        """Выделяет проверяемую пару переноса стоимости после проверки всего INTERNAL_MOVE без изменения запасов."""
+        return StockMovementValuationPolicy.build_snapshot(
+            posting=self.snapshot(),
+            pair=pair,
+            positions=positions,
+            locations=locations,
+        )
+
+    def snapshot(self) -> StockPostingSnapshot:
+        """Возвращает проверенный состав для будущей компенсации без чужих агрегатов."""
+        self._validate()
+        return StockPostingSnapshot(
+            self.id,
+            self.source,
+            self.operation_type,
+            self.posted_at,
+            self.entries,
+            self.reversal_of_id,
+        )
+
+    def _validate(self) -> None:
+        """Проверяет собственный состав и обычные знаки без текущих настроек и I/O."""
+        StockPostingPolicy.ensure_valid(
+            identifier=self.id,
+            source=self.source,
+            operation_type=self.operation_type,
+            posted_at=self.posted_at,
+            entries=self.entries,
+            reversal_of_id=self.reversal_of_id,
+        )
+
+    def _ensure_context(
+        self,
+        *,
+        positions: tuple[StockPositionSnapshot, ...],
+        locations: tuple[StockLocationSnapshot, ...],
+    ) -> None:
+        """Сверяет ссылки и баланс перемещения, оставляя доступность и физический переход позициям."""
+        if self.operation_type is StockOperationType.STATUS_CHANGE:
+            StockStatusChangeBalancePolicy.ensure_balanced(
+                entries=self.entries, positions=positions, locations=locations
+            )
+        elif self.operation_type is StockOperationType.INTERNAL_MOVE:
+            StockMovementBalancePolicy.ensure_balanced(
+                entries=self.entries, positions=positions, locations=locations
+            )
+        else:
+            if not isinstance(locations, tuple) or locations:
+                raise InvalidPostingContextError(
+                    "Локации отдельно передаются только для внутреннего перемещения."
+                )
+            StockPostingPolicy.ensure_positions(
+                entries=self.entries, positions=positions
+            )

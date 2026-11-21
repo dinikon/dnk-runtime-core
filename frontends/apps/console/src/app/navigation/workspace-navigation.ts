@@ -1,4 +1,12 @@
-import { Building2, LifeBuoy, ShoppingBasket, Users, Plug } from "@lucide/vue";
+import {
+  Building2,
+  LifeBuoy,
+  ShoppingBasket,
+  Users,
+  Plug,
+  Warehouse,
+  Package,
+} from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
@@ -11,6 +19,58 @@ export const workspaceNavigation: WorkspaceNavigation = {
     {
       title: "Каталог",
       items: [{ title: "Товары", url: "/catalog/items", icon: ShoppingBasket }],
+    },
+    {
+      title: "Склад",
+      items: [
+        {
+          title: "Остатки",
+          url: "/inventory/stock-positions",
+          icon: Warehouse,
+        },
+        {
+          title: "Движения",
+          url: "/inventory/stock-movements",
+          icon: Warehouse,
+        },
+        {
+          title: "Поступления",
+          url: "/inventory/stock-documents",
+          icon: Warehouse,
+        },
+        {
+          title: "Расходы",
+          url: "/inventory/stock-documents/issues",
+          icon: Warehouse,
+        },
+        {
+          title: "Внутренние перемещения",
+          url: "/inventory/stock-documents/internal-moves",
+          icon: Warehouse,
+        },
+        {
+          title: "Списания",
+          url: "/inventory/stock-documents/write-offs",
+          icon: Warehouse,
+        },
+        {
+          title: "Состояние запаса",
+          url: "/inventory/stock-documents/status-changes",
+          icon: Warehouse,
+        },
+        {
+          title: "Возвраты",
+          url: "/inventory/stock-documents/returns",
+          icon: Warehouse,
+        },
+        { title: "Номенклатура", url: "/inventory/items", icon: Warehouse },
+        { title: "Склады", url: "/inventory/warehouses", icon: Building2 },
+        {
+          title: "Типы тары",
+          url: "/inventory/packaging-types",
+          icon: Package,
+        },
+      ],
     },
     {
       title: "CRM",

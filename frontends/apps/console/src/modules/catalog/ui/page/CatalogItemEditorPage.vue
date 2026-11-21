@@ -1,23 +1,28 @@
 <script setup lang="ts">
+import {
+  InventorySkuPicker,
+  inventoryItemEditLocation,
+} from "@/modules/inventory";
 import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { getApiErrorMessage } from "@/app/providers/http";
 import { useProductPage } from "../../model/use-product-page";
-import { tabGroup } from "../../model/product-editor-layout";
+import { useProductEditorPageState } from "../../model/use-product-editor-page-state";
 import type { ProductSection } from "../../model/product.types";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CatalogVariantsPage from "./CatalogVariantsPage.vue";
 import ProductHeader from "../product/ProductHeader.vue";
 import ProductEditor from "../product/ProductEditor.vue";
 const {
   ctx,
+  skuSearch,
+  skuMutation,
+  setSku,
   id,
   scope,
   item,
   schema,
-  tab,
   pending,
   error,
   blocked,
@@ -33,7 +38,11 @@ const {
   resets,
   contentValues,
   changeContent,
-} = useProductPage(true);
+  flush,
+} = useProductPage();
+const pageState = useProductEditorPageState(
+  () => item.data.value?.kind === "variable",
+);
 const sections: ProductSection[] = [
   "content",
   "status",
@@ -55,13 +64,14 @@ function focused(): void {
 }
 </script>
 <template>
-  <div class="product-editor min-h-0 min-w-0 flex-1 overflow-y-auto">
-    <div
-      class="mx-auto flex w-full max-w-[1440px] flex-col gap-6 p-4 pb-12 md:p-8"
-    >
+  <div
+    class="product-editor -mx-4 -mb-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-background lg:overflow-hidden"
+  >
+    <Teleport to="#workspace-page-header" defer>
       <ProductHeader
-        :title="item.data.value?.title ?? 'Товар без названия'"
-        editing
+        :title="
+          contentValues.title || item.data.value?.title || 'Товар без названия'
+        "
         :locale="ctx.locale.value"
         :options="ctx.options.value"
         @back="
@@ -71,22 +81,26 @@ function focused(): void {
           })
         "
         @locale="ctx.selectLocale"
-        @mode="
-          ctx.router.push({
-            path: `/catalog/items/${id}`,
-            query: { locale: ctx.locale.value },
-          })
-        "
       />
+    </Teleport>
+    <div
+      v-if="
+        item.isError.value ||
+        schema.isError.value ||
+        (!ctx.active.value && !ctx.locales.isPending.value)
+      "
+      class="flex shrink-0 flex-col gap-3 p-4"
+    >
       <Alert
         v-if="item.isError.value || schema.isError.value"
         variant="destructive"
-        ><AlertTitle>{{
+      >
+        <AlertTitle>{{
           item.isError.value
             ? "Не удалось открыть товар"
             : "Не удалось загрузить поля контента"
-        }}</AlertTitle
-        ><AlertDescription
+        }}</AlertTitle>
+        <AlertDescription
           >{{
             getApiErrorMessage(
               item.error.value || schema.error.value,
@@ -99,8 +113,8 @@ function focused(): void {
             @click="reload"
             >Повторить загрузку</Button
           ></AlertDescription
-        ></Alert
-      >
+        >
+      </Alert>
       <Alert v-if="!ctx.active.value && !ctx.locales.isPending.value"
         ><AlertTitle>Редактирование недоступно</AlertTitle
         ><AlertDescription
@@ -108,70 +122,82 @@ function focused(): void {
           просмотра.</AlertDescription
         ></Alert
       >
-      <Skeleton v-if="item.isPending.value" class="h-96 w-full" />
-      <Tabs
-        v-if="item.data.value?.kind === 'variable'"
-        :model-value="
-          ctx.route.query.tab === 'variants' ? 'variants' : 'general'
-        "
-        @update:model-value="
-          ctx.router.replace({
-            query: {
-              ...ctx.route.query,
-              tab: String($event),
-              variant: undefined,
-            },
-          })
-        "
-        ><TabsList aria-label="Разделы вариативного товара"
-          ><TabsTrigger value="general">Товар</TabsTrigger
-          ><TabsTrigger value="variants"
-            >Варианты · {{ item.data.value.variant_count ?? 0 }}</TabsTrigger
-          ></TabsList
-        ></Tabs
-      >
-      <CatalogVariantsPage
-        v-if="
-          item.data.value?.kind === 'variable' &&
-          ctx.route.query.tab === 'variants'
-        "
-        :root-id="id"
-        :parent-stock="item.data.value.stock"
-      />
-      <ProductEditor
-        v-if="item.data.value"
-        v-show="
-          !(
-            item.data.value.kind === 'variable' &&
-            ctx.route.query.tab === 'variants'
-          )
-        "
-        :key="scope"
-        :item="item.data.value"
-        :content="contentValues"
-        :disabled="blocked"
-        :content-disabled="!schema.data.value?.schema.schema_version"
-        :errors="errors"
-        :dirty="dirty"
-        :resets="resets"
-        :pending="pending"
-        :uploading="uploading"
-        :save-status="saveStatus"
-        :error="error"
-        :initial-group="
-          ctx.route.query.tab && ctx.route.query.tab !== 'variants'
-            ? tabGroup[tab]
-            : undefined
-        "
-        :focus-title="ctx.route.query.focus === 'title'"
-        :image-url="imageUrl"
-        @content="changeContent"
-        @save="save"
-        @upload="upload"
-        @reload="reload"
-        @retry="retry"
-        @focused="focused"
-      />
     </div>
+    <div
+      v-if="item.isPending.value"
+      role="status"
+      aria-label="Загрузка товара"
+      class="grid flex-1 gap-6 p-5 lg:grid-cols-[340px_1fr]"
+    >
+      <Skeleton class="h-96 w-full" /><Skeleton class="h-72 w-full" />
+    </div>
+    <ProductEditor
+      v-if="item.data.value"
+      :key="scope"
+      :item="item.data.value"
+      :content="contentValues"
+      :disabled="blocked"
+      :content-disabled="!schema.data.value?.schema.schema_version"
+      :errors="errors"
+      :dirty="dirty"
+      :resets="resets"
+      :pending="pending"
+      :uploading="uploading"
+      :save-status="saveStatus"
+      :error="error"
+      :active-tab="pageState.tab.value"
+      :initial-group="pageState.initialGroup.value"
+      :focus-title="ctx.route.query.focus === 'title'"
+      :image-url="imageUrl"
+      @content="changeContent"
+      @save="save"
+      @upload="upload"
+      @reload="reload"
+      @retry="retry"
+      @focused="focused"
+      @tab="pageState.selectTab"
+    >
+      <template #sku>
+        <InventorySkuPicker
+          :id="`${item.data.value.id}-sku`"
+          :search="skuSearch.search.value"
+          :options="skuSearch.options.value"
+          :loading="skuSearch.loading.value"
+          :error="skuSearch.error.value"
+          :total="skuSearch.total.value"
+          :selected-code="item.data.value.sku"
+          :selected-id="item.data.value.inventoryItemId"
+          :disabled="blocked"
+          :pending="skuMutation.isPending.value"
+          @search="skuSearch.search.value = $event"
+          @select="setSku({ mode: 'existing', inventoryItemId: $event.id })"
+          @create="setSku({ mode: 'create', sku: $event })"
+          @clear="setSku({ mode: 'clear' })"
+          @retry="skuSearch.retry"
+        />
+        <Button
+          v-if="item.data.value.inventoryItemId"
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="blocked || pending"
+          @click="
+            ctx.router.push(
+              inventoryItemEditLocation(
+                item.data.value.inventoryItemId,
+                ctx.route.fullPath,
+              ),
+            )
+          "
+          >Настройки SKU</Button
+        >
+      </template>
+      <template v-if="item.data.value.kind === 'variable'" #variants
+        ><CatalogVariantsPage
+          :root-id="id"
+          :parent-stock="item.data.value.stock"
+          :prepare-edit="flush"
+      /></template>
+    </ProductEditor>
   </div>
 </template>

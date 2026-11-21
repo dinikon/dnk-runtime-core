@@ -5,7 +5,10 @@ from src.modules.files.domain.error import (
     InvalidStorageStateError,
     InvalidFileError,
 )
-from src.modules.files.domain.stored_file.error import FileStateConflictError
+from src.modules.files.domain.stored_file.error import (
+    FileStateConflictError,
+    FileInUseError,
+)
 from src.modules.files.application.port.storage import (
     StorageOwnershipError,
     StorageConfigurationError,
@@ -37,6 +40,8 @@ async def request_file_purge(
         return Response(status_code=202)
     except (FileNotFoundError, StorageNotFoundError) as error:
         raise HTTPException(404, "File or storage was not found.") from error
+    except FileInUseError:
+        raise HTTPException(409, detail={"code": "file_in_use"}) from None
     except (
         FileStateConflictError,
         InvalidStorageStateError,

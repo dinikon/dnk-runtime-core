@@ -1,4 +1,4 @@
-"""Удалённые модули отсутствуют в API и новой начальной схеме."""
+"""Удалённые реализации отсутствуют в API и актуальной tenant-схеме."""
 
 import ast
 import unittest
@@ -27,27 +27,33 @@ class ModuleRegistrationTests(unittest.TestCase):
     def test_removed_source_modules_are_absent(self) -> None:
         """Backend и Console не содержат исходников удалённых модулей."""
         for relative in (
-            "src/modules/inventory",
             "src/modules/warehousing",
             "src/modules/price_lists",
-            "frontends/apps/console/src/modules/inventory",
+            "src/modules/supplier_sourcing/application",
+            "src/modules/supplier_sourcing/infrastructure",
+            "src/modules/supplier_sourcing/presentation",
+            "frontends/apps/console/src/modules/supplier-sourcing",
             "frontends/apps/console/src/modules/price-lists",
             "src/config/feature/price_lists_config.py",
         ):
             self.assertFalse((ROOT / relative).exists(), relative)
+        self.assertTrue((ROOT / "src/modules/supplier_sourcing/domain").is_dir())
+        self.assertTrue(
+            (ROOT / "frontends/apps/console/src/modules/inventory").is_dir()
+        )
 
     def test_routes_include_neighbors_but_exclude_removed_modules(self) -> None:
         """OpenAPI содержит соседние модули без контрактов удалённых функций."""
         schema = create_app().openapi()
         paths = set(schema["paths"])
         for prefix in (
-            "/api/channels",
-            "/api/console/inventory",
+            "/api/console/supplier-sourcing",
             "/api/console/warehousing",
             "/api/console/price-lists",
             "/api/console/price-list-offers",
         ):
             self.assertFalse(any(path.startswith(prefix) for path in paths), prefix)
+        self.assertFalse(any(path.startswith("/api/channels") for path in paths))
         self.assertFalse(
             any(
                 token in name.lower()
@@ -66,6 +72,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         )
         for prefix in (
             "/api/console/catalog",
+            "/api/console/inventory",
             "/api/console/files",
             "/api/console/channels",
             "/api/console/crm/contacts",
@@ -74,9 +81,11 @@ class ModuleRegistrationTests(unittest.TestCase):
             self.assertTrue(any(path.startswith(prefix) for path in paths), prefix)
 
     def test_metadata_and_ownership_contain_only_current_tables(self) -> None:
-        """Новая история не содержит таблиц удалённых модулей."""
+        """Актуальные таблицы отделены от исторических имён удалённого хранения."""
         tables = set(migration_metadata().tables)
-        self.assertEqual(tables, HISTORICAL_TENANT_TABLE_NAMES)
+        source_tables = {"supplier_sources", "supplier_source_fulfillment_modes"}
+        self.assertTrue(source_tables <= HISTORICAL_TENANT_TABLE_NAMES)
+        self.assertTrue(source_tables.isdisjoint(tables))
         self.assertTrue(
             {
                 "catalog_item",
@@ -87,13 +96,15 @@ class ModuleRegistrationTests(unittest.TestCase):
                 "tenant_currency_settings",
                 "channels",
                 "channel_connections",
+                "inventory_items",
+                "warehouses",
+                "stock_documents",
             }
             <= tables
         )
         self.assertTrue(
             {
                 "skus",
-                "warehouses",
                 "catalog_products",
                 "catalog_variants",
                 "price_lists",

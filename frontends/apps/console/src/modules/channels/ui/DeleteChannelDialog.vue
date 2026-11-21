@@ -7,9 +7,9 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogCancel,
-  AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 defineProps<{ open: boolean; name: string; busy: boolean; error: string }>();
 const emit = defineEmits<{ "update:open": [open: boolean]; confirm: [] }>();
 </script>
@@ -26,9 +26,13 @@ const emit = defineEmits<{ "update:open": [open: boolean]; confirm: [] }>();
         ><AlertDescription>{{ error }}</AlertDescription></Alert
       ><AlertDialogFooter
         ><AlertDialogCancel :disabled="busy">Отмена</AlertDialogCancel
-        ><AlertDialogAction :disabled="busy" @click.prevent="emit('confirm')">{{
-          busy ? "Удаляем…" : "Удалить канал"
-        }}</AlertDialogAction></AlertDialogFooter
+        ><Button
+          type="button"
+          variant="destructive"
+          :disabled="busy"
+          @click="emit('confirm')"
+          >{{ busy ? "Удаляем…" : "Удалить канал" }}</Button
+        ></AlertDialogFooter
       ></AlertDialogContent
     ></AlertDialog
   >

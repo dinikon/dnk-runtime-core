@@ -80,6 +80,7 @@ class EmptyTrashPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         self.cutoff = datetime.now(UTC) - timedelta(seconds=1)
+        self.now = self.cutoff - timedelta(days=1)
         self.clock = TestClock(self.cutoff)
         self.app.state.clock = self.clock
         self.app.state.token_manager = TokenManager(InMemoryTokenBackend())

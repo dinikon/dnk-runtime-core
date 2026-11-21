@@ -102,6 +102,14 @@ Commands verify tenant existence and require its calculated schema to exist. The
 
 `--all` processes tenants sequentially, one transaction per tenant. It continues after failures, retains successful upgrades and exits 2 if any tenant failed. Re-running upgrades is safe. No mass upgrade runs at application startup.
 
+Each upgrade/downgrade path runs inside a savepoint on the caller's connection.
+If any revision fails, all DDL, data and version-table changes from that invocation
+are rolled back, even when the caller handles the exception and continues its
+outer transaction. The tenant advisory lock remains owned by that outer transaction.
+Crossing irreversible revision `0016_channels_connections_only` is still rejected.
+Historical baseline round-trip tests use a bounded copy of the real revision graph;
+they never downgrade the current head through this destructive boundary.
+
 ## Authoring migrations
 
 ```sh

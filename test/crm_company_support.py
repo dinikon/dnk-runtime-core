@@ -31,6 +31,17 @@ def company_app(sessions, context, *, scoped_connection=False):
         lambda: app.state.test_context
     )
 
+    if not scoped_connection:
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from src.modules.crm.presentation.company.depends import (
+            get_company_stock_owner_usage,
+        )
+
+        app.dependency_overrides[get_company_stock_owner_usage] = (
+            lambda: SimpleNamespace(is_used=AsyncMock(return_value=False))
+        )
+
     if scoped_connection:
 
         class TestTenantConnection:

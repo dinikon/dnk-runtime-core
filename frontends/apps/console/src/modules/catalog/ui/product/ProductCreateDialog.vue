@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import "./product.css";
-import { nextTick, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 import { useMediaQuery } from "@vueuse/core";
 import { Package, Sparkles, ArrowRight, LoaderCircle } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
@@ -27,14 +27,28 @@ const props = defineProps<{
   open: boolean;
   state: ProductCreationState;
   disabled: boolean;
+  preset: ProductPreset | null;
 }>();
 const emit = defineEmits<{
   close: [];
   choose: [preset: ProductPreset];
   check: [];
+  confirm: [];
+  back: [];
 }>();
 const desktop = useMediaQuery("(min-width: 640px)");
 let opener: HTMLElement | null = null;
+const panel = ref<HTMLElement | null>(null);
+watch(
+  () => props.preset,
+  async (value) => {
+    if (!value) return;
+    await nextTick();
+    panel.value
+      ?.querySelector<HTMLElement>("input,button:not(:disabled)")
+      ?.focus();
+  },
+);
 watch(
   () => props.open,
   (open) => {
@@ -89,59 +103,98 @@ function preventWhilePending(event: Event): void {
           создании.</component
         >
       </component>
-      <div class="flex flex-col gap-3" :aria-busy="state.pending">
-        <Button
-          v-for="option in [
-            {
-              id: 'simple' as const,
-              title: 'Простой товар',
-              text: 'Обычная карточка. Виртуальный товар выключен.',
-              icon: Package,
-            },
-            {
-              id: 'variable' as const,
-              title: 'Вариативный товар',
-              text: 'Общая карточка с отдельными продаваемыми вариантами.',
-              icon: Package,
-            },
-            {
-              id: 'service' as const,
-              title: 'Услуга',
-              text: 'Та же карточка. Виртуальный товар включён.',
-              icon: Sparkles,
-            },
-          ]"
-          :key="option.id"
-          variant="outline"
-          class="h-auto min-h-24 w-full justify-start gap-4 whitespace-normal p-4 text-left"
-          :disabled="
-            disabled || state.pending || state.uncertain || !!state.createdId
-          "
-          @click="emit('choose', option.id)"
-        >
-          <component
-            :is="
-              state.pending && state.preset === option.id
-                ? LoaderCircle
-                : option.icon
+      <div ref="panel" class="flex flex-col gap-3" :aria-busy="state.pending">
+        <template v-if="!preset && !state.createdId">
+          <Button
+            v-for="option in [
+              {
+                id: 'simple' as const,
+                title: 'Простой товар',
+                text: 'Обычная карточка. Виртуальный товар выключен.',
+                icon: Package,
+              },
+              {
+                id: 'variable' as const,
+                title: 'Вариативный товар',
+                text: 'Общая карточка с отдельными продаваемыми вариантами.',
+                icon: Package,
+              },
+              {
+                id: 'service' as const,
+                title: 'Услуга',
+                text: 'Та же карточка. Виртуальный товар включён.',
+                icon: Sparkles,
+              },
+            ]"
+            :key="option.id"
+            variant="outline"
+            class="h-auto min-h-24 w-full justify-start gap-4 whitespace-normal p-4 text-left"
+            :disabled="
+              disabled || state.pending || state.uncertain || !!state.createdId
             "
-            data-icon="inline-start"
-            :class="{
-              'animate-spin': state.pending && state.preset === option.id,
-            }"
-          />
-          <span class="flex min-w-0 flex-1 flex-col gap-1"
-            ><span class="font-semibold">{{
-              state.pending && state.preset === option.id
-                ? "Создание…"
-                : option.title
-            }}</span
-            ><span class="text-sm font-normal text-muted-foreground">{{
-              option.text
-            }}</span></span
+            @click="emit('choose', option.id)"
           >
-          <ArrowRight data-icon="inline-end" />
-        </Button>
+            <component
+              :is="
+                state.pending && state.preset === option.id
+                  ? LoaderCircle
+                  : option.icon
+              "
+              data-icon="inline-start"
+              :class="{
+                'animate-spin': state.pending && state.preset === option.id,
+              }"
+            />
+            <span class="flex min-w-0 flex-1 flex-col gap-1"
+              ><span class="font-semibold">{{
+                state.pending && state.preset === option.id
+                  ? "Создание…"
+                  : option.title
+              }}</span
+              ><span class="text-sm font-normal text-muted-foreground">{{
+                option.text
+              }}</span></span
+            >
+            <ArrowRight data-icon="inline-end" />
+          </Button>
+        </template>
+        <template v-else-if="preset && !state.createdId">
+          <p class="text-sm font-medium">
+            {{
+              preset === "simple"
+                ? "Простой товар"
+                : preset === "service"
+                  ? "Услуга"
+                  : "Вариативный товар"
+            }}
+          </p>
+          <div v-if="preset !== 'variable'" class="flex min-w-0 flex-col gap-2">
+            <label for="create-catalog-sku" class="text-sm font-medium"
+              >SKU
+              <span class="font-normal text-muted-foreground"
+                >(необязательно)</span
+              ></label
+            >
+            <slot name="sku" />
+          </div>
+          <p v-else class="text-sm text-muted-foreground">
+            SKU назначается отдельным продаваемым вариантам после создания
+            карточки.
+          </p>
+          <Button
+            type="button"
+            :disabled="disabled || state.pending || state.uncertain"
+            @click="emit('confirm')"
+            >{{ state.pending ? "Создание…" : "Создать товар" }}</Button
+          >
+          <Button
+            type="button"
+            variant="ghost"
+            :disabled="state.pending || state.uncertain"
+            @click="emit('back')"
+            >Изменить тип карточки</Button
+          >
+        </template>
         <p v-if="disabled" class="text-sm text-muted-foreground">
           Создание доступно после выбора активного языка каталога.
         </p>
@@ -155,7 +208,7 @@ function preventWhilePending(event: Event): void {
           v-if="state.createdId"
           :disabled="state.pending"
           class="min-h-11"
-          @click="emit('choose', state.preset ?? 'simple')"
+          @click="emit('confirm')"
           >Открыть созданный товар</Button
         >
         <Button

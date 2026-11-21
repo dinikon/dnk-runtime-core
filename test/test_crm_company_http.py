@@ -42,6 +42,7 @@ class CompanyHttpTests(unittest.IsolatedAsyncioTestCase):
             rollback=AsyncMock(),
             close=AsyncMock(),
         )
+        self.session.scalar = AsyncMock(return_value=self.identifier)
         self.app = company_app(lambda: self.session, self.context)
         self.app.state.clock = Mock(now=Mock(return_value=self.now + timedelta(days=1)))
         self.app.state.uuid_generator = Mock(new=Mock(return_value=self.identifier))

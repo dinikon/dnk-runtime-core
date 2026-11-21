@@ -1,6 +1,9 @@
+from src.modules.catalog.domain.catalog_item.policy.stock import resolve_stock
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Self
+
+from src.modules.catalog.domain.catalog_item.stock_event import CatalogStockChanged
 from src.modules.catalog.domain.catalog_item.value_object.kind import CatalogItemKind
 from src.modules.catalog.domain.catalog_item.entity.variant import CatalogVariant
 from src.modules.catalog.domain.catalog_item.policy.validation import (
@@ -24,7 +27,6 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     DimensionsVO,
     WeightVO,
 )
-from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.snapshot import (
     CatalogItemValuesSnapshot,
 )
@@ -48,7 +50,7 @@ class CatalogItem:
     id: CatalogItemIdVO
     product_type_id: EntityIdVO
     status: CatalogItemStatus
-    sku: SkuCodeVO | None
+    inventory_item_id: EntityIdVO | None
     virtual: bool
     price: PriceSpecificationVO | None
     weight: WeightVO | None
@@ -62,6 +64,9 @@ class CatalogItem:
     galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
     kind: CatalogItemKind = CatalogItemKind.SIMPLE
     variants: tuple[CatalogVariant, ...] = ()
+    _stock_events: list[CatalogStockChanged] = field(
+        default_factory=list, init=False, compare=False, repr=False
+    )
 
     @classmethod
     def create(
@@ -77,7 +82,7 @@ class CatalogItem:
             identifier=identifier,
             product_type_id=product_type_id,
             status=CatalogItemStatus.DRAFT,
-            sku=None,
+            inventory_item_id=None,
             virtual=virtual,
             price=None,
             weight=None,
@@ -96,7 +101,7 @@ class CatalogItem:
         identifier: CatalogItemIdVO,
         product_type_id: EntityIdVO,
         status: CatalogItemStatus,
-        sku: SkuCodeVO | None,
+        inventory_item_id: EntityIdVO | None,
         virtual: bool,
         price: PriceSpecificationVO | None,
         weight: WeightVO | None,
@@ -117,7 +122,7 @@ class CatalogItem:
             id=identifier,
             product_type_id=product_type_id,
             status=status,
-            sku=sku,
+            inventory_item_id=inventory_item_id,
             virtual=virtual,
             price=price,
             weight=weight,
@@ -158,13 +163,39 @@ class CatalogItem:
         item._validate()
         return item
 
+    def set_inventory_item(
+        self,
+        *,
+        identifier: EntityIdVO | None,
+        actor: EntityIdVO,
+        now: datetime,
+        target_id: CatalogItemIdVO | None = None,
+    ) -> None:
+        """Назначает собственную складскую позицию через границу корня агрегата."""
+        if target_id is not None and target_id != self.id:
+            variant = self.variant(target_id).changed(
+                fields=frozenset({"inventory_item_id"}),
+                inventory_item_id=identifier,
+                actor=actor,
+                now=now,
+            )
+            self.change_variant(variant=variant, actor=actor, now=now)
+            return
+        self.update(
+            fields=frozenset({"inventory_item_id"}),
+            inventory_item_id=identifier,
+            actor=actor,
+            now=now,
+        )
+
     def snapshot(self) -> CatalogItemValuesSnapshot:
         """Передаёт значения чистой политике без ссылки на агрегат."""
         return CatalogItemValuesSnapshot(
             id=self.id,
             product_type_id=self.product_type_id,
             status=self.status,
-            sku=self.sku.value if self.sku else None,
+            sku=None,
+            inventory_item_id=self.inventory_item_id,
             virtual=self.virtual,
             price=self.price,
             weight=self.weight,
@@ -198,8 +229,14 @@ class CatalogItem:
             )
         ):
             raise InvalidCatalogValueError("Audit требует timezone.")
-        if self.sku is not None and not isinstance(self.sku, SkuCodeVO):
+        if self.inventory_item_id is not None and not isinstance(
+            self.inventory_item_id, EntityIdVO
+        ):
             raise InvalidCatalogValueError("Некорректный SKU.", ("sku",))
+        if self.kind is CatalogItemKind.VARIABLE and self.inventory_item_id is not None:
+            raise InvalidCatalogValueError(
+                "Контейнер VARIABLE не имеет собственного SKU.", ("sku",)
+            )
         if type(self.virtual) is not bool:
             raise InvalidCatalogValueError("Virtual требует bool.", ("virtual",))
         if self.price is not None and (
@@ -242,7 +279,7 @@ class CatalogItem:
         actor: EntityIdVO,
         now: datetime,
         status: CatalogItemStatus | None = None,
-        sku: SkuCodeVO | None = None,
+        inventory_item_id: EntityIdVO | None = None,
         virtual: bool | None = None,
         price_specification: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO | None = None,
@@ -257,7 +294,7 @@ class CatalogItem:
         """Атомарно принимает явно заданные значения после проверки итогового кандидата."""
         values: dict[str, object] = {
             "status": status,
-            "sku": sku,
+            "inventory_item_id": inventory_item_id,
             "virtual": virtual,
             "price_specification": price_specification,
             "stock": stock,
@@ -328,6 +365,7 @@ class CatalogItem:
             raise InvalidCatalogValueError(
                 "Для проверки наследуемого контента нужна схема.", ("content",)
             )
+        previous_stock = self._stock_ownership()
         candidate = replace(self, **changes)
         if candidate != self:
             candidate.updated_by = actor
@@ -337,7 +375,9 @@ class CatalogItem:
         if candidate == self:
             return
         for name in self.__dataclass_fields__:
-            setattr(self, name, getattr(candidate, name))
+            if name != "_stock_events":
+                setattr(self, name, getattr(candidate, name))
+        self._record_stock_change(previous_stock, now)
 
     def ensure_can_add_image(
         self,
@@ -400,8 +440,11 @@ class CatalogItem:
                 "Идентификаторы семьи должны быть уникальны."
             )
         skus = [
-            value.value
-            for value in (self.sku, *(v.sku for v in self.variants))
+            value.uuid
+            for value in (
+                self.inventory_item_id,
+                *(v.inventory_item_id for v in self.variants),
+            )
             if value is not None
         ]
         if len(set(skus)) != len(skus):
@@ -468,15 +511,21 @@ class CatalogItem:
             raise InvalidCatalogValueError(
                 "Для проверки контента варианта нужна схема.", ("content",)
             )
+        previous_stock = self._stock_ownership()
         self._replace_variants(
             tuple(variant if v.id == variant.id else v for v in self.variants),
             actor,
             now,
             schema,
         )
+        self._record_stock_change(previous_stock, now)
 
     def remove_variant(
-        self, *, identifier: CatalogItemIdVO, actor: EntityIdVO, now: datetime
+        self,
+        *,
+        identifier: CatalogItemIdVO,
+        actor: EntityIdVO,
+        now: datetime,
     ) -> None:
         """Удаляет entity с проверкой последнего варианта Active-карточки."""
         self.variant(identifier)
@@ -498,3 +547,38 @@ class CatalogItem:
         if candidate != self:
             self.variants = variants
             self.updated_by, self.updated_at = actor, now
+
+    def pull_stock_events(self) -> tuple[CatalogStockChanged, ...]:
+        """Передаёт факты Application для атомарной записи Outbox."""
+        events = tuple(self._stock_events)
+        self._stock_events.clear()
+        return events
+
+    def _stock_ownership(
+        self,
+    ) -> dict[CatalogItemIdVO, tuple[CatalogItemIdVO, StockSpecificationVO | None]]:
+        """Снимок источников количества и ручного наличия без контента."""
+        result = {self.id: (self.id, self.stock)}
+        for variant in self.variants:
+            resolved = resolve_stock(own=variant.stock, parent=self.stock)
+            source, stock = (
+                self.id if resolved.inherited else variant.id
+            ), resolved.specification
+            result[variant.id] = (source, stock)
+        return result
+
+    def _record_stock_change(
+        self,
+        before: dict[
+            CatalogItemIdVO, tuple[CatalogItemIdVO, StockSpecificationVO | None]
+        ],
+        now: datetime,
+    ) -> None:
+        """Публикует только действительно затронутые позиции, включая наследников."""
+        affected = tuple(
+            identifier
+            for identifier, value in self._stock_ownership().items()
+            if before.get(identifier) != value
+        )
+        if affected:
+            self._stock_events.append(CatalogStockChanged(self.id, now, affected))

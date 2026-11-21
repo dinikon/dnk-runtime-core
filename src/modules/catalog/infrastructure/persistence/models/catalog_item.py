@@ -34,14 +34,18 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
         ),
         sa.CheckConstraint("revision>0", name="ck_catalog_item_revision"),
         sa.CheckConstraint(
+            "kind<>'variable' OR inventory_item_id IS NULL",
+            name="ck_catalog_item_inventory_role",
+        ),
+        sa.CheckConstraint(
             "(kind='variant' AND parent_id IS NOT NULL AND parent_id<>id AND product_type_id IS NULL) OR (kind IN ('simple','variable') AND parent_id IS NULL AND product_type_id IS NOT NULL)",
             name="ck_catalog_item_role",
         ),
         sa.Index(
-            "uq_catalog_item_sku",
-            "sku",
+            "uq_catalog_item_inventory_item",
+            "inventory_item_id",
             unique=True,
-            postgresql_where=sa.text("sku IS NOT NULL"),
+            postgresql_where=sa.text("inventory_item_id IS NOT NULL"),
         ),
         sa.Index(
             "ix_catalog_item_roots",
@@ -111,7 +115,15 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
         nullable=True,
     )
     status: Mapped[str] = mapped_column(sa.String(20), nullable=False)
-    sku: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    inventory_item_id: Mapped[UUID | None] = mapped_column(
+        StringUUID,
+        sa.ForeignKey(
+            "tenant.inventory_items.id",
+            name="fk_catalog_item_inventory_item",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+    )
     revision: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     virtual: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
     weight: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)

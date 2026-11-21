@@ -7,3 +7,7 @@ class InvalidCompanyLegalNameError(DomainError):
 
 class CompanyNotFoundError(DomainError):
     """Компания отсутствует в текущем tenant."""
+
+
+class CompanyInUseError(DomainError):
+    """Компания используется внешним источником и не может быть удалена."""

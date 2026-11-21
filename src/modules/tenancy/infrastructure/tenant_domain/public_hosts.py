@@ -50,3 +50,19 @@ class SqlAlchemyTenantPublicHosts:
             )
             is not None
         )
+
+    async def api_host(self, tenant_id: UUID) -> str | None:
+        """Не публикует непроверенный, отключённый или wildcard API host."""
+        host = await self.session.scalar(
+            select(D.host)
+            .where(
+                D.tenant_id == tenant_id,
+                D.status == "active",
+                D.verification_status == "verified",
+                D.is_wildcard.is_(False),
+                D.service_type == "http",
+            )
+            .order_by(D.is_primary.desc(), D.created_at, D.id)
+            .limit(1)
+        )
+        return host if host is not None else await self.primary_host(tenant_id)

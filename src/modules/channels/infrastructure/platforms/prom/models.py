@@ -6,27 +6,28 @@ from src.modules.channels.infrastructure.platforms.base import StrictModel
 
 
 class PromSettings(StrictModel):
-    """Фиксированная валюта и две обязательные языковые версии."""
+    """Фиксированные валюта и порядок языков контента магазина."""
 
-    currency: Literal["UAH"] = Field(
-        default="UAH", title="Валюта", json_schema_extra={"readOnly": True}
-    )
-    locales: tuple[Literal["uk"], Literal["ru"]] = Field(
-        default=("uk", "ru"), title="Языки", json_schema_extra={"readOnly": True}
+    currency: Literal["UAH"] = Field(default="UAH", title="Валюта")
+    locales: tuple[Literal["ru"], Literal["uk"]] = Field(
+        default=("ru", "uk"),
+        title="Языки контента",
+        description="Русский — основной, Українська — дополнительный.",
+        json_schema_extra={"readOnly": True},
     )
 
     @field_validator("locales", mode="before")
     @classmethod
-    def fixed_locales(cls, value: object) -> tuple[str, str]:
-        """Принимает оба порядка, отклоняя неполный набор и дубли."""
+    def normalize_locales(cls, value: object) -> tuple[str, str]:
+        """Принимает только оба языка без дублей и фиксирует основной RU."""
         if (
             not isinstance(value, (list, tuple))
             or len(value) != 2
             or not all(isinstance(item, str) for item in value)
-            or set(value) != {"uk", "ru"}
+            or set(value) != {"ru", "uk"}
         ):
-            raise ValueError("Both uk and ru are required")
-        return ("uk", "ru")
+            raise ValueError("Both ru and uk are required")
+        return ("ru", "uk")
 
 
 class PromConfig(StrictModel):

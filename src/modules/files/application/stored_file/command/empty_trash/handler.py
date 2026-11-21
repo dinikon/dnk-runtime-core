@@ -1,3 +1,4 @@
+from src.modules.files.application.stored_file.port.usage import FileUsagePort
 from src.modules.files.application.stored_file.command.empty_trash.command import (
     EmptyTrashCommand,
 )
@@ -28,8 +29,10 @@ class EmptyTrashHandler:
         queue: FilePurgeQueueProtocol,
         clock: ClockPort,
         uuids: UUIdGeneratorProtocol,
+        usage: FileUsagePort,
     ) -> None:
         """Принимает порты одной транзакции; не открывает UoW и не выполняет storage I/O."""
+        self._usage = usage
         self._files, self._queries, self._queue = files, queries, queue
         self._clock, self._uuids = clock, uuids
 
@@ -52,6 +55,8 @@ class EmptyTrashHandler:
                 file.status != StoredFileStatus.TRASHED
                 or file.deleted_at > command.cutoff
             ):
+                continue
+            if await self._usage.used(command.tenant_id, (file.id.uuid,)):
                 continue
             job_id = EntityIdVO.from_value(self._uuids.new())
             now = self._clock.now()

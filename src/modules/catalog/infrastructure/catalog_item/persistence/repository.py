@@ -107,7 +107,13 @@ class SqlAlchemyCatalogItemRepository:
 
     async def add(self, entity: CatalogItem) -> None:
         """Добавляет самостоятельный товар без собственного commit."""
-        await self.save(entity)
+        original, families = dict(self._original), dict(self._families)
+        try:
+            await self.save(entity)
+        except BaseException:
+            # Не оставляем кэш частично вставленной семьи после отказа INSERT.
+            self._original, self._families = original, families
+            raise
 
     async def save(self, entity: CatalogItem) -> None:
         """Сохраняет семью атомарно, не записывая эффективные значения детям."""
@@ -138,7 +144,10 @@ class SqlAlchemyCatalogItemRepository:
                 await self._session.execute(insert(CatalogItemModel).values(**values))
             except IntegrityError as error:
                 original = getattr(error.orig, "__cause__", None) or error.orig
-                if getattr(original, "constraint_name", None) != "uq_catalog_item_sku":
+                if (
+                    getattr(original, "constraint_name", None)
+                    != "uq_catalog_item_inventory_item"
+                ):
                     raise
                 raise CatalogConflictError(
                     "Конфликт уникального SKU.", ("sku",)

@@ -23,10 +23,14 @@ export const catalogRoutes: RouteRecordRaw[] = [
   },
   {
     path: "catalog/items/:itemId",
-    component: () => import("./ui/page/CatalogItemOverviewPage.vue"),
+    component: () => import("./ui/page/CatalogItemEditorPage.vue"),
   },
   {
     path: "catalog/items/:itemId/edit",
-    component: () => import("./ui/page/CatalogItemEditorPage.vue"),
+    redirect: (to) => ({
+      path: `/catalog/items/${encodeURIComponent(String(to.params.itemId))}`,
+      query: to.query,
+      hash: to.hash,
+    }),
   },
 ];

@@ -44,3 +44,4 @@ class CatalogItemValuesSnapshot:
     galleries: dict[str, CatalogItemGallery]
     kind: CatalogItemKind = CatalogItemKind.SIMPLE
     parent_id: CatalogItemIdVO | None = None
+    inventory_item_id: EntityIdVO | None = None
