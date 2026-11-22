@@ -30,3 +30,12 @@ export function feedListReturnTo(value: unknown): string {
 export function lastFeedOffset(total: number, limit: number): number {
   return Math.max(0, Math.ceil(total / limit) - 1) * limit;
 }
+
+export const feedSectionRoutes = {
+  settings: "feed-detail",
+  schema: "feed-schema",
+  publications: "feed-publications",
+  preview: "feed-preview",
+} as const;
+
+export type FeedSection = keyof typeof feedSectionRoutes;

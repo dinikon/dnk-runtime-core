@@ -2,10 +2,21 @@ from uuid import UUID
 from datetime import datetime
 from collections.abc import Mapping
 from typing import cast
-from sqlalchemy import select, func, or_, any_, bindparam
+from sqlalchemy import select, func, or_, any_, bindparam, tuple_
 from sqlalchemy.dialects.postgresql import ARRAY, UUID as PgUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
+from src.modules.feed_builder.domain.publication.enum.publication_status import (
+    PublicationStatus,
+)
+from src.modules.feed_builder.application.publication.port.export_source import (
+    PublicationCursor,
+    PublicationEditorSource,
+    PublicationExportSource,
+)
+from src.modules.feed_builder.infrastructure.publication.persistence.mapper import (
+    FeedPublicationMapper,
+)
 from src.modules.feed_builder.application.publication.port.query_repository import (
     PublicationRecord,
     PublicationPage,
@@ -98,3 +109,78 @@ class SqlAlchemyPublicationQueryRepository:
             )
         ).mappings()
         return PublicationPage(tuple(self._record(r) for r in rows), total, counts)
+
+    async def count_enabled(self, feed_id: FeedIdVO) -> int:
+        """Считает только включённые публикации."""
+        return (
+            await self._session.scalar(
+                select(func.count())
+                .select_from(Model)
+                .where(
+                    Model.feed_id == feed_id.uuid,
+                    Model.status == PublicationStatus.ENABLED.value,
+                )
+            )
+        ) or 0
+
+    async def read_enabled(
+        self,
+        feed_id: FeedIdVO,
+        limit: int,
+        before: PublicationCursor | None = None,
+    ) -> tuple[PublicationExportSource, ...]:
+        """Использует курсор, совпадающий с порядком вкладки товаров."""
+        query = select(
+            Model.id,
+            Model.catalog_item_id,
+            Model.catalog_variant_id,
+            Model.overrides,
+            Model.created_at,
+        ).where(
+            Model.feed_id == feed_id.uuid,
+            Model.status == PublicationStatus.ENABLED.value,
+        )
+        if before is not None:
+            query = query.where(tuple_(Model.created_at, Model.id) < tuple_(*before))
+        rows = await self._session.execute(
+            query.order_by(Model.created_at.desc(), Model.id.desc()).limit(limit)
+        )
+        return tuple(
+            PublicationExportSource(
+                identifier,
+                (item_id, variant_id),
+                FeedPublicationMapper.read_overrides(overrides),
+                created_at,
+            )
+            for identifier, item_id, variant_id, overrides, created_at in rows
+        )
+
+    async def read_for_editor(
+        self, feed_id: FeedIdVO, publication_id: UUID
+    ) -> PublicationEditorSource | None:
+        """Читает ровно одну сохранённую публикацию своего фида."""
+        row = (
+            await self._session.execute(
+                select(
+                    Model.catalog_item_id,
+                    Model.catalog_variant_id,
+                    Model.overrides,
+                    Model.created_at,
+                    Model.row_version,
+                    Model.status,
+                ).where(Model.feed_id == feed_id.uuid, Model.id == publication_id)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        item_id, variant_id, overrides, created_at, version, status = row
+        return PublicationEditorSource(
+            PublicationExportSource(
+                publication_id,
+                (item_id, variant_id),
+                FeedPublicationMapper.read_overrides(overrides),
+                created_at,
+            ),
+            version,
+            status == PublicationStatus.ARCHIVED.value,
+        )

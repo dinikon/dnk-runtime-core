@@ -1414,8 +1414,8 @@ class FeedCalculationStructureTests(unittest.TestCase):
         )
         self.assertEqual(calculation.default_expression.right.value, Decimal("1.20"))
 
-    def test_presence_dependency_also_requires_purchase_binding(self) -> None:
-        """Даже EXISTS закупки является зависимостью, без молчаливого выбора источника."""
+    def test_catalog_purchase_parameter_does_not_require_legacy_binding(self) -> None:
+        """Обычный параметр Catalog работает без отдельной закупочной привязки."""
         conditional = rule(
             PresenceConditionVO(
                 PresenceOperator.IS_MISSING, ParameterReferenceVO("price.purchase")
@@ -1425,9 +1425,10 @@ class FeedCalculationStructureTests(unittest.TestCase):
             PriceCalculationVO(ParameterReferenceVO("price.purchase")),
             PriceCalculationVO(ParameterReferenceVO("price.regular"), (conditional,)),
         ):
-            with self.assertRaises(InvalidPriceCalculationDefinitionError) as caught:
-                money_field(definition)
-            self.assertEqual(caught.exception.path, ("purchase_source",))
+            field = money_field(definition)
+            self.assertEqual(
+                field.type_definition.value_definition.calculation, definition
+            )
         unused = PriceCalculationVO(
             ParameterReferenceVO("price.regular"),
             purchase_source=PurchasePriceSourceVO(EntityIdVO(uuid4())),
@@ -1456,14 +1457,17 @@ class FeedCalculationStructureTests(unittest.TestCase):
     def test_field_and_feed_restore_recheck_nested_calculation_policy(self) -> None:
         """Вложенный тип не позволяет восстановленной Entity обойти Policy расчёта."""
         original = money_field()
-        calculation = PriceCalculationVO(ParameterReferenceVO("price.purchase"))
+        duplicate = rule()
+        calculation = PriceCalculationVO(
+            ParameterReferenceVO("price.regular"), (duplicate, duplicate)
+        )
         invalid_type = MoneyFieldTypeVO(
             currency=UAH,
             value_definition=MoneyValueDefinitionVO(
                 MoneyValueMode.CALCULATED, calculation=calculation
             ),
         )
-        with self.assertRaises(InvalidPriceCalculationDefinitionError):
+        with self.assertRaises(DuplicatePriceRuleIdentifierError):
             FieldDefinition.restore(
                 identifier=original.id,
                 key=original.key,
@@ -1472,7 +1476,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
                 export=original.export,
             )
         reconstituted = replace(original, type_definition=invalid_type)
-        with self.assertRaises(InvalidPriceCalculationDefinitionError):
+        with self.assertRaises(DuplicatePriceRuleIdentifierError):
             Feed.restore(
                 identifier=FeedIdVO(uuid4()),
                 name=FeedNameVO("Восстановленный"),

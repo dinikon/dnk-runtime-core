@@ -111,16 +111,16 @@ function calculationPayload(value: SchemaCalculation): CalculationDTO {
       condition: nodePayload(r.condition),
       expression: nodePayload(r.expression),
     })),
-    purchase_source: value.purchaseSource
-      ? {
-          provider: value.purchaseSource.provider,
-          path: value.purchaseSource.path,
-          selection: {
-            mode: value.purchaseSource.selection.mode,
-            supplier_source_id: value.purchaseSource.selection.supplierSourceId,
-          },
-        }
-      : null,
+    ...(value.purchaseSource && {
+      purchase_source: {
+        provider: value.purchaseSource.provider,
+        path: value.purchaseSource.path,
+        selection: {
+          mode: value.purchaseSource.selection.mode,
+          supplier_source_id: value.purchaseSource.selection.supplierSourceId,
+        },
+      },
+    }),
   };
 }
 function mapTransform(t: TransformDTO): SchemaTransform {

@@ -134,6 +134,8 @@ class _Execution:
     ) -> RuntimeValue | None:
         """Регистрирует зависимость, в том числе проверенное отсутствие параметра."""
         value = self.inputs.get(name)
+        if isinstance(value, Decimal):
+            self.numeric(value, path)
         self.used[name] = trace_value(value)
         if value is None and not allow_missing:
             raise CalculationExecutionError(
@@ -294,7 +296,10 @@ class MoneyFieldCalculator:
 
     @staticmethod
     def calculate(
-        field: FieldDefinition, inputs: CalculationInputsVO
+        field: FieldDefinition,
+        inputs: CalculationInputsVO,
+        *,
+        manual_amount: PriceAmountVO | None = None,
     ) -> PriceCalculationResult:
         """Возвращает точное значение либо адресованную ошибку выбранной ветви."""
         settings = field.type_definition
@@ -308,7 +313,7 @@ class MoneyFieldCalculator:
             raise CalculationDefinitionError(
                 "INVALID_EXPRESSION_TYPE", "Источник несовместим с денежным полем."
             )
-        if definition.calculation is not None:
+        if manual_amount is None and definition.calculation is not None:
             PriceCalculationSemanticPolicy.ensure_valid(definition.calculation)
         execution = _Execution(inputs)
         selected: UUID | None = None
@@ -319,13 +324,15 @@ class MoneyFieldCalculator:
         context.traps[Underflow] = True
         try:
             with localcontext(context):
-                if definition.mode.value == "MANUAL":
+                if manual_amount is not None:
+                    amount = manual_amount.amount
+                elif definition.mode.value == "MANUAL":
                     raise CalculationExecutionError(
                         "MANUAL_VALUE_REQUIRED",
                         "Для ручного поля требуется значение публикации.",
                         ("value",),
                     )
-                if definition.calculation is None:
+                elif definition.calculation is None:
                     amount = execution.parameter("price.regular", ("value", "source"))
                     execution.record(("value", "source"), "source", amount)
                 else:

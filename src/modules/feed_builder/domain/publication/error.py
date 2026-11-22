@@ -23,3 +23,12 @@ class PublicationVersionConflictError(PublicationDomainError):
 
 class PublicationTransitionError(PublicationDomainError):
     """Отклоняет недопустимый переход участия."""
+
+
+class InvalidPublicationOverrideError(InvalidPublicationValueError):
+    """Передаёт адресованную ошибку проверки ручного значения."""
+
+    def __init__(self, code: str, message: str) -> None:
+        """Сохраняет код и ошибку поля value."""
+        super().__init__(message, path=("value",))
+        self.code = code

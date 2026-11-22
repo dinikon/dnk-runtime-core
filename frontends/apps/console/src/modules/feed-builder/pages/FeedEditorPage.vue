@@ -13,7 +13,7 @@ import FeedStatus from "../ui/item/FeedStatus.vue";
 import { useFeedEditor } from "../model/use-feed-editor";
 import { useFeedEditorNavigation } from "../model/use-feed-editor-navigation";
 import { useArchiveFeed } from "../model/use-archive-feed";
-import { feedListReturnTo } from "../model/feed.navigation";
+import { feedListReturnTo, feedSectionRoutes } from "../model/feed.navigation";
 import { feedErrorMessage } from "../model/feed.errors";
 import { FeedApiError, type Feed } from "../model/feed.types";
 const route = useRoute(),
@@ -117,9 +117,9 @@ async function confirmArchive(): Promise<void> {
         current="settings"
         :disabled="busy"
         @navigate="
-          ($event === 'schema' || $event === 'publications') &&
+          $event !== 'settings' &&
           router.push({
-            name: $event === 'schema' ? 'feed-schema' : 'feed-publications',
+            name: feedSectionRoutes[$event],
             params: { id },
             query: { returnTo },
           })

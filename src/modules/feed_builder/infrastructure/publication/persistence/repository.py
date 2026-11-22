@@ -87,7 +87,7 @@ class SqlAlchemyFeedPublicationRepository:
     async def save(
         self, publication: FeedPublication, expected_version: FeedPublicationVersionVO
     ) -> None:
-        """Меняет только участие и версию, сохраняя JSON overrides без перезаписи."""
+        """Сохраняет участие и ручные значения с проверкой версии публикации."""
         if publication.version.value != expected_version.value + 1:
             raise PublicationVersionConflictError("Неверная новая версия.")
         result = await self._session.execute(
@@ -98,6 +98,7 @@ class SqlAlchemyFeedPublicationRepository:
             )
             .values(
                 status=publication.status.value,
+                overrides=FeedPublicationMapper.write_overrides(publication.overrides),
                 row_version=publication.version.value,
                 updated_at=publication.updated_at,
             )

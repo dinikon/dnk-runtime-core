@@ -18,6 +18,7 @@ import AddPublicationsDialog from "../ui/forms/AddPublicationsDialog.vue";
 import PublicationsToolbar from "../ui/page/PublicationsToolbar.vue";
 import PublicationsList from "../ui/results/PublicationsList.vue";
 import PublicationPricePreview from "../ui/results/PublicationPricePreview.vue";
+import PublicationFieldsEditor from "../ui/forms/PublicationFieldsEditor.vue";
 import {
   usePublications,
   usePublication,
@@ -31,6 +32,7 @@ import { useAddPublications } from "../model/use-add-publications";
 import { useChangePublication } from "../model/use-change-publication";
 import { useArchivePublication } from "../model/use-archive-publication";
 import { useRestorePublication } from "../model/use-restore-publication";
+import { usePublicationOverrideEditor } from "../model/use-publication-override-editor";
 import { useFeedScope } from "../model/use-feed-scope";
 import { useFeed } from "../model/feed.queries";
 import { useFeedSchema, useSchemaMetadata } from "../model/feed-schema.queries";
@@ -42,7 +44,11 @@ import {
   publicationStatusLabel,
 } from "../model/feed-publication.errors";
 import { publicationKeys } from "../model/feed-publication.query-keys";
-import { feedListReturnTo } from "../model/feed.navigation";
+import {
+  feedListReturnTo,
+  feedSectionRoutes,
+  type FeedSection,
+} from "../model/feed.navigation";
 import type {
   Publication,
   PublicationPage,
@@ -77,6 +83,10 @@ const detailRecord = computed(() => {
 const detail = computed(() =>
   detailRecord.value?.feedId === id.value ? detailRecord.value : undefined,
 );
+const editor = usePublicationOverrideEditor(
+  id,
+  computed(() => detail.value?.id ?? ""),
+);
 const detailError = computed(() =>
   detailQuery.error.value
     ? publicationErrorMessage(detailQuery.error.value)
@@ -97,7 +107,8 @@ const busy = computed(
     add.pending.value ||
     change.pending.value ||
     archive.pending.value ||
-    restore.pending.value,
+    restore.pending.value ||
+    editor.pending.value,
 );
 const readonly = computed(
   () =>
@@ -253,10 +264,10 @@ const dialogError = computed(
     selection.error.value ||
     publicationErrorMessage(add.error.value || all.error.value),
 );
-function sections(section: "settings" | "schema" | "publications"): void {
+function sections(section: FeedSection): void {
   if (section === "publications") return;
   void router.push({
-    name: section === "settings" ? "feed-detail" : "feed-schema",
+    name: feedSectionRoutes[section],
     params: { id: id.value },
     query: { returnTo: feedListReturnTo(route.query.returnTo) },
   });
@@ -358,7 +369,8 @@ async function changeStatus(
   });
   if (result) {
     await query.refetch();
-    if (selectedId.value) await detailQuery.refetch();
+    if (selectedId.value)
+      await Promise.all([detailQuery.refetch(), editor.query.refetch()]);
   }
 }
 async function remove(item: Publication): Promise<void> {
@@ -377,7 +389,8 @@ async function remove(item: Publication): Promise<void> {
   });
   if (result) {
     await query.refetch();
-    if (selectedId.value) await detailQuery.refetch();
+    if (selectedId.value)
+      await Promise.all([detailQuery.refetch(), editor.query.refetch()]);
   }
 }
 async function reinstate(item: Publication): Promise<void> {
@@ -394,7 +407,8 @@ async function reinstate(item: Publication): Promise<void> {
   });
   if (result) {
     await query.refetch();
-    if (selectedId.value) await detailQuery.refetch();
+    if (selectedId.value)
+      await Promise.all([detailQuery.refetch(), editor.query.refetch()]);
   }
 }
 function retrySources(): void {
@@ -548,6 +562,22 @@ function retrySources(): void {
         <p v-if="!detail.sourceAvailable" class="text-sm text-destructive">
           Позиция Catalog недоступна. Привязка сохранена.
         </p>
+        <PublicationFieldsEditor
+          :data="editor.query.data.value"
+          :draft="editor.draft.value"
+          :active-field="editor.activeField.value"
+          :conflict="editor.conflict.value"
+          :pending="editor.pending.value"
+          :loading="editor.query.isPending.value"
+          :error="editor.error.value"
+          :load-error="publicationErrorMessage(editor.query.error.value)"
+          @edit="editor.start"
+          @update="editor.update"
+          @save="editor.save"
+          @reset="editor.restore"
+          @cancel="editor.cancel"
+          @accept="editor.acceptCurrent"
+          @refresh="editor.query.refetch()" />
         <PublicationPricePreview
           :fields="
             moneyFields.map((f) => ({

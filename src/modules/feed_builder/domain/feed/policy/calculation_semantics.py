@@ -42,12 +42,12 @@ class PriceCalculationSemanticPolicy:
 
     @classmethod
     def ensure_valid(cls, calculation: PriceCalculationVO) -> None:
-        """Проверяет также неисполненные ветви, не принимая закупку и категории."""
+        """Проверяет все ветви и отклоняет устаревшую привязку закупки."""
         PriceCalculationStructurePolicy.ensure_valid(calculation)
         if calculation.purchase_source is not None:
             raise CalculationDefinitionError(
                 "UNKNOWN_CALCULATION_PARAMETER",
-                "Закупочный источник пока не подключён.",
+                "Используйте price.purchase из Catalog без закупочной привязки.",
                 path=("purchase_source",),
             )
         cls._require(

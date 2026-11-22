@@ -17,7 +17,7 @@ import SchemaFieldForm from "../ui/forms/SchemaFieldForm.vue";
 import { useFeedSchemaEditor } from "../model/use-feed-schema-editor";
 import { useFeed } from "../model/feed.queries";
 import { useFeedEditorNavigation } from "../model/use-feed-editor-navigation";
-import { feedListReturnTo } from "../model/feed.navigation";
+import { feedListReturnTo, feedSectionRoutes } from "../model/feed.navigation";
 import { feedErrorMessage } from "../model/feed.errors";
 import { SchemaApiError } from "../model/feed-schema.types";
 import { FeedApiError } from "../model/feed.types";
@@ -174,9 +174,9 @@ async function save(): Promise<void> {
       @navigate="
         $event === 'settings'
           ? settings()
-          : $event === 'publications' &&
+          : $event !== 'schema' &&
             router.push({
-              name: 'feed-publications',
+              name: feedSectionRoutes[$event],
               params: { id },
               query: { returnTo },
             })

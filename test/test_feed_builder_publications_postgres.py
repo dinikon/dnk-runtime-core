@@ -1,6 +1,9 @@
 """Сохранённый ассортимент Feed через реальные Catalog, API и PostgreSQL."""
 
 import asyncio
+from copy import deepcopy
+import csv
+from io import StringIO
 import os
 import unittest
 from unittest.mock import patch, Mock, AsyncMock
@@ -8,7 +11,32 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, func, update, delete, text
 from sqlalchemy.exc import IntegrityError
 from test import test_feed_builder_calculation_postgres as fixture
+from src.modules.feed_builder.application.feed.schema_document import field_document
+from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
+    CatalogSourcePath,
+)
+from src.modules.feed_builder.domain.feed.enum.source_provider import SourceProvider
+from src.modules.feed_builder.domain.feed.value_object.locale_code import LocaleCodeVO
+from src.modules.feed_builder.domain.feed.value_object.source_reference import (
+    SourceReferenceVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
+    SourceValueDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
+    StringFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.text_constraints import (
+    TextConstraintsVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.manual_value_definition import (
+    ManualValueDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
+    TextFieldTypeVO,
+)
 from src.modules.feed_builder.presentation.publication.router import router
+from test.test_feed_builder_domain import text_field
 from src.modules.feed_builder.infrastructure.persistence.models.publication import (
     FeedPublicationModel,
 )
@@ -402,3 +430,248 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
             f"/api/console/feed-builder/feeds/{self.feed['id']}/variant-selection/{uuid4()}"
         )
         self.assertEqual(missing.status_code, 404, missing.text)
+
+    async def test_preview_and_csv_share_values_and_block_after_limit(self) -> None:
+        """Проверяет предел образца, все строки CSV и ошибку за пределами образца."""
+        await fixture.crud_support.FeedCrudPostgresTests.seed_schema_locales(self)
+        fields = [
+            field_document(
+                text_field(
+                    "sku",
+                    type_definition=StringFieldTypeVO(
+                        SourceValueDefinitionVO(
+                            SourceReferenceVO(
+                                SourceProvider.CATALOG, CatalogSourcePath.SKU
+                            )
+                        )
+                    ),
+                )
+            ),
+            field_document(
+                text_field(
+                    "title",
+                    type_definition=StringFieldTypeVO(
+                        SourceValueDefinitionVO(
+                            SourceReferenceVO(
+                                SourceProvider.CATALOG, CatalogSourcePath.TITLE
+                            )
+                        ),
+                        locale=LocaleCodeVO("uk"),
+                    ),
+                )
+            ),
+            field_document(
+                text_field(
+                    "description",
+                    type_definition=TextFieldTypeVO(
+                        SourceValueDefinitionVO(
+                            SourceReferenceVO(
+                                SourceProvider.CATALOG, CatalogSourcePath.DESCRIPTION
+                            )
+                        ),
+                        locale=LocaleCodeVO("uk"),
+                    ),
+                )
+            ),
+            self.field,
+        ]
+        root = f"{self.base}/{self.feed['id']}"
+        saved = await self.client.put(
+            f"{root}/schema/draft",
+            headers=self.headers,
+            json={
+                "expected_version": 1,
+                "definition": {
+                    "schema_format_version": 1,
+                    "root": {"key": "publication", "kind": "object", "fields": fields},
+                },
+            },
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        item_ids = [await self.item() for _ in range(23)]
+        parent = await self.item("variable")
+        variant = await self.item("variant", parent=parent)
+        saved_content = await self.client.patch(
+            f"{self.catalog}/{parent}?locale=uk",
+            headers=self.headers,
+            json={
+                "content": {
+                    "expected_schema_version": 1,
+                    "values": {
+                        "title": "Білий топ",
+                        "body": "<p>Текст <strong>опису</strong></p>",
+                    },
+                }
+            },
+        )
+        self.assertEqual(saved_content.status_code, 200, saved_content.text)
+        added = await self.add(
+            [
+                *({"catalog_item_id": identifier} for identifier in item_ids),
+                {"catalog_item_id": parent, "catalog_variant_id": variant},
+            ],
+            expected=2,
+        )
+        await self.status(added["items"][0]["id"], 1, "PAUSED")
+
+        sample = await self.client.post(
+            f"{root}/preview", headers=self.headers, json={"expected_version": 2}
+        )
+        self.assertEqual(sample.status_code, 200, sample.text)
+        self.assertEqual(sample.json()["total_enabled"], 23)
+        self.assertEqual(len(sample.json()["rows"]), 20)
+
+        file = await self.client.post(
+            f"{root}/test-csv", headers=self.headers, json={"expected_version": 2}
+        )
+        self.assertEqual(file.status_code, 200, file.text)
+        self.assertIn("text/csv", file.headers["content-type"])
+        csv_rows = list(csv.reader(StringIO(file.text), delimiter=";"))
+        self.assertEqual(len(csv_rows), 23)
+        self.assertEqual(
+            csv_rows[:20],
+            [
+                [value if value is not None else "" for value in row["values"]]
+                for row in sample.json()["rows"]
+            ],
+        )
+        self.assertIn(
+            ["Білий топ", "Текст опису", "990.00"], [row[1:] for row in csv_rows]
+        )
+
+        sampled = {row["publication_id"] for row in sample.json()["rows"]}
+        missing = next(item for item in added["items"][1:] if item["id"] not in sampled)
+        async with self.scoped_session() as session:
+            await session.execute(
+                update(CatalogItemModel)
+                .where(CatalogItemModel.id == UUID(missing["catalog_item_id"]))
+                .values(status="archived")
+            )
+        blocked = await self.client.post(
+            f"{root}/test-csv", headers=self.headers, json={"expected_version": 2}
+        )
+        self.assertEqual(blocked.status_code, 422, blocked.text)
+        self.assertEqual(
+            blocked.json()["detail"]["issues"][0]["publication_id"], missing["id"]
+        )
+        self.assertEqual(
+            blocked.json()["detail"]["issues"][0]["code"], "SOURCE_UNAVAILABLE"
+        )
+
+    async def test_set_and_reset_overrides_flow_through_editor_and_csv(self) -> None:
+        """Проверяет независимость полей, актуальную схему и строгую запись значений."""
+        title = field_document(
+            text_field(
+                "title",
+                type_definition=StringFieldTypeVO(
+                    SourceValueDefinitionVO(
+                        SourceReferenceVO(SourceProvider.CATALOG, CatalogSourcePath.SKU)
+                    ),
+                    constraints=TextConstraintsVO(required=True, max_length=55),
+                ),
+            )
+        )
+        description = field_document(
+            text_field(
+                "description",
+                type_definition=TextFieldTypeVO(
+                    ManualValueDefinitionVO(),
+                    constraints=TextConstraintsVO(max_length=120),
+                ),
+            )
+        )
+        price = deepcopy(self.field)
+        price["type_definition"]["constraints"]["max_amount"] = "1500"
+        second_price = deepcopy(self.field)
+        second_price.update(id=str(uuid4()), key="second_price", label="Вторая цена")
+        second_price["export"]["name"] = "second_price"
+        root = f"{self.base}/{self.feed['id']}"
+        definition = {
+            "schema_format_version": 1,
+            "root": {
+                "key": "publication",
+                "kind": "object",
+                "fields": [title, description, price, second_price],
+            },
+        }
+        saved = await self.client.put(
+            f"{root}/schema/draft",
+            headers=self.headers,
+            json={"expected_version": 1, "definition": definition},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        item_id = await self.item()
+        added = await self.add([{"catalog_item_id": item_id}], expected=2)
+        identifier = added["items"][0]["id"]
+        route = f"/api/console/feed-builder/publications/{identifier}"
+        original = await self.client.get(f"{route}/fields")
+        self.assertEqual(original.status_code, 200, original.text)
+        original_fields = original.json()["fields"]
+        automatic_title = original_fields[0]["original_value"]
+        self.assertTrue(automatic_title.startswith("PRICE-"))
+        self.assertEqual(original_fields[2]["resolved_value"], "990.00")
+        self.assertIsNone(original_fields[1]["original_value"])
+
+        async def set_value(field: dict, value: str, version: int, expected: int = 200):
+            response = await self.client.put(
+                f"{route}/overrides/{field['id']}",
+                headers=self.headers,
+                json={
+                    "value": value,
+                    "expected_version": version,
+                    "expected_feed_version": 2,
+                },
+            )
+            self.assertEqual(response.status_code, expected, response.text)
+            return response.json()
+
+        value = "Т" * 55
+        invalid = await set_value(title, value + "Т", 1, 422)
+        self.assertEqual(invalid["detail"]["field_id"], title["id"])
+        self.assertEqual(invalid["detail"]["code"], "TEXT_LENGTH_CONSTRAINT")
+        self.assertEqual((await set_value(title, value, 1))["publication_version"], 2)
+        await set_value(title, "", 2, 422)
+        await set_value(description, "Описание\nВторая строка", 1, 409)
+        await set_value(description, "Описание\nВторая строка", 2)
+        invalid = await set_value(price, "1500.01", 3, 422)
+        self.assertEqual(invalid["detail"]["code"], "AMOUNT_CONSTRAINT_VIOLATION")
+        await set_value(price, "123.4567", 3)
+        await set_value(second_price, "456.78", 4)
+        read = await self.client.get(f"{route}/fields")
+        self.assertEqual(read.status_code, 200, read.text)
+        self.assertEqual(read.json()["publication_version"], 5)
+        resolved = read.json()["fields"]
+        self.assertEqual(resolved[0]["original_value"], automatic_title)
+        self.assertTrue(all(field["has_override"] for field in resolved))
+
+        async def csv_row() -> list[str]:
+            result = await self.client.post(
+                f"{root}/test-csv", headers=self.headers, json={"expected_version": 2}
+            )
+            self.assertEqual(result.status_code, 200, result.text)
+            return next(csv.reader(StringIO(result.text), delimiter=";"))
+
+        self.assertEqual(
+            await csv_row(), [value, "Описание\nВторая строка", "123.4567", "456.78"]
+        )
+        reset = await self.client.delete(
+            f"{route}/overrides/{price['id']}",
+            headers=self.headers,
+            params={"expected_version": 5, "expected_feed_version": 2},
+        )
+        self.assertEqual(reset.status_code, 200, reset.text)
+        self.assertEqual(reset.json()["publication_version"], 6)
+        self.assertEqual(
+            await csv_row(), [value, "Описание\nВторая строка", "990.00", "456.78"]
+        )
+
+        definition["root"]["fields"][0]["type_definition"]["constraints"][
+            "max_length"
+        ] = 40
+        updated = await self.client.put(
+            f"{root}/schema/draft",
+            headers=self.headers,
+            json={"expected_version": 2, "definition": definition},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        await set_value(title, "Новое значение", 6, 409)

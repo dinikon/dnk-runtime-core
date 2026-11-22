@@ -69,7 +69,7 @@ test("Calculation AST is editable with current parameters and preserves rules, D
       ...calc,
       defaultExpression: {
         kind: "parameter",
-        parameter: "product.category_ids",
+        parameter: "product.unsupported",
       },
     }),
     false,

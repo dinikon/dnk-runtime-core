@@ -1,4 +1,5 @@
 from uuid import UUID
+from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.publication.repository import (
@@ -30,6 +31,18 @@ async def load_editable_publication(
     """Загружает и проверяет объекты в едином порядке блокировок Feed → Publication."""
     feed = await feeds.get_for_update(FeedIdVO(feed_id))
     PublicationParticipationPolicy.ensure_editable(feed)
+    return await load_publication_for_update(
+        publications, feed, identifier, expected_version
+    )
+
+
+async def load_publication_for_update(
+    publications: FeedPublicationRepositoryProtocol,
+    feed: Feed,
+    identifier: UUID,
+    expected_version: int,
+) -> FeedPublication:
+    """Проверяет принадлежность и версию публикации после блокировки её Feed."""
     publication = await publications.get_for_update(FeedPublicationIdVO(identifier))
     if publication.feed_id != feed.id:
         raise PublicationNotFoundError("Публикация не найдена в Feed.")

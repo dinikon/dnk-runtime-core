@@ -120,7 +120,7 @@ def node_document(node: Expression | ConditionOperand | Condition) -> JsonObject
 
 def calculation_document(value: PriceCalculationVO) -> JsonObject:
     """Представляет расчёт с явным ELSE и без валюты вычислений."""
-    return {
+    document: JsonObject = {
         "default_expression": node_document(value.default_expression),
         "rules": [
             {
@@ -130,21 +130,19 @@ def calculation_document(value: PriceCalculationVO) -> JsonObject:
             }
             for rule in value.rules
         ],
-        "purchase_source": (
-            {
-                "provider": "supplier_sourcing",
-                "path": "purchase_price",
-                "selection": {
-                    "mode": "SUPPLIER_SOURCE",
-                    "supplier_source_id": str(
-                        value.purchase_source.supplier_source_id.uuid
-                    ),
-                },
-            }
-            if value.purchase_source is not None
-            else None
-        ),
     }
+    if value.purchase_source is not None:
+        document["purchase_source"] = {
+            "provider": "supplier_sourcing",
+            "path": "purchase_price",
+            "selection": {
+                "mode": "SUPPLIER_SOURCE",
+                "supplier_source_id": str(
+                    value.purchase_source.supplier_source_id.uuid
+                ),
+            },
+        }
+    return document
 
 
 def transform_document(value: TransformDefinitionVO) -> JsonObject:

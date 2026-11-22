@@ -8,6 +8,8 @@ PARAMETER_TYPES: tuple[tuple[str, str], ...] = (
     ("price.effective", "number"),
     ("product.sku", "string"),
     ("product.id", "uuid"),
+    ("price.purchase", "number"),
+    ("product.category_ids", "collection:uuid"),
 )
 ENGINE_VERSION = "1"
 PRECISION = 40

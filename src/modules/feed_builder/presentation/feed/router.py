@@ -80,6 +80,20 @@ from src.modules.feed_builder.presentation.feed.http.response.list_calculation_o
     ListCalculationOperationsResponse,
 )
 
+from src.modules.feed_builder.presentation.feed.export_depends import (
+    prepare_export_transaction,
+    require_catalog_export_access,
+)
+from src.modules.feed_builder.presentation.feed.http.controller.preview_feed import (
+    preview_feed,
+)
+from src.modules.feed_builder.presentation.feed.http.controller.download_test_csv import (
+    download_test_csv,
+)
+from src.modules.feed_builder.presentation.feed.http.response.preview_feed import (
+    PreviewFeedResponse,
+)
+
 router = APIRouter(prefix="/feed-builder/feeds", tags=["feed-builder"])
 
 router.add_api_route(
@@ -185,6 +199,34 @@ preview_router.add_api_route(
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),
+    ],
+)
+preview_router.add_api_route(
+    "/{feed_id}/preview",
+    preview_feed,
+    methods=["POST"],
+    response_model=PreviewFeedResponse,
+    dependencies=[
+        Depends(prepare_export_transaction),
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+        Depends(require_catalog_export_access),
+    ],
+)
+preview_router.add_api_route(
+    "/{feed_id}/test-csv",
+    download_test_csv,
+    methods=["POST"],
+    responses={
+        200: {
+            "content": {"text/csv": {"schema": {"type": "string", "format": "binary"}}}
+        }
+    },
+    dependencies=[
+        Depends(prepare_export_transaction),
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+        Depends(require_catalog_export_access),
     ],
 )
 router.include_router(preview_router)

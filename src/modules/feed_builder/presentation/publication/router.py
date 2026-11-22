@@ -6,6 +6,27 @@ from src.modules.identity.presentation.auth.http.csrf import require_csrf
 from src.modules.feed_builder.presentation.feed.http.schema.body_limit import (
     SchemaBodyLimitRoute,
 )
+from src.modules.feed_builder.presentation.feed.export_depends import (
+    prepare_export_transaction,
+)
+from src.modules.feed_builder.presentation.publication.http.controller.get_publication_fields import (
+    get_publication_fields,
+)
+from src.modules.feed_builder.presentation.publication.http.controller.set_publication_override import (
+    set_publication_override,
+)
+from src.modules.feed_builder.presentation.publication.http.controller.reset_publication_override import (
+    reset_publication_override,
+)
+from src.modules.feed_builder.presentation.publication.http.response.get_publication_fields import (
+    GetPublicationFieldsResponse,
+)
+from src.modules.feed_builder.presentation.publication.http.response.set_publication_override import (
+    SetPublicationOverrideResponse,
+)
+from src.modules.feed_builder.presentation.publication.http.response.reset_publication_override import (
+    ResetPublicationOverrideResponse,
+)
 from src.modules.feed_builder.presentation.publication.http.controller.add_catalog_items import (
     add_catalog_items,
 )
@@ -78,6 +99,36 @@ router.add_api_route(
     change_publication_status,
     methods=["PATCH"],
     response_model=ChangePublicationStatusResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/publications/{publication_id}/fields",
+    get_publication_fields,
+    methods=["GET"],
+    response_model=GetPublicationFieldsResponse,
+    dependencies=[
+        Depends(prepare_export_transaction),
+        Depends(require_authenticated_request_context),
+    ],
+)
+router.add_api_route(
+    "/publications/{publication_id}/overrides/{field_id}",
+    set_publication_override,
+    methods=["PUT"],
+    response_model=SetPublicationOverrideResponse,
+    dependencies=[
+        Depends(require_authenticated_request_context),
+        Depends(require_csrf),
+    ],
+)
+router.add_api_route(
+    "/publications/{publication_id}/overrides/{field_id}",
+    reset_publication_override,
+    methods=["DELETE"],
+    response_model=ResetPublicationOverrideResponse,
     dependencies=[
         Depends(require_authenticated_request_context),
         Depends(require_csrf),

@@ -200,7 +200,7 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn({"id": "price.sale", "value": None}, result["parameters"])
 
     async def test_semantic_runtime_and_request_errors_are_distinct(self) -> None:
-        """Неподключённые данные отклоняются, ошибки исполнения не становятся ELSE."""
+        """Тип коллекции отклоняется в арифметике, ошибки исполнения не становятся ELSE."""
         item = await self.item(sale=None)
         invalid = copy.deepcopy(self.field)
         invalid["type_definition"]["value"]["calculation"]["rules"][0]["expression"] = {
@@ -208,7 +208,7 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
             "parameter": "product.category_ids",
         }
         result = await self.preview(str(uuid4()), field=invalid, status=422)
-        self.assertEqual(result["detail"]["code"], "UNKNOWN_CALCULATION_PARAMETER")
+        self.assertEqual(result["detail"]["code"], "INVALID_EXPRESSION_TYPE")
         response = await self.client.put(
             f"{self.base}/{self.feed['id']}/schema/draft",
             headers=self.headers,
@@ -225,9 +225,7 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual(
-            response.json()["detail"]["code"], "UNKNOWN_CALCULATION_PARAMETER"
-        )
+        self.assertEqual(response.json()["detail"]["code"], "INVALID_EXPRESSION_TYPE")
         self.assertEqual(response.json()["detail"]["field_id"], self.field["id"])
         invalid = copy.deepcopy(self.field)
         calc = invalid["type_definition"]["value"]["calculation"]
@@ -309,6 +307,8 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "price.effective",
                 "product.id",
                 "product.sku",
+                "price.purchase",
+                "product.category_ids",
             },
         )
         operations = (
@@ -402,5 +402,5 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
                     (CatalogCalculationReference(UUID(same)),), NOW
                 )
             )[0]
-            self.assertEqual(snapshot.sale, Decimal("1000"))
+            self.assertIsNone(snapshot.sale)
             self.assertEqual(snapshot.effective, Decimal("1000"))

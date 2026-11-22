@@ -53,5 +53,9 @@ class CatalogCalculationProductReader:
                 regular=result.regular,
                 sale=result.sale,
                 effective=result.effective,
+                purchase=result.purchase,
+                category_ids=tuple(
+                    EntityIdVO(category) for category in result.category_ids
+                ),
             ),
         )

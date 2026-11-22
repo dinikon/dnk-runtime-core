@@ -27,6 +27,8 @@ class CatalogCalculationSnapshot:
     revision: int
     as_of: datetime
     valid_until: datetime | None
+    purchase: Decimal | None = None
+    category_ids: tuple[UUID, ...] = ()
 
 
 class CatalogCalculationItemNotFoundError(Exception):
@@ -44,4 +46,26 @@ class CatalogCalculationReaderProtocol(Protocol):
         self, references: tuple[CatalogCalculationReference, ...], as_of: datetime
     ) -> tuple[CatalogCalculationSnapshot, ...]:
         """Возвращает согласованные цены и реальные revision выбранных записей."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogPublicationValues:
+    """Передаёт цены позиции и эффективные значения полей в нужных локалях."""
+
+    calculation: CatalogCalculationSnapshot
+    texts: tuple[tuple[str, str, str | None], ...]
+
+
+class CatalogPublicationValuesReaderProtocol(Protocol):
+    """Читает существующие продаваемые позиции для табличного экспорта."""
+
+    async def read_publication_values(
+        self,
+        references: tuple[CatalogCalculationReference, ...],
+        as_of: datetime,
+        locales: frozenset[str],
+        content_codes: frozenset[str],
+    ) -> tuple[CatalogPublicationValues, ...]:
+        """Возвращает доступные позиции со значениями и опускает недоступные ссылки."""
         ...

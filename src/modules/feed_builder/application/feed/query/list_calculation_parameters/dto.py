@@ -13,6 +13,6 @@ class CalculationParameterDTO:
 
 @dataclass(frozen=True, slots=True)
 class ListCalculationParametersResultDTO:
-    """Передаёт закрытый реестр без закупки и категорий."""
+    """Передаёт закрытый реестр параметров Catalog."""
 
     items: tuple[CalculationParameterDTO, ...]

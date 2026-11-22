@@ -114,8 +114,8 @@ class PriceCalculationStructurePolicy:
                 (child, depth + 1, (*path, *relative_path))
                 for relative_path, child in children
             )
-        if uses_purchase != (calculation.purchase_source is not None):
+        if calculation.purchase_source is not None and not uses_purchase:
             raise InvalidPriceCalculationDefinitionError(
-                "Закупочный источник требуется только при зависимости price.purchase.",
+                "Прежняя закупочная привязка допустима только для price.purchase.",
                 path=("purchase_source",),
             )

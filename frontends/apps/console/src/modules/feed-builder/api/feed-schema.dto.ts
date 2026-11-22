@@ -46,7 +46,7 @@ export type SchemaNodeDTO =
 export interface CalculationDTO {
   default_expression: SchemaNodeDTO;
   rules: { id: string; condition: SchemaNodeDTO; expression: SchemaNodeDTO }[];
-  purchase_source: {
+  purchase_source?: {
     provider: "supplier_sourcing";
     path: "purchase_price";
     selection: { mode: "SUPPLIER_SOURCE"; supplier_source_id: string };

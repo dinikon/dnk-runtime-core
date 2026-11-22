@@ -14,17 +14,24 @@ class ListCalculationParametersHandler:
     async def execute(
         self, query: ListCalculationParametersQuery
     ) -> ListCalculationParametersResultDTO:
-        """Не рекламирует неподключённые источники или защищённую закупку."""
+        """Описывает типы параметров доступного контракта Catalog."""
         labels = {
             "price.regular": "Обычная цена",
             "price.sale": "Действующая акционная цена",
             "price.effective": "Текущая цена",
             "product.sku": "SKU позиции",
             "product.id": "ID позиции",
+            "price.purchase": "Закупочная цена",
+            "product.category_ids": "Категории Catalog",
         }
         return ListCalculationParametersResultDTO(
             tuple(
-                CalculationParameterDTO(name, labels[name], kind, name != "product.id")
+                CalculationParameterDTO(
+                    name,
+                    labels[name],
+                    kind,
+                    name not in ("product.id", "product.category_ids"),
+                )
                 for name, kind in PARAMETER_TYPES
             )
         )

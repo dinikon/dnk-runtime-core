@@ -117,6 +117,9 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                             "pause",
                             "archive",
                             "restore_participation",
+                            "set_override",
+                            "reset_override",
+                            "_change_overrides",
                         }
                     self.assertEqual(methods, expected, str(path))
                     for method in (

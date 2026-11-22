@@ -33,9 +33,8 @@ class FeedPublicationMapper:
     """Восстанавливает агрегат и точно сериализует все ручные значения без I/O."""
 
     @staticmethod
-    def to_domain(row: Mapping[str, object]) -> FeedPublication:
-        """Использует restore с именованными аргументами и реальной версией."""
-        overrides = row["overrides"]
+    def read_overrides(overrides: object) -> tuple[FieldOverrideVO, ...]:
+        """Читает JSON ручных значений без восстановления агрегата."""
         if not isinstance(overrides, dict):
             raise InvalidPublicationStorageError("Неверные overrides.")
         values: list[FieldOverrideVO] = []
@@ -54,6 +53,11 @@ class FeedPublicationMapper:
             if value is not None and not isinstance(value, (str, PriceAmountVO)):
                 raise InvalidPublicationStorageError("Неверный тип ручного значения.")
             values.append(FieldOverrideVO(FieldIdVO(UUID(identifier)), value))
+        return tuple(values)
+
+    @staticmethod
+    def to_domain(row: Mapping[str, object]) -> FeedPublication:
+        """Использует restore с именованными аргументами и реальной версией."""
         return FeedPublication.restore(
             identifier=FeedPublicationIdVO(cast(UUID, row["id"])),
             feed_id=FeedIdVO(cast(UUID, row["feed_id"])),
@@ -66,11 +70,26 @@ class FeedPublicationMapper:
                 ),
             ),
             status=PublicationStatus(cast(str, row["status"])),
-            overrides=tuple(values),
+            overrides=FeedPublicationMapper.read_overrides(row["overrides"]),
             created_at=cast(datetime, row["created_at"]),
             updated_at=cast(datetime, row["updated_at"]),
             version=FeedPublicationVersionVO(cast(int, row["row_version"])),
         )
+
+    @staticmethod
+    def write_overrides(overrides: tuple[FieldOverrideVO, ...]) -> dict[str, object]:
+        """Сериализует ручные значения, сохраняя точность денежной суммы."""
+        return {
+            str(item.field_id.uuid): {
+                "mode": "MANUAL",
+                "value": (
+                    {"amount": str(item.value.amount)}
+                    if isinstance(item.value, PriceAmountVO)
+                    else item.value
+                ),
+            }
+            for item in overrides
+        }
 
     @staticmethod
     def to_insert_values(publication: FeedPublication) -> dict[str, object]:
@@ -88,15 +107,5 @@ class FeedPublicationMapper:
             row_version=publication.version.value,
             created_at=publication.created_at,
             updated_at=publication.updated_at,
-            overrides={
-                str(o.field_id.uuid): {
-                    "mode": "MANUAL",
-                    "value": (
-                        {"amount": str(o.value.amount)}
-                        if isinstance(o.value, PriceAmountVO)
-                        else o.value
-                    ),
-                }
-                for o in publication.overrides
-            },
+            overrides=FeedPublicationMapper.write_overrides(publication.overrides),
         )

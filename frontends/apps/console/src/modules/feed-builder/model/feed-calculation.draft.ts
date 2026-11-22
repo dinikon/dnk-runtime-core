@@ -6,6 +6,8 @@ export const parameterTypes: Readonly<Record<string, string>> = {
   "price.effective": "number",
   "product.sku": "string",
   "product.id": "uuid",
+  "price.purchase": "number",
+  "product.category_ids": "collection:uuid",
 };
 export function initialCalculation(): SchemaCalculation {
   return {

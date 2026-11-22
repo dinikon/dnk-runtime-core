@@ -114,6 +114,48 @@ class FeedPublication:
             version=version,
         )
 
+    def set_override(self, override: FieldOverrideVO, *, now: datetime) -> Self:
+        """Устанавливает ручное значение одного поля."""
+        if not isinstance(override, FieldOverrideVO):
+            raise InvalidPublicationValueError("Нужно ручное значение поля.")
+        return self._change_overrides(override.field_id, override, now)
+
+    def reset_override(self, field_id: FieldIdVO, *, now: datetime) -> Self:
+        """Возвращает поле к его определению в схеме."""
+        return self._change_overrides(field_id, None, now)
+
+    def _change_overrides(
+        self, field_id: FieldIdVO, override: FieldOverrideVO | None, now: datetime
+    ) -> Self:
+        """Сохраняет остальные значения и меняет версию при фактической правке."""
+        if self.status is PublicationStatus.ARCHIVED:
+            raise PublicationTransitionError(
+                "Архивная публикация доступна для просмотра."
+            )
+        require_datetime(now, error=InvalidPublicationValueError)
+        if not isinstance(field_id, FieldIdVO) or now < self.updated_at:
+            raise InvalidPublicationValueError(
+                "Некорректное изменение ручного значения."
+            )
+        current = next(
+            (item for item in self.overrides if item.field_id == field_id), None
+        )
+        if current == override:
+            return self
+        remaining = tuple(item for item in self.overrides if item.field_id != field_id)
+        if override is not None:
+            remaining = (*remaining, override)
+        if len(remaining) > MAX_FIELDS:
+            raise InvalidPublicationValueError(
+                "Превышен лимит ручных значений публикации."
+            )
+        return replace(
+            self,
+            overrides=remaining,
+            version=FeedPublicationVersionVO(self.version.value + 1),
+            updated_at=now,
+        )
+
     def _transition(
         self,
         target: PublicationStatus,
