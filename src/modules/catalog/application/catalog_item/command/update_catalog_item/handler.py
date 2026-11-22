@@ -1,3 +1,6 @@
+from src.modules.catalog.application.catalog_item.port.category_selection import (
+    CatalogCategorySelectionPort,
+)
 from src.modules.catalog.application.catalog_item.command.update_catalog_item.command import (
     UpdateCatalogItemCommand,
 )
@@ -32,10 +35,11 @@ class UpdateCatalogItemHandler:
         schemas: CatalogItemContentSchemaPort,
         sanitizer: RichTextSanitizerPort,
         files: CatalogImageFilesPort,
+        categories: CatalogCategorySelectionPort,
     ) -> None:
         """Подключает сервис той же транзакции без вложенного handler."""
         self._service = CatalogItemUpdateService(
-            mutations, clock, locales, schemas, sanitizer, files
+            mutations, clock, locales, schemas, sanitizer, files, categories
         )
 
     async def execute(

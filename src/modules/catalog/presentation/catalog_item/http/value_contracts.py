@@ -1,3 +1,9 @@
+from src.modules.catalog.domain.catalog_category.value_object.identifier import (
+    CatalogCategoryIdVO,
+)
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from datetime import datetime
 from decimal import Decimal
@@ -29,6 +35,24 @@ from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGa
 def purchase_price_from_value(value: Decimal | None) -> PurchasePriceVO | None:
     """Преобразует закупочную сумму, сохраняя различие между нулём и null."""
     return PurchasePriceVO(value) if value is not None else None
+
+
+class CategorySelectionValue(BaseModel):
+    """Полное назначение категорий, сохраняемое одной операцией."""
+
+    model_config = ConfigDict(extra="forbid")
+    primary_category_id: UUID
+    additional_category_ids: tuple[UUID, ...] = ()
+
+    def to_vo(self) -> CatalogItemCategoriesVO:
+        """Создаёт проверенное назначение категорий товара."""
+        return CatalogItemCategoriesVO(
+            CatalogCategoryIdVO(self.primary_category_id),
+            tuple(
+                CatalogCategoryIdVO(identifier)
+                for identifier in self.additional_category_ids
+            ),
+        )
 
 
 class PriceValue(BaseModel):

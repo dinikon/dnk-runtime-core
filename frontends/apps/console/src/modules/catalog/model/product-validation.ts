@@ -77,6 +77,7 @@ export function sectionError(
 
 export const fieldSections: Record<string, ProductSection> = {
   status: "status",
+  categories: "categories",
   sku: "sku",
   virtual: "virtual",
   purchase_price: "purchase_price",

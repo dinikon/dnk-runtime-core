@@ -1,3 +1,6 @@
+from src.modules.catalog.infrastructure.catalog_category.selection import (
+    SqlAlchemyCatalogCategorySelection,
+)
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,9 +105,16 @@ def build_process_import_row(
         files,
         clock,
         uuid,
+        SqlAlchemyCatalogCategorySelection(session),
     )
     updates = CatalogItemUpdateService(
-        mutations, clock, locales, schemas, sanitizer, files
+        mutations,
+        clock,
+        locales,
+        schemas,
+        sanitizer,
+        files,
+        SqlAlchemyCatalogCategorySelection(session),
     )
     return ProcessCatalogImportRowHandler(
         EntityIdVO(tenant_id),

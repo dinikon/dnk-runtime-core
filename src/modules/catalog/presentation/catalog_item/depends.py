@@ -1,3 +1,6 @@
+from src.modules.catalog.infrastructure.catalog_category.selection import (
+    SqlAlchemyCatalogCategorySelection,
+)
 from typing import Annotated
 
 from fastapi import Depends
@@ -162,6 +165,7 @@ def get_creation_service(
         files,
         clock,
         uuid,
+        SqlAlchemyCatalogCategorySelection(uow.session),
     )
 
 
@@ -256,10 +260,17 @@ def get_update_catalog_item_handler(
     schemas: SchemasDep,
     sanitizer: SanitizerDep,
     files: FilesDep,
+    uow: UoWDep,
 ) -> UpdateCatalogItemHandler:
     """Собирает единый сценарий изменения на портах общего UoW."""
     return UpdateCatalogItemHandler(
-        mutations, clock, locales, schemas, sanitizer, files
+        mutations,
+        clock,
+        locales,
+        schemas,
+        sanitizer,
+        files,
+        SqlAlchemyCatalogCategorySelection(uow.session),
     )
 
 

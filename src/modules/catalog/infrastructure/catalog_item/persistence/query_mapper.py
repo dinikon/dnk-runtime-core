@@ -52,6 +52,7 @@ class CatalogItemQueryMapper:
                 if original.purchase_price is not None
                 else None
             ),
+            categories=item.categories,
             price_specification=item.price,
             price=computed.price,
             weight=original.weight,

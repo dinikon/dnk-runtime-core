@@ -12,6 +12,7 @@ export function productEditorTab(
 }
 
 export function productEditorGroup(value: unknown): EditorGroup | undefined {
+  if (value === "categories") return "categories";
   if (value === "media") return "media";
   if (value === "inventory") return "stock";
   if (value === "shipping") return "measurements";

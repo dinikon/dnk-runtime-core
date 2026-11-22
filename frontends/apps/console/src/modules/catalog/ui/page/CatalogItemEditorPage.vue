@@ -14,6 +14,7 @@ const {
   ctx,
   id,
   scope,
+  categoryTree,
   item,
   schema,
   pending,
@@ -39,6 +40,7 @@ const pageState = useProductEditorPageState(
 const sections: ProductSection[] = [
   "content",
   "status",
+  "categories",
   "sku",
   "virtual",
   "price",
@@ -126,6 +128,11 @@ function focused(): void {
       <Skeleton class="h-96 w-full" /><Skeleton class="h-72 w-full" />
     </div>
     <ProductEditor
+      :category-options="categoryTree.options.value"
+      :category-loading="categoryTree.query.isPending.value"
+      :category-error="categoryTree.query.isError.value"
+      :locale="ctx.locale.value"
+      @reload-categories="categoryTree.query.refetch()"
       v-if="item.data.value"
       :key="scope"
       :item="item.data.value"

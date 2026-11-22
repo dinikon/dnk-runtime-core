@@ -12,6 +12,7 @@ from dataclasses import fields, replace
 from datetime import UTC, datetime
 import unittest
 from unittest.mock import AsyncMock
+from test.catalog_support import default_categories
 from uuid import uuid4
 from fastapi import FastAPI
 from pydantic import ValidationError
@@ -128,6 +129,8 @@ class CatalogProductTypeTests(unittest.IsolatedAsyncioTestCase):
         schemas.get_by_code.return_value = schema
         now = datetime(2026, 10, 18, tzinfo=UTC)
         clock = type("Clock", (), {"now": lambda self: now})()
+        categories = AsyncMock()
+        categories.default_id.return_value = default_categories().primary_category_id
         handler = CreateCatalogItemHandler(
             repository,
             CatalogItemCreationService(
@@ -138,6 +141,7 @@ class CatalogProductTypeTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(),
                 clock,
                 UUID7Generator(),
+                categories,
             ),
         )
         command = CreateCatalogItemCommand(EntityIdVO(uuid4()), EntityIdVO(uuid4()))
@@ -168,7 +172,9 @@ class CatalogProductTypeTests(unittest.IsolatedAsyncioTestCase):
         )
         actor = EntityIdVO(uuid4())
         now = datetime(2026, 10, 18, tzinfo=UTC)
-        item = CatalogItem.create(CatalogItemIdVO(uuid4()), actor, now, schema.id)
+        item = CatalogItem.create(
+            CatalogItemIdVO(uuid4()), actor, now, schema.id, default_categories()
+        )
         for values in (
             {"title": "Name"},
             {"title": "Name", "details": ""},
@@ -222,7 +228,7 @@ class CatalogRemovedContractsTests(unittest.TestCase):
         schema = app.openapi()
         self.assertFalse(
             any(
-                any("/" + name in path for name in ("attributes", "categories", "tags"))
+                any("/" + name in path for name in ("attributes", "tags"))
                 for path in schema["paths"]
             )
         )
@@ -236,13 +242,10 @@ class CatalogRemovedContractsTests(unittest.TestCase):
             "catalog_attribute_options",
             "catalog_attribute_translations",
             "catalog_attribute_option_translations",
-            "catalog_categories",
-            "catalog_category_translations",
             "catalog_tags",
             "catalog_tag_translations",
             "catalog_item_attributes",
             "catalog_item_attribute_options",
-            "catalog_item_categories",
             "catalog_item_tags",
             "catalog_item_metadata",
             "catalog_item_variant_selections",

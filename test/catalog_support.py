@@ -1,5 +1,11 @@
 """Общие фабрики tenant-схем Catalog для тестов без фиксированных UUID."""
 
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
+from src.modules.catalog.domain.catalog_category.value_object.identifier import (
+    CatalogCategoryIdVO,
+)
 from datetime import UTC, datetime
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +44,11 @@ def default_product_type() -> ProductType:
         EntityIdVO(uuid4()),
         datetime(2026, 10, 18, tzinfo=UTC),
     )
+
+
+def default_categories() -> CatalogItemCategoriesVO:
+    """Назначает отдельную тестовую категорию корневой карточке."""
+    return CatalogItemCategoriesVO(CatalogCategoryIdVO(uuid4()))
 
 
 def default_schema() -> ProductTypeSchemaSnapshot:

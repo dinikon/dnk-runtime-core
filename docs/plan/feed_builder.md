@@ -1278,8 +1278,8 @@ CREATE TABLE fb_publications (
 
     row_version BIGINT NOT NULL,
 
-    created_at TIMESTAMPTZ NOT NULL ,
-    updated_at TIMESTAMPTZ NOT NULL ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT uq_fb_publications_reference UNIQUE NULLS NOT DISTINCT (
         feed_id,

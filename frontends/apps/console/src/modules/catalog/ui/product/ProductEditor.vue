@@ -24,8 +24,14 @@ import ProductStockForm from "../forms/ProductStockForm.vue";
 import ProductDescriptionsForm from "../forms/ProductDescriptionsForm.vue";
 import CatalogItemGalleryForm from "../forms/CatalogItemGalleryForm.vue";
 import ProductMeasurementsForm from "../forms/ProductMeasurementsForm.vue";
+import CatalogItemCategoryForm from "../forms/CatalogItemCategoryForm.vue";
+import type { CategoryOption } from "../../model/category.types";
 const props = defineProps<{
   item: CatalogItem;
+  categoryOptions: CategoryOption[];
+  categoryLoading: boolean;
+  categoryError: boolean;
+  locale: string;
   parentStock?: ProductStock;
   content: Record<string, string>;
   disabled: boolean;
@@ -46,6 +52,7 @@ const emit = defineEmits<{
   save: [section: ProductSection, value: Record<string, unknown>];
   content: [code: "title" | "body", value: string | undefined];
   upload: [file: File, main: boolean];
+  reloadCategories: [];
   reload: [];
   retry: [];
   focused: [];
@@ -256,6 +263,37 @@ onMounted(async () => {
             @title="emit('content', 'title', $event)"
             @virtual="changeVirtual"
             @save="(section, value) => emit('save', section, value)"
+          />
+        </ProductEditorSection>
+        <ProductEditorSection
+          :id="`product-${item.id}-categories`"
+          title="Категории"
+          collapsible
+          default-open
+          :dirty="groupDirty('categories')"
+          :error="groupError('categories')"
+          :reveal="revealed.categories"
+        >
+          <p v-if="categoryLoading" role="status">Загрузка категорий…</p>
+          <p v-else-if="categoryError" role="alert">
+            Не удалось загрузить категории.
+            <button
+              type="button"
+              class="underline"
+              @click="emit('reloadCategories')"
+            >
+              Повторить
+            </button>
+          </p>
+          <CatalogItemCategoryForm
+            v-else-if="item.categories"
+            :value="item.categories"
+            :options="categoryOptions"
+            :locale="locale"
+            :reset="resets.categories ?? 0"
+            :disabled="disabled"
+            :parent-id="item.parent_id ?? null"
+            @change="emit('save', 'categories', { categories: $event })"
           />
         </ProductEditorSection>
         <ProductEditorSection

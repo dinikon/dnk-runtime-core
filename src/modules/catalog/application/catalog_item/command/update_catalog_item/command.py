@@ -1,3 +1,6 @@
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
 from dataclasses import dataclass, field
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
@@ -44,6 +47,8 @@ class UpdateCatalogItemCommand:
     sku: SkuCodeVO | None = None
     virtual: bool | None = None
     price_specification: PriceSpecificationVO | None = None
+    change_primary_only: bool = field(default=False, kw_only=True)
+    categories: CatalogItemCategoriesVO | None = field(default=None, kw_only=True)
     purchase_price: PurchasePriceVO | None = field(default=None, kw_only=True)
     stock: StockSpecificationVO | None = None
     weight: WeightVO | None = None

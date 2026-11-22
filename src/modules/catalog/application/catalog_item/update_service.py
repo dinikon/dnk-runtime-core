@@ -1,3 +1,6 @@
+from src.modules.catalog.application.catalog_item.port.category_selection import (
+    CatalogCategorySelectionPort,
+)
 from collections.abc import Awaitable
 from typing import TypeVar
 from src.modules.catalog.application.catalog_item.command.update_catalog_item.command import (
@@ -49,8 +52,10 @@ class CatalogItemUpdateService:
         schemas: CatalogItemContentSchemaPort,
         sanitizer: RichTextSanitizerPort,
         files: CatalogImageFilesPort,
+        categories: CatalogCategorySelectionPort,
     ) -> None:
         """Принимает порты одного внешнего tenant UoW, без управления транзакцией."""
+        self._categories = categories
         self._mutations = mutations
         self._clock = clock
         self._locales = locales
@@ -63,6 +68,13 @@ class CatalogItemUpdateService:
     ) -> UpdateCatalogItemResultDTO:
         """Загружает актуальное состояние, вызывает один domain update и сохраняет."""
         item = await self._mutations.load(command.tenant_id, command.item_id)
+        categories = command.categories
+        if "categories" in command.fields and categories is not None:
+            if command.change_primary_only:
+                categories = item.categories.with_primary(
+                    categories.primary_category_id
+                )
+            await self._categories.ensure_exist(command.tenant_id, categories)
         localized = command.fields & {"content", "gallery"}
         locale = None
         if localized:
@@ -103,6 +115,7 @@ class CatalogItemUpdateService:
             status=command.status,
             sku=command.sku,
             virtual=command.virtual,
+            categories=categories,
             purchase_price=command.purchase_price,
             price_specification=command.price_specification,
             stock=command.stock,

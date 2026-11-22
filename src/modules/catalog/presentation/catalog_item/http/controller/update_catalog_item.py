@@ -64,6 +64,10 @@ async def update_catalog_item(
                 tenant_id=EntityIdVO.from_value(principal.tenant_id),
                 actor_id=EntityIdVO.from_value(principal.user_id),
                 item_id=CatalogItemIdVO(item_id),
+                change_primary_only=payload.categories is not None
+                and "additional_category_ids"
+                not in payload.categories.model_fields_set,
+                categories=payload.categories.to_vo() if payload.categories else None,
                 fields=frozenset(payload.model_fields_set),
                 locale=locale,
                 status=payload.status,

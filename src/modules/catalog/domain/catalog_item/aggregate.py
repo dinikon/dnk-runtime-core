@@ -1,3 +1,6 @@
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
 from src.modules.catalog.domain.catalog_item.policy.stock import resolve_stock
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -53,6 +56,7 @@ class CatalogItem:
 
     id: CatalogItemIdVO
     product_type_id: EntityIdVO
+    categories: CatalogItemCategoriesVO
     status: CatalogItemStatus
     sku: SkuCodeVO | None
     virtual: bool
@@ -80,12 +84,14 @@ class CatalogItem:
         actor: EntityIdVO,
         now: datetime,
         product_type_id: EntityIdVO,
+        categories: CatalogItemCategoriesVO,
         virtual: bool = False,
     ) -> Self:
         """Создаёт самостоятельную позицию без скрытого варианта."""
         return cls.restore(
             identifier=identifier,
             product_type_id=product_type_id,
+            categories=categories,
             status=CatalogItemStatus.DRAFT,
             sku=None,
             virtual=virtual,
@@ -105,6 +111,7 @@ class CatalogItem:
         *,
         identifier: CatalogItemIdVO,
         product_type_id: EntityIdVO,
+        categories: CatalogItemCategoriesVO,
         status: CatalogItemStatus,
         sku: SkuCodeVO | None,
         virtual: bool,
@@ -127,6 +134,7 @@ class CatalogItem:
         item = cls(
             id=identifier,
             product_type_id=product_type_id,
+            categories=categories,
             status=status,
             sku=sku,
             virtual=virtual,
@@ -163,9 +171,10 @@ class CatalogItem:
         actor: EntityIdVO,
         now: datetime,
         product_type_id: EntityIdVO,
+        categories: CatalogItemCategoriesVO,
     ) -> "CatalogItem":
         """Создаёт контейнер без продаваемого родителя и без скрытого варианта."""
-        item = cls.create(identifier, actor, now, product_type_id)
+        item = cls.create(identifier, actor, now, product_type_id, categories)
         item.kind = CatalogItemKind.VARIABLE
         item._validate()
         return item
@@ -175,6 +184,7 @@ class CatalogItem:
         return CatalogItemValuesSnapshot(
             id=self.id,
             product_type_id=self.product_type_id,
+            categories=self.categories,
             status=self.status,
             sku=self.sku.value if self.sku else None,
             virtual=self.virtual,
@@ -213,6 +223,10 @@ class CatalogItem:
             raise InvalidCatalogValueError("Audit требует timezone.")
         if self.sku is not None and not isinstance(self.sku, SkuCodeVO):
             raise InvalidCatalogValueError("Некорректный SKU.", ("sku",))
+        if not isinstance(self.categories, CatalogItemCategoriesVO):
+            raise InvalidCatalogValueError(
+                "Укажите основную категорию товара.", ("categories",)
+            )
         if type(self.virtual) is not bool:
             raise InvalidCatalogValueError("Virtual требует bool.", ("virtual",))
         if self.purchase_price is not None and not isinstance(
@@ -264,6 +278,7 @@ class CatalogItem:
         sku: SkuCodeVO | None = None,
         virtual: bool | None = None,
         purchase_price: PurchasePriceVO | None = None,
+        categories: CatalogItemCategoriesVO | None = None,
         price_specification: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO | None = None,
         weight: WeightVO | None = None,
@@ -276,6 +291,7 @@ class CatalogItem:
     ) -> None:
         """Атомарно принимает явно заданные значения после проверки итогового кандидата."""
         values: dict[str, object] = {
+            "categories": categories,
             "status": status,
             "sku": sku,
             "virtual": virtual,

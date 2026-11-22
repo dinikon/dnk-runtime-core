@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 from typing import Literal
 from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
+    CategorySelectionValue,
     PriceValue,
     StockValue,
     WeightValue,
@@ -31,6 +32,7 @@ class CatalogItemDetailsResponse(BaseModel):
     status: Literal["draft", "active", "archived"]
     sku: str | None
     virtual: bool
+    categories: CategorySelectionValue | None = None
     purchase_price: Decimal | None
     price_specification: PriceValue | None
     price: Decimal | None

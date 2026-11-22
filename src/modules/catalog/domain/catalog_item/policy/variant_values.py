@@ -45,6 +45,7 @@ def effective_variant(
     return CatalogVariantEffectiveValues(
         replace(
             own,
+            categories=parent.categories,
             translations={locale: values} if values else {},
             galleries={locale: gallery} if gallery is not None else {},
             stock=stock,

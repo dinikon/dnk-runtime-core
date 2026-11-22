@@ -1,12 +1,11 @@
 # Catalog: MVP v1 и следующий этап вариативности
 
-Дата обновления: 2026-10-18.
+Дата обновления: 2026-11-22.
 
 ## Текущая граница MVP v1
 
 Реализовано упрощение Catalog: остаются простые товары, цены, наличие,
-измерения, галереи и локализованный контент title/body. Атрибуты, метки,
-категории и metadata полностью удалены. ProductType — отдельный Aggregate Root
+измерения, галереи и локализованный контент title/body. Дерево категорий и назначения описаны в разделе 8. Атрибуты, метки и metadata удалены. ProductType — отдельный Aggregate Root
 со своими блоками; системный Default создаётся фасадом Catalog при onboarding
 Tenant после администратора в общей транзакции. Каждый тип и блок получают
 собственный UUIDv7, audit содержит UUID администратора. Повторная установка
@@ -337,10 +336,8 @@ item ID/изменённых разделов; Catalog revisions для этог
 5. Глобальные атрибуты имеют только тип `enum`, устойчивые option ID и переводы.
    Общие характеристики и оси выбора используют один справочник; произвольные
    локальные текстовые атрибуты и другие типы не входят в MVP.
-6. Category образует дерево. Только SIMPLE получает несколько явно назначенных
-   категорий, ровно одну основную при непустом наборе. Только SIMPLE получает теги.
-   Назначения VARIABLE/VARIANT не включаются в MVP; проекция канала может иметь
-   свою классификацию через mapping и overrides.
+6. Категории образуют дерево с переводами. SIMPLE и VARIABLE владеют назначениями,
+   VARIANT получает категории родителя. Классификация площадки принадлежит Channels.
 7. Catalog хранит SKU-код, базовую цену/скидку, массу/размеры и вручную заданные
    настройки наличия. Это полноценные поля нового MVP, а не условие подключения
    будущего Inventory. Код SKU не является идентификатором складского агрегата.
@@ -655,14 +652,19 @@ Default selection хранится у VARIABLE и соответствует п�
 Category имеет собственный parent ID и переводы. Дерево категорий не связано
 с ограничением товарной вложенности: у категорий может быть несколько уровней.
 Самоссылки, циклы и перемещение под собственного потомка запрещены.
-Дерево читается по ветвям с серверной пагинацией.
+API возвращает узлы текущего tenant с `parent_id`, исходным названием и переводом
+запрошенной локали. Console собирает дерево и явно отмечает отсутствующий перевод.
+Операции изменения дерева используют эксклюзивную транзакционную блокировку tenant.
+При назначении категорий товару та же блокировка берётся в разделяемом режиме.
+Удаление проверяет дочерние узлы, назначения карточек и использование по умолчанию.
 
-Назначения доступны только SIMPLE. При пустом списке primary отсутствует;
-при непустом ровно одна primary из списка. Назначаются только явные узлы,
-предки не добавляются автоматически. Tag — отдельный справочник UUID/переводов;
-набор тегов SIMPLE уникален. Категория с детьми или ссылками не удаляется;
-используемая метка не удаляется. Эти ограничения проверяются под согласованной
-защитой конкурентных изменений и дублируются FK там, где применимо.
+У каждого SIMPLE и VARIABLE ровно одна основная категория и независимый набор
+дополнительных. VARIANT читает выбор родителя. PATCH только с основной категорией
+может продвинуть дополнительную и оставить прежнюю основную в назначениях. Передача
+полного набора заменяет назначения атомарно под блокировкой товара. Предки узла
+не назначаются автоматически. Миграция `0023_catalog_categories` создаёт отдельную
+начальную категорию в каждой схеме и назначает её существующим корням.
+Новые черновики и импорты получают текущую категорию по умолчанию.
 
 Переход SIMPLE → VARIABLE сохраняет ID корня: прежняя SIMPLE-запись становится
 семейством, дети получают новые CatalogItem ID. Команда содержит полную
@@ -670,15 +672,14 @@ Category имеет собственный parent ID и переводы. Дер
 из новых детей. Получатель обязателен для SKU, цены, virtual и наличия;
 у корня цена очищается, virtual=false, manage_stock=false. Измерения остаются
 defaults семьи. SKU корня не остаётся SKU семейства.
-Категории/теги не могут остаться у VARIABLE: при непустых назначениях переход
-отклоняется до их явного снятия.
+При переходе категории остаются на корневой карточке.
 
 Переход VARIABLE → SIMPLE также сохраняет ID корня и явно выбирает ребёнка,
 чьи effective продаваемые данные и локализованный контент/галерея будут
 материализованы в SIMPLE. Own-данные корня и выбранного ребёнка разрешаются
 по показанной пользователю политике; остальные дети удаляются только с явным
 перечнем затрагиваемых ID и подтверждением потери их данных в команде.
-Категории/теги новой SIMPLE назначаются отдельными сценариями.
+Новая SIMPLE сохраняет категории корневой карточки.
 
 ID удалённых детей не подменяется ID корня. После появления внешних связей
 переход/удаление с зависимостями требует согласованного плана обработки связей
@@ -861,9 +862,9 @@ nullable weight/length/width/height и отдельные unit-столбцы. M
 | catalog_item_attribute_options / CatalogItemAttributeOptionModel | Ordered options assignment; принадлежат правильному definition |
 | catalog_item_variant_selections / CatalogItemVariantSelectionModel | Выбранные options дочернего CatalogItem, не отдельная товарная модель |
 | catalog_item_default_selections / CatalogItemDefaultSelectionModel | Default комбинация VARIABLE |
-| catalog_categories, catalog_category_translations | Дерево и переводы |
+| catalog_categories, catalog_category_translations | Дерево и переводы. В catalog_categories флаг is_default выбирает категорию для новых товаров |
 | catalog_tags, catalog_tag_translations | Метки и переводы |
-| catalog_item_categories / CatalogItemCategoryModel | Только SIMPLE, membership и is_primary |
+| catalog_item_categories / CatalogItemCategoryModel | Все назначения SIMPLE и VARIABLE, is_default отмечает основную категорию товара |
 | catalog_item_tags / CatalogItemTagModel | Только SIMPLE, уникальные tag ID |
 | catalog_item_metadata / CatalogItemMetadataModel | Typed entries, set/clear, порядок |
 
@@ -896,9 +897,8 @@ translations/content/media в новой схеме нет. Контент и me
 - FK справочников используют RESTRICT для используемых объектов; внутренние
   дочерние записи могут каскадно удаляться только при явно разрешённом удалении
   агрегата. FK не заменяет usage check внешних модулей.
-- Назначение категорий/тегов только SIMPLE защищается доменом и составной
-  ссылкой на роль владельца. Непустой набор требует primary; partial unique
-  защищает «не более одной», домен под lock — «ровно одна».
+- Основное и дополнительные назначения хранятся в catalog_item_categories.
+  У каждой связи есть флаг is_default, у варианта собственных связей нет. Проверки ролей и единственности выполняет Domain.
 
 Составные FK/generated columns детализируются в baseline и проверяются реальным
 PostgreSQL. План не утверждает, что один self FK проверяет kind родителя или
@@ -1039,7 +1039,7 @@ Usage port проверяет внешние зависимости удален
 | Галерея | Раздел media карточки выбранной locale | upload, replace gallery, primary, порядок/подписи, empty/inherit |
 | SIMPLE classification | Разделы categories/tags | set categories/primary, set tags; у других kinds отсутствуют |
 | Глобальные атрибуты | /catalog/attributes | enum definition/options/переводы, protection использования |
-| Категории | /catalog/categories | Дерево по ветвям, create/move/translation/delete |
+| Категории | /catalog/categories | Дерево, создание, перенос, переводы, выбор категории по умолчанию и удаление |
 | Теги | /catalog/tags | create/translation/delete/list |
 
 ProductType/ContentBlock редакторы и меню удаляются; доступен read-only просмотр
@@ -1146,7 +1146,7 @@ API registration и frontend routes пересматриваются в том �
 | Stock | Boolean, общий source без удвоения, отрицательное/нулевое количество, manual backorder, семейная сводка и available_for_sale |
 | Measurements / metadata | value/unit пары, точные преобразования, независимое наследование размеров, типы/keys/order/clear, отсутствие native payload в Catalog |
 | Media / Files | Main принадлежит набору, порядок, localized replace/empty/inherit, tenant/file validation, upload rollback, stream close |
-| Classifications | Только SIMPLE, primary membership, cycles, delete protection и concurrent assign/delete |
+| Classifications | Категории SIMPLE и VARIABLE, primary membership, cycles, delete protection и concurrent assign/delete |
 | HTTP / UoW | Request/Response на сценарий, 204/stream, CSRF/tenant, 404/409/422, rollback и commit failure |
 | Persistence | Self/composite FK, роли владельцев, нормализованные значения, optimistic revision/family lock, независимые семьи параллельны |
 | Migrations | Удалены старые Catalog revisions, один head, base→head в двух tenants, новый downgrade, onboarding rollback, no drift |
@@ -1187,7 +1187,7 @@ npm run build:console
   источников цены/наличия. Текущий Catalog MVP от этого не зависит.
 
 Единая CatalogItem-модель, фиксированный Default, enum-only атрибуты,
-категории/теги только SIMPLE, локализованные галереи, наследование одного уровня
+категории SIMPLE и VARIABLE, локализованные галереи, наследование одного уровня
 и fresh database уже являются решениями этого плана, а не открытыми вопросами.
 
 ## 17. Реализация CatalogItem (октябрь 2026)

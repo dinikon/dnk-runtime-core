@@ -113,7 +113,6 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
     weight: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     weight_unit: Mapped[str | None] = mapped_column(sa.String(2), nullable=True)
     purchase_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
-    primary_category_id: Mapped[UUID | None] = mapped_column(StringUUID, sa.ForeignKey("tenant.catalog_categories.id"), index=True)
     regular_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     sale_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     date_on_sale_from: Mapped[datetime | None] = mapped_column(

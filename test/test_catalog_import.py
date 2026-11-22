@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
+from test.catalog_support import default_categories
 from uuid import uuid4
 from src.modules.catalog.domain.catalog_import.aggregate import CatalogImport
 from src.modules.catalog.domain.catalog_import.value_object.configuration import (
@@ -201,7 +202,11 @@ class CatalogImportValuesTests(unittest.TestCase):
         self.now = datetime.now(UTC)
         self.actor = EntityIdVO(uuid4())
         self.item = CatalogItem.create(
-            CatalogItemIdVO(uuid4()), self.actor, self.now, EntityIdVO(uuid4())
+            CatalogItemIdVO(uuid4()),
+            self.actor,
+            self.now,
+            EntityIdVO(uuid4()),
+            default_categories(),
         )
         self.item.update(
             fields=frozenset({"price_specification", "dimensions"}),

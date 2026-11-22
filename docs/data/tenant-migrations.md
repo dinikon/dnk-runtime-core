@@ -1,7 +1,7 @@
 # Tenant migrations
 
 The current tenant chain starts at `0001_tenant_baseline` and ends at
-`0022_catalog_purchase_price`, after `0021_feed_publications`. Existing schemas
+`0024_fb_publication_timestamps`, after `0023_catalog_categories`. Existing schemas
 upgrade to this head; new onboarding applies the same chain. The older numbered
 revisions described below are historical release notes, not the deployed chain.
 
@@ -28,6 +28,14 @@ Tenant models use `TenantBase` with logical schema `tenant`. `src/modules/tenant
 `CreateTenantHandler` creates the tenant and primary domain, invokes the tenancy-owned bootstrap port, then provisions the administrator and email and initializes Catalog through its public Application facade. It has no base-currency input or currency-catalog dependency. Catalog writes use that administrator UUID for audit and generate separate UUIDv7 identifiers for Default and its title/body blocks. Repeated initialization preserves a complete existing schema and rejects an incomplete one. `AlembicTenantSchemaBootstrapAdapter` uses the same UoW session to acquire a schema lock, reject an existing schema, create it and upgrade to `head`.
 
 The adapter and migrator never commit. PostgreSQL DDL, Alembic version writes, tenant, domain, owner identity and cloud connection writes commit together. Any failure rolls everything back. The Control Plane installer records accepted-command errors in its durable attempt state and reconciles actual resources before declaring absence.
+
+## Catalog categories (0023)
+
+`catalog_categories.is_default` marks the default category of each tenant.
+`catalog_item_categories` stores both primary and additional assignments for root
+items, with `is_default` marking the primary membership. On upgrade, every
+existing root gets one membership in the initial default category. Variants
+inherit their parent's assignments at read time.
 
 ## Catalog purchase price (0022)
 

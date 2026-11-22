@@ -1,3 +1,9 @@
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
+from src.modules.catalog.application.catalog_item.port.category_selection import (
+    CatalogCategorySelectionPort,
+)
 from src.modules.catalog.domain.catalog_item.value_object.kind import CatalogItemKind
 from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
@@ -50,8 +56,10 @@ class CatalogItemCreationService:
         files: CatalogImageFilesPort,
         clock: ClockPort,
         uuid: UUIdGeneratorProtocol,
+        categories: CatalogCategorySelectionPort,
     ) -> None:
         """Получает порты внешнего UoW; не сохраняет товар и не завершает транзакцию."""
+        self.categories = categories
         self.schemas, self.locales, self.skus = schemas, locales, skus
         self.sanitizer, self.files, self.clock, self.uuid = (
             sanitizer,
@@ -74,6 +82,13 @@ class CatalogItemCreationService:
         if sku and await self.skus.in_use(sku.value):
             raise CatalogConflictError("SKU уже используется.", ("sku",))
         now = self.clock.now()
+        categories = values.categories
+        if categories is None:
+            categories = CatalogItemCategoriesVO(
+                await self.categories.default_id(tenant_id)
+            )
+        else:
+            await self.categories.ensure_exist(tenant_id, categories)
         if values.kind is CatalogItemKind.SIMPLE:
             if values.variants:
                 raise InvalidCatalogValueError("Простой товар не содержит вариантов.")
@@ -82,6 +97,7 @@ class CatalogItemCreationService:
                 actor_id,
                 now,
                 schema.id,
+                categories,
                 values.virtual,
             )
         elif values.kind is CatalogItemKind.VARIABLE:
@@ -92,6 +108,7 @@ class CatalogItemCreationService:
                 actor=actor_id,
                 now=now,
                 product_type_id=schema.id,
+                categories=categories,
             )
         else:
             raise InvalidCatalogValueError("Создавать вариант нужно через родителя.")

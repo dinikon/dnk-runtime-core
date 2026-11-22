@@ -1,3 +1,4 @@
+import type { CategorySelection } from "./category.types";
 // Самостоятельные модели форм; транспортные DTO остаются на границе API.
 export type ProductSection =
   | "content"
@@ -5,6 +6,7 @@ export type ProductSection =
   | "sku"
   | "virtual"
   | "purchase_price"
+  | "categories"
   | "price"
   | "stock"
   | "measurements"
@@ -48,6 +50,7 @@ export interface ProductPatch {
   status?: ProductStatus;
   sku?: string | null;
   virtual?: boolean;
+  categories?: CategorySelection;
   purchase_price?: string | null;
   price_specification?: ProductPrice | null;
   stock?: ProductStock;

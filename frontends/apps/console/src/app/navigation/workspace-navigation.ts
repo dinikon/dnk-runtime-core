@@ -2,6 +2,7 @@ import {
   Building2,
   LifeBuoy,
   ShoppingBasket,
+  FolderTree,
   Users,
   Plug,
   Rss,
@@ -20,7 +21,10 @@ export const workspaceNavigation: WorkspaceNavigation = {
     },
     {
       title: "Каталог",
-      items: [{ title: "Товары", url: "/catalog/items", icon: ShoppingBasket }],
+      items: [
+        { title: "Товары", url: "/catalog/items", icon: ShoppingBasket },
+        { title: "Категории", url: "/catalog/categories", icon: FolderTree },
+      ],
     },
     {
       title: "CRM",

@@ -65,6 +65,10 @@ export interface ReadItemDTO {
   status: ItemStatus;
   sku: string | null;
   virtual: boolean;
+  categories: {
+    primary_category_id: string;
+    additional_category_ids: string[];
+  };
   purchase_price: string | null;
   price_specification: PriceDTO | null;
   price: string | null;
@@ -150,6 +154,10 @@ export interface UpdateItemRequest {
   status?: ItemStatus;
   sku?: string | null;
   virtual?: boolean;
+  categories?: {
+    primary_category_id: string;
+    additional_category_ids: string[];
+  };
   purchase_price?: string | null;
   price_specification?: PriceDTO | null;
   stock?: StockDTO;

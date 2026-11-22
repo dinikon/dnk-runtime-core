@@ -1,3 +1,6 @@
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
 from dataclasses import dataclass, field
 from src.modules.catalog.domain.catalog_item.value_object.kind import (
     CatalogItemKind,
@@ -49,6 +52,7 @@ class CreateCatalogVariantValues:
 class CreateCatalogItemValues:
     """Описывает исходные значения самостоятельного товара без внешнего источника."""
 
+    categories: CatalogItemCategoriesVO | None = field(default=None, kw_only=True)
     product_type_code: str = "default"
     virtual: bool = False
     status: CatalogItemStatus = CatalogItemStatus.DRAFT

@@ -1,3 +1,4 @@
+import { useCategoryTree } from "./use-category-tree";
 import { computed, reactive, ref, watch, onBeforeUnmount, type Ref } from "vue";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { getApiErrorMessage } from "@/app/providers/http";
@@ -41,6 +42,7 @@ export function useProductPage(variantId?: Ref<string>) {
       );
     },
   );
+  const categoryTree = useCategoryTree(ctx);
   const id = computed(() => String(ctx.route.params.itemId));
   const enabled = computed(() => !!ctx.locale.value && !!ctx.tenantId.value);
   const item = useQuery({
@@ -288,6 +290,7 @@ export function useProductPage(variantId?: Ref<string>) {
     error,
     blocked,
     isDirty,
+    categoryTree,
     resetFor,
     save,
     upload,

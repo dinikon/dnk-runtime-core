@@ -74,6 +74,9 @@ import src.modules.files.infrastructure.persistence.models.bucket  # noqa: F401
 import src.modules.files.infrastructure.persistence.models.stored_file  # noqa: F401
 
 
+import src.modules.catalog.infrastructure.persistence.models.catalog_category  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.catalog_category_translation  # noqa: F401
+import src.modules.catalog.infrastructure.persistence.models.catalog_item_category  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item  # noqa: F401
 import src.modules.feed_builder.infrastructure.persistence.models.feed  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_content_value  # noqa: F401

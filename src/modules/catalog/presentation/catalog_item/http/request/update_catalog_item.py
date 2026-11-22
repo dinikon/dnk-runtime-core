@@ -12,6 +12,7 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
 from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
+    CategorySelectionValue,
     PriceValue,
     StockValue,
     WeightValue,
@@ -32,6 +33,7 @@ class UpdateCatalogItemRequest(BaseModel):
     """Частичное изменение товара: отсутствие поля отличается от явного null."""
 
     model_config = ConfigDict(extra="forbid")
+    categories: CategorySelectionValue | None = None
     status: CatalogItemStatus | None = None
     sku: str | None = None
     virtual: StrictBool | None = None
@@ -43,7 +45,7 @@ class UpdateCatalogItemRequest(BaseModel):
     content: UpdateCatalogItemContentRequest | None = None
     gallery: GalleryValue | None = None
 
-    @field_validator("status", "virtual", "stock")
+    @field_validator("categories", "status", "virtual", "stock")
     @classmethod
     def reject_null(cls, value: object) -> object:
         """Отклоняет явный null обязательных значений, сохраняя пропущенные поля."""

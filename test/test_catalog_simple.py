@@ -6,6 +6,7 @@ from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, localcontext
 import unittest
+from test.catalog_support import default_categories
 from uuid import uuid4
 from src.modules.catalog.domain.catalog_item.aggregate import CatalogItem
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
@@ -64,7 +65,11 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         self.actor = EntityIdVO(uuid4())
         self.schema = default_schema()
         self.item = CatalogItem.create(
-            CatalogItemIdVO(uuid4()), self.actor, self.now, self.schema.id
+            CatalogItemIdVO(uuid4()),
+            self.actor,
+            self.now,
+            self.schema.id,
+            default_categories(),
         )
 
     def test_creation_and_restore_validate_one_item(self) -> None:

@@ -1,3 +1,6 @@
+from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
+    CatalogItemCategoryModel,
+)
 from src.modules.catalog.domain.catalog_item.entity.variant import CatalogVariant
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.infrastructure.catalog_item.content_schema import (
@@ -179,6 +182,7 @@ class SqlAlchemyCatalogItemRepository:
     ) -> None:
         """Заменяет только изменённую группу внутренних связей в правильном порядке FK."""
         groups = (
+            (CatalogItemCategoryModel,),
             (CatalogItemContentValueModel, CatalogItemTranslationModel),
             (CatalogItemImageModel, CatalogItemGalleryModel),
         )

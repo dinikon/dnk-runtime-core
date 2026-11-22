@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest.mock import patch, Mock, AsyncMock
 from uuid import UUID, uuid4
-from sqlalchemy import select, func, update, delete
+from sqlalchemy import select, func, update, delete, text
 from sqlalchemy.exc import IntegrityError
 from test import test_feed_builder_calculation_postgres as fixture
 from src.modules.feed_builder.presentation.publication.router import router
@@ -72,6 +72,35 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.status_code, expected, response.text)
         return response.json()
+
+    async def test_migration_preserves_publication_dates_and_sets_insert_defaults(
+        self,
+    ) -> None:
+        """Проверяет сохранность доменных дат и вставку без дат после обновления схемы."""
+        item_id = await self.item()
+        result = await self.add([{"catalog_item_id": item_id}])
+        identifier = UUID(result["items"][0]["id"])
+        schema = self.schemas[0]
+        table = f'"{schema}".fb_publications'
+        read_dates = text(f"SELECT created_at, updated_at FROM {table} WHERE id=:id")
+        async with self.engine.begin() as connection:
+            dates = (await connection.execute(read_dates, {"id": identifier})).one()
+            await self.migrator.downgrade(connection, schema, "0023_catalog_categories")
+            await self.migrator.upgrade(connection, schema)
+            self.assertEqual(
+                (await connection.execute(read_dates, {"id": identifier})).one(), dates
+            )
+            inserted = (
+                await connection.execute(
+                    text(
+                        f"INSERT INTO {table} (id, feed_id, catalog_item_id, status, row_version, overrides) "
+                        "VALUES (:id, :feed, :item, 'DRAFT', 1, '{}') RETURNING created_at, updated_at"
+                    ),
+                    {"id": uuid4(), "feed": UUID(self.feed["id"]), "item": uuid4()},
+                )
+            ).one()
+            now = await connection.scalar(select(func.current_timestamp()))
+            self.assertEqual(tuple(inserted), (now, now))
 
     async def test_add_repeat_pause_archive_restore_keeps_identity_and_overrides(
         self,

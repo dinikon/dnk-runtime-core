@@ -1,3 +1,6 @@
+from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
+    CatalogItemCategoryModel,
+)
 from src.modules.catalog.infrastructure.persistence.models.content_block import (
     ContentBlockModel,
 )
@@ -19,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 PART_MODELS = (
+    CatalogItemCategoryModel,
     CatalogItemTranslationModel,
     CatalogItemContentValueModel,
     CatalogItemGalleryModel,

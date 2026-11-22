@@ -15,6 +15,7 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
 )
 from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
     purchase_price_from_value,
+    CategorySelectionValue,
     PriceValue,
     StockValue,
     WeightValue,
@@ -81,6 +82,7 @@ class CreateCatalogItemRequest(BaseModel):
     """Создаёт пустой или заполненный товар; отсутствующие разделы получают defaults."""
 
     model_config = ConfigDict(extra="forbid")
+    categories: CategorySelectionValue | None = None
     kind: CatalogItemKind = CatalogItemKind.SIMPLE
     variants: list[InitialCatalogVariantRequest] = Field(default_factory=list)
     product_type_code: str = "default"

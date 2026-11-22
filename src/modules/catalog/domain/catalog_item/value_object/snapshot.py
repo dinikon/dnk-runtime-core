@@ -1,3 +1,6 @@
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
 from dataclasses import dataclass
 from src.modules.catalog.domain.catalog_item.value_object.kind import (
     CatalogItemKind,
@@ -47,4 +50,5 @@ class CatalogItemValuesSnapshot:
     galleries: dict[str, CatalogItemGallery]
     kind: CatalogItemKind = CatalogItemKind.SIMPLE
     parent_id: CatalogItemIdVO | None = None
+    categories: CatalogItemCategoriesVO | None = None
     purchase_price: PurchasePriceVO | None = None

@@ -1,3 +1,4 @@
+import type { CategorySelection } from "./category.types";
 import type {
   ProductPrice,
   ProductWeight,
@@ -38,6 +39,7 @@ export interface CatalogItem {
   status: "draft" | "active" | "archived";
   sku: string | null;
   virtual: boolean;
+  categories: CategorySelection;
   purchase_price: string | null;
   price_specification: ProductPrice | null;
   price: string | null;

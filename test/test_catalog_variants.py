@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, UTC, timedelta
 from decimal import Decimal
 import unittest
+from test.catalog_support import default_categories
 from uuid import uuid4
 from test.catalog_support import default_schema
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
@@ -69,6 +70,7 @@ class CatalogVariantDomainTests(unittest.TestCase):
             actor=self.actor,
             now=self.now,
             product_type_id=self.schema.id,
+            categories=default_categories(),
         )
         self.root.update(
             fields=frozenset({"content", "stock", "weight"}),

@@ -24,6 +24,7 @@ const pageState = useProductEditorPageState(() => false, true);
 const sections: ProductSection[] = [
   "content",
   "status",
+  "categories",
   "sku",
   "virtual",
   "price",
@@ -85,6 +86,11 @@ const dirty = computed(() => sections.filter(page.isDirty));
           @measurements="page.save('measurements', { [$event]: null })"
         />
         <ProductEditor
+          :category-options="page.categoryTree.options.value"
+          :category-loading="page.categoryTree.query.isPending.value"
+          :category-error="page.categoryTree.query.isError.value"
+          :locale="page.ctx.locale.value"
+          @reload-categories="page.categoryTree.query.refetch()"
           class="product-variant-workspace shrink-0"
           :active-tab="pageState.tab.value"
           :initial-group="pageState.initialGroup.value"

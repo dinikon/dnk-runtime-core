@@ -1,3 +1,6 @@
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -58,6 +61,7 @@ class CatalogItemDetailsDTO:
     sku: str | None
     virtual: bool
     price_specification: PriceSpecificationVO | None
+    categories: CatalogItemCategoriesVO | None = field(default=None, kw_only=True)
     purchase_price: Decimal | None = field(default=None, kw_only=True)
     price: Decimal | None
     weight: WeightVO | None

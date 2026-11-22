@@ -1,3 +1,12 @@
+from src.modules.catalog.domain.catalog_item.value_object.categories import (
+    CatalogItemCategoriesVO,
+)
+from src.modules.catalog.domain.catalog_category.value_object.identifier import (
+    CatalogCategoryIdVO,
+)
+from src.modules.catalog.infrastructure.persistence.models.catalog_item_category import (
+    CatalogItemCategoryModel,
+)
 from src.modules.catalog.domain.catalog_item.value_object.kind import (
     CatalogItemKind,
 )
@@ -131,8 +140,23 @@ class CatalogItemMapper:
                     else None
                 ),
             )
+        categories = None
+        if row["kind"] != "variant":
+            assignments = rows("catalog_item_categories")
+            (primary,) = (
+                entry["category_id"] for entry in assignments if entry["is_default"]
+            )
+            categories = CatalogItemCategoriesVO(
+                CatalogCategoryIdVO(primary),
+                tuple(
+                    CatalogCategoryIdVO(entry["category_id"])
+                    for entry in assignments
+                    if not entry["is_default"]
+                ),
+            )
         return CatalogItemValuesSnapshot(
             id=CatalogItemIdVO(identifier),
+            categories=categories,
             product_type_id=product_type_id or EntityIdVO(row["product_type_id"]),
             status=CatalogItemStatus(row["status"]),
             sku=row["sku"],
@@ -169,6 +193,7 @@ class CatalogItemMapper:
         """Восстанавливает агрегат исключительно через проверяющую фабрику."""
         return CatalogItem.restore(
             identifier=CatalogItemIdVO.from_value(value.id),
+            categories=value.categories,
             product_type_id=value.product_type_id,
             status=value.status,
             sku=SkuCodeVO(value.sku) if value.sku else None,
@@ -276,12 +301,28 @@ class CatalogItemMapper:
         parts = {
             model.__table__.name: []
             for model in (
+                CatalogItemCategoryModel,
                 CatalogItemTranslationModel,
                 CatalogItemContentValueModel,
                 CatalogItemGalleryModel,
                 CatalogItemImageModel,
             )
         }
+        if isinstance(item, CatalogItem):
+            parts["catalog_item_categories"] = [
+                dict(
+                    catalog_item_id=identifier,
+                    category_id=category.uuid,
+                    is_default=category == item.categories.primary_category_id,
+                )
+                for category in (
+                    item.categories.primary_category_id,
+                    *sorted(
+                        item.categories.additional_category_ids,
+                        key=lambda value: value.uuid,
+                    ),
+                )
+            ]
         for locale, values in item.translations.items():
             parts["catalog_item_translations"].append(
                 dict(catalog_item_id=identifier, locale=locale)
