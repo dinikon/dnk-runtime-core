@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
+)
 from src.modules.catalog.domain.catalog_item.value_object.measurements import (
     DimensionsVO,
     WeightVO,
@@ -21,6 +24,11 @@ from src.modules.catalog.domain.catalog_item.value_object.stock import (
 )
 from src.modules.catalog.domain.catalog_item.entity.image import CatalogItemImage
 from src.modules.catalog.domain.catalog_item.entity.gallery import CatalogItemGallery
+
+
+def purchase_price_from_value(value: Decimal | None) -> PurchasePriceVO | None:
+    """Преобразует закупочную сумму, сохраняя различие между нулём и null."""
+    return PurchasePriceVO(value) if value is not None else None
 
 
 class PriceValue(BaseModel):

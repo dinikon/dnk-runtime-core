@@ -38,6 +38,7 @@ export interface CatalogItem {
   status: "draft" | "active" | "archived";
   sku: string | null;
   virtual: boolean;
+  purchase_price: string | null;
   price_specification: ProductPrice | null;
   price: string | null;
   weight: ProductWeight | null;

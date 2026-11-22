@@ -18,6 +18,9 @@ import { useProductSectionDraft } from "../../model/use-product-section-draft";
 import { decimalInput } from "../../model/product-input";
 import ProductFieldError from "../product/ProductFieldError.vue";
 const props = defineProps<{
+  purchasePrice: string | null;
+  purchaseReset: number;
+  purchaseError?: string;
   value: ProductPrice | null;
   reset: number;
   disabled: boolean;
@@ -25,7 +28,10 @@ const props = defineProps<{
   current: string | null;
   id: string;
 }>();
-const emit = defineEmits<{ change: [value: ProductPrice | null] }>();
+const emit = defineEmits<{
+  change: [value: ProductPrice | null];
+  purchaseChange: [value: string | null];
+}>();
 function emptyPrice(): ProductPrice {
   return {
     regular_price: "",
@@ -46,6 +52,11 @@ const { value: price, change } = useProductSectionDraft(
   () => props.value ?? emptyPrice(),
   () => props.reset,
   (value) => emit("change", hasPrice(value) ? value : null),
+);
+const { value: purchase, change: changePurchase } = useProductSectionDraft(
+  () => props.purchasePrice,
+  () => props.purchaseReset,
+  (value) => emit("purchaseChange", value),
 );
 const filled = computed(() => hasPrice(price.value));
 const saleOpen = ref(!!props.value?.sale_price);
@@ -109,6 +120,25 @@ function dateField(
             @update:model-value="field('regular_price', decimalInput($event))"
         /></Field>
       </FieldGroup>
+      <Field
+        class="product-property-field"
+        :data-invalid="!!purchaseError || undefined"
+      >
+        <FieldLabel :for="`${id}-purchase-price`">Закупочная цена</FieldLabel>
+        <Input
+          :id="`${id}-purchase-price`"
+          :model-value="purchase ?? ''"
+          :aria-invalid="!!purchaseError || undefined"
+          :aria-describedby="purchaseError ? `${id}-purchase-error` : undefined"
+          inputmode="decimal"
+          placeholder="Не задана"
+          @update:model-value="changePurchase(decimalInput($event) || null)"
+        />
+        <ProductFieldError
+          :id="`${id}-purchase-error`"
+          :error="purchaseError"
+        />
+      </Field>
       <Collapsible v-model:open="saleOpen"
         ><CollapsibleTrigger
           class="group flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-medium"

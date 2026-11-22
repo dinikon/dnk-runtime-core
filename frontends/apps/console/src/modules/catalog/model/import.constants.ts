@@ -17,6 +17,7 @@ export const importTargets = [
   ["body", "Описание"],
   ["status", "Статус товара"],
   ["virtual", "Услуга / virtual"],
+  ["purchase_price", "Закупочная цена"],
   ["regular_price", "Обычная цена"],
   ["sale_price", "Акционная цена"],
   ["discount", "Скидка Prom"],

@@ -21,6 +21,9 @@ from src.modules.catalog.application.catalog_item.command.update_catalog_variant
 from src.modules.catalog.application.catalog_item.command.update_catalog_item.command import (
     UpdateCatalogItemContent,
 )
+from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
+    purchase_price_from_value,
+)
 from src.modules.catalog.presentation.catalog_item.depends import (
     UpdateCatalogVariantHandlerDep,
 )
@@ -75,6 +78,7 @@ async def update_catalog_variant(
                 status=payload.status,
                 sku=sku,
                 virtual=payload.virtual,
+                purchase_price=purchase_price_from_value(payload.purchase_price),
                 price_specification=price,
                 stock=stock,
                 weight=weight,

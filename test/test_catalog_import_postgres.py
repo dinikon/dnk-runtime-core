@@ -334,6 +334,34 @@ class CatalogImportPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.get_import(identifier))["run"]["created"], 1)
         self.assertEqual(len(self.downloads), 1)
 
+    async def test_csv_skips_only_sale_at_or_above_regular(self):
+        """Импортирует позиции, сохраняя закупку и только действительные скидки."""
+        identifier = await self.create_import(
+            b"sku,regular_price,sale_price,purchase_price,date_on_sale_from\n"
+            b"A,100,101,120,2026-01-01\nB,100,100,40,2026-01-01\n"
+            b"C,100,80,30,2026-01-01\n"
+        )
+        await self.execute_current(identifier)
+        await self.start_import(identifier)
+        await self.execute_current(identifier)
+        run = (await self.get_import(identifier))["run"]
+        self.assertEqual((run["created"], run["errors"]), (3, 0))
+        async with self.engine.connect() as connection:
+            rows = await connection.execute(
+                text(
+                    f"SELECT sku, regular_price, sale_price, purchase_price, date_on_sale_from IS NOT NULL "
+                    f'FROM "{self.schemas[0]}".catalog_item ORDER BY sku'
+                )
+            )
+            self.assertEqual(
+                rows.all(),
+                [
+                    ("A", 100, None, 120, False),
+                    ("B", 100, None, 40, False),
+                    ("C", 100, 80, 30, True),
+                ],
+            )
+
     async def test_partial_update_preserves_other_translation_body_and_price(self):
         original = await self.client.post(
             self.base + "/items",

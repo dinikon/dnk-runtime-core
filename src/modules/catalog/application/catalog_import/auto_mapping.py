@@ -23,6 +23,8 @@ ALIASES: dict[str, tuple[str, str | None]] = {
     "descriptionua": ("body", "uk"),
     "ціна": ("regular_price", None),
     "цена": ("regular_price", None),
+    "закупочнаяцена": ("purchase_price", None),
+    "закупівельнаціна": ("purchase_price", None),
     "price": ("regular_price", None),
     "наявність": ("stock_status", None),
     "наличие": ("stock_status", None),

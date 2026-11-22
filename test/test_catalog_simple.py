@@ -26,6 +26,9 @@ from src.modules.catalog.domain.catalog_item.value_object.measurements import (
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
+)
 from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
@@ -184,6 +187,32 @@ class CatalogSimpleDomainTests(unittest.TestCase):
         )
         self.assertNotIn("en", self.item.translations)
         self.assertIn("ru", self.item.translations)
+
+    def test_purchase_amount_and_discount_boundaries(self) -> None:
+        """Закупка независима от продажи, а скидка строго меньше обычной цены."""
+        for invalid in ("-1", "0.0000001", "NaN", "Infinity"):
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaises(InvalidCatalogValueError),
+            ):
+                PurchasePriceVO(Decimal(invalid))
+        for regular, sale in (("0", "0"), ("1", "1.000000"), ("1", "1.000001")):
+            with self.subTest(sale=sale):
+                price = PriceSpecificationVO(
+                    Decimal(regular), Decimal(sale), self.now, self.now
+                )
+                self.assertIsNone(price.sale_price)
+                self.assertIsNone(price.date_on_sale_from)
+                self.assertIsNone(price.date_on_sale_to)
+                self.assertEqual(price.at(self.now), Decimal(regular))
+        self.item.update(
+            fields={"purchase_price"},
+            actor=self.actor,
+            now=self.now,
+            purchase_price=PurchasePriceVO(Decimal("0")),
+        )
+        self.assertEqual(self.item.snapshot().purchase_price.value, Decimal("0"))
+        self.assertIsNone(self.item.price)
 
     def test_price_boundaries_and_zero_availability(self) -> None:
         """Скидка действует в интервале [from,to); нулевая цена допускает продажу."""

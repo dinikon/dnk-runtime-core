@@ -13,6 +13,9 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
+)
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
 )
@@ -50,6 +53,8 @@ class CatalogVariant:
     translations: dict[str, dict[str, str]] = field(default_factory=dict)
     galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
 
+    purchase_price: PurchasePriceVO | None = None
+
     @classmethod
     def create(
         cls,
@@ -82,6 +87,7 @@ class CatalogVariant:
         status: CatalogItemStatus = CatalogItemStatus.DRAFT,
         sku: SkuCodeVO | None = None,
         virtual: bool = False,
+        purchase_price: PurchasePriceVO | None = None,
         price: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO = StockSpecificationVO(),
         weight: WeightVO | None = None,
@@ -106,6 +112,7 @@ class CatalogVariant:
             dimensions,
             {k: dict(v) for k, v in (translations or {}).items()},
             dict(galleries or {}),
+            purchase_price=purchase_price,
         )
         item.validate()
         return item
@@ -134,6 +141,7 @@ class CatalogVariant:
             raise InvalidCatalogValueError("Некорректный audit варианта.")
         for value, expected, name in (
             (self.sku, SkuCodeVO, "sku"),
+            (self.purchase_price, PurchasePriceVO, "purchase_price"),
             (self.price, PriceSpecificationVO, "price_specification"),
             (self.weight, WeightVO, "weight"),
             (self.dimensions, DimensionsVO, "dimensions"),
@@ -173,6 +181,7 @@ class CatalogVariant:
             status=self.status,
             sku=self.sku.value if self.sku else None,
             virtual=self.virtual,
+            purchase_price=self.purchase_price,
             price=self.price,
             weight=self.weight,
             dimensions=self.dimensions,
@@ -196,6 +205,7 @@ class CatalogVariant:
         status: CatalogItemStatus | None = None,
         sku: SkuCodeVO | None = None,
         virtual: bool | None = None,
+        purchase_price: PurchasePriceVO | None = None,
         price_specification: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO | None = None,
         weight: WeightVO | None = None,
@@ -209,6 +219,7 @@ class CatalogVariant:
             "status": status,
             "sku": sku,
             "virtual": virtual,
+            "purchase_price": purchase_price,
             "price_specification": price_specification,
             "stock": stock,
             "weight": weight,

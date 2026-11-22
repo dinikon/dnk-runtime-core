@@ -47,6 +47,11 @@ class CatalogItemQueryMapper:
             status=original.status,
             sku=item.sku,
             virtual=item.virtual,
+            purchase_price=(
+                original.purchase_price.value
+                if original.purchase_price is not None
+                else None
+            ),
             price_specification=item.price,
             price=computed.price,
             weight=original.weight,

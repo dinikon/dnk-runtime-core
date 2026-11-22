@@ -30,8 +30,11 @@ class PriceSpecificationVO:
             raise InvalidCatalogValueError(
                 "Цена должна быть конечным неотрицательным Decimal с точностью до 6 знаков."
             )
-        if self.sale_price is not None and self.sale_price > self.regular_price:
-            raise InvalidCatalogValueError("Цена скидки превышает обычную цену.")
+        if self.sale_price is not None and self.sale_price >= self.regular_price:
+            object.__setattr__(self, "sale_price", None)
+            object.__setattr__(self, "date_on_sale_from", None)
+            object.__setattr__(self, "date_on_sale_to", None)
+            return
         bounds = (self.date_on_sale_from, self.date_on_sale_to)
         if any(
             v is not None and (v.tzinfo is None or v.utcoffset() is None)

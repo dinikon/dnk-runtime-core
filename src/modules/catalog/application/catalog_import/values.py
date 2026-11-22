@@ -19,6 +19,9 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
+)
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
     StockStatus,
@@ -225,6 +228,7 @@ def product_values(
             virtual=current.virtual,
             status=current.status,
             sku=current.sku.value if current.sku else None,
+            purchase_price=current.purchase_price,
             price_specification=current.price,
             stock=current.stock,
             weight=current.weight,
@@ -255,6 +259,16 @@ def product_values(
                 virtual=boolean_value(scalar(values, "virtual") or "", "virtual"),
             )
             fields.add("virtual")
+        if "purchase_price" in values:
+            section = "purchase_price"
+            raw_purchase = scalar(values, section)
+            purchase = (
+                PurchasePriceVO(decimal_value(raw_purchase, section))
+                if raw_purchase
+                else None
+            )
+            product = replace(product, purchase_price=purchase)
+            fields.add(section)
         if values.keys() & PRICE:
             section = "price_specification"
             before = product.price_specification

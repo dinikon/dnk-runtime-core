@@ -21,6 +21,9 @@ from src.modules.catalog.application.catalog_item.command.update_catalog_item.co
     UpdateCatalogItemCommand,
     UpdateCatalogItemContent,
 )
+from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
+    purchase_price_from_value,
+)
 from src.modules.catalog.presentation.catalog_item.depends import (
     UpdateCatalogItemHandlerDep,
 )
@@ -70,6 +73,7 @@ async def update_catalog_item(
                     else None
                 ),
                 virtual=payload.virtual,
+                purchase_price=purchase_price_from_value(payload.purchase_price),
                 price_specification=(
                     converted("price_specification", payload.price_specification.to_vo)
                     if payload.price_specification

@@ -31,6 +31,7 @@ class CatalogItemDetailsResponse(BaseModel):
     status: Literal["draft", "active", "archived"]
     sku: str | None
     virtual: bool
+    purchase_price: Decimal | None
     price_specification: PriceValue | None
     price: Decimal | None
     weight: WeightValue | None

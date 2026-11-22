@@ -20,6 +20,9 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
+)
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
 )
@@ -65,6 +68,7 @@ class CatalogItem:
     galleries: dict[str, CatalogItemGallery] = field(default_factory=dict)
     kind: CatalogItemKind = CatalogItemKind.SIMPLE
     variants: tuple[CatalogVariant, ...] = ()
+    purchase_price: PurchasePriceVO | None = None
     _stock_events: list[CatalogStockChanged] = field(
         default_factory=list, init=False, compare=False, repr=False
     )
@@ -104,6 +108,7 @@ class CatalogItem:
         status: CatalogItemStatus,
         sku: SkuCodeVO | None,
         virtual: bool,
+        purchase_price: PurchasePriceVO | None = None,
         price: PriceSpecificationVO | None,
         weight: WeightVO | None,
         dimensions: DimensionsVO | None,
@@ -125,6 +130,7 @@ class CatalogItem:
             status=status,
             sku=sku,
             virtual=virtual,
+            purchase_price=purchase_price,
             price=price,
             weight=weight,
             dimensions=dimensions,
@@ -172,6 +178,7 @@ class CatalogItem:
             status=self.status,
             sku=self.sku.value if self.sku else None,
             virtual=self.virtual,
+            purchase_price=self.purchase_price,
             price=self.price,
             weight=self.weight,
             dimensions=self.dimensions,
@@ -208,6 +215,12 @@ class CatalogItem:
             raise InvalidCatalogValueError("Некорректный SKU.", ("sku",))
         if type(self.virtual) is not bool:
             raise InvalidCatalogValueError("Virtual требует bool.", ("virtual",))
+        if self.purchase_price is not None and not isinstance(
+            self.purchase_price, PurchasePriceVO
+        ):
+            raise InvalidCatalogValueError(
+                "Некорректная закупочная цена.", ("purchase_price",)
+            )
         if self.price is not None and (
             not isinstance(self.price, PriceSpecificationVO)
         ):
@@ -250,6 +263,7 @@ class CatalogItem:
         status: CatalogItemStatus | None = None,
         sku: SkuCodeVO | None = None,
         virtual: bool | None = None,
+        purchase_price: PurchasePriceVO | None = None,
         price_specification: PriceSpecificationVO | None = None,
         stock: StockSpecificationVO | None = None,
         weight: WeightVO | None = None,
@@ -265,6 +279,7 @@ class CatalogItem:
             "status": status,
             "sku": sku,
             "virtual": virtual,
+            "purchase_price": purchase_price,
             "price_specification": price_specification,
             "stock": stock,
             "weight": weight,
@@ -395,7 +410,11 @@ class CatalogItem:
         if self.kind is CatalogItemKind.SIMPLE and self.variants:
             raise InvalidCatalogValueError("Простой товар не содержит вариантов.")
         if self.kind is CatalogItemKind.VARIABLE:
-            if self.price is not None or self.virtual:
+            if (
+                self.price is not None
+                or self.purchase_price is not None
+                or self.virtual
+            ):
                 raise InvalidCatalogValueError("Контейнер не имеет цены и virtual.")
             if self.status is CatalogItemStatus.ACTIVE and not any(
                 v.status is not CatalogItemStatus.ARCHIVED for v in self.variants

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -58,6 +58,7 @@ class CatalogItemDetailsDTO:
     sku: str | None
     virtual: bool
     price_specification: PriceSpecificationVO | None
+    purchase_price: Decimal | None = field(default=None, kw_only=True)
     price: Decimal | None
     weight: WeightVO | None
     dimensions: DimensionsVO | None

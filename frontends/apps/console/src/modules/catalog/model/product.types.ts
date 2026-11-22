@@ -4,6 +4,7 @@ export type ProductSection =
   | "status"
   | "sku"
   | "virtual"
+  | "purchase_price"
   | "price"
   | "stock"
   | "measurements"
@@ -47,6 +48,7 @@ export interface ProductPatch {
   status?: ProductStatus;
   sku?: string | null;
   virtual?: boolean;
+  purchase_price?: string | null;
   price_specification?: ProductPrice | null;
   stock?: ProductStock;
   weight?: ProductWeight | null;

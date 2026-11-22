@@ -211,6 +211,33 @@ class CatalogImportValuesTests(unittest.TestCase):
             dimensions=DimensionsVO(length=LengthVO(Decimal("5"), LengthUnit.CM)),
         )
 
+    def test_import_independent_purchase_and_strict_sale(self) -> None:
+        """Частичное обновление закупки сохраняет обе цены продажи."""
+        for raw, expected in (
+            ("120,000001", Decimal("120.000001")),
+            ("0", Decimal(0)),
+            ("", None),
+        ):
+            result = product_values(
+                self.configuration, {"purchase_price": [raw]}, self.item
+            )
+            purchase = result.product.purchase_price
+            self.assertEqual(purchase.value if purchase else None, expected)
+            self.assertEqual(result.product.price_specification, self.item.price)
+            self.assertEqual(result.fields, {"purchase_price"})
+        for sale in ("100", "101"):
+            with self.subTest(sale=sale):
+                result = product_values(
+                    self.configuration,
+                    {"sale_price": [sale], "purchase_price": ["120"]},
+                    self.item,
+                )
+                self.assertIsNone(result.product.price_specification.sale_price)
+                self.assertEqual(
+                    result.product.price_specification.regular_price, Decimal("100")
+                )
+                self.assertEqual(result.product.purchase_price.value, Decimal("120"))
+
     def test_partial_price_and_dimension_updates_preserve_other_fields(self) -> None:
         result = product_values(
             self.configuration,

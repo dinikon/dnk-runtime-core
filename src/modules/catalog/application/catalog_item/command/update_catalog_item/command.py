@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.catalog.domain.catalog_item.value_object.identifier import (
     CatalogItemIdVO,
@@ -9,6 +9,9 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
 from src.modules.catalog.domain.catalog_item.value_object.sku import SkuCodeVO
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
+)
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
 )
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
@@ -41,6 +44,7 @@ class UpdateCatalogItemCommand:
     sku: SkuCodeVO | None = None
     virtual: bool | None = None
     price_specification: PriceSpecificationVO | None = None
+    purchase_price: PurchasePriceVO | None = field(default=None, kw_only=True)
     stock: StockSpecificationVO | None = None
     weight: WeightVO | None = None
     dimensions: DimensionsVO | None = None

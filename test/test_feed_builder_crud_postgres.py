@@ -772,7 +772,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.migrator.upgrade(connection, schema)
             self.assertEqual(
                 await self.migrator.current(connection, schema),
-                ("0021_feed_publications",),
+                (self.migrator.head(),),
             )
             tables = (
                 (

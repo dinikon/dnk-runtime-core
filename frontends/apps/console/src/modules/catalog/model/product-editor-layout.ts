@@ -7,7 +7,7 @@ export const editorGroups = [
     title: "Основные сведения",
     sections: ["content", "sku", "virtual"],
   },
-  { id: "pricing", title: "Цены", sections: ["price"] },
+  { id: "pricing", title: "Цены", sections: ["price", "purchase_price"] },
   { id: "stock", title: "Наличие", sections: ["stock"] },
   { id: "descriptions", title: "Описание", sections: ["content"] },
   { id: "measurements", title: "Вес и размеры", sections: ["measurements"] },

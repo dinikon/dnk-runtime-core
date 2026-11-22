@@ -1,3 +1,4 @@
+from decimal import Decimal
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
 )
@@ -13,6 +14,7 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
     CatalogItemStatus,
 )
 from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
+    purchase_price_from_value,
     PriceValue,
     StockValue,
     WeightValue,
@@ -36,6 +38,7 @@ class InitialCatalogVariantRequest(BaseModel):
     status: CatalogItemStatus = CatalogItemStatus.DRAFT
     sku: str | None = None
     virtual: StrictBool = False
+    purchase_price: Decimal | None = None
     price_specification: PriceValue | None = None
     stock: StockValue | None = None
     weight: WeightValue | None = None
@@ -59,6 +62,7 @@ class InitialCatalogVariantRequest(BaseModel):
             status=self.status,
             sku=self.sku,
             virtual=self.virtual,
+            purchase_price=purchase_price_from_value(self.purchase_price),
             price_specification=(
                 self.price_specification.to_vo() if self.price_specification else None
             ),
@@ -83,6 +87,7 @@ class CreateCatalogItemRequest(BaseModel):
     virtual: StrictBool = False
     status: CatalogItemStatus = CatalogItemStatus.DRAFT
     sku: str | None = None
+    purchase_price: Decimal | None = None
     price_specification: PriceValue | None = None
     stock: StockValue | None = None
     weight: WeightValue | None = None

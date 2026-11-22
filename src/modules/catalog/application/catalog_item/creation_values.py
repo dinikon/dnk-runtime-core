@@ -8,6 +8,9 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
+)
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
 )
@@ -34,6 +37,7 @@ class CreateCatalogVariantValues:
     sku: str | None = None
     virtual: bool = False
     price_specification: PriceSpecificationVO | None = None
+    purchase_price: PurchasePriceVO | None = field(default=None, kw_only=True)
     stock: StockSpecificationVO = field(default_factory=StockSpecificationVO)
     weight: WeightVO | None = None
     dimensions: DimensionsVO | None = None
@@ -50,6 +54,7 @@ class CreateCatalogItemValues:
     status: CatalogItemStatus = CatalogItemStatus.DRAFT
     sku: str | None = None
     price_specification: PriceSpecificationVO | None = None
+    purchase_price: PurchasePriceVO | None = field(default=None, kw_only=True)
     stock: StockSpecificationVO = field(default_factory=StockSpecificationVO)
     weight: WeightVO | None = None
     dimensions: DimensionsVO | None = None

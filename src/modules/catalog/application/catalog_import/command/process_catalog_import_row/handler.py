@@ -145,6 +145,7 @@ class ProcessCatalogImportRowHandler:
                             fields,
                             status=product.status,
                             virtual=product.virtual,
+                            purchase_price=product.purchase_price,
                             price_specification=product.price_specification,
                             stock=product.stock,
                             weight=product.weight,

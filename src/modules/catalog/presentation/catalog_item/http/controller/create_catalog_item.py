@@ -16,6 +16,9 @@ from src.modules.catalog.domain.error import (
     CatalogNotFoundError,
     CatalogConflictError,
 )
+from src.modules.catalog.presentation.catalog_item.http.value_contracts import (
+    purchase_price_from_value,
+)
 from src.modules.catalog.presentation.catalog_item.http.serialization import (
     transport_value,
 )
@@ -54,6 +57,7 @@ async def create_catalog_item(
                     virtual=payload.virtual,
                     status=payload.status,
                     sku=payload.sku,
+                    purchase_price=purchase_price_from_value(payload.purchase_price),
                     price_specification=(
                         payload.price_specification.to_vo()
                         if payload.price_specification

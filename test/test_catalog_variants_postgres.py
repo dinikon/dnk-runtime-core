@@ -3,6 +3,9 @@
 import unittest
 from uuid import UUID, uuid4
 from sqlalchemy import text
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
+    TenantMigrator,
+)
 from test.test_catalog_postgres import CatalogPostgresTests
 from src.modules.catalog.application.catalog_item.query.get_catalog_product_snapshot.query import (
     GetCatalogProductSnapshotQuery,
@@ -10,6 +13,108 @@ from src.modules.catalog.application.catalog_item.query.get_catalog_product_snap
 
 
 class CatalogVariantsPostgresTests(CatalogPostgresTests):
+    async def test_independent_prices_round_trip_on_simple_and_variant(self) -> None:
+        """Проверяет обе роли через create/PATCH/GET и снятие недействующей акции."""
+        simple = await self.request("POST", "/items", {"purchase_price": "0"}, 201)
+        family = await self.request(
+            "POST",
+            "/items",
+            {"kind": "variable", "variants": [{"purchase_price": "0"}]},
+            201,
+        )
+        root = "/items/" + family["id"]
+        variant = (await self.request("GET", root + "/variants?locale=en"))["items"][0]
+        await self.request("PATCH", root, {"purchase_price": "1"}, 422)
+        for path in ("/items/" + simple["id"], root + "/variants/" + variant["id"]):
+            initial = (await self.request("GET", path + "?locale=en"))["item"]
+            self.assertEqual(initial["purchase_price"], "0")
+            self.assertIsNone(initial["price"])
+            await self.request(
+                "PATCH",
+                path,
+                {
+                    "price_specification": {"regular_price": "100", "sale_price": "85"},
+                    "purchase_price": "110.123456",
+                },
+            )
+            await self.request(
+                "PATCH",
+                path,
+                {
+                    "price_specification": {
+                        "regular_price": "85",
+                        "sale_price": "86",
+                        "date_on_sale_from": "2026-01-01T00:00:00Z",
+                    },
+                    "purchase_price": "123",
+                },
+            )
+            item = (await self.request("GET", path + "?locale=en"))["item"]
+            self.assertEqual(item["purchase_price"], "123")
+            self.assertEqual(item["price"], "85")
+            self.assertIsNone(item["price_specification"]["sale_price"])
+            self.assertIsNone(item["price_specification"]["date_on_sale_from"])
+            async with self.engine.connect() as connection:
+                row = (
+                    await connection.execute(
+                        text(
+                            f'SELECT sale_price, date_on_sale_from FROM "{self.schemas[0]}".catalog_item WHERE id=:id'
+                        ),
+                        {"id": path.rsplit("/", 1)[-1]},
+                    )
+                ).one()
+                self.assertEqual(tuple(row), (None, None))
+            await self.request("PATCH", path, {"price_specification": None})
+            item = (await self.request("GET", path + "?locale=en"))["item"]
+            self.assertEqual(item["purchase_price"], "123")
+            await self.request("PATCH", path, {"purchase_price": None})
+            self.assertIsNone(
+                (await self.request("GET", path + "?locale=en"))["item"][
+                    "purchase_price"
+                ]
+            )
+
+    async def test_price_migration_keeps_legacy_data_and_removes_comparison(
+        self,
+    ) -> None:
+        """Схема хранит суммы; решение о применении акции принадлежит Domain."""
+        schema = self.schemas[0]
+        identifier = (await self.create_item())["id"]
+        table = f'"{schema}".catalog_item'
+        migrator = TenantMigrator()
+        async with self.engine.begin() as connection:
+            await migrator.downgrade(connection, schema, "0021_feed_publications")
+            await connection.execute(
+                text(
+                    f"UPDATE {table} SET regular_price=10, sale_price=10 WHERE id=:id"
+                ),
+                {"id": identifier},
+            )
+            await migrator.upgrade(connection, schema)
+            self.assertEqual(
+                await connection.scalar(
+                    text(f"SELECT sale_price FROM {table} WHERE id=:id"),
+                    {"id": identifier},
+                ),
+                10,
+            )
+            await connection.execute(
+                text(f"UPDATE {table} SET sale_price=11 WHERE id=:id"),
+                {"id": identifier},
+            )
+            self.assertEqual(
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM pg_constraint WHERE conrelid=to_regclass(:table) AND conname IN ('ck_catalog_item_sale_price','ck_catalog_item_purchase_price')"
+                    ),
+                    {"table": table},
+                ),
+                0,
+            )
+        item = (await self.request("GET", f"/items/{identifier}?locale=en"))["item"]
+        self.assertIsNone(item["price_specification"]["sale_price"])
+        self.assertEqual(item["price"], "10")
+
     async def test_list_stock_projection(self) -> None:
         """Списки передают количество и источник без копирования общего запаса детям."""
         root = (

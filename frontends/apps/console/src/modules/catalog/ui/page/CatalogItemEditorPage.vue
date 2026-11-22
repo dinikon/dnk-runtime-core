@@ -42,6 +42,7 @@ const sections: ProductSection[] = [
   "sku",
   "virtual",
   "price",
+  "purchase_price",
   "stock",
   "measurements",
   "galleries",

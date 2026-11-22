@@ -30,6 +30,9 @@ from src.modules.catalog.domain.catalog_item.value_object.status import (
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.value_object.purchase_price import (
+    PurchasePriceVO,
+)
 from src.modules.catalog.domain.catalog_item.value_object.stock import (
     StockSpecificationVO,
     StockStatus,
@@ -134,6 +137,11 @@ class CatalogItemMapper:
             status=CatalogItemStatus(row["status"]),
             sku=row["sku"],
             virtual=row["virtual"],
+            purchase_price=(
+                PurchasePriceVO(row["purchase_price"])
+                if row["purchase_price"] is not None
+                else None
+            ),
             price=price,
             weight=(
                 WeightVO(row["weight"], WeightUnit(row["weight_unit"]))
@@ -165,6 +173,7 @@ class CatalogItemMapper:
             status=value.status,
             sku=SkuCodeVO(value.sku) if value.sku else None,
             virtual=value.virtual,
+            purchase_price=value.purchase_price,
             price=value.price,
             weight=value.weight,
             dimensions=value.dimensions,
@@ -193,6 +202,7 @@ class CatalogItemMapper:
             status=value.status,
             sku=SkuCodeVO(value.sku) if value.sku is not None else None,
             virtual=value.virtual,
+            purchase_price=value.purchase_price,
             price=value.price,
             stock=value.stock,
             weight=value.weight,
@@ -222,6 +232,9 @@ class CatalogItemMapper:
             created_by=item.created_by.uuid,
             updated_by=item.updated_by.uuid,
             virtual=item.virtual,
+            purchase_price=(
+                item.purchase_price.value if item.purchase_price is not None else None
+            ),
             regular_price=price.regular_price if price else None,
             sale_price=price.sale_price if price else None,
             date_on_sale_from=price.date_on_sale_from if price else None,

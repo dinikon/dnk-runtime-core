@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import {
   Dialog,
   DialogContent,
@@ -38,24 +38,9 @@ const emit = defineEmits<{
 const draft = ref<ProductPatch>({}),
   dirty = ref(false),
   submitted = ref(false);
-watch(
-  () => props.item,
-  (item) => {
-    if (item && !dirty.value)
-      draft.value =
-        props.section === "price"
-          ? { price_specification: clone(item.price_specification) }
-          : { stock: clone(item.stock) };
-  },
-  { immediate: true },
-);
-const validation = computed(() =>
-  props.section === "price" && !draft.value.price_specification
-    ? "Укажите корректную цену."
-    : sectionError(props.section, draft.value),
-);
+const validation = computed(() => sectionError(props.section, draft.value));
 function change(patch: ProductPatch): void {
-  draft.value = patch;
+  draft.value = { ...draft.value, ...patch };
   dirty.value = true;
   emit("dirty", true);
 }
@@ -119,11 +104,27 @@ function save(): void {
         <ProductPricingForm
           v-if="section === 'price'"
           id="quick"
-          :value="draft.price_specification ?? null"
+          :value="item.price_specification"
+          :purchase-price="item.purchase_price"
+          :purchase-reset="0"
+          :purchase-error="
+            submitted
+              ? sectionError('purchase_price', {
+                  purchase_price: draft.purchase_price,
+                })
+              : ''
+          "
+          @purchase-change="change({ purchase_price: $event })"
           :reset="0"
           :disabled="pending || loading || blocked"
           :current="item.price"
-          :error="submitted ? validation : ''"
+          :error="
+            submitted
+              ? sectionError('price', {
+                  price_specification: draft.price_specification,
+                })
+              : ''
+          "
           @change="change({ price_specification: $event })"
         />
         <ProductStockForm

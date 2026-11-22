@@ -58,10 +58,6 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
             name="ck_catalog_item_price",
         ),
         sa.CheckConstraint(
-            "(sale_price IS NULL AND date_on_sale_from IS NULL AND date_on_sale_to IS NULL) OR (sale_price IS NOT NULL AND sale_price>=0 AND sale_price<=regular_price)",
-            name="ck_catalog_item_sale_price",
-        ),
-        sa.CheckConstraint(
             "date_on_sale_from IS NULL OR date_on_sale_to IS NULL OR date_on_sale_from<=date_on_sale_to",
             name="ck_catalog_item_sale_interval",
         ),
@@ -116,6 +112,8 @@ class CatalogItemModel(EntityAuditMixin, AudienceMixin, TenantBase):
     virtual: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
     weight: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     weight_unit: Mapped[str | None] = mapped_column(sa.String(2), nullable=True)
+    purchase_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
+    primary_category_id: Mapped[UUID | None] = mapped_column(StringUUID, sa.ForeignKey("tenant.catalog_categories.id"), index=True)
     regular_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     sale_price: Mapped[Decimal | None] = mapped_column(sa.Numeric(), nullable=True)
     date_on_sale_from: Mapped[datetime | None] = mapped_column(

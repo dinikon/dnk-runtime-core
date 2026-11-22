@@ -65,6 +65,7 @@ export interface ReadItemDTO {
   status: ItemStatus;
   sku: string | null;
   virtual: boolean;
+  purchase_price: string | null;
   price_specification: PriceDTO | null;
   price: string | null;
   weight: WeightDTO | null;
@@ -149,6 +150,7 @@ export interface UpdateItemRequest {
   status?: ItemStatus;
   sku?: string | null;
   virtual?: boolean;
+  purchase_price?: string | null;
   price_specification?: PriceDTO | null;
   stock?: StockDTO;
   weight?: WeightDTO | null;

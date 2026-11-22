@@ -103,6 +103,7 @@ class CatalogItemUpdateService:
             status=command.status,
             sku=command.sku,
             virtual=command.virtual,
+            purchase_price=command.purchase_price,
             price_specification=command.price_specification,
             stock=command.stock,
             weight=command.weight,

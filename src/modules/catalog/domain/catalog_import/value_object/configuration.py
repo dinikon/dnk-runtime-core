@@ -8,6 +8,7 @@ TARGETS = (
     "virtual",
     "title",
     "body",
+    "purchase_price",
     "regular_price",
     "sale_price",
     "discount",

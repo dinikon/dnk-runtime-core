@@ -51,7 +51,9 @@ HTTP принимает все поддержанные разделы созд�
 измерения, переводы и галереи. SKU уникален в tenant после trim с сохранением
 регистра. Товар создаётся черновиком без контента, цены и SKU.
 
-Price specification хранит обычную и акционную суммы и UTC-интервал [from,to).
+Закупочная цена `purchase_price` принадлежит продаваемой позиции и задаётся независимо от цены продажи.
+Price specification хранит обычную и строго меньшую акционную суммы и UTC-интервал [from,to).
+При записи и импорте равная или более высокая акционная цена снимает акцию вместе с датами; остальные поля сохраняются.
 Текущая price вычисляется на as_of. Decimal точный, до шести дробных разрядов;
 0 допустим, отсутствие цены блокирует продажу. Цены каталога не имеют валютной метки.
 Диапазон товара берётся из цен его активных вариантов. При добавлении товара
@@ -88,7 +90,7 @@ Image stream закрывается после ответа; снятие свя
 
 Префикс /api/console/catalog: POST/GET /items, GET/PATCH/DELETE /items/{id},
 GET /product-type/default, upload и image content. Удалённые справочники отсутствуют
-в OpenAPI. PATCH принимает status, sku, virtual, price_specification, stock, weight,
+в OpenAPI. PATCH принимает status, sku, virtual, price_specification, purchase_price, stock, weight,
 dimensions, content, gallery. Неизвестные поля и пустой PATCH дают 422.
 Пропуск поля сохраняет значение; null очищает только nullable-поля. Изменение
 content/gallery требует query locale. Ошибки разделов содержат field/message.

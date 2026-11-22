@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Self
 from pydantic import (
     BaseModel,
@@ -34,6 +35,7 @@ class UpdateCatalogVariantRequest(BaseModel):
     status: CatalogItemStatus | None = None
     sku: str | None = None
     virtual: StrictBool | None = None
+    purchase_price: Decimal | None = None
     price_specification: PriceValue | None = None
     stock: StockValue | None = None
     weight: WeightValue | None = None

@@ -270,6 +270,12 @@ onMounted(async () => {
         >
           <ProductPricingForm
             :id="item.id"
+            :purchase-price="item.purchase_price"
+            :purchase-reset="resets.purchase_price ?? 0"
+            :purchase-error="props.errors.purchase_price"
+            @purchase-change="
+              emit('save', 'purchase_price', { purchase_price: $event })
+            "
             :value="item.price_specification"
             :current="item.price"
             :reset="resets.price ?? 0"

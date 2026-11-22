@@ -1,6 +1,6 @@
 import type { ProductPatch } from "./product.types";
 import type { ProductSection } from "./product.types";
-import { convertMeasurement } from "./measurement-conversion";
+import { convertMeasurement } from "./measurement-conversion.ts";
 
 /** Возвращает точный Decimal в миллионных долях, без преобразования суммы в Number. */
 function decimal(value: string): bigint | null {
@@ -29,17 +29,19 @@ export function sectionError(
   }
   if (section === "sku" && patch.sku && patch.sku.length > 128)
     return "SKU не длиннее 128 символов.";
+  if (patch.purchase_price != null) {
+    const purchase = decimal(patch.purchase_price);
+    if (purchase === null || purchase < 0n)
+      return "Укажите неотрицательную закупочную цену с точностью до 6 знаков.";
+  }
   if (section === "price" && patch.price_specification) {
     const price = patch.price_specification;
     const regular = decimal(price.regular_price),
       sale = price.sale_price === null ? null : decimal(price.sale_price);
     if (regular === null || regular < 0n)
       return "Укажите неотрицательную цену с точностью до 6 знаков.";
-    if (
-      price.sale_price !== null &&
-      (sale === null || sale < 0n || sale > regular)
-    )
-      return "Цена скидки должна быть от 0 до обычной цены.";
+    if (price.sale_price !== null && (sale === null || sale < 0n))
+      return "Укажите неотрицательную акционную цену с точностью до 6 знаков.";
     if (
       price.sale_price === null &&
       (price.date_on_sale_from || price.date_on_sale_to)
@@ -77,6 +79,7 @@ export const fieldSections: Record<string, ProductSection> = {
   status: "status",
   sku: "sku",
   virtual: "virtual",
+  purchase_price: "purchase_price",
   price_specification: "price",
   stock: "stock",
   weight: "measurements",
