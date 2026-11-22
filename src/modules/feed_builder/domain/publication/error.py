@@ -11,3 +11,15 @@ class InvalidPublicationValueError(PublicationDomainError):
 
 class DuplicateFieldOverrideError(PublicationDomainError):
     """Отклоняет несколько ручных значений одного поля публикации."""
+
+
+class PublicationNotFoundError(PublicationDomainError):
+    """Сообщает об отсутствующей публикации текущего tenant."""
+
+
+class PublicationVersionConflictError(PublicationDomainError):
+    """Отклоняет устаревшую версию публикации."""
+
+
+class PublicationTransitionError(PublicationDomainError):
+    """Отклоняет недопустимый переход участия."""

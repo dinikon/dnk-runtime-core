@@ -9,6 +9,22 @@ class InvalidFeedValueError(FeedDomainError):
     """Сообщает о некорректном собственном значении VO или агрегата."""
 
 
+class FeedNotFoundError(FeedDomainError):
+    """Сообщает об отсутствии Feed в текущем tenant."""
+
+
+class FeedCodeConflictError(FeedDomainError):
+    """Сообщает о занятом коде Feed, включая архивные записи."""
+
+
+class FeedVersionConflictError(FeedDomainError):
+    """Отклоняет сохранение устаревшей версии Feed."""
+
+
+class FeedArchivedError(FeedDomainError):
+    """Запрещает изменение настроек архивного Feed."""
+
+
 class InvalidFieldDefinitionError(FeedDomainError):
     """Сообщает о несовместимых настройках определения поля."""
 

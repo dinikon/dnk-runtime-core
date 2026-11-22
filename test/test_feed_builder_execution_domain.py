@@ -1,3 +1,7 @@
+from src.modules.feed_builder.domain.publication.value_object.feed_publication_version import (
+    FeedPublicationVersionVO,
+)
+
 """Состояния публикаций, генераций и ключей доступа без I/O и переходов поведения."""
 
 from dataclasses import FrozenInstanceError, fields, replace
@@ -226,6 +230,7 @@ class FeedPublicationDomainTests(unittest.TestCase):
                         feed_id=feed_id,
                         product_reference=reference,
                         status=PublicationStatus.ENABLED,
+                        version=FeedPublicationVersionVO(1),
                         overrides=(),
                         created_at=NOW,
                         updated_at=NOW,
@@ -248,6 +253,7 @@ class FeedPublicationDomainTests(unittest.TestCase):
                     EntityIdVO(uuid4()), EntityIdVO(uuid4())
                 ),
                 status=status,
+                version=FeedPublicationVersionVO(17),
                 overrides=overrides,
                 created_at=NOW,
                 updated_at=FINISHED,
@@ -351,6 +357,7 @@ class FeedPublicationDomainTests(unittest.TestCase):
             feed_id=FeedIdVO(uuid4()),
             product_reference=CatalogProductReferenceVO(EntityIdVO(uuid4())),
             status=PublicationStatus.PAUSED,
+            version=FeedPublicationVersionVO(1),
             overrides=overrides,
             created_at=NOW,
             updated_at=FINISHED,
@@ -371,6 +378,7 @@ class FeedPublicationDomainTests(unittest.TestCase):
             feed_id=FeedIdVO(uuid4()),
             product_reference=CatalogProductReferenceVO(EntityIdVO(uuid4())),
             status=PublicationStatus.ENABLED,
+            version=FeedPublicationVersionVO(1),
             overrides=(FieldOverrideVO(identifier, amount),),
             created_at=NOW,
             updated_at=FINISHED,

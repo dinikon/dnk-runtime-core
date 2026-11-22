@@ -1,4 +1,4 @@
-"""Границы объектного Domain-среза FeedBuilder без поведения и внешних слоёв."""
+"""Архитектурные границы Feed CRUD и объектных агрегатов следующих срезов."""
 
 import ast
 import subprocess
@@ -14,15 +14,15 @@ DOMAIN = MODULE / "domain"
 class FeedBuilderArchitectureTests(unittest.TestCase):
     """Проверяет направление зависимостей, фабрики, VO и импорт рекурсивных типов."""
 
-    def test_slice_contains_only_domain_and_empty_package_initializers(self) -> None:
-        """Не создаёт repositories, evaluator или внешние слои раньше их срезов."""
+    def test_slice_contains_crud_layers_and_empty_package_initializers(self) -> None:
+        """Разрешает Feed CRUD без внешних слоёв остальных агрегатов и evaluator."""
         self.assertEqual(
             {
                 path.name
                 for path in MODULE.iterdir()
                 if path.is_dir() and path.name != "__pycache__"
             },
-            {"domain"},
+            {"domain", "application", "infrastructure", "presentation"},
         )
         self.assertEqual(
             {
@@ -32,7 +32,7 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
             },
             {"feed", "publication", "generation", "access_key"},
         )
-        forbidden = {"repository.py", "evaluator.py", "events.py"}
+        forbidden = {"events.py"}
         for path in MODULE.rglob("*.py"):
             with self.subTest(path=path):
                 self.assertNotIn(path.name, forbidden)
@@ -93,8 +93,8 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                         str(path),
                     )
 
-    def test_aggregate_and_entities_only_declare_create_restore(self) -> None:
-        """Не добавляет __post_init__, методы изменения, события и исполнение формул."""
+    def test_behavior_is_limited_to_implemented_slices(self) -> None:
+        """Разрешает поведение Feed/Publication; остальные объекты сохраняют create/restore."""
         paths = [
             *sorted(DOMAIN.glob("*/aggregate.py")),
             *sorted(DOMAIN.glob("*/entity/*.py")),
@@ -107,9 +107,23 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                         for item in node.body
                         if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
                     }
-                    self.assertEqual(methods, {"create", "restore"}, str(path))
+                    expected = {"create", "restore"}
+                    if path == DOMAIN / "feed/aggregate.py":
+                        expected |= {"change_settings", "change_schema", "archive"}
+                    if path == DOMAIN / "publication/aggregate.py":
+                        expected |= {
+                            "_transition",
+                            "enable",
+                            "pause",
+                            "archive",
+                            "restore_participation",
+                        }
+                    self.assertEqual(methods, expected, str(path))
                     for method in (
-                        item for item in node.body if isinstance(item, ast.FunctionDef)
+                        item
+                        for item in node.body
+                        if isinstance(item, ast.FunctionDef)
+                        and item.name in {"create", "restore"}
                     ):
                         self.assertTrue(
                             any(
@@ -158,7 +172,8 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
             self.assertNotIn("revision", path.name, str(path))
             for node in ast.walk(ast.parse(path.read_text())):
                 if isinstance(node, ast.ImportFrom) and node.module:
-                    self.assertFalse(node.module.endswith(".aggregate"), str(path))
+                    if path.name != "repository.py" and path.parent.name != "policy":
+                        self.assertFalse(node.module.endswith(".aggregate"), str(path))
                 if isinstance(node, ast.AnnAssign) and isinstance(
                     node.target, ast.Name
                 ):
@@ -229,6 +244,61 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                 timeout=10,
             )
             self.assertEqual(result.returncode, 0, f"{name}: {result.stderr}")
+
+    def test_crud_layer_dependencies_and_no_transaction_control(self) -> None:
+        """Защищает зависимости слоёв, DTO и общую транзакцию внешнего UoW."""
+        for layer in ("application", "infrastructure", "presentation"):
+            for path in (MODULE / layer).rglob("*.py"):
+                tree = ast.parse(path.read_text())
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        name = node.module
+                        if layer == "application":
+                            self.assertFalse(
+                                name.startswith(
+                                    (
+                                        "sqlalchemy",
+                                        "fastapi",
+                                        "pydantic",
+                                        "src.modules.feed_builder.infrastructure",
+                                        "src.modules.feed_builder.presentation",
+                                    )
+                                ),
+                                str(path),
+                            )
+                        if name.startswith("src."):
+                            self.assertTrue(
+                                (
+                                    PROJECT_ROOT / (name.replace(".", "/") + ".py")
+                                ).is_file(),
+                                str(path),
+                            )
+                    if isinstance(node, ast.Call) and isinstance(
+                        node.func, ast.Attribute
+                    ):
+                        self.assertNotIn(
+                            node.func.attr, {"commit", "rollback"}, str(path)
+                        )
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        self.assertIsNotNone(node.returns, f"{path}:{node.name}")
+                        self.assertIsNotNone(
+                            ast.get_docstring(node), f"{path}:{node.name}"
+                        )
+                        self.assertNotEqual(node.name, "__post_init__", str(path))
+                        for arg in [
+                            *node.args.posonlyargs,
+                            *node.args.args,
+                            *node.args.kwonlyargs,
+                        ]:
+                            if arg.arg not in {"self", "cls"}:
+                                self.assertIsNotNone(
+                                    arg.annotation, f"{path}:{node.name}:{arg.arg}"
+                                )
+                    if isinstance(node, ast.Name):
+                        self.assertNotEqual(node.id, "Any", str(path))
+        for root in ("generation", "access_key"):
+            self.assertFalse((MODULE / "application" / root).exists())
+            self.assertFalse((MODULE / "presentation" / root).exists())
 
 
 if __name__ == "__main__":

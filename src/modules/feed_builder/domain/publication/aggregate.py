@@ -1,4 +1,8 @@
-from dataclasses import dataclass
+from src.modules.feed_builder.domain.publication.value_object.feed_publication_version import (
+    FeedPublicationVersionVO,
+)
+from src.modules.feed_builder.domain.publication.error import PublicationTransitionError
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Self
 from src.modules.feed_builder.domain.feed.limits import MAX_FIELDS
@@ -34,6 +38,7 @@ class FeedPublication:
     overrides: tuple[FieldOverrideVO, ...]
     created_at: datetime
     updated_at: datetime
+    version: FeedPublicationVersionVO
 
     @classmethod
     def create(
@@ -53,6 +58,7 @@ class FeedPublication:
             overrides=(),
             created_at=now,
             updated_at=now,
+            version=FeedPublicationVersionVO(1),
         )
 
     @classmethod
@@ -66,12 +72,14 @@ class FeedPublication:
         overrides: tuple[FieldOverrideVO, ...],
         created_at: datetime,
         updated_at: datetime,
+        version: FeedPublicationVersionVO,
     ) -> Self:
         """Восстанавливает состояние, проверяя уникальность overrides и собственные даты."""
         if (
             not isinstance(identifier, FeedPublicationIdVO)
             or not isinstance(feed_id, FeedIdVO)
             or not isinstance(product_reference, CatalogProductReferenceVO)
+            or not isinstance(version, FeedPublicationVersionVO)
             or not isinstance(status, PublicationStatus)
             or not isinstance(overrides, (list, tuple))
             or len(overrides) > MAX_FIELDS
@@ -103,4 +111,62 @@ class FeedPublication:
             overrides=tuple(overrides),
             created_at=created_at,
             updated_at=updated_at,
+            version=version,
+        )
+
+    def _transition(
+        self,
+        target: PublicationStatus,
+        allowed: tuple[PublicationStatus, ...],
+        now: datetime,
+    ) -> Self:
+        """Атомарно меняет участие, сохраняя ссылку, overrides и исходную дату."""
+        require_datetime(now, error=InvalidPublicationValueError)
+        if now < self.updated_at:
+            raise InvalidPublicationValueError(
+                "Время изменения не может двигаться назад."
+            )
+        if self.status is target:
+            return self
+        if self.status not in allowed:
+            raise PublicationTransitionError(
+                "Недопустимое изменение участия публикации."
+            )
+        return replace(
+            self,
+            status=target,
+            updated_at=now,
+            version=FeedPublicationVersionVO(self.version.value + 1),
+        )
+
+    def enable(self, *, now: datetime) -> Self:
+        """Возобновляет участие без восстановления архивной публикации."""
+        return self._transition(
+            PublicationStatus.ENABLED,
+            (PublicationStatus.PAUSED, PublicationStatus.DRAFT),
+            now,
+        )
+
+    def pause(self, *, now: datetime) -> Self:
+        """Приостанавливает участвующую позицию без изменения Catalog."""
+        return self._transition(
+            PublicationStatus.PAUSED, (PublicationStatus.ENABLED,), now
+        )
+
+    def archive(self, *, now: datetime) -> Self:
+        """Убирает позицию из состава, сохраняя идентичность и ручные значения."""
+        return self._transition(
+            PublicationStatus.ARCHIVED,
+            (
+                PublicationStatus.ENABLED,
+                PublicationStatus.PAUSED,
+                PublicationStatus.DRAFT,
+            ),
+            now,
+        )
+
+    def restore_participation(self, *, now: datetime) -> Self:
+        """Явно возвращает архивную позицию в состав фида."""
+        return self._transition(
+            PublicationStatus.ENABLED, (PublicationStatus.ARCHIVED,), now
         )

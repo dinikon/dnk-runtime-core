@@ -1,0 +1,6 @@
+"""Типы версионируемых JSON-документов чтения, не транспортные модели."""
+
+type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[
+    str, JsonValue
+]
+type JsonObject = dict[str, JsonValue]

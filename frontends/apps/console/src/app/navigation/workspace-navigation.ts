@@ -1,4 +1,11 @@
-import { Building2, LifeBuoy, ShoppingBasket, Users, Plug } from "@lucide/vue";
+import {
+  Building2,
+  LifeBuoy,
+  ShoppingBasket,
+  Users,
+  Plug,
+  Rss,
+} from "@lucide/vue";
 
 import type { WorkspaceNavigation } from "./workspace-navigation.types";
 
@@ -6,7 +13,10 @@ export const workspaceNavigation: WorkspaceNavigation = {
   navGroups: [
     {
       title: "Каналы продаж",
-      items: [{ title: "Подключения", url: "/channels", icon: Plug }],
+      items: [
+        { title: "Подключения", url: "/channels", icon: Plug },
+        { title: "Фиды", url: "/feed-builder/feeds", icon: Rss },
+      ],
     },
     {
       title: "Каталог",

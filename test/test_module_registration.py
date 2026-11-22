@@ -84,6 +84,7 @@ class ModuleRegistrationTests(unittest.TestCase):
         )
         for prefix in (
             "/api/console/catalog",
+            "/api/console/feed-builder/feeds",
             "/api/console/files",
             "/api/console/channels",
             "/api/console/crm/contacts",
@@ -110,6 +111,7 @@ class ModuleRegistrationTests(unittest.TestCase):
                 "catalog_item",
                 "contacts",
                 "companies",
+                "fb_feeds",
                 "files_registry",
                 "users",
                 "channels",

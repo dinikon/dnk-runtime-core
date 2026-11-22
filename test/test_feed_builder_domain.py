@@ -84,6 +84,7 @@ from src.modules.feed_builder.domain.feed.value_object.feed_export_settings impo
     FeedExportSettingsVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
+from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.domain.feed.value_object.text_constraints import (
@@ -276,6 +277,7 @@ class FeedConstructionTests(unittest.TestCase):
                         "export_settings": settings,
                         "created_at": NOW,
                         "updated_at": NOW,
+                        "version": FeedVersionVO(1),
                     }
                     self.assertEqual(
                         {item.name for item in fields(Feed)}, set(expected)
@@ -348,6 +350,7 @@ class FeedConstructionTests(unittest.TestCase):
             "export_settings": settings,
             "created_at": created_at,
             "updated_at": updated_at,
+            "version": FeedVersionVO(1),
         }
         self.assertEqual({item.name for item in fields(Feed)}, set(expected))
         for attribute, value in expected.items():

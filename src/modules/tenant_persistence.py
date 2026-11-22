@@ -14,6 +14,8 @@ import src.modules.identity.infrastructure.persistence.models.invitation  # noqa
 # Не удалять имена при удалении модели: autogenerate должен видеть DROP TABLE.
 HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
+        "fb_feeds",
+        "fb_publications",
         "catalog_content_block_definitions",
         "catalog_content_block_translations",
         "catalog_item",
@@ -73,6 +75,7 @@ import src.modules.files.infrastructure.persistence.models.stored_file  # noqa: 
 
 
 import src.modules.catalog.infrastructure.persistence.models.catalog_item  # noqa: F401
+import src.modules.feed_builder.infrastructure.persistence.models.feed  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_content_value  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_gallery  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_image  # noqa: F401
@@ -107,3 +110,5 @@ import src.modules.channels.infrastructure.persistence.models.channel  # noqa: F
 import src.modules.channels.infrastructure.persistence.models.connection  # noqa: F401
 
 import src.modules.crm.infrastructure.persistence.models.position_history  # noqa: F401
+
+import src.modules.feed_builder.infrastructure.persistence.models.publication  # noqa: F401

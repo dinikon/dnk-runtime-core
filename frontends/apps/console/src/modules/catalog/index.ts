@@ -5,4 +5,14 @@ export {
 
 export { default as CatalogContentEditor } from "./ui/product/ProductRichText.vue";
 
-export { searchSalesCatalog, readSalesCatalog } from './model/catalog-public';
+export { searchSalesCatalog, readSalesCatalog } from "./model/catalog-public";
+
+export {
+  searchCatalogPreviewProducts,
+  searchCatalogPreviewVariants,
+} from "./model/catalog-public";
+
+export {
+  searchCatalogPublicationProducts,
+  searchCatalogPublicationVariants,
+} from "./model/catalog-public";

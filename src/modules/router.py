@@ -1,4 +1,11 @@
+from src.modules.feed_builder.presentation.publication.router import (
+    router as feed_publications_router,
+)
 from src.modules.catalog.presentation.router import router as catalog_router
+from src.modules.feed_builder.presentation.feed.router import (
+    router as feeds_router,
+    metadata_router as feeds_metadata_router,
+)
 from fastapi import APIRouter
 
 from src.modules.crm.presentation.contact.router import router as contacts_router
@@ -16,6 +23,8 @@ from src.modules.reference_data.presentation.router import (
 router = APIRouter(prefix="/api/console")
 
 router.include_router(catalog_router)
+router.include_router(feeds_router)
+router.include_router(feeds_metadata_router)
 from src.modules.files.presentation.router import router as files_router
 
 router.include_router(files_router)
@@ -41,3 +50,5 @@ router.include_router(funnel_router)
 from src.modules.channels.presentation.router import router as channels_router
 
 router.include_router(channels_router)
+
+router.include_router(feed_publications_router)

@@ -60,3 +60,128 @@ export async function readSalesCatalog(
     sku: item.sku ?? null,
   };
 }
+
+export interface CatalogPreviewChoice {
+  id: string;
+  title: string;
+  sku: string | null;
+  kind: "simple" | "variable" | "variant";
+}
+export interface CatalogPreviewPage {
+  items: CatalogPreviewChoice[];
+  total: number;
+}
+export async function searchCatalogPreviewProducts(
+  locale: string,
+  search: string,
+  offset: number,
+  signal: AbortSignal,
+): Promise<CatalogPreviewPage> {
+  const { catalogApi } = await import("../api/catalog.api");
+  const page = await catalogApi.listItems(
+    locale,
+    search,
+    offset,
+    20,
+    undefined,
+    signal,
+  );
+  return {
+    total: page.total,
+    items: page.items
+      .filter((i) => i.kind !== "variant")
+      .map((i) => ({
+        id: i.id,
+        title: i.title ?? i.sku ?? i.id,
+        sku: i.sku ?? null,
+        kind: i.kind ?? "simple",
+      })),
+  };
+}
+export async function searchCatalogPreviewVariants(
+  rootId: string,
+  locale: string,
+  offset: number,
+  signal: AbortSignal,
+): Promise<CatalogPreviewPage> {
+  const { catalogApi } = await import("../api/catalog.api");
+  const page = await catalogApi.listVariants(
+    rootId,
+    locale,
+    offset,
+    20,
+    signal,
+  );
+  return {
+    total: page.total,
+    items: page.items.map((i) => ({
+      id: i.id,
+      title: i.title ?? i.sku ?? i.id,
+      sku: i.sku ?? null,
+      kind: i.kind ?? "variant",
+    })),
+  };
+}
+
+export interface CatalogPublicationChoice {
+  id: string;
+  title: string;
+  sku: string | null;
+  kind: "simple" | "variable" | "variant";
+  available: boolean;
+}
+export interface CatalogPublicationPage {
+  items: CatalogPublicationChoice[];
+  total: number;
+}
+export async function searchCatalogPublicationProducts(
+  locale: string,
+  search: string,
+  offset: number,
+  signal: AbortSignal,
+): Promise<CatalogPublicationPage> {
+  const { catalogApi } = await import("../api/catalog.api");
+  const page = await catalogApi.listItems(
+    locale,
+    search,
+    offset,
+    20,
+    undefined,
+    signal,
+  );
+  return {
+    total: page.total,
+    items: page.items.map((i) => ({
+      id: i.id,
+      title: i.title ?? i.sku ?? i.id,
+      sku: i.sku,
+      kind: i.kind ?? "simple",
+      available: i.status !== "archived",
+    })),
+  };
+}
+export async function searchCatalogPublicationVariants(
+  rootId: string,
+  locale: string,
+  offset: number,
+  signal: AbortSignal,
+): Promise<CatalogPublicationPage> {
+  const { catalogApi } = await import("../api/catalog.api");
+  const page = await catalogApi.listVariants(
+    rootId,
+    locale,
+    offset,
+    20,
+    signal,
+  );
+  return {
+    total: page.total,
+    items: page.items.map((i) => ({
+      id: i.id,
+      title: i.title ?? i.sku ?? i.id,
+      sku: i.sku,
+      kind: i.kind ?? "variant",
+      available: i.status !== "archived",
+    })),
+  };
+}

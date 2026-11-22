@@ -13,10 +13,12 @@
 принадлежит полю и служит меткой результата; он не выполняет конвертацию.
 Курс пользователь задаёт обычной константой своей формулы. Курсовых сервисов,
 автоматического наследования валюты источника и FX-контекста модуль не использует.
-Реализован объектный Domain-срез: Feed, FeedPublication, FeedGeneration и
-FeedAccessKey с create/restore и проверками. Бизнес-методы, ревизии схем,
-репозитории, исполнение генерации и остальные слои пока не реализуются.
-Разделы будущего поведения и SQL/API ниже не означают наличие этих возможностей.
+Реализованы объекты Domain Feed/Publication/Generation/AccessKey и первая
+рабочая вертикаль Feed CRUD: изменение общих настроек, архивация, PostgreSQL,
+Application и Console API/UI. Добавлен конструктор рабочей схемы с полями,
+источниками, настройками типов и атомарным сохранением. Остальные три агрегата
+остаются объектными. Ревизии, публикация схем, вычисление значений, генерации
+и управление секретами пока не реализованы. Будущие разделы описывают цель.
 
 ## **1. Цель, границы и порядок реализации**
 
@@ -97,7 +99,7 @@ VO, enums, чистыми структурными Policy, ошибками со
 создать их заготовки в первом срезе. Структурные Policy проверяют определения
 при конструировании, но не исполняют условия, формулы или жизненный цикл Feed.
 
-#### **1.3.1. Текущий срез: Publication, Generation и AccessKey**
+#### **1.3.1. Предыдущий объектный срез: Publication, Generation и AccessKey**
 
 После объектов Feed добавлены три самостоятельных Aggregate Root:
 FeedPublication, FeedGeneration и FeedAccessKey. Их фабрики create/restore
@@ -116,6 +118,61 @@ Feed остаётся в существующем контракте. Колле
 выпуска/отзыва секретов, событий, repositories, SQL, Application, API или UI.
 Исторические версии/draft в следующих разделах — отложенное поведение,
 которое потребуется отдельно согласовать перед реализацией.
+
+#### **1.3.2. Реализованный первый рабочий срез: Feed CRUD**
+
+Один Feed создаётся как DRAFT с пустой схемой и обязательным выбранным CSV/XML.
+Доступны создание, список, карточка, PATCH общих настроек и DELETE через ARCHIVED.
+API принимает name/code/export_settings; schema/status/id/version клиента
+при создании и schema/status при PATCH запрещены. Рабочая схема редактируется
+отдельным API среза 1.3.3.
+
+Таблица fb_feeds находится в tenant-схеме и хранит полные schema_definition и
+export_settings JSONB без отдельных таблиц полей/правил/ревизий.
+Feed.change_settings и Feed.archive возвращают новое проверенное frozen-состояние.
+Версия конкурентного сохранения — FeedVersionVO: создаётся со значением 1,
+увеличивается один раз при фактическом изменении; это не ревизия схемы.
+Повтор одинаковых настроек не изменяет дату/версию и не пишет БД.
+
+DELETE сохраняет строку и код. Архив исключён из обычного списка, доступен через
+status=ARCHIVED и GET карточки, редактирование запрещено. Повтор DELETE архива
+возвращает 204 даже с прежней положительной expected_version.
+Отсутствующий ID, включая ID другого tenant, возвращает 404.
+
+SQLAlchemy и query/write repositories используют существующий внешний UoW
+на уже привязанном tenant-соединении. Сценарии не открывают транзакции и
+не присваивают свойства агрегату. UUID и время получаются через существующие порты.
+Фоновые задания, Outbox, public routes и хранение остальных агрегатов не создаются.
+
+#### **1.3.3. Реализованный конструктор рабочей схемы**
+
+Пользователь собирает состав товарного предложения в Console: STRING/TEXT/MONEY,
+источники, локали/fallback, необязательная валютная метка, ограничения,
+преобразования, порядок и участие в экспорте. Схема сохраняется целиком через
+Feed.change_schema в fb_feeds.schema_definition и открывается повторно без потерь.
+Новые поля создаются пользователем; обязательных системных title/sku/price нет.
+
+Текущий draft — единственная рабочая схема Feed. У неё нет собственной версии,
+таблицы, commit name/description, истории или ссылок на опубликованную схему.
+Feed.version общий для схемы, настроек и архивации. Реализованы чистый evaluator,
+редактирование IF/ELSE и предпросмотр MONEY на реальном SIMPLE/выбранном VARIANT.
+Публикация схем, участие товаров в Feed и генерация остаются будущими.
+API сохраняет полный существующий AST. Определения с пока неподключёнными закупкой/
+категориями сохраняются без изменений и доступны в Console только для просмотра.
+
+#### **1.3.4. Реализованный ассортимент FeedPublication**
+
+В Console доступна вкладка «Товары»: выбор SIMPLE и конкретных VARIANT,
+атомарное добавление до 100 явных ссылок, серверный список/поиск/статусы/страницы,
+карточка и проверка цены существующим evaluator. Выбор «Всех существующих»
+фиксирует ограниченный набор ID; новые варианты автоматически не подключаются.
+Публикации хранятся в fb_publications отдельно от Feed. Повторные и конкурентные
+добавления возвращают прежний ID, сохраняя PAUSED/ARCHIVED и overrides.
+Пауза/возобновление/архивация/явный возврат выполняются через Domain и собственную
+версию Publication; Feed.version и статус Feed от изменения состава не меняются.
+Пустая схема и отсутствие цены не блокируют привязку. Архивный Feed read-only.
+Полное разрешение полей, редактор overrides и материализованные проекции —
+следующая часть среза 16.6; текущая проверка цены не означает READY всего предложения.
 
 ### **1.4. Границы контекстов**
 
@@ -184,7 +241,8 @@ Override — индивидуальное значение конкретной 
 
 1. Структура: модуль → слой → Aggregate Root → ответственность. Дочерние Entity
    поля/правила/артефакт не получают самостоятельных repositories. Текущий срез
-   содержит domain/{feed,publication,generation,access_key} и тесты без других слоёв.
+   содержит Domain четырёх корней и application/infrastructure/presentation только
+   для Feed CRUD и рабочей схемы; общая модель хранения расположена в infrastructure/persistence/models.
 2. Domain — обычный Python без FastAPI, Pydantic, SQLAlchemy, I/O и logger.
    Фабрики агрегата/Entity create/restore явные; __post_init__ допустим только VO.
    В объектном срезе других методов поведения нет. В последующих срезах состояние
@@ -238,7 +296,9 @@ src/modules/feed_builder/
   presentation/depends/
 ```
 
-Объектный срез создаёт только Domain из разделов 3.4 и 3.7–3.10.
+Объектный срез создаёт Domain из разделов 3.4 и 3.7–3.10.
+Текущая вертикаль Feed добавляет необходимые файлы четырёх слоёв по разделу 1.3.2;
+пустые заготовки сценариев Publication/Generation/AccessKey не создаются.
 Остальные каталоги появляются по факту реализации. Общие UoW/jobs/events/storage
 механизмы переиспользуются; файловая структура не определяет границы агрегатов.
 
@@ -248,7 +308,7 @@ src/modules/feed_builder/
 
 | Корень | Ответственность | Когда реализуется |
 | --- | --- | --- |
-| Feed | Определения полей, расчётов и настройки схемы/экспорта | Объекты — первый срез; поведение — следующие |
+| Feed | Определения полей и общие настройки | Объекты, change_settings/change_schema/archive, CRUD и редактор рабочей схемы реализованы; активация — позже |
 | FeedPublication | Привязка позиции, участие, индивидуальные overrides | Объекты и проверки — текущий срез; поведение — позже |
 | FeedGeneration | Снимок определения, состояние сборки, контекст и один артефакт | Объекты и проверки — текущий срез; выполнение — позже |
 | FeedAccessKey | Состояние отдельного ключа чтения публичного файла | Объекты и проверки — текущий срез; выпуск/отзыв — позже |
@@ -257,15 +317,16 @@ FieldDefinition и ConditionalPriceRule — Entity внутри Feed. Отдел
 для наценок нет. FeedSchemaVO и настройки — VO. Проекция публикации — read model.
 Связи самостоятельных агрегатов — по ID, не через Python-ссылки на чужой агрегат.
 
-### **3.2. Feed: состояние и фабрики первого среза**
+### **3.2. Feed: текущее состояние и минимальное поведение**
 
 | Поле | Тип / смысл |
 | --- | --- |
 | id | FeedIdVO |
 | name, code | FeedNameVO, FeedCodeVO |
-| status | FeedStatus: DRAFT / ACTIVE / PAUSED / ARCHIVED, пока без переходов |
+| status | FeedStatus: DRAFT / ACTIVE / PAUSED / ARCHIVED; реализован переход в ARCHIVED |
 | schema | FeedSchemaVO; допускает пустой состав |
 | export_settings | FeedExportSettingsVO |
+| version | FeedVersionVO: положительный BIGINT конкурентного сохранения |
 | created_at, updated_at | Timezone-aware datetime |
 
 Feed.create получает явные ID/время и обязательные export_settings с выбранным
@@ -274,6 +335,15 @@ Feed.create получает явные ID/время и обязательны�
 переданные значения, проверяет согласованность и не генерирует ID, события или
 предзаполненные поля.
 Новый Feed создаётся в DRAFT. Restore сохраняет явно переданное допустимое состояние.
+
+Feed остаётся frozen. change_settings(name, code, export_settings, now) возвращает
+новый Self, сохраняя id/created_at/schema/status, обновляя updated_at и version.
+Все свойства типизированы и проверяются до возврата; архив редактировать нельзя.
+archive(now) сохраняет схему/настройки и переводит в ARCHIVED с новой версией.
+Повторное действие возвращает исходный объект. Время с timezone не может быть
+раньше updated_at. Создание, обновление и restore не создают события этого среза.
+В persistent mapper версия всегда берётся из row_version; missing/corrupt
+сохранённые значения не заменяются defaults.
 
 FeedExportSettingsVO содержит обязательное format_settings: ExportFormatSettings,
 product_mode: FeedProductMode со значением VARIABLE_TO_SINGLE по умолчанию и
@@ -338,9 +408,13 @@ Feed, применяется к выбранной выгрузке и не вх
 ко всем продаваемым позициям, независимо от SIMPLE/VARIANT. Расширение Enum новыми
 режимами относится к будущему срезу группировки; его поведение сейчас не реализуется.
 
-Первый срез не добавляет внутренние методы редактирования, публикации или генерации.
-Достаточно create/restore и проверок корректности конструируемого состояния.
-Код уникален в пределах tenant на будущем persistence/application уровне;
+Текущее поведение Feed включает change_settings/change_schema/archive.
+change_schema(schema, now) проверяет структуру и совместимость прямых источников
+через Policy и атомарно возвращает новое frozen-состояние. ID/created_at/настройки
+сохраняются; при фактическом изменении увеличивается Feed.version и updated_at.
+No-op не пишет БД. Архив и время ранее updated_at отклоняются. Публикация схемы
+и генерация остаются будущими; отдельного CRUD внутренних Entity нет.
+Код уникален в пределах tenant на persistence/application уровне;
 VO проверяет только формат. FeedCode не используется как публичный секрет.
 
 ### **3.3. Зависимые Entity и определения значений**
@@ -405,7 +479,9 @@ Enum принадлежат FeedBuilder, не импортируют Domain Cata
 Будущие границы ввода/хранения явно преобразуют строковые коды в Enum до создания
 SourceReferenceVO. В JSON сохраняются прежние provider/path коды, формат схемы
 остаётся 1. Существование адаптера, права, тип результата и требование locale
-проверяются в следующих срезах через SourcePathRegistry/Application; Domain
+проверяются через SourcePathRegistry/Application по мере подключения исполнения.
+Текущий конструктор уже проверяет тип/локаль прямого источника и доступность
+локалей через owner-порт справочника; данные товаров не читаются. Domain
 источники не читает. Новый встроенный путь/провайдер требует явного расширения
 Enum и проверки допустимой пары; пользователь не регистрирует произвольный path.
 Для будущих пользовательских характеристик вводится отдельная типизированная
@@ -445,6 +521,7 @@ src/modules/feed_builder/domain/feed/
     price_calculation_structure.py   PriceCalculationStructurePolicy
   value_object/
     feed_id.py                       FeedIdVO
+    feed_version.py                  FeedVersionVO конкурентного сохранения
     feed_name.py                     FeedNameVO
     feed_code.py                     FeedCodeVO
     field_id.py                      FieldIdVO
@@ -510,8 +587,9 @@ src/modules/feed_builder/domain/feed/
 CurrencyVO переиспользуется из shared как необязательная метка;
 MoneyVO в FeedBuilder не используется. FeedIdVO/FieldIdVO/PriceRuleIdVO
 строятся на существующем EntityIdVO. Новый LocaleCodeVO локален FeedBuilder и
-не импортирует внутренний LocaleVO/ошибки Catalog. DTO, repository, events,
-policies исполнения и evaluator пока не создаются. types.py не объединяет
+не импортирует внутренний LocaleVO/ошибки Catalog. DTO и repository добавлены
+только для Feed CRUD; events, policies исполнения и evaluator пока отсутствуют.
+types.py не объединяет
 определения VO.
 
 Собственные настройки и допустимые операции проверяет соответствующий VO типа
@@ -555,9 +633,9 @@ Shared MoneyVO не используется внутри FeedBuilder и не и
 
 ### **3.6. Состояние Feed в последующих срезах**
 
-При реализации редактирования/публикации schema первого среза станет рабочим
-определением draft. Добавятся ссылка на текущую неизменяемую опубликованную
-версию, draft revision/base version, configuration_version, persistence version,
+Сейчас schema уже является единственным рабочим определением. При отдельном
+согласовании публикации и ревизий добавятся ссылка на текущую неизменяемую опубликованную
+версию, draft revision/base version, configuration_version,
 счётчик запросов и ссылка на активную генерацию вместе с её sequence.
 Структура FieldDefinition и PriceCalculationVO при этом сохраняется.
 История схем целиком не загружается в агрегат.
@@ -565,10 +643,12 @@ Shared MoneyVO не используется внутри FeedBuilder и не и
 Будущие domain-операции владеют изменениями полей/правил и публикацией;
 ни Application, ни дочерний объект не обходят корень. Конкретные методы
 добавляются вместе с поведением соответствующего среза, не заготовками сейчас.
-FeedGeneration/FeedPublication/FeedAccessKey уже имеют собственные create/restore;
-методы поведения появятся в отдельных срезах. row_version не означает commit Domain.
+FeedGeneration/FeedPublication/FeedAccessKey имеют собственные create/restore.
+FeedPublication дополнительно получил поведение участия в срезе 16.6.1;
+поведение Generation/AccessKey появится отдельно. row_version не означает commit Domain.
 
-Жизненный цикл следующего среза: первая публикация переводит DRAFT в ACTIVE;
+Будущий жизненный цикл публикации схемы переводит Feed из DRAFT в ACTIVE;
+добавление FeedPublication такого перехода не выполняет.
 ACTIVE можно приостановить и затем возобновить через PAUSED. Новая публикация
 у PAUSED не возобновляет генерации автоматически. ARCHIVED — конечное состояние,
 из него редактирование/генерация не разрешены. Пауза сохраняет прежнюю публичную
@@ -579,8 +659,8 @@ UpdateFeedSettings передаёт желаемый status, переход пр
 
 Publication хранит id: FeedPublicationIdVO, feed_id: FeedIdVO,
 product_reference: CatalogProductReferenceVO, status: PublicationStatus,
-overrides: tuple[FieldOverrideVO, ...], created_at и updated_at.
-Версии конкурентного сохранения добавляются с поведением/хранением.
+overrides: tuple[FieldOverrideVO, ...], created_at, updated_at и
+version: FeedPublicationVersionVO. Версия — положительный BIGINT, а не ревизия схемы.
 CatalogProductReferenceVO содержит catalog_item_id: EntityIdVO и
 catalog_variant_id: EntityIdVO | None. Ссылка на Catalog однозначна:
 
@@ -603,17 +683,25 @@ FieldOverrideVO содержит field_id: FieldIdVO и value: str | PriceAmount
 не подменяет явно пустое значение. Пустой/многострочный текст допустим;
 совместимость с required/типом схемы проверяется будущим поведением; валюта в override не дублируется.
 
-create требует ID, feed_id, ссылку и now, создаёт ENABLED без overrides.
-restore сохраняет все свойства, требует типизированный статус, timezone-aware
+create требует ID, feed_id, ссылку и now, создаёт ENABLED без overrides с version=1.
+restore сохраняет все свойства, требует явную FeedPublicationVersionVO и типизированный статус, timezone-aware
 даты с updated_at >= created_at, уникальные field_id и не более MAX_FIELDS
 overrides. Входной list/tuple копируется в tuple. Restore не требует текущую
 схему: после её изменения исторический override не теряется и не удаляется молча.
 Существование Catalog/Feed, принадлежность варианта и уникальность публикаций
-между агрегатами будут проверяться через Application/хранение, без I/O в Domain.
+проверяются через Application/хранение, без I/O в Domain. Методы enable/pause/
+archive/restore_participation возвращают неизменяемое новое состояние; no-op
+сохраняет исходный объект, версию и updated_at. restore_participation — бизнес-
+возврат из архива, отдельный от фабрики restore. Переходы сохраняют ссылку,
+created_at и все overrides; прямого переназначения публикации другому товару нет.
+Проверка Feed/режима вынесена в чистую PublicationParticipationPolicy.
+Существующий DRAFT можно включить, обычный create сразу создаёт ENABLED.
+Из ARCHIVED нельзя выполнить enable/pause: используется явный возврат.
 
 PublicationStatus: DRAFT / ENABLED / PAUSED / ARCHIVED.
 Readiness: READY / NEEDS_INPUT / INVALID / STALE. Это разные измерения.
-Readiness и проекции в текущем срезе не создаются.
+Readiness и постоянные проекции в срезе управления ассортиментом не создаются.
+Ни статус ENABLED, ни успешный расчёт одного поля не заменяют полную готовность.
 
 - NEEDS_INPUT: нет обязательного ручного/текстового значения, перевода либо
   MANUAL_REQUIRED требует ручного перевода, при отсутствии более серьёзных ошибок.
@@ -1017,35 +1105,35 @@ Application. Примеры title/price не создают скрытых пр�
 
 Дополнительно в `public` schema нужен реестр публичных идентификаторов Feed для маршрутизации в tenant.
 
-**Draft хранится отдельно от опубликованных версий.** Это упрощает редактирование, блокировки и обеспечение неизменяемости опубликованной конфигурации. Все SQL-фрагменты ниже задают целевую структуру и реализуются tenant-миграциями Alembic с SQLAlchemy-моделями, mapper и репозиториями.
+Сейчас реализована только fb_feeds; остальные строки таблицы — будущие срезы.
+Текущая схема хранится в fb_feeds.schema_definition. При будущем вводе ревизий
+модель и перенос данных согласуются отдельно.
+
+**Будущий draft хранится отдельно от опубликованных версий.** Это упрощает редактирование, блокировки и обеспечение неизменяемости опубликованной конфигурации. Все SQL-фрагменты ниже задают целевую структуру и реализуются tenant-миграциями Alembic с SQLAlchemy-моделями, mapper и репозиториями.
 
 ### **5.2. Таблица Feed**
 
 ```
 CREATE TABLE fb_feeds (
     id UUID PRIMARY KEY,
-
-    name TEXT NOT NULL,
-    code TEXT NOT NULL UNIQUE,
-
-    configuration_version BIGINT NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'DRAFT'
-        CHECK (status IN (
-            'DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED'
-        )),
-
-    active_schema_version INTEGER NULL,
-    active_generation_id UUID NULL,
-    active_generation_sequence BIGINT NULL,
-
-    generation_sequence BIGINT NOT NULL DEFAULT 0,
-    row_version BIGINT NOT NULL DEFAULT 1,
-
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    row_version BIGINT NOT NULL,
+    schema_definition JSONB NOT NULL,
     export_settings JSONB NOT NULL,
-
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_fb_feeds_code UNIQUE (code),
+    CONSTRAINT ck_fb_feeds_name CHECK (char_length(btrim(name)) BETWEEN 1 AND 255),
+    CONSTRAINT ck_fb_feeds_code CHECK (code ~ '^[a-z][a-z0-9_-]{0,63}$'),
+    CONSTRAINT ck_fb_feeds_status CHECK (status IN ('DRAFT','ACTIVE','PAUSED','ARCHIVED')),
+    CONSTRAINT ck_fb_feeds_version CHECK (row_version >= 1),
+    CONSTRAINT ck_fb_feeds_dates CHECK (updated_at >= created_at),
+    CONSTRAINT ck_fb_feeds_schema CHECK (jsonb_typeof(schema_definition) = 'object'),
+    CONSTRAINT ck_fb_feeds_settings CHECK (jsonb_typeof(export_settings) = 'object')
 );
+CREATE INDEX ix_fb_feeds_status_updated ON fb_feeds(status, updated_at, id);
 
 ```
 
@@ -1075,11 +1163,42 @@ CsvExportSettingsVO/XmlExportSettingsVO; format не передаётся в к�
 При записи mapper явно берёт format.value из ClassVar: dataclass asdict сам по себе
 ClassVar не добавляет. Готовые настройки передаются фабрике restore, собственные
 инварианты проверяет Domain. Коллекция formats и отдельные csv/xml не поддерживаются;
-persistence/API срезы ещё не реализованы, адаптеры совместимости заранее не вводятся.
-Изменение формата/его параметров учитывается configuration_version и требует новой
-генерации; schema_format_version и версия схемы полей при этом не меняются.
+persistence/API Feed CRUD реализованы без aliases старой формы.
+Сейчас изменение формата/параметров увеличивает row_version. Отдельная
+configuration_version и запуск сборки появятся с поведением генераций;
+schema_format_version при изменении формата не меняется.
 
-### **5.3. Таблицы Schema**
+Текущая модель: infrastructure/persistence/models/feed.py.
+Tenant-миграция 0020_feed_builder_crud следует за 0019_catalog_price_amounts,
+проверена на новом tenant и при upgrade/downgrade существующего tenant.
+Модель зарегистрирована в src/modules/tenant_persistence.py вместе с историческим
+именем fb_feeds; autogenerate на head должен оставаться пустым.
+
+schema_definition хранит канонический документ раздела 4 с полным порядком полей,
+AI-метаданными, AST, закупочными bindings, constraints и transforms.
+Application schema_document формирует документ результатов без I/O; Infrastructure
+definition_mapper восстанавливает VO/Entity и контролирует входную форму/бюджеты.
+FeedMapper.to_domain вызывает Feed.restore, который проверяет инварианты корня.
+Строки Decimal не преобразуются в float; currency=None остаётся None.
+
+Для текущего CRUD row_version соответствует Feed.version. UPDATE содержит ID
+и ожидаемую версию в WHERE; ноль обновлённых строк означает конфликт.
+get_for_update использует блокировку строки. Репозиторий не вызывает commit/rollback.
+Именованное ограничение uq_fb_feeds_code переводится в FeedCodeConflictError;
+остальные IntegrityError не маскируются. Архивный код остаётся занятым.
+
+В будущем active_schema_version/active_generation_id/sequence/configuration_version
+будут добавлены отдельными миграциями. Их нет в текущей таблице; SQL ниже описывает
+будущие расширения и не выполняется миграцией 0020.
+
+### **5.3. Будущие таблицы Schema**
+
+В текущем срезе эти таблицы не создаются. Рабочее определение хранится в
+fb_feeds.schema_definition, версия — fb_feeds.row_version. Следующий SQL и
+описание публикации ниже относятся только к будущему согласованному срезу
+ревизий. Ввод отдельных draft/version потребует самостоятельной миграции данных
+и явного изменения контрактов; текущий PUT не использует nullable draft version.
+
 
 ```
 CREATE TABLE fb_schema_drafts (
@@ -1135,7 +1254,7 @@ SaveFeedSchemaDraft создаёт строку при первом сохран
 
 В дальнейшем можно реализовать несколько параллельных веток схем, но для MVP это не требуется.
 
-### **5.4. FeedPublication**
+### **5.4. FeedPublication — реализовано**
 
 ```
 CREATE TABLE fb_publications (
@@ -1148,21 +1267,21 @@ CREATE TABLE fb_publications (
     catalog_variant_id UUID NULL
         CHECK (catalog_variant_id IS NULL OR catalog_variant_id <> catalog_item_id),
 
-    status TEXT NOT NULL DEFAULT 'ENABLED'
+    status TEXT NOT NULL
         CHECK (status IN (
             'DRAFT', 'ENABLED',
             'PAUSED', 'ARCHIVED'
         )),
 
-    overrides JSONB NOT NULL DEFAULT '{}'
+    overrides JSONB NOT NULL
         CHECK (jsonb_typeof(overrides) = 'object'),
 
-    row_version BIGINT NOT NULL DEFAULT 1,
+    row_version BIGINT NOT NULL,
 
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL ,
+    updated_at TIMESTAMPTZ NOT NULL ,
 
-    UNIQUE NULLS NOT DISTINCT (
+    CONSTRAINT uq_fb_publications_reference UNIQUE NULLS NOT DISTINCT (
         feed_id,
         catalog_item_id,
         catalog_variant_id
@@ -1204,6 +1323,16 @@ FK на внутренние таблицы Catalog не вводится. Ти�
 Если поле наследуется, запись в `overrides` не требуется.
 
 В будущем `FieldOverride` может поддерживать дополнительные режимы: `CLEAR`, `EXPRESSION`, `GENERATED`, не меняя физическую модель.
+
+Таблица создаётся миграцией 0021_feed_publications после 0020_feed_builder_crud.
+Domain передаёт даты и версию явно. Репозитории используют существующий tenant UoW;
+сперва блокируется Feed, затем публикация. Это сериализует добавление/архив Feed
+и не позволяет дублям появиться при перекрывающихся пакетах. Запись статуса
+меняет только status/row_version/updated_at и не перезаписывает JSON overrides.
+Read-side читает проекции напрямую; список не вызывает Feed/Publication.restore.
+Сортировка created_at DESC, id DESC. Поиск подписей/SKU выполняет Catalog и отдаёт
+IDs; собственный query repository применяет UUID-array и серверную пагинацию.
+Межмодульного SQL JOIN нет. Подписи обогащаются только для текущей страницы.
 
 ### **5.5. Материализованная проекция**
 
@@ -1431,8 +1560,8 @@ configuration_version изменяется для влияющих на эксп
 
 ## **6. Application: целевые порты, сценарии и транзакции**
 
-Этот раздел реализуется после объектов и поведения Domain. В первом срезе
-Application-классы, порты и репозитории не создаются.
+Сценарии Feed CRUD уже реализованы. Остальные Application-контракты ниже
+относятся к будущим срезам; их пустые заготовки не создаются.
 
 ### **6.1. Контракты хранения и внешних данных**
 
@@ -1477,15 +1606,17 @@ provider/path в обход SourceReferenceVO и не дублируется о�
 
 ### **6.2. Команды: входы и результаты**
 
-Все сценарии получают доверенные tenant_id/actor_id. Каждый имеет собственные
-Command, Handler и конкретный DTO результата либо None. Для существующих
+Сценарии исполняются в доверенном tenant/actor-контексте. У текущего Feed CRUD
+авторизацию проверяет Presentation, репозитории привязаны к tenant внешнего UoW.
+Каждый сценарий имеет Command, Handler и конкретный DTO результата либо None. Для существующих
 объектов передаются нужные expected_version; HTTP Request/ORM не входят в контракт.
 
 | Сценарий | Вход кроме контекста | Результат |
 | --- | --- | --- |
-| CreateFeed | name, code, export_settings, optional schema | CreateFeedResultDTO: feed_id, draft_version, row_version |
-| UpdateFeedSettings | feed_id, изменяемые настройки, expected_version | UpdateFeedSettingsResultDTO: версии |
-| SaveFeedSchemaDraft | feed_id, definition с полями/AST/bindings, expected draft version или null, expected_schema_version | SaveFeedSchemaDraftResultDTO: draft_version, issues |
+| CreateFeed | name, code, export_settings | CreateFeedResultDTO: карточка пустого DRAFT и version |
+| UpdateFeed | feed_id, expected_version, name/code/export_settings | UpdateFeedResultDTO: карточка с сохранённой схемой и version |
+| ArchiveFeed | feed_id, expected_version | None |
+| SaveFeedSchemaDraft — реализовано | feed_id, definition с полями/AST/bindings, expected_version = Feed.version | SaveFeedSchemaDraftResultDTO: feed_id, version, definition |
 | PublishFeedSchema | feed_id, expected feed/draft versions | PublishFeedSchemaResultDTO: schema_version, content_hash |
 | AddCatalogItemsToFeed | feed_id, item_references: пары catalog_item_id/catalog_variant_id | AddCatalogItemsToFeedResultDTO: mapping каждой пары → publication_id |
 | RemoveFeedPublication | publication_id, expected_version | None |
@@ -1507,9 +1638,9 @@ Command, Handler и конкретный DTO результата либо None.
 
 | Query | Вход | Результат |
 | --- | --- | --- |
-| ListFeeds | фильтры/сортировка/пагинация | Page[FeedListItemDTO] |
+| ListFeeds | search/status/limit/offset | ListFeedsResultDTO: items/total/limit/offset |
 | GetFeed | feed_id | FeedDetailsDTO |
-| GetFeedSchema | feed_id, ACTIVE / DRAFT / version | FeedSchemaDetailsDTO |
+| GetFeedSchema — реализовано | feed_id, текущая рабочая схема | FeedSchemaDetailsDTO: feed_id, version, status, definition |
 | ListFieldTypes / ListSourcePaths / ListTransforms | контекст/тип | Собственные DTO метаданных |
 | ListCalculationParameters / ListCalculationOperations | контекст/тип | Собственные DTO типов/операций/прав |
 | ListFeedPublications | feed_id, фильтры/пагинация | Page[FeedPublicationListItemDTO] |
@@ -1579,8 +1710,12 @@ configuration_version — настройки экспорта/выдачи, не
 Это целевой потребительский контракт FeedBuilder, а не утверждение о готовом API.
 Четыре прямых источника Catalog соответствуют SourceProvider.CATALOG и
 CatalogSourcePath. Коды price.* и product.* в таблице — отдельные параметры AST,
-а не дополнительные значения CatalogSourcePath; ParameterReferenceVO в этом
-срезе не меняется и проверяет форму ID, семантику задаёт будущий ParameterRegistryPort.
+а не дополнительные значения CatalogSourcePath. ParameterReferenceVO проверяет форму
+ID; реализованная PriceCalculationSemanticPolicy проверяет закрытый реестр и типы
+всех ветвей до чтения товаров. Сейчас реестр содержит только price.regular,
+price.sale, price.effective, product.sku и product.id. price.purchase и
+product.category_ids — будущие подключения, metadata/API их не предлагают;
+новые/изменённые формулы с ними отклоняются.
 Catalog уже хранит regular/sale и UTC-интервал действия акции. Supplier Sourcing
 хранит purchase_price предложений. ProductParameterReader собирает категории
 через публичную границу владельца, не через импорт ORM.
@@ -1665,7 +1800,7 @@ Fallback отмечается явно в actual_locale/метаданных, н
    чистый evaluator. Пользовательский курс вычисляется как обычная арифметика.
 4. Проверить тип, применить type_definition.transforms в порядке схемы,
    затем числовой контракт и type_definition.constraints без Shared MoneyVO.
-5. Для MONEY сформировать будущий PriceValueVO(amount, currency), где currency
+5. Для MONEY сформировать PriceValueVO(amount, currency), где currency
    взята только из определения поля. None остаётся отсутствием метки.
 6. Вернуть значение/origin/trace/issues; PublicationResolver собирает readiness.
 
@@ -1727,7 +1862,7 @@ MoneyValueDefinitionVO имеет режим SOURCE, MANUAL или CALCULATED. �
 и optional purchase_source при зависимости price.purchase. Процент/фиксированная
 надбавка в UI — удобный способ построить выражение конечной цены.
 PriceAmountVO содержит только сумму. Необязательная currency принадлежит полю;
-будущий PriceValueVO объединит сумму и выбранную метку при разрешении значения.
+PriceValueVO объединяет сумму и выбранную метку при разрешении значения.
 
 ### **8.2. Выбор IF / ELSE IF / ELSE**
 
@@ -1780,7 +1915,7 @@ ALL/ANY используют короткое замыкание слева на
 
 Все формулы возвращают конечный числовой Decimal суммы MONEY-поля.
 MAX не подменяет отсутствующую sale price: нужен EXISTS или явная ветвь ELSE.
-UI «+20%» строит множитель 1.20. Пересчёт пользователь задаёт явно:
+UI «+20%» строит AST price × (1 + 20 / 100), без вычисления коэффициента через float. Пересчёт пользователь задаёт явно:
 price.regular / 40 для деления на курс или price.regular * 1.20 / 40
 для пересчёта с наценкой. CurrencyVO("USD") сам по себе сумму не изменяет.
 
@@ -1831,7 +1966,7 @@ ROUND_HALF_UP для деления), не зависит от настроек 
 Недопустимый результат возвращает issue, а не скрытое обнуление.
 Отрицательность проверяет min_amount поля, а не название price.
 
-PriceAmountVO — сумма override без валюты. Будущий PriceValueVO — разрешённый
+PriceAmountVO — сумма override без валюты. PriceValueVO — разрешённый
 результат с amount и необязательной currency из поля; валютная метка не дублируется
 в override. Ни один из этих объектов не выполняет конвертацию.
 Деление на ноль/отсутствующий параметр обрабатываются как ошибки выбранной ветви;
@@ -1886,11 +2021,12 @@ VARIANT). Одного списка ID родителей недостаточн
 принадлежность, доступ и допустимость по контракту Catalog. VARIABLE с null вместо
 варианта отклоняется, а не раскрывается автоматически в момент генерации.
 
-Application проверяет права, получает Feed/опубликованную схему и внешние факты
+Текущий AddCatalogItems использует сохранённый Feed без требования опубликованной
+схемы. Application проверяет права, получает Feed и внешние факты
 о выбранных ссылках через CatalogProductReader. Domain получает типизированные
 данные для проверки собственных правил публикации, без I/O; допустимость
 product_mode проверяет VO настроек. В одной транзакции создаются недостающие
-FeedPublication и задачи проекций; результат отображает каждую нормализованную
+FeedPublication; постоянные задачи проекций появятся отдельно. Результат отображает каждую нормализованную
 пару ID в publication_id. Неверная ссылка отклоняет запрос без частичной привязки.
 Повторная/конкурентная привязка, включая пересечение одиночного выбора и «добавить
 все», не создаёт дубль и не стирает существующие overrides/status.
@@ -1922,6 +2058,15 @@ Catalog позднее удалены, несовместимо изменены
 Категории и цены могут отсутствовать; это не препятствует самой привязке товара.
 Они проверяются только в тех определениях/условиях, которым нужны при resolve.
 Внешняя техническая недоступность не маскируется отсутствием товара.
+
+Текущий запрос содержит expected_feed_version и от 1 до 100 item_references.
+Сначала проверяется полный пакет: неверная ссылка отклоняет его до записи.
+Нормализация сохраняет порядок первых вхождений. Ответ для каждой ссылки содержит
+id, пару Catalog ID, status/version и outcome CREATED/EXISTING, плюс feed_version.
+Повтор не возобновляет PAUSED и не возвращает ARCHIVED автоматически.
+Пустая схема, отсутствующие цена/перевод допускают добавление; архивные/удалённые
+позиции Catalog и неверные пары отклоняются. Удаление источника впоследствии
+сохраняет публикацию, список показывает source_available=false.
 
 ### **9.2. Установка и сброс override**
 
@@ -2260,8 +2405,9 @@ Public registry разрешает public_id в доверенный tenant, Ten
 
 ## **12. Presentation: целевой REST API**
 
-Маршруты ниже — контракт будущих срезов, не существующая реализация.
-Все административные маршруты имеют префикс /api/feed-builder.
+Feed CRUD, GET схемы, PUT рабочего определения и три реестра метаданных
+реализованы; остальные маршруты — будущие срезы.
+Административный префикс — /api/console/feed-builder.
 Controller/request/response каждого метода находятся в отдельных файлах,
 router только регистрирует маршруты/статусы/Depends. HTTP DTO не входят в Domain.
 
@@ -2272,8 +2418,9 @@ router только регистрирует маршруты/статусы/Dep
 | POST | /feeds | CreateFeed |
 | GET | /feeds | ListFeeds |
 | GET | /feeds/{id} | GetFeed |
-| PATCH | /feeds/{id} | UpdateFeedSettings |
-| GET | /feeds/{id}/schema | GetFeedSchema: ACTIVE/DRAFT/version |
+| PATCH | /feeds/{id} | UpdateFeed |
+| DELETE | /feeds/{id}?expected_version=N | ArchiveFeed: 204 без тела |
+| GET | /feeds/{id}/schema | GetFeedSchema: текущая рабочая схема, без ACTIVE/history |
 | PUT | /feeds/{id}/schema/draft | SaveFeedSchemaDraft, включая AST/правила/bindings |
 | POST | /feeds/{id}/schema/publish | PublishFeedSchema |
 | POST | /feeds/{id}/preview | PreviewFeed |
@@ -2284,8 +2431,10 @@ router только регистрирует маршруты/статусы/Dep
 | GET | /calculation-parameters | ListCalculationParameters |
 | GET | /calculation-operations | ListCalculationOperations |
 
-CreateFeed принимает name/code/export_settings и optional definition; без неё
-создаётся пустой draft. Поле передаёт общие свойства и type_definition с
+CreateFeed принимает только name/code/export_settings: всегда создаётся пустой
+DRAFT. Передать definition/schema/status/id/version нельзя.
+Карточка GET возвращает schema, export_settings, version, ID, статус и даты.
+Редактор рабочей схемы реализован в срезе 1.3.3. Поле передаёт общие свойства и type_definition с
 дискриминатором kind по разделу 4. STRING/TEXT принимают locale/fallback,
 MONEY — необязательную currency (null или код); неизвестные/чужие свойства отклоняются, в том числе
 старые плоские value_type/locale/currency. export_settings.product_mode принимает
@@ -2298,10 +2447,25 @@ CreateFeed требует export_settings и обязательное format_set
 и параметрами соответствующего типа, как в разделе 5.2. Неизвестные/чужие свойства,
 None/null, коллекции и старая форма formats отклоняются. На границе создаётся
 один VO без передачи ClassVar format в конструктор. GET возвращает выбранную
-конфигурацию и отдельно метаданные единственного активного файла, если он уже есть.
+конфигурацию; метаданные активного файла появятся вместе с генерациями.
 Для PATCH format_settings заменяет объект целиком, отсутствие сохраняет его,
 null недопустим; смена формата не заменяет активный файл до успешной генерации.
-HTTP/API классы пока не реализуются.
+Реализованы отдельные controller/request/response каждого метода; у DELETE нет
+пустого Response-класса. Prefix и router подключены к src/modules/router.py.
+UpdateFeed получает expected_version и хотя бы одно из name/code/export_settings.
+Пропуск свойства сохраняет его, null запрещён. export_settings заменяется целиком.
+Список принимает search (до 255 символов), status, limit=50 (1..100), offset>=0
+в диапазоне BIGINT. Поиск по имени/коду не учитывает регистр и экранирует wildcard.
+Сортировка updated_at DESC, id DESC; ответ items/total/limit/offset.
+Обычный список исключает ARCHIVED; явный status=ARCHIVED возвращает архив.
+
+POST возвращает 201; GET/PATCH — 200; DELETE — 204 без тела.
+404 — отсутствующий Feed в текущем tenant; 409 — занятый код, устаревшая версия
+или изменение архива; 422 — неверные данные/пустой PATCH/некорректная версия.
+Аутентификация/CSRF — существующие зависимости Identity. require_feed_access
+проверяет tenant-контекст и AuthorizationService.can для resource_type=feed_builder.feed
+с действиями feed_builder.feed.create/read/update/archive. Клиент не выбирает SQL-схему.
+UoW завершается до отправки ответа; ошибка не превращается в успешный CRUD.
 Схема сохраняется и возвращается в
 единственной форме type_definition без параллельных aliases. Реестры /field-types
 описывают возможности типов для UI и не заменяют типизированную схему параметрами
@@ -2310,24 +2474,123 @@ ListSourcePaths выдаёт только источники из Domain-кон�
 и совместимости. Входные provider/path преобразуются в Enum на границе, свободного
 ввода путей нет; прямой запрос также проходит серверную проверку.
 
+#### **12.1.1. Реализованный API рабочей схемы**
+
+GET /feeds/{id}/schema возвращает feed_id, общую version, status и definition.
+PUT /feeds/{id}/schema/draft принимает только expected_version (положительный
+BIGINT) и полный definition. Отдельной версии draft нет, null запрещён.
+Ответ 200: feed_id/version/канонический definition; no-op сохраняет версию/дату.
+PATCH настроек не меняет схему, сохранение схемы не меняет настройки/статус.
+Одновременные изменения обоих экранов защищаются одной Feed.version.
+
+Закрытые Pydantic-описания различают текст/деньги, источники, преобразования и все
+известные узлы AST. Лишние поля, неизвестные пути, старые aliases и числовые JSON
+значения вместо Decimal-строк отклоняются. До JSON decoding проверяется лимит
+тела 1 МиБ, включая chunked-запросы, и ограничение вложенности; Domain сохраняет
+свои бюджеты AST/полей/правил/литералов. Сохранение схемы не исполняет выражения;
+вычисление выполняется отдельным read-only preview после семантической проверки.
+
+FeedSchemaSourcePolicy проверяет совместимость пути с типом. TITLE/DESCRIPTION
+требуют локаль; SKU не принимает locale/fallback; REGULAR_PRICE совместим с MONEY.
+Application проверяет основную и fallback-локали одним обращением к owner-порту
+reference_data через SchemaLocalesPort. Валютная метка проверяется CurrencyVO
+без обращения к курсам или справочнику валют. Внешние данные товаров не читаются.
+
+Сохранение использует feed_builder.feed.update; чтение и метаданные —
+feed_builder.feed.read. Аутентификация, tenant admission, CSRF и внешний UoW
+остаются существующими. 409 имеет code VERSION_CONFLICT или FEED_ARCHIVED;
+404 — FEED_NOT_FOUND; предметный 422 содержит code SCHEMA_INVALID, message,
+field_id и path, если поле определимо. Ошибки HTTP-формы возвращают validation loc.
+Сбой commit не превращается в успешный ответ, изменения откатываются.
+
+GET /field-types возвращает типы, editable_modes SOURCE/MANUAL (для MONEY также
+CALCULATED), активные локали,
+max_fields/max_transforms. GET /source-paths описывает четыре Domain Enum пути,
+допустимые типы и требование локали. GET /transforms описывает существующие
+string.trim/string.truncate/money.ceil_step и конкретные типы их параметров.
+Пути вводятся выбором из реестра; произвольного URL или Python-атрибута нет.
+
+#### **12.1.2. Реализованный API расчётного предпросмотра**
+
+Префикс /api/console/feed-builder:
+
+| Метод | Путь | Результат |
+| --- | --- | --- |
+| GET | /calculation-parameters | ID, тип, nullability и подпись пяти подключённых параметров |
+| GET | /calculation-operations | Операции/арность, engine_version, precision и лимиты |
+| POST | /feeds/{id}/calculation-preview | Read-only расчёт текущего MONEY-поля на позиции Catalog |
+
+POST принимает expected_version (текущую Feed.version), field_id,
+catalog_item_id, catalog_variant_id=null либо UUID выбранного варианта и optional
+полное definition_override этого поля в существующем HTTP-формате. Допускается
+новое несохранённое поле с собственным ID; временная схема проверяет уникальность
+его ID/key/export.name. Передать цены, as_of или произвольные пути нельзя.
+
+Ответ содержит feed_id/version/field_id, definition_hash канонического определения,
+оба Catalog ID/selected_product_id/product_kind/sku, фактическую (пассивную) source_revision,
+as_of/valid_until, calculation_engine_version, validation_status VALID/INVALID,
+resolved_value, selected_rule_id/used_default, steps, parameters и issues с
+field_id/rule_id/path. Суммы передаются строками; при отсутствии валютной метки
+resolved_value содержит только amount. Фиктивных schema/config/publication versions нет.
+
+Сначала проверяются feed_builder.feed.read, feed_builder.feed.calculation_preview
+и catalog.item.read для выбранного корня/варианта. Metadata требует Feed read;
+POST защищён существующими auth/tenant/CSRF и лимитами тела 1 МиБ/depth.
+source_revision отражает фактическое SQL-поле Catalog. Сейчас оно пассивное и
+при PATCH цены не увеличивается, поэтому не является маркером свежести/ключом
+кеша. Preview перечитывает цену при каждом вызове, показывает снимок на as_of;
+смена самой цены при прежнем revision отражается следующим расчётом. Перед
+постоянными проекциями публикаций нужен отдельный согласованный механизм
+инвалидации Catalog (монотонная версия или fingerprint/события), без выдуманных
+версий в этом срезе.
+404 означает недоступный Feed/товар/пару; 409 — версия/архив; 422 — форма/семантика
+определения; 403 — права; 503 — техническая недоступность источника. Ошибка
+исполнения корректного AST возвращает 200 с INVALID и адресованными issues,
+не маскируется переходом на ELSE. Preview не делает write/invalidation как мутация.
+
 ### **12.2. Публикации**
+
+Реализованы под /api/console/feed-builder:
 
 | Метод | Путь | Сценарий |
 | --- | --- | --- |
-| POST | /feeds/{id}/publications | AddCatalogItemsToFeed |
-| GET | /feeds/{id}/publications | ListFeedPublications |
-| GET | /publications/{id} | GetFeedPublication |
-| DELETE | /publications/{id} | RemoveFeedPublication |
-| PUT | /publications/{id}/overrides/{field_id} | SetPublicationOverride |
-| DELETE | /publications/{id}/overrides/{field_id} | ResetPublicationOverride |
-| PATCH | /publications/{id}/status | ChangePublicationStatus |
-| POST | /publications/{id}/preview | PreviewFeedPublication |
+| POST | /feeds/{id}/publications | AddCatalogItems, атомарный пакет до 100 |
+| GET | /feeds/{id}/publications | ListPublications, серверные search/status/locale/limit/offset |
+| GET | /publications/{id} | GetPublication, карточка участия |
+| PATCH | /publications/{id}/status | ChangePublicationStatus: ENABLED/PAUSED |
+| DELETE | /publications/{id} | RemovePublication через архив |
+| POST | /publications/{id}/restore | RestorePublication с проверкой доступности Catalog |
+| GET | /feeds/{id}/variant-selection/{catalog_item_id} | Фиксированный набор всех текущих вариантов |
 
-POST /feeds/{id}/publications принимает item_references из раздела 9.1 и возвращает
-mapping каждой пары catalog_item_id/catalog_variant_id в publication_id.
-Простой товар передаёт null, вариант — свой ID и ID родителя. Сырой родитель VARIABLE
-без выбора вариантов не создаёт публикацию. Формы/метаданные выбора используют
-публичные контракты Catalog; read-запрос не добавляет позиции в Feed.
+POST добавления возвращает 200 с CREATED/EXISTING, не обрезает и не раскрывает
+VARIABLE автоматически. DELETE принимает expected_version в query и возвращает
+204 без фиктивной response schema. PATCH/restore принимают expected_version
+публикации в теле и возвращают id/status/version/updated_at. Версия Feed используется
+только при добавлении; изменения публикаций не увеличивают её.
+Список содержит feed_version/feed_status, items/total и счётчики статусов всего
+Feed; по умолчанию архив исключён. Сведения об источнике ограничены парой ID,
+kind/title/parent_title/sku/source_available. Readiness не выдумывается.
+
+Каждый метод имеет отдельные controller/request/response и Application-сценарий;
+общие зависимости используют один UoW. Права Feed read и publication.read/add/
+update/archive/restore проверяются через Identity с ресурсом Feed. Подписи/выбор
+требуют Catalog read; список проверяет также право чтения коллекции, включая
+поиск/счётчики без строк. Все выбранные корни/варианты проверяются отдельно.
+Изменения защищены CSRF; тела ограничены до JSON/Pydantic. 404 — недоступный объект/
+пара, 409 — версия/переход/архив Feed, 422 — структура/лимит, 403 — права,
+503 — техническая недоступность Catalog. Архив Feed доступен для чтения состава.
+
+В variant-selection владелец Catalog читает набор ID и размер семейства одним SQL
+снимком. Более 100 вариантов дают 422 с предложением индивидуального выбора;
+недоступное семейство — 404. После получения снимка submit передаёт эти конкретные
+пары; добавленные позднее варианты не включаются. API snapshot сам ничего не пишет.
+
+Для цены из карточки используется существующий POST /feeds/{id}/calculation-preview:
+пара IDs берётся из публикации, поле — из сохранённой схемы. MANUAL требует будущего
+редактора значений. Preview сохраняет существующие права, Decimal и отсутствие FX.
+
+Следующая часть добавит Set/ResetPublicationOverride и PreviewFeedPublication
+всех полей с readiness, а затем постоянные проекции; эти методы пока не реализованы.
 
 ### **12.3. Генерации и ключи**
 
@@ -2394,7 +2657,9 @@ TRANSLATION_MANUAL_REQUIRED, VERSION_CONFLICT, SOURCE_UNAVAILABLE,
 UNKNOWN_CALCULATION_PARAMETER и вычислительные коды раздела 8.6.
 
 Запись передаёт expected_version агрегата/draft и получает новую версию;
-Save draft при отсутствии использует expected_version=null с expected_schema_version.
+В текущих save draft/preview expected_version — обязательная положительная
+Feed.version. Отдельные версии/expected_schema_version появятся вместе с будущим
+жизненным циклом публикации схемы.
 PATCH различает отсутствие поля и null. Создание — 201, постановка задания — 202,
 операция без результата — 204 без фиктивной response schema. Reset возвращает
 новую версию, поэтому для него используется 200 с конкретным DTO.
@@ -2406,9 +2671,53 @@ PATCH различает отсутствие поля и null. Создание
 
 ## **13. Frontend: конструктор, условия и предпросмотр**
 
+### **13.0. Реализованный Console Feed CRUD**
+
+Модуль frontends/apps/console/src/modules/feed-builder подключён через публичный
+index.ts к authenticated workspace routes и разделу «Каналы продаж → Фиды».
+Реализованы /feed-builder/feeds, /feed-builder/feeds/new и /feed-builder/feeds/:id.
+Они используют существующий /api/console/feed-builder/feeds через общий HTTP client
+и CSRF, без изменений серверных контрактов.
+
+Список показывает название, код, формат, статус, число полей и дату обновления.
+Поиск по названию/коду, статус и offset сохраняются в URL; размер страницы — 50,
+сортировка серверная, фиксированная. «Все рабочие» исключает архив, «В архиве»
+запрашивает ARCHIVED. После архивации последней строки offset возвращается
+на последнюю существующую страницу. Возврат из настроек сохраняет фильтры списка.
+
+Создание требует name, code и явно выбранный CSV/XML. Форма показывает настройки
+одного формата: CSV delimiter/include_header либо XML root_name/item_name.
+Кодировка UTF-8, VARIABLE_TO_SINGLE и STRICT фиксированы. Новый Feed — DRAFT
+с пустой схемой; после POST открывается его карточка.
+
+Карточка редактирует только name/code/export_settings. PATCH содержит отличия
+и expected_version открытого снимка; export_settings заменяется целиком.
+schema/status/version не редактируются формой. Draft отделён от query cache:
+refetch не стирает ввод, успешный ответ подтверждает только отправленный снимок.
+409 сохраняет ввод и требует явной загрузки актуальных настроек перед повтором;
+версия не подставляется в повторный PATCH автоматически. Уход с несохранённым
+вводом требует подтверждения, pending блокирует повторную отправку.
+
+Архивация доступна в списке и карточке после подтверждения с названием/кодом.
+expected_version фиксируется при открытии диалога и не меняется при refetch.
+После 204 списки/карточка помечаются устаревшими, список перечитывается;
+из карточки выполняется возврат в список. Конфликт в диалоге требует закрыть
+его и проверить данные. Архивный Feed доступен только для просмотра, код занят,
+восстановление и физическое удаление не предлагаются.
+
+DTO/mapper, чистые модели/проверки, query keys, queries, отдельные create/update/
+archive composables, draft, page state и UI разделены по архитектуре Console.
+Ключи включают tenant/user/sessionRevision и параметры запроса; AbortSignal
+передаётся в HTTP. Смена контекста очищает draft/диалоги/старый cache, отменяет
+запросы и отклоняет поздние ответы, включая возврат к прежнему tenant.
+POST не повторяется автоматически: при неоднозначном результате форма блокирует
+повторное создание и предлагает проверить список. 403/404/422/409 имеют понятные
+сообщения; UI не разбирает Axios. Редактор схемы добавлен в 13.2.
+Выбор товаров, публикация, сборка файлов и ключи остаются отдельными срезами.
+
 ### **13.1. Создание Feed**
 
-Форма содержит name, code и настройки форматов. В Export Settings показано
+Форма содержит name, code и настройки выбранного формата. В Export Settings показано
 описание «Варианты как самостоятельные товары»; единственный код модели —
 VARIABLE_TO_SINGLE по умолчанию. Выбор между режимами в первой версии не нужен.
 DTO и чистая модель сохраняют явный код режима. Форма требует явный выбор CSV
@@ -2423,6 +2732,47 @@ Backend создаёт Feed с пустым составом. Пустое со�
 обязательной отдельной ценовой политики.
 
 ### **13.2. Конструктор схемы**
+
+Текущий маршрут /feed-builder/feeds/:id/schema доступен через вкладку «Схема»
+в карточке Feed; существующая ссылка /feeds/:id открывает настройки.
+Палитра добавляет пользовательское поле, список выбирает/дублирует/удаляет и
+переставляет его доступными кнопками. Копия получает новый UUID/key/export.name,
+переименование/перестановка сохраняют ID. Удаление подтверждается пользователем.
+Inspector редактирует общие свойства и вложенные настройки выбранного типа.
+
+SOURCE выбирается из серверного реестра, MANUAL задаёт последующее заполнение
+публикации и не содержит значения в схеме. MONEY допускает пустую валютную метку.
+Числовые денежные границы и шаги хранятся строками; текстовые длины сохраняют
+незавершённый ввод локально до валидации. Для текста доступны локаль, fallback и
+упорядоченная цепочка запасных локалей. Порядок transforms редактируется отдельно.
+CALCULATED редактируется визуальным деревом: параметры/Decimal-константы,
+арифметика/функции, сравнения/наличие/логические группы, упорядоченные IF и ELSE.
+Редактирование/перестановка сохраняют ID правила, копирование создаёт новый UUID.
+Быстрые действия «прибавить процент/сумму» строят AST для ELSE без локального расчёта.
+Поля с неподключёнными закупкой/категориями остаются read-only; их AST/AI/bindings
+передаются без потерь при редактировании остальных полей.
+
+«Сохранить схему» проверяет весь локальный draft и отправляет полный снимок.
+Невалидный/незавершённый ввод остаётся в форме; ошибки связываются с полем,
+первое проблемное поле выбирается и control получает focus. Refetch не стирает
+изменения; 409 сохраняет ввод и требует явной загрузки актуальных данных.
+Успешный ответ подтверждает только отправленный снимок. Pending блокирует дубль,
+выход с dirty требует подтверждения. Архив — read-only. Смена tenant/session
+очищает draft/cache/выбор, отменяет запросы и отклоняет поздние результаты.
+Схема, настройки и список Feed инвалидируются после сохранения; число полей
+читается из сохранённого определения. Серверный кеш — Vue Query, не Pinia.
+
+Предпросмотр MONEY показывает поиск и страницы товаров Catalog, язык названий,
+отдельный выбор VARIANT у VARIABLE, результат/ветвь/исходные параметры/trace/issues.
+Он передаёт текущий draft поля без предварительного save. Изменение поля, выбранной
+позиции, Feed.version или блокировка редактора отменяют запрос и помечают прежний
+результат устаревшим; поздние ответы (включая переход A→B→A) игнорируются.
+После valid_until результат устаревает по таймеру; при скрытии/повторном открытии
+экрана требуется свежий расчёт, а не обещание вечной актуальности source revision.
+Смена tenant/session очищает результат/выбор и scoped caches, dispose снимает таймеры.
+Денежного evaluator на frontend нет: Console только строит AST и показывает серверный ответ.
+
+Дальнейший целевой конструктор:
 
 Три зоны: FieldPalette (STRING/TEXT/MONEY), упорядоченный SchemaCanvas и Inspector.
 Каждое добавление создаёт новый UUID; переименование/перестановка сохраняют ID.
@@ -2481,28 +2831,32 @@ override без изменения опубликованной схемы.
 
 ### **13.4. Публикации и overrides**
 
-Таблица: Catalog name/SKU, readiness, issues, число overrides, computed_at/STALE
-и пользовательские колонки из схемы. Для основной подписи/цены нет скрытого
-выбора поля по key: пользователь может выбрать колонки/основные поля отображения,
-без него показываются Catalog identification и общий статус.
-Пагинация/поиск/сортировка серверные, не загрузка всего Feed.
+Реализована вкладка «Товары» и маршрут /feed-builder/feeds/:id/publications.
+Список показывает Catalog title/SKU, родительскую карточку варианта, участие,
+дату добавления и действия. Поиск/статус/локаль/страница хранятся в URL;
+сервер возвращает ограниченную страницу. Карточка открывается через query
+publication=UUID и восстанавливается по ссылке/reload.
+Пауза/возобновление, подтверждённые архивация/возврат сохраняют publication_id.
+Архив Feed read-only. Повторное добавление отображает CREATED/EXISTING, сообщает
+о сохранённых PAUSED/ARCHIVED и предлагает открыть архив для явного возврата.
 
-В диалоге добавления SIMPLE выбирается одной позицией, VARIABLE раскрывает список
-дочерних вариантов с индивидуальными флажками и действием «Все существующие».
-Выбор только белого топика отправляет только его пару ID. Снимок выбора хранится
-локально до submit, query/refetch не расширяет подтверждённый набор автоматически.
-После успешной mutation обновляются списки/счётчики публикаций, повторный submit
-блокируется на pending; неоднозначный ответ не запускает скрытое повторное создание.
-Видны родитель и выбранный вариант, но строки Feed соответствуют конкретным
-публикациям, а не целым семействам. Page связывает query/mutation и UI;
-компоненты выбора получают модели через props и передают выбор через emits.
+Диалог получает SIMPLE и VARIABLE через публичный frontend-контракт Catalog.
+У SIMPLE свой флажок, у VARIABLE — список отдельных вариантов. Выбор сохраняется
+между страницами/поиском/семействами до submit. «Все существующие» получает полный
+ограниченный снимок ID; запрос отменяется при смене контекста, поздние ABA-ответы
+игнорируются. Превышение общего выбора 100 не меняет предыдущий набор.
+Pending блокирует повтор submit; 409 сохраняет выбор и требует явного обновления
+контекста Feed. Смена tenant/session очищает выбор/результаты и scoped caches.
+После неоднозначного ответа интерфейс предлагает проверить состав перед повтором.
 
-Редактор получает PublicationPreviewDTO и отображает динамические поля,
-source/automatic/manual/resolved, валюту/локаль и ошибки. Переключение на ручной
-ввод подставляет текущее значение локально, сохраняется только явной mutation.
-Reset удаляет override и возвращает автоматическое определение. У поля MANUAL
-без источника отсутствие значения может дать NEEDS_INPUT. CSV/XML preview
-строится на серверном результате, а не вычисляется UI.
+В карточке пользователь выбирает MONEY-поле сохранённой схемы и проверяет цену
+конкретной публикации: сумма, необязательная валютная метка, IF/ELSE, inputs/trace/
+issues/as_of. Нет скрытого выбора по key=price и общего статуса READY на основании
+одного денежного поля. Новые формулы или значения здесь не сохраняются.
+
+Следующая часть: редактор динамических полей, manual overrides/reset и полный
+PublicationPreviewDTO/readiness. Пользовательские колонки и серверная фильтрация
+по готовности появятся вместе с полноценным resolver/проекциями.
 
 ### **13.5. Экспорт и история**
 
@@ -2639,8 +2993,8 @@ Unit-тесты обычного Python без PostgreSQL/FastAPI/HTTP:
 - Собственные настройки проверяют VO типов; PriceCalculationStructurePolicy
   проверяет ID/бюджет/закупочную зависимость при create/restore поля и восстановлении
   Feed без выбора ветви, вычислений и обращения к внешнему реестру параметров.
-- Нет evaluator, методов редактирования/публикации/генерации, репозиториев,
-  событий, запросов к справочникам и заготовок внешних слоёв.
+- Нет evaluator, редактора полей/публикации схемы/генерации, событий и запросов
+  к справочникам. Репозиторий и внешние слои есть только у Feed CRUD.
 
 Это критерии именно первого среза. Исполнение if/арифметики и full publish-проверка
 не требуются до реализации соответствующих следующих срезов.
@@ -2679,9 +3033,68 @@ Unit-тесты обычного Python без PostgreSQL/FastAPI/HTTP:
 - Строки/чужие enum вместо enum, сырые структуры вместо VO, bool вместо счётчиков
   не принимаются. Все ID/время передаются явно.
 - Архитектурные проверки обходят все четыре корня и их зависимые Entity/VO:
-  только create/restore у Aggregate/Entity, __post_init__ только у VO,
-  пустые __init__.py, прямые импорты, аннотации/docstrings, отсутствие I/O,
-  ссылок на чужие Aggregate объекты, ревизий, внешних слоёв и репозиториев.
+  create/restore плюс change_settings/archive только у Feed, __post_init__ только
+  у VO; пустые __init__.py, прямые импорты, аннотации/docstrings и чистый Domain.
+  Остальные слои есть только у Feed; связи агрегатов по ID, ревизий нет.
+
+#### **15.1.2. Реализованный Feed CRUD**
+
+test_feed_builder_crud.py проверяет Domain change_settings/archive, версии,
+идемпотентность и атомарность, Application-сценарии, закрытые HTTP-контракты
+и полный JSON round-trip схемы/AST с Decimal, fallback и nullable currency.
+Повреждённые данные не заменяются пустой схемой или CSV.
+
+test_feed_builder_crud_postgres.py выполняется с TEST_POSTGRES_URL на изолированной
+PostgreSQL. Проверяются полный HTTP CRUD с реальными auth/CSRF/UoW, архив и
+сохранение занятого кода, rollback конфликта, конкурентные PATCH, репозиторный CAS,
+две tenant-схемы, поиск/страницы/статусы, сохранность сложной схемы, CSV/XML,
+миграция нового/существующего tenant. Чтение карточки не вызывает Feed.restore.
+
+Архитектурные тесты разрешают только текущее поведение Feed и его внешние слои.
+Publication/Generation/AccessKey по-прежнему имеют только объекты Domain.
+Существующие metadata/registration/tenant-migration проверки остаются обязательными.
+
+#### **15.1.3. Console Feed CRUD**
+
+Node-тесты test/feed-builder-contracts.test.ts, feed-builder-state.test.ts
+и feed-builder-editor.test.ts
+проверяют явный выбор формата, закрытый POST, минимальный PATCH/expected_version,
+полную замену CSV/XML без смешения настроек, false/tab, XML identifiers,
+round-trip Decimal-строк схемы без Number, изоляцию draft и подтверждение только
+отправленного снимка, фильтры/offset/безопасный returnTo, разделение query keys
+по tenant/user/session, блокировку дубля и позднего ответа отменённого запроса.
+Интеграционный тест composable с настоящими Vue/Pinia/QueryClient дополнительно
+проверяет refetch/conflict/reset, pending, ввод во время save, очистку прежнего
+cache/draft при смене tenant и запрет изменения архивного Feed.
+Команда из frontends/: npm --workspace @dnk/console run test:feed-builder
+(Node 24, как существующие Console tests).
+
+Обязательны lint:console, typecheck:console, build:console и браузерные проверки
+создания/смены формата/архивации/read-only, pending, 409 с сохранением ввода,
+403/retry, empty/search/URL/reload, смены tenant, неоднозначного POST,
+клавиатуры и мобильного viewport. Браузерная проверка на тестовых ответах API
+подтверждает работу клиента и payload, но не заменяет PostgreSQL HTTP-тесты 15.1.2.
+
+#### **15.1.4. Рабочая схема: backend и Console**
+
+test_feed_builder_schema.py проверяет атомарное change_schema/no-op/порядок/ID,
+архив, совместимость источников, locale port, лимиты и закрытый HTTP/AST round-trip.
+PostgreSQL suite test_feed_builder_crud_postgres.py дополнен полным schema API
+workflow, metadata, CSRF/права/tenant, shared-version конфликтом с настройками,
+chunked/depth лимитами, rollback при ошибке commit и сохранностью сложного AST.
+
+Console tests feed-builder-schema.test.ts и feed-builder-schema-editor.test.ts
+проверяют четыре поля, независимый proxy-safe draft, ID/копии/порядок, незавершённый
+ввод, точность Decimal-строк за диапазоном Number, AST/AI/bindings round-trip,
+refetch/conflict/reset, pending, ввод после submit, смену tenant/session и архив.
+Обязательны общие lint/typecheck/build Console и существующие regression tests.
+
+Сквозная браузерная проверка использует реальный Feed API и временную PostgreSQL:
+создание CSV → четыре источника → локали/валютная метка/transforms → порядок →
+save/reload → копия/удаление → конкурентный PATCH настроек/409 с сохранением ввода →
+исправление ошибок/focus → повторное сохранение → архив/read-only. Отдельно
+проверяются desktop/mobile, клавиатура, пустая схема, 404 и отсутствие runtime errors.
+Auth identity в такой проверке задаётся тестовой фикстурой; CSRF/Feed/UoW/SQL настоящие.
 
 ### **15.2. Поведение Domain и вычислитель следующих срезов**
 
@@ -2823,7 +3236,7 @@ ExportFormat. Feed.create требует export_settings; формат авто�
 events, repository, Application, SQL, API или UI. Не создаются их пустые заготовки.
 Готовность: create/restore и структурные unit-тесты 15.1 проходят без внешних сервисов.
 
-#### **16.1.1. Domain Publication, Generation и AccessKey: текущий срез**
+#### **16.1.1. Domain Publication, Generation и AccessKey: объектный срез**
 
 FeedPublication с выбранной позицией/overrides; FeedGeneration с полным снимком,
 попыткой, расчётным контекстом и зависимым FeedArtifact; самостоятельный
@@ -2831,10 +3244,46 @@ FeedAccessKey с digest и датой отзыва. Только create/restore 
 Общие ошибки/валидация находятся на уровне Domain; правила структуры схемы
 повторно используются фабриками Feed и FeedGeneration через чистую Policy.
 
-Готовность: все тесты 15.1.1 и существующие тесты Feed проходят. Ревизий,
-бизнес-методов, событий, контрактов хранения, evaluator и внешних слоёв нет.
+Готовность: все тесты 15.1.1 и существующие тесты Feed проходят.
+У Publication/Generation/AccessKey нет бизнес-методов, контрактов хранения или
+внешних слоёв. Ревизий, событий и evaluator нет.
 Наличие объектов не означает возможность реально привязать Catalog, собрать
 файл, выпустить секрет, отозвать доступ или переключить публичную выдачу.
+
+#### **16.1.2. Первая рабочая вертикаль Feed CRUD — реализовано**
+
+Минимальное поведение frozen Feed, FeedVersionVO, контракт записи; полные
+JSON mappers; FeedModel/fb_feeds и tenant-миграция 0020; write/query repositories;
+CreateFeed/GetFeed/ListFeeds/UpdateFeed/ArchiveFeed с конкретными DTO;
+отдельные HTTP controller/request/response и Depends. Внешний UoW, UUID/Clock,
+tenant binding, Identity authorization и CSRF переиспользованы.
+
+Готовность: CRUD работает через /api/console/feed-builder/feeds на реальной
+PostgreSQL, ошибки и конкурентные изменения покрыты тестами; JSON round-trip
+не теряет существующие поля, nullable currency, точные Decimal и формулы.
+Редактор рабочей схемы реализован в 16.1.4; далее — вычисления и поведение публикаций. Ревизии, фоновые сборки
+и public distribution в эту реализацию не входят. Console UI вынесен в 16.1.3.
+
+#### **16.1.3. Console Feed CRUD — реализовано**
+
+Список, создание, редактирование настроек одного CSV/XML и архивация подключены
+к существующему API. Реализованы URL-фильтры, навигация, read-only архив,
+защита draft, version conflict, pending и tenant/session isolation по 13.0.
+Контракты/состояние покрыты Node-тестами; применяются проверки 15.1.3.
+Редактор рабочей схемы реализован в 16.1.4. Работа с публикациями и генерация
+остаются отдельными срезами.
+
+#### **16.1.4. Конструктор рабочей схемы — реализовано**
+
+Завершённый сценарий: создать Feed → открыть «Схема» → добавить пользовательские
+STRING/TEXT/MONEY → настроить прямые источники/локали/валютную метку/ограничения/
+преобразования/экспорт → изменить порядок → сохранить → открыть повторно →
+продолжить редактирование → архивировать и просмотреть read-only.
+Backend реализует Domain change_schema/Policy, чистую сборку документа в
+Application, read/write порты и SQL-адаптеры, use-case DTO/handlers, закрытые HTTP
+схемы и metadata API. Console содержит типизированные DTO/mappers/models,
+queries/mutation, отдельный draft и Page/UI. Используется текущая fb_feeds,
+новой миграции и истории нет. Исполнение вычислений добавлено отдельным срезом 16.5.
 
 ### **16.2. Поведение Domain и жизненный цикл схемы**
 
@@ -2867,27 +3316,71 @@ Export Settings/API/DTO явно сохраняют единственный pro
 Готовность: пользователь создаёт/редактирует определения; UI не обещает расчёт,
 пока следующий срез не подключён. Unsupported definitions отклоняются явно.
 
-### **16.5. Условия, арифметика и чтение параметров**
+### **16.5. Формулы цены, IF/ELSE и предпросмотр — реализовано**
 
-Чистые evaluator/типизация/лимиты/Decimal context, Application resolver,
-batch простые позиции/выбранные варианты Catalog с эффективным контекстом родителей,
-категории/закупка по выбранной позиции, Registry/ReferenceData,
-PreviewFieldCalculation и объяснение ошибок/ветвей. Для закупки реализуется
-явный source selector, для акции — единый as_of.
+Законченный сценарий: открыть MONEY-поле → выбрать CALCULATED → задать IF
+sale EXISTS, THEN sale × 1.10, ELSE regular × (1 + 15 / 100) → выбрать товар
+SIMPLE либо конкретный VARIANT под VARIABLE → рассчитать текущий ввод → увидеть
+цену, выбранную ветвь/исполненные шаги/ошибки → сохранить схему → открыть повторно.
+Предпросмотр не добавляет товар в Feed и не создаёт публикаций/генераций/ревизий.
 
-Готовность: IF/ELSE, обычная/акционная/закупочная цена, необязательные метки и точность
-проверены, ненужные ветви не исполняются, protected inputs/trace защищены.
+Domain содержит PriceCalculationSemanticPolicy, CalculationInputsVO, PriceValueVO
+и MoneyFieldCalculator с адресованными результатами/ошибками/trace. Проверяется
+весь AST (включая невыбранные ветви); исполняются только пройденные условия и одна
+формула. Ошибка не становится False/ELSE. Отсутствие отличается от 0/False/пустой
+строки. Контекст evaluator v1: precision=40, ROUND_HALF_UP, конечный Decimal;
+бюджет каждого входа/результата — 40 цифр и exponent ±128, AST depth=32,
+nodes=4096, rules=100, collection_items=500. После выражения применяются transforms и constraints.
+ceil_step вычисляется точно через целые коэффициенты; скрытого округления по валюте нет.
+
+Подключены только price.regular, price.sale (действующая на as_of), price.effective,
+product.sku и product.id выбранной позиции. Закупка и категории пока не подключены.
+Новые/изменённые неподдержанные формулы отклоняются семантически; ранее сохранённый
+неизменённый AST можно передать при правке других полей без потерь.
+Catalog владеет immutable CalculationSnapshot и batch-reader: один SELECT выбранных
+ID, проверка ролей/пары родитель-вариант, реальные revision, единый серверный as_of
+и valid_until ближайшей границы акции. Пассивный SQL revision не используется
+для кеширования цен: повторный preview всегда читает текущие значения.
+Смысл активной акции задаёт Domain Catalog
+(начало включительно, конец исключительно), цена VARIABLE не подставляется.
+Feed Application получает снимок через собственный порт и Infrastructure-адаптер;
+чужой ORM/Domain не проникает в Feed Domain/Application.
+
+Read-only Query PreviewFieldCalculation читает Feed schema projection без
+Feed.restore, проверяет expected_version/архив, собирает временное определение
+поля и вызывает Domain. Клиент передаёт только ID и optional definition_override;
+цен/часов клиента во входе нет. Preview не пишет БД и не увеличивает Feed.version.
+HTTP и Console описаны в 12.1.2 и 13.2; SQL-схема не меняется.
+
+Готовность проверена Domain/Application/HTTP/PostgreSQL тестами: IF/ELSE и short
+circuit, типы всех ветвей, числовая точность/лимиты, вариант и принадлежность,
+действие акции/ноль, валютная метка, версии/архив/tenant/права/CSRF, сохранение AST.
+Console проверяется mapper/state/race тестами и браузером с реальным API:
+несохранённый ввод, save/reload, простой товар/вариант, desktop/mobile.
+Подключение закупки/категорий, publication resolver, экспорт и история — следующие срезы.
 
 ### **16.6. Publication и проекции**
 
-Поведение уже созданного Domain публикации, явная привязка SIMPLE/выбранных VARIANT с парой ID,
-фиксированный выбор «Всех существующих» без автоподключения новых вариантов,
-overrides/reset, участие/readiness, FieldValueResolver/PublicationResolver,
-проекции с ревизиями позиции/использованного родителя и valid_until,
-список/выбор/редактор и общий preview. Доменные денежные правила не дублируются UI.
+#### **16.6.1. Сохранённый ассортимент — реализовано**
 
-Готовность: корректный automatic/manual результат, stale на смене данных/акции,
-отсутствие дублей, условный upsert и batch без N+1.
+Законченный сценарий: открыть «Товары» → выбрать SIMPLE/конкретные VARIANT →
+сохранить атомарный пакет → открыть повторно → проверить цену → приостановить/
+возобновить → убрать в архив → явно вернуть с прежним ID.
+Domain добавил версию и поведение участия; Infrastructure — модель/миграцию,
+write/query repositories и адаптер публичного batch-reader Catalog; Application —
+конкретные сценарии; HTTP — самостоятельные методы; Console — список/диалог/
+карточку/действия и существующий preview цены. Публикации не вложены в Feed.
+Нет дублей, не стираются overrides, новые варианты не включаются автоматически.
+Все изменения состава сериализуются с архивом Feed и защищены версиями.
+
+#### **16.6.2. Полное разрешение предложения и постоянные проекции — далее**
+
+Set/ResetOverride через Domain, динамические STRING/TEXT/MONEY поля, fallback,
+FieldValueResolver/PublicationResolver, readiness и общий preview. Затем —
+материализованные проекции с реальными версиями Feed/Publication, fingerprint/
+инвалидацией источников, valid_until и условным upsert без N+1. Пассивный Catalog
+revision сам по себе недостаточен для актуальности. Схемные ревизии/публикация
+схемы проектируются отдельно и не становятся фиктивными версиями этого среза.
 
 ### **16.7. Export Engine**
 
@@ -2953,7 +3446,8 @@ Feed с другим. Схема, публикация и итоговый ар�
    по умолчанию и обязательное format_settings с одним CSV либо XML VO.
    Feed.create требует export_settings. Фабрики сохраняют режим и параметры,
    VO отклоняет коллекции/нетипизированные значения; формат определяется классом VO.
-3. Feed/FieldDefinition/ConditionalPriceRule имеют только create/restore;
+3. FieldDefinition/ConditionalPriceRule имеют только create/restore;
+   Feed дополнительно получил change_settings/archive в срезе 18.1.2.
    VO/enums/ошибки корректно разнесены, каждый VO — отдельный файл.
    Настройки принадлежат трём VO типов, структура расчёта проверяется
    PriceCalculationStructurePolicy без исполнения формул; уникальность — фабрикой Feed.
@@ -2962,13 +3456,14 @@ Feed с другим. Схема, публикация и итоговый ар�
    Прямые источники ограничены SourceProvider.CATALOG и четырьмя CatalogSourcePath;
    произвольные строки и чужие Enum не принимаются.
 5. Restore сохраняет идентичность, порядок и настройки без генерации новых данных.
-6. Нет evaluator, методов редактирования/публикации/генерации, событий,
-   репозиториев и внешних слоёв. Unit-тесты не требуют БД или HTTP.
+6. Нет evaluator, методов редактора полей/публикации схемы/генерации или событий.
+   Unit-тесты Domain не требуют БД или HTTP; Feed CRUD имеет отдельные проверки.
 
 #### **18.1.1. Текущий объектный срез**
 
 1. FeedPublication, FeedGeneration, FeedAccessKey и зависимый FeedArtifact имеют
-   только create/restore; каждый VO находится в отдельном файле.
+   исходно имели только create/restore; FeedPublication получил поведение и
+   версию в 18.1.6. Каждый VO находится в отдельном файле.
 2. SIMPLE/выбранный VARIANT представлены ссылкой, overrides типизированы,
    уникальны по field_id и не зависят от загрузки текущей схемы при restore.
 3. Генерация содержит полный неизменяемый снимок одного CSV/XML без ревизий;
@@ -2978,6 +3473,70 @@ Feed с другим. Схема, публикация и итоговый ар�
    соответствует дате отзыва. Выпуск/проверка секрета пока не реализуются.
 6. Тесты всех объектов и архитектурных границ проходят без БД/HTTP/часов/UUID
    внутри Domain. Существующий контракт Feed сохранён.
+
+#### **18.1.2. Реализованный первый Feed CRUD**
+
+1. POST создаёт DRAFT с пустой схемой, одним обязательным форматом и version=1.
+2. Список/карточка читают проекции, список по умолчанию исключает архив.
+3. PATCH атомарно изменяет только настройки с expected_version, сохраняя схему;
+   no-op сохраняет версию/дату. Некорректные/устаревшие изменения отклоняются.
+4. DELETE архивирует и возвращает 204; код и строка остаются, повтор идемпотентен.
+5. Репозитории, mapper, модель и tenant-миграция проверены на PostgreSQL:
+   изоляция tenant, уникальность, CAS/конкуренция, rollback, Decimal/AST round-trip.
+6. Аутентификация, авторизация и CSRF подключены через существующие контракты.
+7. Feed получил CRUD, FeedPublication — внешний срез состава 18.1.6;
+   ревизии/генератор и внешние методы AccessKey появятся отдельно. Console CRUD описан в 18.1.3.
+
+#### **18.1.3. Реализованный интерфейс Console**
+
+1. «Фиды» доступны в навигации: список, поиск, статусы, страницы и фильтр архива.
+2. Создание пустого Feed и редактирование настроек используют один явный CSV/XML,
+   VARIABLE_TO_SINGLE, STRICT и UTF-8 через существующий API с CSRF.
+3. Архивация подтверждается; архив открывается только для просмотра, код занят.
+4. Конфликты и refetch сохраняют ввод; повторный pending/неоднозначный POST
+   не создаёт скрытые дубликаты, tenant/session state не смешивается.
+5. Генерация и доступ пока не представлены как готовые UI-функции.
+   Управление составом через FeedPublication реализовано в 18.1.6.
+   Конструктор схемы и формулы добавлены следующими срезами 18.1.4–18.1.5.
+
+#### **18.1.4. Реализованный конструктор рабочей схемы**
+
+1. Схема создаётся пользователем из равноправных полей и сохраняется полным снимком.
+2. Настройки типов структурированы; источники закрыты Enum/реестром, локали
+   проверяются справочником, currency необязательна и не конвертирует сумму.
+3. ID/порядок/параметры/Decimal-строки/существующий AST/AI сохраняются без потерь.
+4. Shared Feed.version защищает схему, настройки и архив от потери изменений;
+   ошибка не оставляет частичной записи, no-op не увеличивает версию.
+5. Console поддерживает полный цикл редактирования и повторного открытия,
+   конфликты/dirty/pending/tenant/session/read-only архив и доступную навигацию.
+6. Нет ревизий, публикации схемы или генерации. Участие товаров добавлено в 18.1.6.
+   Формулы и тестовый выбор товара для расчёта добавлены срезом 18.1.5.
+
+#### **18.1.5. Реализованные формулы и предпросмотр цены**
+
+1. MONEY/CALCULATED сохраняет ELSE и упорядоченные IF с устойчивыми rule IDs.
+2. Единая Domain Policy проверяет новые/изменённые формулы при save и preview;
+   вычислитель возвращает Decimal-сумму с необязательной валютной меткой.
+3. Preview работает с текущим вводом поля и реальными Catalog SIMPLE/VARIANT,
+   возвращает ветвь, параметры, шаги/issues и фактические версии/временной контекст.
+4. Preview не изменяет Feed, не создаёт публикаций и не запускает сборку файла.
+5. Console поддерживает визуальное дерево, быстрые наценки, выбор конкретного
+   варианта, сохранение/reload и отмену поздних результатов при ABA/смене контекста.
+6. Изменение определения/товара/версии и граница акции делают результат устаревшим;
+   смена tenant/session очищает результат и выбор. 409 сохраняет черновик.
+7. Закупка, категории, автоматическая конвертация валют и FX не подключены.
+
+#### **18.1.6. Реализованное управление ассортиментом**
+
+1. Простые товары и выбранные варианты сохраняются отдельными FeedPublication.
+2. Пакет до 100 атомарен, повтор/конкуренция сохраняют ID/status/overrides.
+3. Пауза/возобновление/архивация/явный возврат выполняются через корень и CAS.
+4. Конструктор схемы/формулы и Feed.version от изменения состава не меняются.
+5. Console поддерживает URL/reload, серверный поиск/пагинацию, выбор между
+   страницами, фиксированный снимок вариантов, 409/pending/контекст и mobile.
+6. Проверка цены использует сохранённую схему и существующий evaluator без записи.
+7. Архив Feed read-only, удалённый источник виден как недоступный без потери связи.
+8. Полный resolver, manual overrides/readiness и постоянные проекции — далее.
 
 ### **18.2. Полный целевой MVP после последующих срезов**
 

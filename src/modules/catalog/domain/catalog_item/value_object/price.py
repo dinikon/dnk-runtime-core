@@ -43,15 +43,16 @@ class PriceSpecificationVO:
         if all(v is not None for v in bounds) and bounds[0] > bounds[1]:
             raise InvalidCatalogValueError("Начало скидки позже окончания.")
 
-    def at(self, as_of: datetime) -> Decimal:
-        """Вычисляет текущую цену по времени, переданному вызывающей стороной."""
+    def active_sale(self, as_of: datetime) -> Decimal | None:
+        """Возвращает только действующую скидку на полуоткрытом интервале."""
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise InvalidCatalogValueError("Время расчёта требует timezone.")
         active = (
             self.date_on_sale_from is None or as_of >= self.date_on_sale_from
         ) and (self.date_on_sale_to is None or as_of < self.date_on_sale_to)
-        return (
-            self.sale_price
-            if self.sale_price is not None and active
-            else self.regular_price
-        )
+        return self.sale_price if self.sale_price is not None and active else None
+
+    def at(self, as_of: datetime) -> Decimal:
+        """Вычисляет текущую цену по времени, переданному вызывающей стороной."""
+        sale = self.active_sale(as_of)
+        return sale if sale is not None else self.regular_price
