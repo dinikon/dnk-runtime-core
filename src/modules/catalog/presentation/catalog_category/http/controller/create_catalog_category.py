@@ -31,7 +31,7 @@ async def create_catalog_category(
     handler: CreateCatalogCategoryHandlerDep,
     payload: CreateCatalogCategoryRequest,
 ) -> CreateCatalogCategoryResponse:
-    """Создаёт узел дерева на исходном языке."""
+    """Создаёт узел дерева с названием на выбранном языке."""
     principal = context.principal
     if principal is None or not principal.tenant_id:
         raise HTTPException(403, "Tenant context is required.")
@@ -45,7 +45,7 @@ async def create_catalog_category(
                     if payload.parent_id
                     else None
                 ),
-                source_locale=LocaleVO(payload.source_locale),
+                locale=LocaleVO(payload.locale),
                 name=payload.name,
             )
         )

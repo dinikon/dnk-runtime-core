@@ -66,6 +66,10 @@
   min-height: 44px;
   min-width: 44px;
 }
+.product-editor .product-category-actions > [data-slot="button"] {
+  min-height: 0;
+  min-width: 0;
+}
 .product-switch-target {
   display: inline-flex;
   align-items: center;

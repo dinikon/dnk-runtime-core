@@ -286,7 +286,11 @@ onMounted(async () => {
             </button>
           </p>
           <CatalogItemCategoryForm
-            v-else-if="item.categories"
+            v-if="
+              item.categories &&
+              !categoryLoading &&
+              (!categoryError || categoryOptions.length)
+            "
             :value="item.categories"
             :options="categoryOptions"
             :locale="locale"
@@ -295,6 +299,13 @@ onMounted(async () => {
             :parent-id="item.parent_id ?? null"
             @change="emit('save', 'categories', { categories: $event })"
           />
+          <p
+            v-if="errors.categories"
+            role="alert"
+            class="mt-2 text-sm text-destructive"
+          >
+            {{ errors.categories }}
+          </p>
         </ProductEditorSection>
         <ProductEditorSection
           v-if="item.kind !== 'variable'"

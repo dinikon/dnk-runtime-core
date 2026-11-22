@@ -18,7 +18,7 @@ export async function changeCategory(change: CategoryChange): Promise<void> {
   switch (change.action) {
     case "create":
       await httpClient.post(base, {
-        source_locale: change.locale,
+        locale: change.locale,
         name: change.name,
         parent_id: change.parent,
       });

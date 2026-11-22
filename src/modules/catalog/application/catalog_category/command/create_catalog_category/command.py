@@ -8,10 +8,10 @@ from src.modules.catalog.domain.value_object.locale import LocaleVO
 
 @dataclass(frozen=True, slots=True)
 class CreateCatalogCategoryCommand:
-    """Название, исходный язык и родитель нового узла."""
+    """Первое название, его локаль и родитель нового узла."""
 
     tenant_id: EntityIdVO
     actor_id: EntityIdVO
     parent_id: CatalogCategoryIdVO | None
-    source_locale: LocaleVO
+    locale: LocaleVO
     name: str

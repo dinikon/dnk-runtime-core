@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   categoryTree,
   choosePrimary,
+  withSelectedCategories,
 } from "../src/modules/catalog/model/category-tree.ts";
 import type { CatalogCategory } from "../src/modules/catalog/model/category.types.ts";
 
@@ -15,8 +16,8 @@ test("tree displays ancestry and explicitly identifies an untranslated name", ()
     id,
     parentId,
     name,
-    sourceName: "Топы",
-    sourceLocale: "ru",
+    fallbackName: "Топы",
+    fallbackLocale: "ru",
     isDefault: false,
   });
   const rows = categoryTree([
@@ -39,4 +40,22 @@ test("promoting a selected category retains the former primary exactly once", ()
     additional_category_ids: ["sale", "tops"],
   });
   assert.deepEqual(selection.additional_category_ids, ["summer", "sale"]);
+});
+
+test("multi-select replaces the additional categories and keeps the primary", () => {
+  const selection = {
+    primary_category_id: "tops",
+    additional_category_ids: ["old"],
+  };
+  assert.deepEqual(
+    withSelectedCategories(selection, ["tops", "summer", "sale", "summer"]),
+    {
+      primary_category_id: "tops",
+      additional_category_ids: ["summer", "sale"],
+    },
+  );
+  assert.deepEqual(withSelectedCategories(selection, []), {
+    primary_category_id: "tops",
+    additional_category_ids: [],
+  });
 });

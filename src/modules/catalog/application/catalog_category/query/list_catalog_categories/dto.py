@@ -4,13 +4,13 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class CatalogCategoryRowDTO:
-    """Узел дерева с исходным и запрошенным названием."""
+    """Узел дерева с запрошенным и резервным названием."""
 
     id: UUID
     parent_id: UUID | None
-    source_locale: str
     name: str | None
-    source_name: str
+    fallback_locale: str
+    fallback_name: str
     is_default: bool
 
 

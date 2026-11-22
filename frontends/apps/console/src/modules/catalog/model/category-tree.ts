@@ -19,7 +19,7 @@ export function categoryTree(rows: CatalogCategory[]): CategoryOption[] {
   while (stack.length) {
     const { row, parentPath, depth } = stack.pop()!;
     const label =
-      row.name ?? `${row.sourceName} (${row.sourceLocale}, нет перевода)`;
+      row.name ?? `${row.fallbackName} (${row.fallbackLocale}, нет перевода)`;
     const path = parentPath ? parentPath + " / " + label : label;
     result.push({ ...row, path, depth });
     for (const child of [...(children.get(row.id) ?? [])].reverse())
@@ -27,6 +27,19 @@ export function categoryTree(rows: CatalogCategory[]): CategoryOption[] {
   }
   return result;
 }
+
+export function withSelectedCategories(
+  selection: CategorySelection,
+  selectedIds: readonly string[],
+): CategorySelection {
+  const additionalIds = new Set(selectedIds);
+  additionalIds.delete(selection.primary_category_id);
+  return {
+    primary_category_id: selection.primary_category_id,
+    additional_category_ids: [...additionalIds],
+  };
+}
+
 export function choosePrimary(
   selection: CategorySelection,
   id: string,

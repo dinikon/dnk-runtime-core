@@ -68,7 +68,8 @@ function submit(): void {
       {{ node ? "Редактировать категорию" : "Новая категория" }}
     </h2>
     <p v-if="node && !node.name" class="text-sm text-muted-foreground">
-      Исходное название ({{ node.sourceLocale }}) · {{ node.sourceName }}
+      Название на другом языке ({{ node.fallbackLocale }}) ·
+      {{ node.fallbackName }}
     </p>
     <fieldset :disabled="pending" class="grid gap-3">
       <label class="grid gap-1 text-sm"

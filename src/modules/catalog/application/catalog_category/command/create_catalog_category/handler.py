@@ -32,13 +32,13 @@ class CreateCatalogCategoryHandler:
     async def execute(
         self, command: CreateCatalogCategoryCommand
     ) -> CreateCatalogCategoryResultDTO:
-        """Создаёт узел дерева на исходном языке."""
+        """Создаёт узел дерева с названием на выбранном языке."""
         await self.repository.lock_tree(command.tenant_id)
-        await self.locales.ensure_active(command.source_locale.value)
+        await self.locales.ensure_active(command.locale.value)
         category = CatalogCategory.create(
             CatalogCategoryIdVO(self.uuid.new()),
             None,
-            command.source_locale,
+            command.locale,
             command.name,
         )
         if command.parent_id is not None:

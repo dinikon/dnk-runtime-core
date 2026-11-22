@@ -1,8 +1,8 @@
 export interface CatalogCategory {
   id: string;
   parentId: string | null;
-  sourceLocale: string;
-  sourceName: string;
+  fallbackLocale: string;
+  fallbackName: string;
   name: string | null;
   isDefault: boolean;
 }

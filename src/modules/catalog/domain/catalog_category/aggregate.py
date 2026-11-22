@@ -20,7 +20,6 @@ class CatalogCategory:
 
     id: CatalogCategoryIdVO
     parent_id: CatalogCategoryIdVO | None
-    source_locale: LocaleVO
     translations: dict[str, CatalogCategoryTranslation]
     is_default: bool
 
@@ -29,27 +28,24 @@ class CatalogCategory:
         cls,
         identifier: CatalogCategoryIdVO,
         parent_id: CatalogCategoryIdVO | None,
-        source_locale: LocaleVO,
+        locale: LocaleVO,
         name: str,
     ) -> Self:
-        """Создаёт категорию с названием на исходном языке."""
-        return cls.restore(
-            identifier, parent_id, source_locale, {source_locale.value: name}
-        )
+        """Создаёт категорию с первым локализованным названием."""
+        return cls.restore(identifier, parent_id, {locale.value: name})
 
     @classmethod
     def restore(
         cls,
         identifier: CatalogCategoryIdVO,
         parent_id: CatalogCategoryIdVO | None,
-        source_locale: LocaleVO,
         names: Mapping[str, str],
         *,
         is_default: bool = False,
     ) -> Self:
-        """Восстанавливает узел и проверяет наличие исходного перевода."""
-        if source_locale.value not in names:
-            raise InvalidCatalogValueError("Укажите название на исходном языке.")
+        """Восстанавливает узел с минимум одним локализованным названием."""
+        if not names:
+            raise InvalidCatalogValueError("Укажите хотя бы одно название категории.")
         if identifier == parent_id:
             raise InvalidCatalogValueError(
                 "Категория не может быть собственным родителем."
@@ -57,7 +53,6 @@ class CatalogCategory:
         return cls(
             identifier,
             parent_id,
-            source_locale,
             {
                 code: CatalogCategoryTranslation.restore(LocaleVO(code), name)
                 for code, name in names.items()

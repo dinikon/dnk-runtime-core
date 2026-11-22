@@ -18,16 +18,16 @@ from src.modules.catalog.domain.value_object.locale import LocaleVO
 
 
 class CatalogCategoryTests(unittest.TestCase):
-    def test_restore_requires_original_name_and_valid_translations(self) -> None:
-        identifier, locale = CatalogCategoryIdVO(uuid4()), LocaleVO("uk")
+    def test_restore_requires_at_least_one_valid_translation(self) -> None:
+        identifier = CatalogCategoryIdVO(uuid4())
         for names in (
-            {"en": "Clothing"},
+            {},
             {"uk": "  "},
             {"uk": "Одяг", "en": "x" * 256},
         ):
             with self.subTest(names=names), self.assertRaises(InvalidCatalogValueError):
-                CatalogCategory.restore(identifier, None, locale, names)
-        node = CatalogCategory.restore(identifier, None, locale, {"uk": "Одяг"})
+                CatalogCategory.restore(identifier, None, names)
+        node = CatalogCategory.restore(identifier, None, {"uk": "Одяг"})
         node.translate(LocaleVO("en"), " Clothing ")
         self.assertEqual(node.translations["en"].name, "Clothing")
         self.assertEqual(node.translations["uk"].name, "Одяг")

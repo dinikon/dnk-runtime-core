@@ -1,4 +1,4 @@
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.catalog.infrastructure.persistence.models.catalog_category import (
     CatalogCategoryModel,
@@ -21,27 +21,28 @@ class SqlAlchemyCatalogCategoryQueryRepository:
         self.session = session
 
     async def list_tree(self, locale: LocaleVO) -> ListCatalogCategoriesResultDTO:
-        """Возвращает связи дерева и названия для выбранного языка."""
+        """Возвращает запрошенный перевод и резервное название по первой локали."""
         nodes = CatalogCategoryModel.__table__
         names = CatalogCategoryTranslationModel.__table__
-        source = names.alias("source")
+        fallback = (
+            select(names.c.locale, names.c.name)
+            .where(names.c.category_id == nodes.c.id)
+            .order_by(names.c.locale)
+            .limit(1)
+            .correlate(nodes)
+            .lateral("fallback")
+        )
         query = (
             select(
                 nodes.c.id,
                 nodes.c.parent_id,
-                nodes.c.source_locale,
                 names.c.name,
-                source.c.name.label("source_name"),
+                fallback.c.locale.label("fallback_locale"),
+                fallback.c.name.label("fallback_name"),
                 nodes.c.is_default,
             )
             .select_from(
-                nodes.join(
-                    source,
-                    and_(
-                        source.c.category_id == nodes.c.id,
-                        source.c.locale == nodes.c.source_locale,
-                    ),
-                ).outerjoin(
+                nodes.join(fallback, true()).outerjoin(
                     names,
                     and_(
                         names.c.category_id == nodes.c.id,

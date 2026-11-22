@@ -7,9 +7,9 @@ class CatalogCategoryRowResponse(BaseModel):
 
     id: UUID
     parent_id: UUID | None
-    source_locale: str
-    source_name: str
     name: str | None
+    fallback_locale: str
+    fallback_name: str
     is_default: bool
 
 

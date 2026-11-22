@@ -58,12 +58,11 @@ class SqlAlchemyCatalogCategoryRepository:
         return CatalogCategoryMapper.to_domain(node, dict(names.all()))
 
     async def add(self, category: CatalogCategory) -> None:
-        """Записывает новый узел вместе с исходным названием."""
+        """Записывает новый узел вместе с его названиями."""
         await self.session.execute(
             insert(CatalogCategoryModel).values(
                 id=category.id.uuid,
                 parent_id=category.parent_id.uuid if category.parent_id else None,
-                source_locale=category.source_locale.value,
                 is_default=category.is_default,
             )
         )

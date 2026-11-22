@@ -4,7 +4,11 @@ import asyncio
 import os
 import unittest
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
+
+from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
+    TenantMigrator,
+)
 
 from test import test_catalog_postgres as support
 
@@ -22,7 +26,7 @@ class CatalogCategoriesPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.request(
                 "POST",
                 "/categories",
-                {"source_locale": "ru", "name": name, "parent_id": parent},
+                {"locale": "ru", "name": name, "parent_id": parent},
                 201,
             )
         )["id"]
@@ -46,6 +50,8 @@ class CatalogCategoriesPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tree[tops]["name"], "Tops")
         self.assertIsNone(tree[tops]["parent_id"])
         self.assertIsNone(tree[summer]["name"])
+        self.assertEqual(tree[summer]["fallback_locale"], "ru")
+        self.assertEqual(tree[summer]["fallback_name"], "Лето")
         await self.request("PUT", "/categories/default", {"category_id": tops})
         simple = (await self.request("POST", "/items", {}, 201))["id"]
         self.assertEqual(
@@ -144,10 +150,6 @@ class CatalogCategoriesPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_backfill_and_tenant_isolation(self):
         """Проверяет upgrade существующего каталога и изоляцию его справочника."""
-        from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations import (
-            TenantMigrator,
-        )
-
         simple = (await self.request("POST", "/items", {"sku": "existing"}, 201))["id"]
         root = (
             await self.request(
@@ -183,3 +185,43 @@ class CatalogCategoriesPostgresTests(unittest.IsolatedAsyncioTestCase):
             (await self.request("GET", f"/items/{simple}?locale=ru"))["item"]["sku"],
             "existing",
         )
+
+    async def test_dropping_source_locale_preserves_names_and_membership(self) -> None:
+        """Проверяет старые данные при смене ревизии и выбор резервного названия."""
+        parent = await self.category("Одежда")
+        category = await self.category("Топы", parent)
+        await self.request(
+            "PATCH", f"/categories/{category}", {"translations": {"en": "Tops"}}
+        )
+        selection = {"primary_category_id": category, "additional_category_ids": []}
+        item = (await self.request("POST", "/items", {"categories": selection}, 201))[
+            "id"
+        ]
+        schema = self.schemas[0]
+        migrator = TenantMigrator()
+        async with self.engine.begin() as conn:
+            await migrator.downgrade(conn, schema, "0024_fb_publication_timestamps")
+            await conn.execute(
+                text(
+                    f'UPDATE "{schema}".catalog_categories '
+                    "SET source_locale = 'ru' WHERE id = :id"
+                ),
+                {"id": category},
+            )
+            await migrator.upgrade(conn, schema)
+            columns = await conn.run_sync(
+                lambda connection: inspect(connection).get_columns(
+                    "catalog_categories", schema=schema
+                )
+            )
+            self.assertNotIn("source_locale", {column["name"] for column in columns})
+
+        for locale, expected in (("ru", "Топы"), ("en", "Tops"), ("fr", None)):
+            rows = (await self.request("GET", f"/categories?locale={locale}"))["items"]
+            row = next(value for value in rows if value["id"] == category)
+            self.assertEqual(row["name"], expected)
+            self.assertEqual(row["parent_id"], parent)
+            self.assertEqual(row["fallback_locale"], "en")
+            self.assertEqual(row["fallback_name"], "Tops")
+        card = (await self.request("GET", f"/items/{item}?locale=ru"))["item"]
+        self.assertEqual(card["categories"], selection)

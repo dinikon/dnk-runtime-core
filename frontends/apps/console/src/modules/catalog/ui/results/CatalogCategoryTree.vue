@@ -19,9 +19,9 @@ const emit = defineEmits<{
         :style="{ paddingInlineStart: Math.min(8, row.depth) + 'rem' }"
         :title="row.path"
       >
-        <span class="font-medium">{{ row.name ?? row.sourceName }}</span>
+        <span class="font-medium">{{ row.name ?? row.fallbackName }}</span>
         <span v-if="!row.name" class="ml-2 text-sm text-muted-foreground"
-          >Нет перевода · {{ row.sourceLocale }}</span
+          >Нет перевода · {{ row.fallbackLocale }}</span
         >
         <span v-if="row.isDefault" class="ml-2 text-sm text-muted-foreground"
           >По умолчанию</span

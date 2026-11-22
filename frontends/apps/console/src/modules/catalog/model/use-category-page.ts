@@ -57,7 +57,7 @@ export function useCategoryPage() {
   function remove(row: CategoryOption) {
     if (
       window.confirm(
-        "Удалить категорию «" + (row.name ?? row.sourceName) + "»?",
+        "Удалить категорию «" + (row.name ?? row.fallbackName) + "»?",
       )
     )
       void save({ action: "delete", id: row.id });

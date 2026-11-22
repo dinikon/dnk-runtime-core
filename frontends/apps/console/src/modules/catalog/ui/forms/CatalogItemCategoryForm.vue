@@ -1,12 +1,29 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { Check, ChevronsUpDown, Star, X } from "@lucide/vue";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/native-select";
+import { ButtonGroup } from "@/components/ui/button-group";
+import {
+  Combobox,
+  ComboboxAnchor,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxItemIndicator,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxViewport,
+} from "@/components/ui/combobox";
 import type {
   CategoryOption,
   CategorySelection,
 } from "../../model/category.types";
-import { choosePrimary } from "../../model/category-tree";
+import {
+  choosePrimary,
+  withSelectedCategories,
+} from "../../model/category-tree";
 import { useProductSectionDraft } from "../../model/use-product-section-draft";
 const props = defineProps<{
   value: CategorySelection;
@@ -25,74 +42,124 @@ const { value: draft, change } = useProductSectionDraft(
 const labels = computed(
   () => new Map(props.options.map((option) => [option.id, option.path])),
 );
-const available = computed(() =>
-  props.options.filter(
-    (row) =>
-      row.id !== draft.value.primary_category_id &&
-      !draft.value.additional_category_ids.includes(row.id),
-  ),
-);
-function add(event: Event): void {
-  const input = event.target as HTMLSelectElement;
-  if (input.value)
-    change({
-      ...draft.value,
-      additional_category_ids: [
-        ...draft.value.additional_category_ids,
-        input.value,
-      ],
-    });
-  input.value = "";
+const selection = computed(() => (props.parentId ? props.value : draft.value));
+const selectedIds = computed(() => [
+  selection.value.primary_category_id,
+  ...selection.value.additional_category_ids,
+]);
+
+function updateSelection(value: unknown): void {
+  if (Array.isArray(value) && value.every((id) => typeof id === "string")) {
+    change(withSelectedCategories(draft.value, value));
+  }
+}
+
+function removeCategory(id: string): void {
+  updateSelection(selectedIds.value.filter((selectedId) => selectedId !== id));
 }
 </script>
 <template>
   <fieldset class="grid gap-3" :disabled="disabled">
-    <label class="grid gap-1 text-sm"
-      >Основная категория
-      <span v-if="parentId">{{ labels.get(value.primary_category_id) }}</span>
-      <NativeSelect
-        v-else
-        aria-label="Основная категория"
-        :model-value="draft.primary_category_id"
-        @update:model-value="change(choosePrimary(draft, String($event)))"
+    <template v-if="!parentId">
+      <Combobox
+        v-if="options.length"
+        multiple
+        :disabled="disabled"
+        :model-value="selectedIds"
+        :reset-search-term-on-select="false"
+        @update:model-value="updateSelection"
       >
-        <option v-for="row in options" :key="row.id" :value="row.id">
-          {{ row.path }}
-        </option>
-      </NativeSelect>
-    </label>
-    <ul
-      v-if="draft.additional_category_ids.length"
-      aria-label="Дополнительные категории"
-      class="grid gap-2"
-    >
+        <ComboboxAnchor class="w-full" as-child>
+          <ComboboxTrigger as-child>
+            <Button
+              type="button"
+              variant="outline"
+              class="w-full justify-between font-normal"
+            >
+              Выбрать категории
+              <ChevronsUpDown aria-hidden="true" class="opacity-50" />
+            </Button>
+          </ComboboxTrigger>
+        </ComboboxAnchor>
+        <ComboboxList
+          align="start"
+          class="w-[var(--reka-combobox-trigger-width)] max-w-[calc(100vw-2rem)]"
+        >
+          <ComboboxInput
+            aria-label="Поиск категорий"
+            placeholder="Название или путь категории"
+          />
+          <ComboboxEmpty class="px-3 py-4 text-muted-foreground">
+            Категории не найдены.
+          </ComboboxEmpty>
+          <ComboboxViewport class="max-h-60 overflow-y-auto">
+            <ComboboxGroup>
+              <ComboboxItem
+                v-for="option in options"
+                :key="option.id"
+                :value="option.id"
+                :text-value="option.path"
+                :disabled="option.id === selection.primary_category_id"
+                :aria-disabled="
+                  option.id === selection.primary_category_id || undefined
+                "
+              >
+                <span class="min-w-0 flex-1 break-words">{{
+                  option.path
+                }}</span>
+                <ComboboxItemIndicator>
+                  <Check aria-hidden="true" />
+                </ComboboxItemIndicator>
+              </ComboboxItem>
+            </ComboboxGroup>
+          </ComboboxViewport>
+        </ComboboxList>
+      </Combobox>
+      <p v-else role="status" class="text-sm text-muted-foreground">
+        В каталоге пока нет категорий.
+      </p>
+    </template>
+
+    <ul aria-label="Выбранные категории" class="grid gap-2">
       <li
-        v-for="id in draft.additional_category_ids"
+        v-for="id in selectedIds"
         :key="id"
-        class="flex flex-wrap items-center gap-2"
+        class="flex min-w-0 items-center gap-2"
       >
-        <span class="text-sm">{{ labels.get(id) }}</span>
-        <template v-if="!parentId">
+        <span class="min-w-0 break-words text-sm">{{
+          labels.get(id) ?? id
+        }}</span>
+        <Badge v-if="id === selection.primary_category_id" variant="secondary">
+          Основная
+        </Badge>
+        <ButtonGroup
+          v-else-if="!parentId"
+          class="product-category-actions ml-auto shrink-0"
+          :aria-label="`Действия с категорией: ${labels.get(id) ?? id}`"
+        >
           <Button
+            type="button"
             variant="outline"
-            size="sm"
+            size="icon-sm"
+            class="size-[24px]"
+            :aria-label="`Сделать основной: ${labels.get(id) ?? id}`"
+            title="Сделать основной"
             @click="change(choosePrimary(draft, id))"
-            >Сделать основной</Button
           >
+            <Star aria-hidden="true" class="size-3.5" />
+          </Button>
           <Button
-            variant="ghost"
-            size="sm"
-            @click="
-              change({
-                ...draft,
-                additional_category_ids: draft.additional_category_ids.filter(
-                  (key) => key !== id,
-                ),
-              })
-            "
-            >Снять</Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            class="size-[24px]"
+            :aria-label="`Снять категорию: ${labels.get(id) ?? id}`"
+            title="Снять категорию"
+            @click="removeCategory(id)"
           >
-        </template>
+            <X aria-hidden="true" class="size-3.5" />
+          </Button>
+        </ButtonGroup>
       </li>
     </ul>
     <RouterLink
@@ -104,18 +171,5 @@ function add(event: Event): void {
       }"
       >Категории родительской карточки</RouterLink
     >
-    <label v-else-if="available.length" class="grid gap-1 text-sm"
-      >Добавить категорию
-      <select
-        aria-label="Добавить категорию"
-        class="h-9 rounded-md border bg-background px-2"
-        @change="add"
-      >
-        <option value="">Выберите категорию</option>
-        <option v-for="row in available" :key="row.id" :value="row.id">
-          {{ row.path }}
-        </option>
-      </select>
-    </label>
   </fieldset>
 </template>
