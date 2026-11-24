@@ -33,6 +33,9 @@ from src.modules.feed_builder.infrastructure.export_state.persistence.query_repo
 from src.modules.feed_builder.infrastructure.export_state.persistence.repository import (
     SqlAlchemyFeedExportStateRepository,
 )
+from src.modules.feed_builder.infrastructure.export_state.tenancy import (
+    TenancyPublicFeedTenantResolver,
+)
 from src.modules.feed_builder.presentation.feed.depends import FeedRepositoryDep
 from src.modules.shared.presentation.jobs.management import (
     build_schedule_scheduled_job_use_case,
@@ -40,6 +43,10 @@ from src.modules.shared.presentation.jobs.management import (
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
+from src.modules.tenancy.presentation.depends.application import (
+    ResolveReadableTenantByHostHandlerDep,
+    TenantSchemaNamingDep,
+)
 
 
 def get_feed_export_queries(uow: UoWDep) -> FeedExportQueryRepositoryProtocol:
@@ -89,11 +96,16 @@ RotateFeedPublicLinkHandlerDep = Annotated[
 
 
 def get_download_public_feed_handler(
-    uow: UoWDep, queries: FeedExportQueriesDep
+    uow: UoWDep,
+    queries: FeedExportQueriesDep,
+    resolve_tenant: ResolveReadableTenantByHostHandlerDep,
+    tenant_naming: TenantSchemaNamingDep,
 ) -> DownloadPublicFeedHandler:
-    """Подключает публичный запрос к Files на той же tenant-сессии."""
+    """Подключает Tenancy и Files на той же сессии, что и запрос фида."""
     return DownloadPublicFeedHandler(
-        queries, FilesFeedExportContent(build_files_handlers(uow.session).content)
+        TenancyPublicFeedTenantResolver(resolve_tenant, uow.session, tenant_naming),
+        queries,
+        FilesFeedExportContent(build_files_handlers(uow.session).content),
     )
 
 

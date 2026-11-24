@@ -26,6 +26,9 @@ from src.modules.tenancy.application.ports.schema_bootstrap import (
 from src.modules.tenancy.application.tenant.command.create_tenant.handler import (
     CreateTenantHandler,
 )
+from src.modules.tenancy.application.tenant_domain.query.resolve_readable_tenant_by_host.handler import (
+    ResolveReadableTenantByHostHandler,
+)
 from src.modules.tenancy.application.tenant_domain.use_case.resolve_tenant_by_host import (
     ResolveTenantByHostUseCase,
 )
@@ -42,6 +45,14 @@ from src.modules.tenancy.presentation.depends.infrastructure import (
     TenantOnboardingServiceDep,
 )
 from src.modules.tenancy.presentation.depends.infrastructure import TenantsRepositoryDep
+
+
+def get_tenant_schema_naming() -> TenantSchemaNaming:
+    """Возвращает правила именования tenant-схем текущего приложения."""
+    return TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
+
+
+TenantSchemaNamingDep = Annotated[TenantSchemaNaming, Depends(get_tenant_schema_naming)]
 
 
 def get_tenant_storage(uow: UoWDep) -> TenantStorageProtocol:
@@ -174,11 +185,26 @@ TenantRequestContextByHostUseCaseDep = Annotated[
 ]
 
 
+def get_resolve_readable_tenant_by_host_handler(
+    tenants: TenantsRepositoryDep, domains: TenantDomainsRepositoryDep
+) -> ResolveReadableTenantByHostHandler:
+    """Собирает разрешение tenant для чтения данных на общей сессии запроса."""
+    return ResolveReadableTenantByHostHandler(tenants, domains)
+
+
+ResolveReadableTenantByHostHandlerDep = Annotated[
+    ResolveReadableTenantByHostHandler,
+    Depends(get_resolve_readable_tenant_by_host_handler),
+]
+
+
 __all__ = [
     "CreateTenantHandlerDep",
+    "ResolveReadableTenantByHostHandlerDep",
     "ResolveTenantByHostUseCaseDep",
     "TenantSchemaBootstrapContextFactoryDep",
     "TenantSchemaBootstrapPortDep",
+    "TenantSchemaNamingDep",
     "TenantRequestContextByHostUseCaseDep",
     "get_create_tenant_handler",
     "get_resolve_tenant_by_host_use_case",

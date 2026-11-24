@@ -99,6 +99,12 @@ from src.modules.shared.infrastructure.persistence.tenant_cleanup import (
     delete_shared_tenant_records,
 )
 from src.modules.shared.infrastructure.time import UtcClock
+from src.modules.tenancy.application.tenant_domain.query.resolve_readable_tenant_by_host.dto import (
+    ResolveReadableTenantByHostResultDTO,
+)
+from src.modules.tenancy.application.tenant_domain.query.resolve_readable_tenant_by_host.handler import (
+    ResolveReadableTenantByHostHandler,
+)
 from src.modules.tenancy.infrastructure.persistence.tenant import TenantModel
 from src.modules.tenancy.infrastructure.persistence.tenant_domain import (
     TenantDomainModel,
@@ -685,10 +691,68 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
             json={"expected_version": updated["feed_version"]},
         )
         self.assertEqual(rotated.status_code, 200, rotated.text)
-        self.assertEqual((await self.public.get(xml_path)).status_code, 404)
+        self.assertEqual(
+            (
+                await self.public.get(xml_path, headers={"If-None-Match": "*"})
+            ).status_code,
+            404,
+        )
         new_path = urlsplit(rotated.json()["url"]).path
         self.assertTrue(new_path.endswith(".xml"))
         self.assertEqual((await self.public.get(new_path)).content, result.content)
+
+    async def test_anonymous_download_uses_tenant_read_policy(self) -> None:
+        """Проверяет статусы tenant и домена для обоих публичных форматов."""
+        paths: list[str] = []
+        for suffix in ("csv", "xml"):
+            feed = await self.create(code=f"public-host-{suffix}", xml=suffix == "xml")
+            self.root = f"{self.base}/{feed['id']}"
+            self.path = f"{self.root}/publications"
+            version = await self.save_schema(1, [field_document(text_field("name"))])
+            await self.add([{"catalog_item_id": await self.item()}], expected=version)
+            await self.enqueue(version)
+            await self.worker.process_once()
+            result = await self.export_state()
+            self.assertEqual(result["report"]["outcome"], "PUBLISHED", result)
+            paths.append(urlsplit(result["active"]["url"]).path)
+
+        self.assertFalse(self.public.cookies)
+        with patch.object(
+            ResolveReadableTenantByHostHandler,
+            "execute",
+            return_value=ResolveReadableTenantByHostResultDTO(self.other.uuid),
+        ):
+            for path in paths:
+                response = await self.public.get(path, headers={"If-None-Match": "*"})
+                self.assertEqual(response.status_code, 404, response.text)
+
+        for tenant_status, domain_status, expected in (
+            ("active", "active", 200),
+            ("freeze", "active", 200),
+            ("active", "disabled", 404),
+            ("provisioning", "active", 404),
+            ("deletion_pending", "active", 403),
+        ):
+            async with self.sessions.begin() as session:
+                await session.execute(
+                    update(TenantModel)
+                    .where(TenantModel.id == self.tenant.uuid)
+                    .values(status=tenant_status)
+                )
+                await session.execute(
+                    update(TenantDomainModel)
+                    .where(TenantDomainModel.host == self.tenant_host)
+                    .values(status=domain_status)
+                )
+            for path in paths:
+                with self.subTest(
+                    tenant=tenant_status, domain=domain_status, path=path
+                ):
+                    headers = {"If-None-Match": "*"} if expected != 200 else {}
+                    response = await self.public.get(path, headers=headers)
+                    self.assertEqual(response.status_code, expected, response.text)
+                    if expected == 403:
+                        self.assertEqual(response.json()["code"], "tenant_unavailable")
 
     async def test_category_profiles_resolve_catalog_rules_and_publish_tree(
         self,

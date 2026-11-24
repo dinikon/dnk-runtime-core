@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 
 from src.modules.feed_builder.presentation.export_state.http.controller.download_public_feed import (
     download_public_feed,
+)
+from src.modules.feed_builder.presentation.export_state.http.controller.download_public_feed_xml import (
     download_public_feed_xml,
 )
 from src.modules.feed_builder.presentation.export_state.http.controller.get_feed_export_state import (
