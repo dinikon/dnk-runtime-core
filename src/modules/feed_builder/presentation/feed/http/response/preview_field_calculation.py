@@ -66,7 +66,7 @@ class PreviewFieldCalculationResponse(BaseModel):
     valid_until: datetime | None
     calculation_engine_version: str
     validation_status: str
-    resolved_value: ResolvedPriceResponse | None
+    resolved_value: ResolvedPriceResponse | bool | int | None
     selected_rule_id: UUID | None
     used_default: bool
     steps: tuple[CalculationStepResponse, ...]
@@ -94,7 +94,7 @@ class PreviewFieldCalculationResponse(BaseModel):
             resolved_value=(
                 ResolvedPriceResponse(amount=value.amount, currency=value.currency)
                 if value.amount is not None
-                else None
+                else value.scalar_value
             ),
             selected_rule_id=value.selected_rule_id,
             used_default=value.used_default,

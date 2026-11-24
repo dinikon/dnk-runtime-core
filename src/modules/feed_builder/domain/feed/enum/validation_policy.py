@@ -2,6 +2,7 @@ from enum import StrEnum
 
 
 class ValidationPolicy(StrEnum):
-    """Задаёт строгое поведение при ошибках публикаций."""
+    """Определяет, можно ли публиковать файл при ошибках отдельных позиций."""
 
     STRICT = "STRICT"
+    SKIP_INVALID = "SKIP_INVALID"

@@ -1,16 +1,44 @@
-from dataclasses import dataclass
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
+from src.modules.feed_builder.application.feed.port.catalog_category_tree import (
+    SourceCategoryDTO,
+)
+from dataclasses import dataclass, replace
 from datetime import datetime
 import re
 from uuid import UUID
 
+from src.modules.feed_builder.domain.feed.types import ResolvedFieldValue
+from src.modules.feed_builder.domain.feed.validation import is_xml_text
+from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
+from src.modules.feed_builder.application.feed.port.catalog_category_tree import (
+    CatalogCategoryTreePort,
+)
+from src.modules.feed_builder.application.feed.service.category_export import (
+    CategoryAssignment,
+    CategoryExportResolver,
+)
+from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
+    StringFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
+    TextFieldTypeVO,
+)
 from src.modules.feed_builder.application.feed.export_settings_dto import (
     CsvExportSettingsDTO,
+    XmlExportSettingsDTO,
 )
 from src.modules.feed_builder.application.feed.port.query_repository import (
     FeedQueryRepositoryProtocol,
 )
 from src.modules.feed_builder.application.feed.query.get_feed.dto import FeedDetailsDTO
 from src.modules.feed_builder.application.feed.schema_definition import decode_schema
+from src.modules.feed_builder.application.feed.export_settings import settings_to_dto
+from src.modules.feed_builder.application.feed.schema_document import schema_document
+from src.modules.feed_builder.domain.export_state.value_object.export_snapshot import (
+    ExportSnapshotVO,
+)
 from src.modules.feed_builder.application.publication.port.export_source import (
     PublicationCatalogAccessPort,
     PublicationCatalogValuesPort,
@@ -30,9 +58,6 @@ from src.modules.feed_builder.domain.feed.error import (
 )
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
-)
 from src.modules.feed_builder.domain.feed.value_object.price_value import PriceValueVO
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
@@ -59,6 +84,7 @@ class PublicationExportContext:
     as_of: datetime
     locales: frozenset[str]
     sources: frozenset[str]
+    category_fields: tuple[CategoryExportResolver, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,9 +95,11 @@ class ExportRecord:
     catalog_item_id: UUID
     catalog_variant_id: UUID | None
     sku: str | None
-    values: tuple[str | PriceValueVO | None, ...]
+    values: tuple[ResolvedFieldValue, ...]
     issues: tuple[FieldIssue, ...]
     readiness: str
+    warnings: tuple[FieldIssue, ...] = ()
+    categories: tuple[CategoryAssignment, ...] = ()
 
 
 class PublicationExportService:
@@ -84,6 +112,7 @@ class PublicationExportService:
         products: PublicationCatalogValuesPort,
         access: PublicationCatalogAccessPort,
         clock: ClockPort,
+        categories: CatalogCategoryTreePort | None = None,
     ) -> None:
         """Принимает только порты чтения и доверенный контекст доступа."""
         self._feeds = feeds
@@ -91,6 +120,7 @@ class PublicationExportService:
         self._products = products
         self._access = access
         self._clock = clock
+        self._categories = categories
 
     async def prepare(
         self, feed_id: FeedIdVO, expected_version: int
@@ -100,10 +130,14 @@ class PublicationExportService:
 
     async def prepare_for_editor(self, feed_id: FeedIdVO) -> PublicationExportContext:
         """Читает актуальную схему в том числе для карточки архивной публикации."""
-        return await self._prepare(feed_id, None)
+        return await self._prepare(feed_id, None, include_categories=False)
 
     async def _prepare(
-        self, feed_id: FeedIdVO, expected_version: int | None
+        self,
+        feed_id: FeedIdVO,
+        expected_version: int | None,
+        *,
+        include_categories: bool = True,
     ) -> PublicationExportContext:
         """Фиксирует одну сохранённую схему и потребности её полей."""
         feed = await self._feeds.get_details(feed_id)
@@ -113,14 +147,43 @@ class PublicationExportService:
             raise FeedVersionConflictError("Feed уже изменён.")
         if expected_version is not None and feed.status == "ARCHIVED":
             raise FeedArchivedError("Архивный Feed доступен только для просмотра.")
-        schema = decode_schema(feed.schema)
+        return await self._context(
+            feed,
+            decode_schema(feed.schema),
+            self._clock.now(),
+            include_categories=include_categories,
+        )
+
+    async def prepare_for_refresh(
+        self, feed_id: FeedIdVO, snapshot: ExportSnapshotVO, as_of: datetime
+    ) -> PublicationExportContext:
+        """Использует сохранённые параметры задачи независимо от новых правок Feed."""
+        feed = await self._feeds.get_details(feed_id)
+        if feed is None:
+            raise FeedNotFoundError("Feed не найден.")
+        captured = replace(
+            feed,
+            schema=schema_document(snapshot.schema),
+            export_settings=settings_to_dto(snapshot.settings),
+        )
+        return await self._context(captured, snapshot.schema, as_of)
+
+    async def _context(
+        self,
+        feed: FeedDetailsDTO,
+        schema: FeedSchemaVO,
+        as_of: datetime,
+        *,
+        include_categories: bool = True,
+    ) -> PublicationExportContext:
+        """Собирает зависимости схемы и общий контекст чтения."""
         locales: set[str] = set()
         sources: set[str] = set()
         for field in schema.fields:
             settings = field.type_definition
-            if isinstance(settings, MoneyFieldTypeVO) or not isinstance(
-                settings.value_definition, SourceValueDefinitionVO
-            ):
+            if not isinstance(
+                settings, (StringFieldTypeVO, TextFieldTypeVO)
+            ) or not isinstance(settings.value_definition, SourceValueDefinitionVO):
                 continue
             path = settings.value_definition.source.path
             if path in (CatalogSourcePath.TITLE, CatalogSourcePath.DESCRIPTION):
@@ -131,13 +194,50 @@ class PublicationExportService:
                     locales.update(
                         locale.value for locale in settings.fallback_policy.locales
                     )
+        category_fields = []
+        catalog_trees: dict[str, tuple[SourceCategoryDTO, ...]] = {}
+        if include_categories and isinstance(
+            feed.export_settings.format_settings, XmlExportSettingsDTO
+        ):
+            for field in schema.fields:
+                definition = field.type_definition
+                if not field.export.enabled or not isinstance(
+                    definition, CategoryFieldTypeVO
+                ):
+                    continue
+                source = ()
+                if any(node.catalog_id is not None for node in definition.nodes) or any(
+                    rule.include_descendants for rule in definition.rules
+                ):
+                    if self._categories is None:
+                        raise InvalidFeedValueError("Дерево Catalog недоступно.")
+                    locale = definition.locale.value
+                    if locale not in catalog_trees:
+                        catalog_trees[locale] = await self._categories.read(locale)
+                    source = catalog_trees[locale]
+                category_fields.append(CategoryExportResolver(field, source))
+        references = {
+            resolver.field.id
+            for resolver in category_fields
+            if resolver.field.export.publication_key is not None
+        }
+        exported = tuple(
+            field
+            for field in schema.fields
+            if field.export.enabled
+            and (
+                not isinstance(field.type_definition, CategoryFieldTypeVO)
+                or field.id in references
+            )
+        )
         return PublicationExportContext(
             feed,
             schema,
-            tuple(field for field in schema.fields if field.export.enabled),
-            self._clock.now(),
+            exported,
+            as_of,
             frozenset(locales),
             frozenset(sources),
+            tuple(category_fields),
         )
 
     async def count_enabled(self, feed_id: FeedIdVO) -> int:
@@ -163,6 +263,12 @@ class PublicationExportService:
             return ()
         snapshots = await self.read_catalog(context, items)
         resolver = PublicationResolver()
+        locales = {
+            field.id.uuid: field.type_definition.locale.value
+            for field in context.schema.fields
+            if isinstance(field.type_definition, (StringFieldTypeVO, TextFieldTypeVO))
+            and field.type_definition.locale
+        }
         records: list[ExportRecord] = []
         for item in items:
             snapshot = snapshots.get(item.reference)
@@ -170,7 +276,19 @@ class PublicationExportService:
                 item.id, context.schema, item.overrides, snapshot
             )
             fields = {field.field_id: field.value for field in publication.fields}
-            csv_issues = self.csv_issues(context, fields)
+            assignments: list[CategoryAssignment] = []
+            category_issues: list[FieldIssue] = []
+            if snapshot is not None:
+                for category in context.category_fields:
+                    if category.field.export.publication_key is None:
+                        continue
+                    result = category.resolve(snapshot.inputs)
+                    if isinstance(result, FieldIssue):
+                        category_issues.append(result)
+                    elif result is not None:
+                        assignments.append(result)
+                        fields[result.field_id] = result.reference
+            format_issues = (*self.format_issues(context, fields), *category_issues)
             records.append(
                 ExportRecord(
                     publication_id=item.id,
@@ -180,8 +298,19 @@ class PublicationExportService:
                     values=tuple(
                         fields.get(field.id.uuid) for field in context.exported_fields
                     ),
-                    issues=(*publication.issues, *csv_issues),
-                    readiness="INVALID" if csv_issues else publication.readiness,
+                    issues=(*publication.issues, *format_issues),
+                    readiness="INVALID" if format_issues else publication.readiness,
+                    categories=tuple(assignments),
+                    warnings=tuple(
+                        FieldIssue(
+                            field.field_id,
+                            "LOCALE_FALLBACK",
+                            "Использован текст из резервной локали.",
+                        )
+                        for field in publication.fields
+                        if field.actual_locale is not None
+                        and field.actual_locale != locales.get(field.field_id)
+                    ),
                 )
             )
         return tuple(records)
@@ -211,14 +340,22 @@ class PublicationExportService:
         )
 
     @staticmethod
-    def csv_issues(
-        context: PublicationExportContext, fields: dict[UUID, str | PriceValueVO | None]
+    def format_issues(
+        context: PublicationExportContext, fields: dict[UUID, ResolvedFieldValue]
     ) -> tuple[FieldIssue, ...]:
-        """Возвращает диагностику CSV для полей в сохранённом порядке экспорта."""
-        if not isinstance(
-            context.feed.export_settings.format_settings, CsvExportSettingsDTO
-        ):
-            return ()
+        """Возвращает блокирующие ошибки выбранного формата по экспортируемым полям."""
+        settings = context.feed.export_settings.format_settings
+        if isinstance(settings, XmlExportSettingsDTO):
+            return tuple(
+                FieldIssue(
+                    field.id.uuid,
+                    "XML_INVALID_CHARACTER",
+                    "Текст содержит символ, недопустимый в XML 1.0.",
+                )
+                for field in context.exported_fields
+                if isinstance(value := fields.get(field.id.uuid), str)
+                and not is_xml_text(value)
+            )
         return tuple(
             FieldIssue(
                 field.id.uuid,
@@ -226,21 +363,33 @@ class PublicationExportService:
                 "Текст начинается как формула электронной таблицы. Исправьте значение для CSV.",
             )
             for field in context.exported_fields
-            if _csv_formula_like(fields.get(field.id.uuid))
+            if isinstance(settings, CsvExportSettingsDTO)
+            and _csv_formula_like(fields.get(field.id.uuid))
         )
 
 
-def csv_cell(value: str | PriceValueVO | None) -> str | None:
+def csv_cell(value: ResolvedFieldValue) -> str | None:
     """Представляет типизированное значение точно как в табличном экспорте."""
     if isinstance(value, PriceValueVO):
         amount = format(value.amount.amount, "f")
         return (
             f"{amount} {value.currency.value}" if value.currency is not None else amount
         )
+    if type(value) is bool:
+        return "true" if value else "false"
+    if type(value) is int:
+        return str(value)
     return value
 
 
-def _csv_formula_like(value: str | PriceValueVO | None) -> bool:
+def xml_attribute_cell(value: ResolvedFieldValue) -> str | None:
+    """Возвращает значение XML-атрибута до экранирования в сериализаторе."""
+    if isinstance(value, PriceValueVO):
+        return format(value.amount.amount, "f")
+    return csv_cell(value)
+
+
+def _csv_formula_like(value: ResolvedFieldValue) -> bool:
     """Отклоняет формулоподобный текст, сохраняя числа и исходные значения."""
     if not isinstance(value, str):
         return False

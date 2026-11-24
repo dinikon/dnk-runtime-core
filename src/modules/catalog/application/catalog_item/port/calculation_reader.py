@@ -29,6 +29,8 @@ class CatalogCalculationSnapshot:
     valid_until: datetime | None
     purchase: Decimal | None = None
     category_ids: tuple[UUID, ...] = ()
+    stock_quantity: int | None = None
+    in_stock: bool | None = None
 
 
 class CatalogCalculationItemNotFoundError(Exception):

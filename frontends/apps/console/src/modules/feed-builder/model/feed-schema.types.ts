@@ -1,7 +1,10 @@
+import type { CategoryType, CategoryDocumentExport, CategoryPublicationExport } from "./feed-categories.types";
 import { FeedApiError, type FeedStatus } from "./feed.types.ts";
-export type FieldKind = "string" | "text" | "money";
+export type FieldKind = "string" | "text" | "money" | "integer" | "boolean" | "category";
+export type XmlFieldPlacement = "ELEMENT" | "ATTRIBUTE";
 export type SourcePath =
-  "item.title" | "item.description" | "item.sku" | "item.regular_price";
+  | "item.title" | "item.description" | "item.sku" | "item.regular_price"
+  | "item.stock_quantity" | "item.in_stock";
 export interface SchemaSource {
   provider: "catalog";
   path: SourcePath;
@@ -61,8 +64,10 @@ export type SchemaTransform =
   | { operation: "string.trim"; parameters: Record<string, never> }
   | { operation: "string.truncate"; parameters: { maxLength: number } }
   | { operation: "money.ceil_step"; parameters: { step: string } };
-export type TextValue =
-  { kind: "SOURCE"; source: SchemaSource } | { kind: "MANUAL" };
+type DirectValue =
+  | { kind: "SOURCE"; source: SchemaSource }
+  | { kind: "MANUAL" };
+export type TextValue = DirectValue | { kind: "CONSTANT"; value: string };
 export type MoneyValue =
   | { kind: "MONEY"; mode: "SOURCE"; source: SchemaSource }
   | { kind: "MONEY"; mode: "MANUAL" }
@@ -91,12 +96,28 @@ export interface MoneyType {
   value: MoneyValue;
   transforms: SchemaTransform[];
 }
+export interface BooleanCalculation {
+  kind: "CALCULATED";
+  condition: SchemaNode;
+  thenValue: boolean;
+  elseValue: boolean;
+}
+export interface IntegerType {
+  kind: "integer";
+  value: DirectValue | { kind: "CONSTANT"; value: number };
+  constraints: { required: boolean; minValue: number | null; maxValue: number | null };
+}
+export interface BooleanType {
+  kind: "boolean";
+  value: DirectValue | { kind: "CONSTANT"; value: boolean } | BooleanCalculation;
+  constraints: { required: boolean };
+}
 export interface SchemaField {
   id: string;
   key: string;
   label: string;
-  typeDefinition: TextType | MoneyType;
-  export: { name: string; enabled: boolean };
+  typeDefinition: TextType | MoneyType | IntegerType | BooleanType | CategoryType;
+  export: { name: string; enabled: boolean; xmlPlacement: XmlFieldPlacement; document?: CategoryDocumentExport; publication?: CategoryPublicationExport };
   aiInstruction: string | null;
 }
 export interface FeedSchemaDefinition {
@@ -169,7 +190,7 @@ export type TextTypeDraft = Omit<
   transforms: DraftTransform[];
   value:
     | { kind: "SOURCE"; source: { provider: "catalog"; path: SourcePath | "" } }
-    | { kind: "MANUAL" };
+    | Exclude<TextValue, { kind: "SOURCE" }>;
 };
 export type MoneyTypeDraft = Omit<
   MoneyType,
@@ -185,8 +206,14 @@ export type MoneyTypeDraft = Omit<
       }
     | Exclude<MoneyValue, { mode: "SOURCE" }>;
 };
+export interface IntegerTypeDraft {
+  kind: "integer";
+  value: DirectValue | { kind: "CONSTANT"; value: string };
+  constraints: { required: boolean; minValue: string; maxValue: string };
+}
+export type ScalarTypeDraft = IntegerTypeDraft | BooleanType;
 export type SchemaFieldDraft = Omit<SchemaField, "typeDefinition"> & {
-  typeDefinition: TextTypeDraft | MoneyTypeDraft;
+  typeDefinition: TextTypeDraft | MoneyTypeDraft | ScalarTypeDraft | CategoryType;
 };
 export interface FeedSchemaDraft {
   fields: SchemaFieldDraft[];

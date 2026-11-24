@@ -20,6 +20,8 @@ export function mapPublicationFields(
       label: field.label,
       kind: field.kind,
       required: field.required,
+      minValue: field.min_value ?? null,
+      maxValue: field.max_value ?? null,
       minLength: field.min_length,
       maxLength: field.max_length,
       minAmount: field.min_amount,

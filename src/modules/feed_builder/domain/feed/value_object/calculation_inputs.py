@@ -16,6 +16,8 @@ class CalculationInputsVO:
     effective: Decimal | None
     purchase: Decimal | None = None
     category_ids: tuple[EntityIdVO, ...] = ()
+    stock_quantity: int | None = None
+    in_stock: bool | None = None
 
     def __post_init__(self) -> None:
         """Проверяет собственные типы без обращения к Catalog или часам."""
@@ -38,9 +40,14 @@ class CalculationInputsVO:
         ):
             raise InvalidFeedValueError("Нужен набор ID категорий Catalog.")
 
+        if (
+            self.stock_quantity is not None and type(self.stock_quantity) is not int
+        ) or (self.in_stock is not None and type(self.in_stock) is not bool):
+            raise InvalidFeedValueError("Некорректные исходные остаток или наличие.")
+
     def get(
         self, name: str
-    ) -> Decimal | str | EntityIdVO | tuple[EntityIdVO, ...] | None:
+    ) -> Decimal | str | bool | EntityIdVO | tuple[EntityIdVO, ...] | None:
         """Различает отсутствующее значение и неизвестный параметр."""
         parameter_type(name)
         return {
@@ -51,4 +58,10 @@ class CalculationInputsVO:
             "product.id": self.product_id,
             "price.purchase": self.purchase,
             "product.category_ids": self.category_ids,
+            "stock.quantity": (
+                Decimal(self.stock_quantity)
+                if self.stock_quantity is not None
+                else None
+            ),
+            "stock.in_stock": self.in_stock,
         }[name]

@@ -1,3 +1,4 @@
+import { newCategoryType } from "./feed-categories.draft.ts";
 import { calculationIsSupported } from "./feed-calculation.draft.ts";
 import { cloneSchemaValue } from "./feed-schema.clone.ts";
 import type {
@@ -25,6 +26,20 @@ function draftTransform(t: SchemaTransform): DraftTransform {
 export function fieldDraft(field: SchemaField): SchemaFieldDraft {
   const clone = cloneSchemaValue(field),
     type = clone.typeDefinition;
+  if (type.kind === "boolean" || type.kind === "category") return { ...clone, typeDefinition: type };
+  if (type.kind === "integer") return {
+    ...clone,
+    typeDefinition: {
+      ...type,
+      value: type.value.kind === "CONSTANT"
+        ? { kind: "CONSTANT", value: String(type.value.value) } : type.value,
+      constraints: {
+        required: type.constraints.required,
+        minValue: type.constraints.minValue === null ? "" : String(type.constraints.minValue),
+        maxValue: type.constraints.maxValue === null ? "" : String(type.constraints.maxValue),
+      },
+    },
+  };
   return {
     ...clone,
     typeDefinition:
@@ -62,6 +77,7 @@ export function newSchemaField(
   kind: FieldKind,
   id: string,
   used: SchemaFieldDraft[],
+  locale = "uk",
 ): SchemaFieldDraft {
   let n = 1;
   while (
@@ -72,8 +88,27 @@ export function newSchemaField(
     id,
     key: `field_${n}`,
     label: "Новое поле",
-    export: { name: `field_${n}`, enabled: true },
+    export: { name: `field_${n}`, enabled: true, xmlPlacement: "ELEMENT" as const },
     aiInstruction: null,
+  };
+  if (kind === "category") return {
+    ...common,
+    export: { ...common.export, publication: { valueKey: "id", required: false } },
+    typeDefinition: newCategoryType(locale),
+  };
+  if (kind === "integer") return {
+    ...common,
+    typeDefinition: {
+      kind, value: { kind: "SOURCE", source: { provider: "catalog", path: "item.stock_quantity" } },
+      constraints: { required: false, minValue: "", maxValue: "" },
+    },
+  };
+  if (kind === "boolean") return {
+    ...common,
+    typeDefinition: {
+      kind, value: { kind: "SOURCE", source: { provider: "catalog", path: "item.in_stock" } },
+      constraints: { required: false },
+    },
   };
   return {
     ...common,
@@ -124,7 +159,13 @@ export function duplicateSchemaField(
     id,
     key: `${key}_copy_${n}`,
     label: `${field.label.slice(0, 247)} (копия)`,
-    export: { ...clone.export, name: `${name}_copy_${n}` },
+    export: {
+      ...clone.export, name: `${name}_copy_${n}`,
+      ...(clone.export.document ? { document: {
+        ...clone.export.document,
+        container: `${clone.export.document.container.slice(0, 115)}_copy_${n}`,
+      } } : {}),
+    },
   };
 }
 export function moveSchemaField(
@@ -140,6 +181,20 @@ export function moveSchemaField(
   result.splice(target, 0, item!);
   return result;
 }
+export function fieldCanPreview(field?: SchemaFieldDraft | null): boolean {
+  const type = field?.typeDefinition;
+  if (!type) return false;
+  if (type.kind === "money") return type.value.mode !== "MANUAL";
+  return (type.kind === "integer" || type.kind === "boolean") && type.value.kind !== "MANUAL";
+}
+
+export function parseFeedInteger(value: string): number | undefined {
+  const text = value.trim();
+  if (!/^[+-]?[0-9]+$/.test(text)) return;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
 export function fieldIsReadonly(field: SchemaFieldDraft): boolean {
   return (
     field.typeDefinition.kind === "money" &&
@@ -223,16 +278,25 @@ export function validateSchemaDraft(
       );
     if (
       !/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(field.export.name.trim()) ||
-      names.has(field.export.name.trim())
+      ((field.typeDefinition.kind !== "category" || field.export.publication) && names.has(field.export.name.trim()))
     )
       error(
         ["export", "name"],
         "Нужно уникальное имя колонки или XML-тега до 128 символов.",
       );
+    if (field.export.xmlPlacement === "ATTRIBUTE" && field.export.name.trim() === "xmlns")
+      error(["export", "name"], "Имя xmlns зарезервировано для пространства имён XML.");
     ids.add(field.id);
     keys.add(field.key.trim());
-    names.add(field.export.name.trim());
+    if (field.typeDefinition.kind !== "category" || field.export.publication) names.add(field.export.name.trim());
     const type = field.typeDefinition;
+    if (type.kind === "category") {
+      if (field.export.enabled && !field.export.document && !field.export.publication)
+        error(["export"], "Выберите вывод дерева или ссылки.");
+      if (field.export.publication && !type.objectSchema.fields.some((prop) => prop.key === field.export.publication?.valueKey))
+        error(["export", "publication"], "Выберите свойство для ссылки.");
+      return;
+    }
     const source =
       type.kind === "money"
         ? type.value.mode === "SOURCE"
@@ -253,7 +317,7 @@ export function validateSchemaDraft(
           ["type_definition", "value", "source"],
           "Выберите совместимый источник.",
         );
-      else if (type.kind !== "money") {
+      else if (type.kind === "string" || type.kind === "text") {
         if (entry.requiresLocale && !type.locale)
           error(["type_definition", "locale"], "Выберите локаль источника.");
         if (!entry.requiresLocale && (type.locale || type.fallbackPolicy))
@@ -262,6 +326,24 @@ export function validateSchemaDraft(
             "Этот источник не использует локаль или fallback.",
           );
       }
+    }
+    if (type.kind === "boolean") return;
+    if (type.kind === "integer") {
+      const { minValue, maxValue } = type.constraints;
+      const minimum = parseFeedInteger(minValue);
+      const maximum = parseFeedInteger(maxValue);
+      if (
+        (minValue.trim() && minimum === undefined) ||
+        (maxValue.trim() && maximum === undefined) ||
+        (minimum !== undefined && maximum !== undefined && minimum > maximum)
+      ) error(["type_definition", "constraints"], "Укажите целые границы от меньшей к большей.");
+      if (type.value.kind === "CONSTANT") {
+        const value = parseFeedInteger(type.value.value);
+        if (value === undefined || (minimum !== undefined && value < minimum) ||
+            (maximum !== undefined && value > maximum))
+          error(["type_definition", "value"], "Укажите целое число в границах поля.");
+      }
+      return;
     }
     if (type.kind !== "money") {
       const available = new Set(metadata.locales.map((l) => l.code));
@@ -391,6 +473,19 @@ export function draftDefinition(
         label: field.label.trim(),
         export: { ...field.export, name: field.export.name.trim() },
       };
+      if (type.kind === "boolean" || type.kind === "category") return { ...common, typeDefinition: type };
+      if (type.kind === "integer") {
+        return { ...common, typeDefinition: {
+          ...type,
+          value: type.value.kind === "CONSTANT"
+            ? { kind: "CONSTANT", value: parseFeedInteger(type.value.value)! } : type.value,
+          constraints: {
+            required: type.constraints.required,
+            minValue: parseFeedInteger(type.constraints.minValue) ?? null,
+            maxValue: parseFeedInteger(type.constraints.maxValue) ?? null,
+          },
+        } };
+      }
       return {
         ...common,
         typeDefinition:

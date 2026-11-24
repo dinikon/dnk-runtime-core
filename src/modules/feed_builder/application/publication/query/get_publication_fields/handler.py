@@ -1,3 +1,13 @@
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.types import ResolvedFieldValue
+from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
+    BooleanFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
+    IntegerFieldTypeVO,
+)
 from src.modules.feed_builder.application.feed.service.publication_export import (
     PublicationExportService,
     csv_cell,
@@ -59,17 +69,20 @@ class GetPublicationFieldsHandler:
         originals = {field.field_id: field for field in original.fields}
         resolved = {field.field_id: field for field in current.fields}
         manual = {override.field_id: override.value for override in item.overrides}
-        original_csv_issues = self._export.csv_issues(
+        original_format_issues = self._export.format_issues(
             context,
             {identifier: value.value for identifier, value in originals.items()},
         )
-        csv_issues = self._export.csv_issues(
+        format_issues = self._export.format_issues(
             context, {identifier: value.value for identifier, value in resolved.items()}
         )
         fields: list[PublicationFieldDTO] = []
         for field in context.schema.fields:
             settings = field.type_definition
-            constraints = settings.constraints
+            if isinstance(settings, CategoryFieldTypeVO):
+                continue
+            scalar = isinstance(settings, (IntegerFieldTypeVO, BooleanFieldTypeVO))
+            constraints = None if scalar else settings.constraints
             money = settings if isinstance(settings, MoneyFieldTypeVO) else None
             inherited = originals.get(field.id.uuid)
             effective = resolved.get(field.id.uuid)
@@ -79,15 +92,25 @@ class GetPublicationFieldsHandler:
                     field_id=field.id.uuid,
                     label=field.label.value,
                     kind=settings.kind,
-                    required=constraints.required,
+                    required=settings.required if scalar else constraints.required,
+                    min_value=(
+                        settings.min_value
+                        if isinstance(settings, IntegerFieldTypeVO)
+                        else None
+                    ),
+                    max_value=(
+                        settings.max_value
+                        if isinstance(settings, IntegerFieldTypeVO)
+                        else None
+                    ),
                     min_length=(
                         None
-                        if isinstance(settings, MoneyFieldTypeVO)
+                        if scalar or money is not None
                         else settings.constraints.min_length
                     ),
                     max_length=(
                         None
-                        if isinstance(settings, MoneyFieldTypeVO)
+                        if scalar or money is not None
                         else settings.constraints.max_length
                     ),
                     min_amount=(
@@ -111,16 +134,20 @@ class GetPublicationFieldsHandler:
                         if isinstance(raw, PriceAmountVO)
                         else raw
                     ),
-                    original_value=csv_cell(inherited.value) if inherited else None,
-                    resolved_value=csv_cell(effective.value) if effective else None,
+                    original_value=(
+                        _editor_value(inherited.value) if inherited else None
+                    ),
+                    resolved_value=(
+                        _editor_value(effective.value) if effective else None
+                    ),
                     original_issues=tuple(
                         issue.message
-                        for issue in (*original.issues, *original_csv_issues)
+                        for issue in (*original.issues, *original_format_issues)
                         if issue.field_id == field.id.uuid
                     ),
                     issues=tuple(
                         issue.message
-                        for issue in (*current.issues, *csv_issues)
+                        for issue in (*current.issues, *format_issues)
                         if issue.field_id == field.id.uuid
                     ),
                 )
@@ -132,3 +159,10 @@ class GetPublicationFieldsHandler:
             snapshot is not None,
             tuple(fields),
         )
+
+
+def _editor_value(value: ResolvedFieldValue) -> str | int | bool | None:
+    """Сохраняет целые и логические значения типизированными в редакторе."""
+    if type(value) in (int, bool):
+        return value
+    return csv_cell(value)

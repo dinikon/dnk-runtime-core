@@ -4,6 +4,7 @@ import type {
   FeedSettings,
   FeedFieldErrors,
   FeedChanges,
+  FormatSettings,
 } from "./feed.types.ts";
 export function feedDraft(feed?: Feed): FeedDraft {
   const format = feed?.exportSettings.formatSettings;
@@ -15,6 +16,7 @@ export function feedDraft(feed?: Feed): FeedDraft {
     includeHeader: format?.format === "csv" ? format.includeHeader : true,
     rootName: format?.format === "xml" ? format.rootName : "catalog",
     itemName: format?.format === "xml" ? format.itemName : "product",
+    validationPolicy: feed?.exportSettings.validationPolicy ?? "STRICT",
   };
 }
 export function validateFeedDraft(draft: FeedDraft): FeedFieldErrors {
@@ -66,21 +68,45 @@ export function draftSettings(draft: FeedDraft): FeedSettings {
               encoding: "utf-8",
             },
       productMode: "VARIABLE_TO_SINGLE",
-      validationPolicy: "STRICT",
+      validationPolicy: draft.validationPolicy,
     },
   };
 }
+function sameFormatSettings(
+  base: FormatSettings,
+  next: FormatSettings,
+): boolean {
+  if (base.format === "csv" && next.format === "csv") {
+    return (
+      base.delimiter === next.delimiter &&
+      base.includeHeader === next.includeHeader &&
+      base.encoding === next.encoding
+    );
+  }
+  if (base.format === "xml" && next.format === "xml") {
+    return (
+      base.rootName === next.rootName &&
+      base.itemName === next.itemName &&
+      base.encoding === next.encoding
+    );
+  }
+  return false;
+}
+
 export function feedChanges(
   base: FeedSettings,
   next: FeedSettings,
 ): FeedChanges {
+  const before = base.exportSettings;
+  const after = next.exportSettings;
+  const exportChanged =
+    before.validationPolicy !== after.validationPolicy ||
+    before.productMode !== after.productMode ||
+    !sameFormatSettings(before.formatSettings, after.formatSettings);
   return {
     ...(base.name !== next.name ? { name: next.name } : {}),
     ...(base.code !== next.code ? { code: next.code } : {}),
-    ...(JSON.stringify(base.exportSettings) !==
-    JSON.stringify(next.exportSettings)
-      ? { exportSettings: next.exportSettings }
-      : {}),
+    ...(exportChanged ? { exportSettings: after } : {}),
   };
 }
 /** Only the submitted snapshot is acknowledged; later input remains dirty. */

@@ -1,11 +1,31 @@
 from dataclasses import dataclass
 from uuid import UUID
 
+from src.modules.feed_builder.domain.feed.types import (
+    ResolvedFieldValue,
+    ScalarFieldType,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_calculation import (
+    BooleanCalculationVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
+    BooleanFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.constant_value_definition import (
+    ConstantValueDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
+    IntegerFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
+    TextFieldTypeVO,
+)
 from src.modules.feed_builder.domain.feed.calculation.error import (
     CalculationDefinitionError,
 )
 from src.modules.feed_builder.domain.feed.calculation.evaluator import (
     MoneyFieldCalculator,
+    calculate_boolean,
 )
 from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
 from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
@@ -15,8 +35,9 @@ from src.modules.feed_builder.domain.feed.enum.locale_fallback_mode import (
     LocaleFallbackMode,
 )
 from src.modules.feed_builder.domain.feed.enum.money_value_mode import MoneyValueMode
-from src.modules.feed_builder.domain.feed.enum.transform_operation import (
-    TransformOperation,
+from src.modules.feed_builder.domain.feed.field_type_validation import (
+    apply_text_transforms,
+    valid_text_characters,
 )
 from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
     MoneyFieldTypeVO,
@@ -32,8 +53,8 @@ from src.modules.feed_builder.domain.feed.value_object.price_value import PriceV
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.truncate_parameters import (
-    TruncateParametersVO,
+from src.modules.feed_builder.domain.feed.value_object.text_constant_value_definition import (
+    TextConstantValueDefinitionVO,
 )
 from src.modules.feed_builder.domain.publication.value_object.field_override import (
     FieldOverrideVO,
@@ -60,7 +81,7 @@ class ResolvedField:
     """Передаёт конечное типизированное значение и его происхождение."""
 
     field_id: UUID
-    value: str | PriceValueVO | None
+    value: ResolvedFieldValue
     origin: str
     actual_locale: str | None = None
     issues: tuple[FieldIssue, ...] = ()
@@ -74,14 +95,11 @@ class FieldValueResolver:
     ) -> ResolvedField:
         """Подготавливает ручное значение без загрузки исходных данных."""
         settings, value = field.type_definition, override.value
-        if isinstance(value, str) and not isinstance(settings, MoneyFieldTypeVO):
-            if (
-                any("\ud800" <= character <= "\udfff" for character in value)
-                or "\x00" in value
-                or (
-                    isinstance(settings, StringFieldTypeVO)
-                    and ("\n" in value or "\r" in value)
-                )
+        if isinstance(value, str) and isinstance(
+            settings, (StringFieldTypeVO, TextFieldTypeVO)
+        ):
+            if not valid_text_characters(
+                value, multiline=isinstance(settings, TextFieldTypeVO)
             ):
                 return self._issue(
                     field,
@@ -115,6 +133,8 @@ class FieldValueResolver:
         settings = field.type_definition
         if isinstance(settings, MoneyFieldTypeVO):
             return self._money(field, settings, snapshot, override)
+        if isinstance(settings, (IntegerFieldTypeVO, BooleanFieldTypeVO)):
+            return self._scalar(field, settings, snapshot, override)
 
         definition = settings.value_definition
         locale = None
@@ -122,6 +142,9 @@ class FieldValueResolver:
         if override is not None:
             value = override.value
             origin = "MANUAL"
+        elif isinstance(definition, TextConstantValueDefinitionVO):
+            value = definition.value
+            origin = "CONSTANT"
         elif not isinstance(definition, SourceValueDefinitionVO):
             value = None
             origin = "MANUAL"
@@ -151,11 +174,7 @@ class FieldValueResolver:
         if value is not None and not isinstance(value, str):
             return self._issue(field, origin, "INVALID_FIELD_VALUE", "Ожидается текст.")
         if value is not None:
-            for transform in settings.transforms:
-                if transform.operation is TransformOperation.STRING_TRIM:
-                    value = value.strip()
-                elif isinstance(transform.parameters, TruncateParametersVO):
-                    value = value[: transform.parameters.max_length]
+            value = apply_text_transforms(value, settings.transforms)
         constraints = settings.constraints
         if manual_translation or (
             constraints.required and (value is None or not value.strip())
@@ -163,17 +182,64 @@ class FieldValueResolver:
             return self._issue(
                 field, origin, "REQUIRED_VALUE_MISSING", "Требуется значение поля."
             )
-        if value is not None and (
-            (constraints.min_length is not None and len(value) < constraints.min_length)
-            or (
-                constraints.max_length is not None
-                and len(value) > constraints.max_length
-            )
-        ):
+        if value is not None and not constraints.accepts_length(value):
             return self._issue(
                 field, origin, "TEXT_LENGTH_CONSTRAINT", "Длина текста вне границ поля."
             )
         return ResolvedField(field.id.uuid, value, origin, locale)
+
+    def _scalar(
+        self,
+        field: FieldDefinition,
+        settings: ScalarFieldType,
+        snapshot: PublicationCatalogSnapshotVO,
+        override: FieldOverrideVO | None,
+    ) -> ResolvedField:
+        """Разрешает числовые и логические поля без подмены нуля и false."""
+        definition = settings.value_definition
+        if override is not None:
+            value, origin = override.value, "MANUAL"
+        elif isinstance(definition, ConstantValueDefinitionVO):
+            value, origin = definition.value, "CONSTANT"
+        elif isinstance(definition, SourceValueDefinitionVO):
+            value = (
+                snapshot.inputs.stock_quantity
+                if definition.source.path is CatalogSourcePath.STOCK_QUANTITY
+                else snapshot.inputs.in_stock
+            )
+            origin = "INHERITED"
+        elif isinstance(definition, BooleanCalculationVO):
+            result = calculate_boolean(definition, snapshot.inputs)
+            if result.issues:
+                return ResolvedField(
+                    field.id.uuid,
+                    None,
+                    "CALCULATED",
+                    issues=tuple(
+                        FieldIssue(field.id.uuid, issue.code, issue.message, issue.path)
+                        for issue in result.issues
+                    ),
+                )
+            value, origin = result.value, "CALCULATED"
+        else:
+            value, origin = None, "MANUAL"
+        if value is None:
+            if settings.required:
+                return self._issue(
+                    field, origin, "REQUIRED_VALUE_MISSING", "Требуется значение поля."
+                )
+        elif isinstance(settings, IntegerFieldTypeVO) and not settings.accepts(value):
+            return self._issue(
+                field,
+                origin,
+                "INVALID_INTEGER_VALUE",
+                "Нужно целое число в допустимых границах поля.",
+            )
+        elif isinstance(settings, BooleanFieldTypeVO) and type(value) is not bool:
+            return self._issue(
+                field, origin, "INVALID_BOOLEAN_VALUE", "Ожидается true или false."
+            )
+        return ResolvedField(field.id.uuid, value, origin)
 
     def _money(
         self,

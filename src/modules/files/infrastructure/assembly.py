@@ -1,4 +1,10 @@
 from src.modules.files.application.artifact.service import ArtifactFilesService
+from src.modules.feed_builder.application.export_state.query.find_used_feed_export_files.handler import (
+    FindUsedFeedExportFilesHandler,
+)
+from src.modules.feed_builder.infrastructure.export_state.persistence.query_repository import (
+    SqlAlchemyFeedExportQueryRepository,
+)
 from src.modules.files.application.stored_file.port.usage import FileUsagePort
 from src.modules.files.infrastructure.file_usage import ConsumerFileUsage
 from src.modules.catalog.application.catalog_item.query.find_used_image_files.handler import (
@@ -206,4 +212,7 @@ def build_file_usage(session: AsyncSession) -> FileUsagePort:
     """Подключает владельцев ссылок на внешней границе Files без опционального bypass."""
     return ConsumerFileUsage(
         catalog=CatalogImages(SqlAlchemyCatalogImageUsage(session)),
+        exports=FindUsedFeedExportFilesHandler(
+            SqlAlchemyFeedExportQueryRepository(session)
+        ),
     )

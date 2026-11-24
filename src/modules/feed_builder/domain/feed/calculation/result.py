@@ -26,6 +26,17 @@ class CalculationIssue:
 
 
 @dataclass(frozen=True, slots=True)
+class BooleanCalculationResult:
+    """Передаёт итог логического расчёта и исполненные условия."""
+
+    value: bool | None
+    used_default: bool
+    steps: tuple[CalculationStep, ...]
+    parameters: tuple[tuple[str, TraceValue], ...]
+    issues: tuple[CalculationIssue, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class PriceCalculationResult:
     """Передаёт итог и объяснение без состояния публикации или сохранения БД."""
 

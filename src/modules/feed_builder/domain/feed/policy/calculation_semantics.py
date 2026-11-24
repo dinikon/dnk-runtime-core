@@ -67,6 +67,12 @@ class PriceCalculationSemanticPolicy:
                 ("rules", index, "expression"),
             )
 
+    @classmethod
+    def ensure_condition(cls, condition: object) -> None:
+        """Проверяет, что корень логического расчёта возвращает условие."""
+        path = ("condition",)
+        cls._require(cls.node_type(condition, path) == "condition", path)
+
     @staticmethod
     def _require(valid: bool, path: tuple[str | int, ...]) -> None:
         """Запрещает несовместимые типы независимо от значений конкретного товара."""

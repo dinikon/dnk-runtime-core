@@ -309,6 +309,8 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 "product.sku",
                 "price.purchase",
                 "product.category_ids",
+                "stock.quantity",
+                "stock.in_stock",
             },
         )
         operations = (

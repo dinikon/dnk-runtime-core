@@ -25,3 +25,9 @@ class TextConstraintsVO:
             raise InvalidFeedValueError(
                 "Минимальная длина не может превышать максимальную."
             )
+
+    def accepts_length(self, value: str) -> bool:
+        """Проверяет длину готового текста по заданным границам."""
+        return (self.min_length is None or len(value) >= self.min_length) and (
+            self.max_length is None or len(value) <= self.max_length
+        )

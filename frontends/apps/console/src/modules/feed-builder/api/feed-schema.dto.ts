@@ -1,3 +1,4 @@
+import type { CategoryTypeDTO, CategoryDocumentExportDTO, CategoryPublicationExportDTO } from "./feed-categories.dto";
 import type {
   FieldKind,
   SourcePath,
@@ -56,7 +57,21 @@ export type TransformDTO =
   | { op: "string.trim"; params: Record<string, never> }
   | { op: "string.truncate"; params: { max_length: number } }
   | { op: "money.ceil_step"; params: { step: string } };
+type DirectValueDTO = { kind: "SOURCE"; source: SchemaSource } | { kind: "MANUAL" };
+
 export type FieldTypeDTO =
+  | CategoryTypeDTO
+  | {
+      kind: "integer";
+      value: DirectValueDTO | { kind: "CONSTANT"; value: number };
+      constraints: { required: boolean; min_value: number | null; max_value: number | null };
+    }
+  | {
+      kind: "boolean";
+      value: DirectValueDTO | { kind: "CONSTANT"; value: boolean }
+        | { kind: "CALCULATED"; condition: SchemaNodeDTO; then_value: boolean; else_value: boolean };
+      constraints: { required: boolean };
+    }
   | {
       kind: "string" | "text";
       locale: string | null;
@@ -69,7 +84,7 @@ export type FieldTypeDTO =
         min_length: number | null;
         max_length: number | null;
       };
-      value: { kind: "SOURCE"; source: SchemaSource } | { kind: "MANUAL" };
+      value: DirectValueDTO | { kind: "CONSTANT"; value: string };
       transforms: TransformDTO[];
     }
   | {
@@ -91,7 +106,13 @@ export interface SchemaFieldDTO {
   key: string;
   label: string;
   type_definition: FieldTypeDTO;
-  export: { name: string; enabled: boolean };
+  export: {
+    name: string;
+    enabled: boolean;
+    xml_placement?: "ELEMENT" | "ATTRIBUTE";
+    document?: CategoryDocumentExportDTO;
+    publication?: CategoryPublicationExportDTO;
+  };
   ai: { instruction: string | null };
 }
 export interface DefinitionDTO {

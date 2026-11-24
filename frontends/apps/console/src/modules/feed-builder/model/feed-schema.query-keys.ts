@@ -9,6 +9,11 @@ export const feedSchemaKeys = {
     "schema",
     id,
   ],
+  catalogCategories: (scope: FeedScope, locale: string | undefined): readonly [...Root, "catalog-category-tree", string | undefined] => [
+    ...feedKeys.root(scope),
+    "catalog-category-tree",
+    locale,
+  ],
   metadata: (scope: FeedScope): readonly [...Root, "schema-metadata"] => [
     ...feedKeys.root(scope),
     "schema-metadata",

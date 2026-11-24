@@ -25,19 +25,24 @@ class ListFieldTypesHandler:
             FieldValueType.STRING: "Короткий текст",
             FieldValueType.TEXT: "Длинный текст",
             FieldValueType.MONEY: "Денежное значение",
+            FieldValueType.INTEGER: "Целое число",
+            FieldValueType.BOOLEAN: "Логическое значение",
+            FieldValueType.CATEGORY: "Категория",
+        }
+        modes = ("SOURCE", "MANUAL", "CONSTANT")
+        specialized_modes = {
+            FieldValueType.MONEY: ("SOURCE", "MANUAL", "CALCULATED"),
+            FieldValueType.BOOLEAN: (*modes, "CALCULATED"),
+            FieldValueType.CATEGORY: ("INLINE",),
         }
         return ListFieldTypesResultDTO(
             tuple(
                 FieldTypeItemDTO(
                     kind.value,
                     labels[kind],
-                    kind is not FieldValueType.MONEY,
+                    kind in (FieldValueType.STRING, FieldValueType.TEXT),
                     kind is FieldValueType.MONEY,
-                    (
-                        ("SOURCE", "MANUAL", "CALCULATED")
-                        if kind is FieldValueType.MONEY
-                        else ("SOURCE", "MANUAL")
-                    ),
+                    specialized_modes.get(kind, modes),
                 )
                 for kind in FieldValueType
             ),

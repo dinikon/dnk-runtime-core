@@ -12,6 +12,10 @@ from src.modules.feed_builder.domain.feed.limits import (
     MAX_LITERAL_EXPONENT,
 )
 
+_INVALID_XML_CHARACTER = re.compile(
+    r"[^\x09\x0a\x0d\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]"
+)
+
 
 def text(value: str, *, label: str, maximum: int, pattern: str | None = None) -> str:
     """Нормализует непустую строку, ограничивая длину, форму и управляющие символы."""
@@ -107,3 +111,8 @@ def is_condition(value: object) -> bool:
     return isinstance(
         value, (ComparisonConditionVO, LogicalConditionVO, PresenceConditionVO)
     )
+
+
+def is_xml_text(value: str) -> bool:
+    """Проверяет текст и значения атрибутов, допустимые в XML 1.0."""
+    return _INVALID_XML_CHARACTER.search(value) is None

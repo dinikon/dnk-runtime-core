@@ -13,7 +13,14 @@ class SourceSchema(ClosedSchema):
     """Описывает закрытую пару источника, преобразуемую в Domain Enum."""
 
     provider: Literal["catalog"]
-    path: Literal["item.title", "item.description", "item.sku", "item.regular_price"]
+    path: Literal[
+        "item.title",
+        "item.description",
+        "item.sku",
+        "item.regular_price",
+        "item.stock_quantity",
+        "item.in_stock",
+    ]
 
 
 class ParameterNode(ClosedSchema):
@@ -149,6 +156,13 @@ class TextManualValueSchema(ClosedSchema):
     kind: Literal["MANUAL"]
 
 
+class TextConstantValueSchema(ClosedSchema):
+    """Передаёт заданный в схеме текст без приведения других типов."""
+
+    kind: Literal["CONSTANT"]
+    value: str
+
+
 class MoneyValueSchema(ClosedSchema):
     """Передаёт ровно один денежный способ получения значения по правилам Domain."""
 
@@ -223,7 +237,8 @@ class TextTypeSchema(ClosedSchema):
 
     kind: Literal["string", "text"]
     value: Annotated[
-        TextSourceValueSchema | TextManualValueSchema, Field(discriminator="kind")
+        TextSourceValueSchema | TextManualValueSchema | TextConstantValueSchema,
+        Field(discriminator="kind"),
     ]
     locale: str | None = Field(default=None, max_length=64)
     fallback_policy: FallbackSchema | None = None
@@ -243,11 +258,169 @@ class MoneyTypeSchema(ClosedSchema):
     transforms: list[CeilStepSchema] = Field(default_factory=list, max_length=128)
 
 
+class IntegerConstantSchema(ClosedSchema):
+    """Хранит целочисленную константу без приведения других типов."""
+
+    kind: Literal["CONSTANT"]
+    value: int
+
+
+class BooleanConstantSchema(ClosedSchema):
+    """Хранит явную логическую константу."""
+
+    kind: Literal["CONSTANT"]
+    value: bool
+
+
+class BooleanCalculationSchema(ClosedSchema):
+    """Передаёт условие IF и значения обеих ветвей."""
+
+    kind: Literal["CALCULATED"]
+    condition: Node
+    then_value: bool
+    else_value: bool
+
+
+class BooleanConstraintsSchema(ClosedSchema):
+    """Отмечает обязательность логического значения."""
+
+    required: bool = False
+
+
+class IntegerConstraintsSchema(BooleanConstraintsSchema):
+    """Добавляет диапазон целого значения."""
+
+    min_value: int | None = None
+    max_value: int | None = None
+
+
+class IntegerTypeSchema(ClosedSchema):
+    """Передаёт определение целого поля и диапазон."""
+
+    kind: Literal["integer"]
+    value: Annotated[
+        TextSourceValueSchema | TextManualValueSchema | IntegerConstantSchema,
+        Field(discriminator="kind"),
+    ]
+    constraints: IntegerConstraintsSchema = Field(
+        default_factory=IntegerConstraintsSchema
+    )
+
+
+class BooleanTypeSchema(ClosedSchema):
+    """Передаёт определение логического поля и обязательность."""
+
+    kind: Literal["boolean"]
+    value: Annotated[
+        TextSourceValueSchema
+        | TextManualValueSchema
+        | BooleanConstantSchema
+        | BooleanCalculationSchema,
+        Field(discriminator="kind"),
+    ]
+    constraints: BooleanConstraintsSchema = Field(
+        default_factory=BooleanConstraintsSchema
+    )
+
+
+class CategoryPropertySchema(ClosedSchema):
+    """Описывает свойство, его тип и позицию в XML."""
+
+    key: str = Field(min_length=1, max_length=128)
+    kind: Literal["string", "text", "integer", "boolean"]
+    required: bool = False
+    xml: CategoryPropertyExportSchema = Field(
+        default_factory=lambda: CategoryPropertyExportSchema()
+    )
+    source: Literal["CATALOG_NAME"] | None = None
+
+
+class CategoryPropertyExportSchema(ClosedSchema):
+    """Указывает XML-представление свойства записи."""
+
+    placement: Literal["ATTRIBUTE", "ELEMENT", "TEXT", "NONE"] = "NONE"
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class CategoryObjectSchema(ClosedSchema):
+    """Хранит форму записи и ключи идентификации."""
+
+    id_key: str = Field(min_length=1, max_length=128)
+    label_key: str = Field(min_length=1, max_length=128)
+    fields: list[CategoryPropertySchema] = Field(min_length=1, max_length=64)
+
+
+class CategoryNodeSchema(ClosedSchema):
+    """Хранит исходные значения одного объекта схемы."""
+
+    id: str = Field(min_length=36, max_length=36)
+    values: dict[str, str | int | bool] = Field(max_length=64)
+    parent_id: str | None = Field(default=None, max_length=36)
+    catalog_id: str | None = Field(default=None, max_length=36)
+    inherit_parent: bool = False
+
+
+class CategoryRuleSchema(ClosedSchema):
+    """Назначает запись по существующему условию."""
+
+    id: str = Field(min_length=36, max_length=36)
+    target_id: str = Field(min_length=36, max_length=36)
+    condition: Node
+    label: str = Field(min_length=1, max_length=255)
+    include_descendants: bool = False
+
+
+class CategoryValueSchema(ClosedSchema):
+    """Хранит записи и правила выбора внутри поля."""
+
+    kind: Literal["INLINE"]
+    nodes: list[CategoryNodeSchema] = Field(max_length=1000)
+    rules: list[CategoryRuleSchema] = Field(max_length=100)
+    fallback: Literal["CATALOG", "FIXED", "NONE"]
+    fallback_id: str | None = Field(default=None, max_length=36)
+    catalog_priority: list[Annotated[str, Field(max_length=36)]] = Field(
+        default_factory=list, max_length=1000
+    )
+    next_export_id: int = Field(default=1, ge=1, le=2**53 - 1)
+
+
+class CategoryTypeSchema(ClosedSchema):
+    """Встраивает словарь и его данные в type_definition."""
+
+    kind: Literal["category"]
+    object_schema: CategoryObjectSchema
+    value: CategoryValueSchema
+    locale: str = Field(default="uk", min_length=2, max_length=64)
+    name_transforms: list[
+        Annotated[TrimSchema | TruncateSchema, Field(discriminator="op")]
+    ] = Field(default_factory=list, max_length=128)
+
+
+class DocumentFieldExportSchema(ClosedSchema):
+    """Задаёт контейнер, элемент и размещение объектного выхода."""
+
+    container: str = Field(min_length=1, max_length=128)
+    item: str = Field(min_length=1, max_length=128)
+    parent: Literal["ROOT", "SHOP"] = "ROOT"
+    layout: Literal["FLAT", "NESTED"] = "FLAT"
+    parent_attribute: str = Field(default="parentId", min_length=1, max_length=128)
+
+
+class PublicationFieldExportSchema(ClosedSchema):
+    """Выбирает свойство записи, отдаваемое в предложение."""
+
+    value_key: str = Field(min_length=1, max_length=128)
+    required: bool = False
+
+
 class FieldExportSchema(ClosedSchema):
     """Передаёт экспортное имя и явное участие поля."""
 
     name: str = Field(min_length=1, max_length=128)
     enabled: bool
+    xml_placement: Literal["ELEMENT", "ATTRIBUTE"] = "ELEMENT"
+    document: DocumentFieldExportSchema | None = None
+    publication: PublicationFieldExportSchema | None = None
 
 
 class FieldAiSchema(ClosedSchema):
@@ -263,7 +436,12 @@ class DefinitionFieldSchema(ClosedSchema):
     key: str = Field(min_length=1, max_length=128)
     label: str = Field(min_length=1, max_length=255)
     type_definition: Annotated[
-        TextTypeSchema | MoneyTypeSchema, Field(discriminator="kind")
+        TextTypeSchema
+        | MoneyTypeSchema
+        | IntegerTypeSchema
+        | BooleanTypeSchema
+        | CategoryTypeSchema,
+        Field(discriminator="kind"),
     ]
     export: FieldExportSchema
     ai: FieldAiSchema = Field(default_factory=FieldAiSchema)

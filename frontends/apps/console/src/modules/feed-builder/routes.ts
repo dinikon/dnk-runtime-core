@@ -1,6 +1,11 @@
 import type { RouteRecordRaw } from "vue-router";
 export const feedBuilderRoutes: RouteRecordRaw[] = [
   {
+    path: "feed-builder/feeds/:id/export",
+    name: "feed-export",
+    component: () => import("./pages/FeedExportPage.vue"),
+  },
+  {
     path: "feed-builder/feeds/:id/preview",
     name: "feed-preview",
     component: () => import("./pages/FeedPreviewPage.vue"),

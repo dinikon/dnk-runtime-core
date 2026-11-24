@@ -10,6 +10,7 @@ class PreviewColumnResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     field_id: UUID
     name: str
+    xml_attribute: bool
 
 
 class PreviewIssueResponse(BaseModel):
@@ -23,6 +24,18 @@ class PreviewIssueResponse(BaseModel):
     rule_id: UUID | None
 
 
+class PreviewCategoryResponse(BaseModel):
+    """Показывает ID и путь рассчитанной категории."""
+
+    model_config = ConfigDict(from_attributes=True)
+    field_id: UUID
+    field_label: str
+    node_id: UUID
+    export_id: str
+    path: tuple[str, ...]
+    rule_label: str | None
+
+
 class PreviewRowResponse(BaseModel):
     """Передаёт вычисленные ячейки выбранной позиции."""
 
@@ -34,6 +47,7 @@ class PreviewRowResponse(BaseModel):
     values: tuple[str | None, ...]
     issues: tuple[PreviewIssueResponse, ...]
     readiness: str
+    categories: tuple[PreviewCategoryResponse, ...] = ()
 
 
 class PreviewFeedResponse(BaseModel):

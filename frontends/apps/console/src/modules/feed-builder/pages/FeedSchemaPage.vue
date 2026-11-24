@@ -12,7 +12,8 @@ import SchemaFieldsList from "../ui/results/SchemaFieldsList.vue";
 import CalculationPreviewPanel from "../ui/results/CalculationPreviewPanel.vue";
 import { calculationErrorMessage } from "../model/feed-calculation.errors";
 import { useFeedCalculationPreview } from "../model/use-feed-calculation-preview";
-import { fieldIsReadonly } from "../model/feed-schema.draft";
+import { fieldCanPreview, fieldIsReadonly } from "../model/feed-schema.draft";
+import { useFeedCategoryTree } from "../model/feed-categories.queries";
 import SchemaFieldForm from "../ui/forms/SchemaFieldForm.vue";
 import { useFeedSchemaEditor } from "../model/use-feed-schema-editor";
 import { useFeed } from "../model/feed.queries";
@@ -26,7 +27,22 @@ const route = useRoute(),
 const id = computed(() => String(route.params.id ?? ""));
 const editor = useFeedSchemaEditor(id),
   feed = useFeed(id);
+const xmlItemName = computed(() => {
+  const settings = feed.data.value?.exportSettings.formatSettings;
+  return settings?.format === "xml" ? settings.itemName : undefined;
+});
 useFeedEditorNavigation(editor.dirty, editor.busy);
+const exportedItemName = computed(() =>
+  xmlItemName.value && editor.draft.value?.fields.some(
+    field => field.export.enabled && field.export.document?.parent === "SHOP",
+  ) ? "offer" : xmlItemName.value,
+);
+const catalogCategories = useFeedCategoryTree(
+  computed(() => {
+    const definition = editor.selected.value?.typeDefinition;
+    return definition?.kind === "category" ? definition.locale : undefined;
+  }),
+);
 const returnTo = computed(() => feedListReturnTo(route.query.returnTo));
 const queryError = computed(
   () => editor.query.error.value || editor.metadata.error.value,
@@ -271,6 +287,12 @@ async function save(): Promise<void> {
         <SchemaFieldForm
           :key="editor.selected.value.id"
           :field="editor.selected.value"
+          :xml-item-name="exportedItemName"
+          :catalog-categories="catalogCategories.data.value ?? []"
+          :catalog-loading="catalogCategories.isFetching.value"
+          :catalog-error="catalogCategories.isError.value"
+          :saved-category-ids="editor.savedCategoryIds.value"
+          @retry-catalog="catalogCategories.refetch()"
           :metadata="editor.metadata.data.value"
           :issues="[...selectedIssues, ...previewIssues]"
           :calculation-metadata="preview.metadata.data.value"
@@ -290,10 +312,10 @@ async function save(): Promise<void> {
         >
         <CalculationPreviewPanel
           v-if="
-            editor.selected.value.typeDefinition.kind === 'money' &&
-            editor.selected.value.typeDefinition.value.mode !== 'MANUAL' &&
+            fieldCanPreview(editor.selected.value) &&
             !fieldIsReadonly(editor.selected.value)
           "
+          :field-kind="editor.selected.value.typeDefinition.kind"
           :locale="preview.locale.value"
           :locales="editor.metadata.data.value.locales"
           :products="preview.products.data.value?.items ?? []"

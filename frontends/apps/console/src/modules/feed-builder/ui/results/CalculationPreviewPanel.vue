@@ -17,7 +17,9 @@ import type {
   CatalogPriceChoice,
   TraceValue,
 } from "../../model/feed-calculation.types";
+import type { FieldKind } from "../../model/feed-schema.types";
 const props = defineProps<{
+  fieldKind?: FieldKind;
   locale: string;
   locales: { code: string; name: string }[];
   products: CatalogPriceChoice[];
@@ -60,6 +62,7 @@ function chooseVariant(value: string): void {
 const branch = computed(() => {
   const value = props.result;
   if (!value) return "";
+  if (value.steps.some((step) => step.operation === "THEN")) return "THEN";
   if (!value.selectedRuleId)
     return value.usedDefault
       ? "ELSE"
@@ -82,13 +85,12 @@ function display(value: TraceValue): string {
 <template>
   <section
     class="flex min-w-0 flex-col gap-4 rounded-lg border p-4"
-    aria-label="Предпросмотр цены"
+    :aria-label="fieldKind === 'money' ? 'Предпросмотр цены' : 'Предпросмотр значения'"
   >
     <div>
       <h2 class="text-lg font-semibold">Предпросмотр на товаре</h2>
       <p class="text-sm text-muted-foreground">
-        Проверяет текущий ввод без сохранения схемы. Цены берём из каталога на
-        момент запроса.
+        Проверяет текущий ввод без сохранения схемы на данных Catalog.
       </p>
     </div>
     <Field
@@ -223,7 +225,7 @@ function display(value: TraceValue): string {
       </div>
     </template>
     <Button type="button" :disabled="!canPreview" @click="emit('preview')">{{
-      pending ? "Рассчитываем…" : "Рассчитать цену"
+      pending ? "Рассчитываем…" : fieldKind === "money" ? "Рассчитать цену" : "Рассчитать значение"
     }}</Button>
     <Alert v-if="error" variant="destructive"
       ><AlertDescription>{{ error }}</AlertDescription></Alert
@@ -231,7 +233,7 @@ function display(value: TraceValue): string {
     <Alert v-if="stale"
       ><AlertDescription
         >Результат устарел. Настройки, товар или период акции изменились.
-        Рассчитайте цену повторно.</AlertDescription
+        Повторите расчёт.</AlertDescription
       ></Alert
     >
     <div
@@ -240,20 +242,25 @@ function display(value: TraceValue): string {
       :class="stale ? 'opacity-60' : ''"
       aria-live="polite"
     >
-      <div v-if="result.resolvedValue" class="rounded-md bg-muted p-4">
+      <div v-if="result.resolvedValue !== null" class="rounded-md bg-muted p-4">
         <p class="text-sm text-muted-foreground">
-          {{ stale ? "Предыдущая цена" : "Рассчитанная цена" }}
+          {{
+            fieldKind === "money"
+              ? stale ? "Предыдущая цена" : "Рассчитанная цена"
+              : stale ? "Предыдущее значение" : "Результат"
+          }}
         </p>
         <p
           class="break-all text-2xl font-semibold"
           data-testid="calculated-price"
         >
-          {{ result.resolvedValue.amount
-          }}<span v-if="result.resolvedValue.currency" class="ml-1">
-            {{ result.resolvedValue.currency }}</span
-          >
+          <template v-if="typeof result.resolvedValue === 'object'">
+            {{ result.resolvedValue.amount }}<span v-if="result.resolvedValue.currency" class="ml-1">{{ result.resolvedValue.currency }}</span>
+          </template>
+          <template v-else>{{ String(result.resolvedValue) }}</template>
         </p>
       </div>
+      <p v-else-if="result.validationStatus === 'VALID'" class="text-sm">Значение отсутствует</p>
       <p class="text-sm">Ветка: {{ branch }}</p>
       <Alert
         v-for="(issue, index) in result.issues"

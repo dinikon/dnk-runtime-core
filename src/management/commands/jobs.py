@@ -131,7 +131,22 @@ async def handle_worker(_args: argparse.Namespace) -> int:
     from src.modules.catalog.presentation.catalog_import.maintenance_job import (
         CatalogImportMaintenanceJobHandler,
     )
+    from src.modules.feed_builder.application.export_state.job_types import (
+        REFRESH_JOB_TYPE,
+        RECONCILE_JOB_TYPE,
+        RETIRE_FILE_JOB_TYPE,
+    )
+    from src.modules.feed_builder.presentation.export_state.jobs import (
+        FeedExportJobHandler,
+        ReconcileFeedExportJobHandler,
+        RetireFeedExportFileJobHandler,
+    )
 
+    from src.modules.tenancy.application.tenant.tenant_schema_naming import (
+        TenantSchemaNaming,
+    )
+
+    export_naming = TenantSchemaNaming(dnk_config.SCHEMA_PREFIX)
     catalog_imports = CatalogImportJobHandler(db_helper.session_factory)
     dispatcher = build_scheduled_job_dispatcher(
         {
@@ -143,6 +158,15 @@ async def handle_worker(_args: argparse.Namespace) -> int:
             "catalog.import.run": catalog_imports,
             "catalog.import.maintain": CatalogImportMaintenanceJobHandler(
                 db_helper.session_factory
+            ),
+            REFRESH_JOB_TYPE: FeedExportJobHandler(
+                db_helper.session_factory, export_naming
+            ),
+            RECONCILE_JOB_TYPE: ReconcileFeedExportJobHandler(
+                db_helper.session_factory, export_naming
+            ),
+            RETIRE_FILE_JOB_TYPE: RetireFeedExportFileJobHandler(
+                db_helper.session_factory, export_naming
             ),
             FILES_CLEANUP_JOB_TYPE: FilesCleanupJobHandler(db_helper.session_factory),
             FILES_PURGE_JOB_TYPE: FilesPurgeJobHandler(db_helper.session_factory),

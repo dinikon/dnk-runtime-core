@@ -16,6 +16,8 @@ HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
         "fb_feeds",
         "fb_publications",
+        "fb_export_states",
+        "fb_export_issues",
         "catalog_content_block_definitions",
         "catalog_content_block_translations",
         "catalog_item",
@@ -115,3 +117,4 @@ import src.modules.channels.infrastructure.persistence.models.connection  # noqa
 import src.modules.crm.infrastructure.persistence.models.position_history  # noqa: F401
 
 import src.modules.feed_builder.infrastructure.persistence.models.publication  # noqa: F401
+import src.modules.feed_builder.infrastructure.persistence.models.export_state  # noqa: F401

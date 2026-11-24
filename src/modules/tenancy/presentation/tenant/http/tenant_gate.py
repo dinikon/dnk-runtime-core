@@ -39,13 +39,16 @@ class TenantAdmissionMiddleware:
             return await self.app(scope, receive, send)
         sessions = getattr(request.app.state, "db", db_helper.session_factory)
         async with sessions() as session:
-            tenant_id = await session.scalar(
-                select(TenantDomainModel.tenant_id).where(
-                    TenantDomainModel.host == extract_request_host(request)
+            domain = (
+                await session.execute(
+                    select(TenantDomainModel.tenant_id, TenantDomainModel.status).where(
+                        TenantDomainModel.host == extract_request_host(request)
+                    )
                 )
-            )
-        if tenant_id is None:
+            ).one_or_none()
+        if domain is None:
             return await self.app(scope, receive, send)
+        tenant_id = domain.tenant_id
         try:
             async with TenantGate(sessions).hold(tenant_id) as connection:
                 await bind_tenant_schema(
@@ -54,6 +57,8 @@ class TenantAdmissionMiddleware:
                     TenantSchemaNaming(dnk_config.SCHEMA_PREFIX),
                 )
                 request.state.tenant_connection = connection
+                if domain.status == "active":
+                    request.state.admitted_tenant_id = tenant_id
                 await self.app(scope, receive, send)
         except TenantUnavailable:
             if scope["type"] == "websocket":

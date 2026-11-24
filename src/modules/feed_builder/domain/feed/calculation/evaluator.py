@@ -8,6 +8,9 @@ from decimal import (
 )
 from uuid import UUID
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
+from src.modules.feed_builder.domain.feed.value_object.boolean_calculation import (
+    BooleanCalculationVO,
+)
 from src.modules.feed_builder.domain.feed.calculation.error import (
     CalculationExecutionError,
     CalculationDefinitionError,
@@ -17,6 +20,7 @@ from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
 )
 from src.modules.feed_builder.domain.feed.calculation.parameters import PRECISION
 from src.modules.feed_builder.domain.feed.calculation.result import (
+    BooleanCalculationResult,
     CalculationStep,
     CalculationIssue,
     PriceCalculationResult,
@@ -291,6 +295,39 @@ class _Execution:
         )
 
 
+def _numeric_context() -> Context:
+    """Создаёт одинаковый числовой бюджет для денежных и логических выражений."""
+    context = Context(prec=PRECISION, rounding=ROUND_HALF_UP, Emin=-168, Emax=168)
+    context.traps[Underflow] = True
+    return context
+
+
+def calculate_boolean(
+    calculation: BooleanCalculationVO, inputs: CalculationInputsVO
+) -> BooleanCalculationResult:
+    """Выполняет проверенное условие IF тем же вычислителем, что и денежные правила."""
+    execution = _Execution(inputs)
+    issues: tuple[CalculationIssue, ...] = ()
+    value = None
+    used_default = False
+    try:
+        with localcontext(_numeric_context()):
+            condition = execution.node(calculation.condition, ("condition",))
+        used_default = condition is False
+        value = calculation.else_value if used_default else calculation.then_value
+        result_path = ("else_value",) if used_default else ("then_value",)
+        execution.record(result_path, "ELSE" if used_default else "THEN", value)
+    except CalculationExecutionError as exc:
+        issues = (CalculationIssue(exc.code, str(exc), exc.path),)
+    return BooleanCalculationResult(
+        value,
+        used_default,
+        tuple(execution.steps),
+        tuple(execution.used.items()),
+        issues,
+    )
+
+
 class MoneyFieldCalculator:
     """Разрешает MONEY-поле одинаково для preview и будущих публикаций/экспорта."""
 
@@ -320,10 +357,8 @@ class MoneyFieldCalculator:
         used_default = False
         value = None
         issues: tuple[CalculationIssue, ...] = ()
-        context = Context(prec=PRECISION, rounding=ROUND_HALF_UP, Emin=-168, Emax=168)
-        context.traps[Underflow] = True
         try:
-            with localcontext(context):
+            with localcontext(_numeric_context()):
                 if manual_amount is not None:
                     amount = manual_amount.amount
                 elif definition.mode.value == "MANUAL":

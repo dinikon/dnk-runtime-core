@@ -278,6 +278,7 @@ class FeedConstructionTests(unittest.TestCase):
                         "created_at": NOW,
                         "updated_at": NOW,
                         "version": FeedVersionVO(1),
+                        "public_link_id": None,
                     }
                     self.assertEqual(
                         {item.name for item in fields(Feed)}, set(expected)
@@ -351,6 +352,7 @@ class FeedConstructionTests(unittest.TestCase):
             "created_at": created_at,
             "updated_at": updated_at,
             "version": FeedVersionVO(1),
+            "public_link_id": None,
         }
         self.assertEqual({item.name for item in fields(Feed)}, set(expected))
         for attribute, value in expected.items():

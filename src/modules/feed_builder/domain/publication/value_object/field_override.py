@@ -14,11 +14,12 @@ class FieldOverrideVO:
 
     mode: ClassVar[OverrideMode] = OverrideMode.MANUAL
     field_id: FieldIdVO
-    value: str | PriceAmountVO | None
+    value: str | int | bool | PriceAmountVO | None
 
     def __post_init__(self) -> None:
         """Требует ID поля, текст, сумму без валюты либо явное пустое значение."""
         if not isinstance(self.field_id, FieldIdVO) or (
-            self.value is not None and not isinstance(self.value, (str, PriceAmountVO))
+            self.value is not None
+            and not isinstance(self.value, (str, int, bool, PriceAmountVO))
         ):
             raise InvalidPublicationValueError("Некорректное ручное значение поля.")

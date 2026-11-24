@@ -40,7 +40,7 @@ export interface CalculationPreviewDTO {
   valid_until: string | null;
   calculation_engine_version: string;
   validation_status: "VALID" | "INVALID";
-  resolved_value: { amount: string; currency?: string } | null;
+  resolved_value: { amount: string; currency?: string } | number | boolean | null;
   selected_rule_id: string | null;
   used_default: boolean;
   steps: {

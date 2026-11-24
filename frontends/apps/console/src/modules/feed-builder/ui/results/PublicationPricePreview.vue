@@ -88,7 +88,7 @@ const emit = defineEmits<{ field: [id: string]; preview: [] }>();
       :class="stale ? 'opacity-60' : ''"
     >
       <p
-        v-if="result.resolvedValue"
+        v-if="result.resolvedValue && typeof result.resolvedValue === 'object'"
         class="break-all rounded bg-muted p-3 text-xl font-semibold"
         data-testid="publication-price"
       >

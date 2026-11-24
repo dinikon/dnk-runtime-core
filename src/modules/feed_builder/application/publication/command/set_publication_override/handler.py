@@ -1,3 +1,6 @@
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
 from decimal import Decimal
 import re
 
@@ -56,9 +59,13 @@ class SetPublicationOverrideHandler:
             expected_feed_version=command.expected_feed_version,
             expected_version=command.expected_version,
         )
-        value: str | PriceAmountVO = command.value
+        if isinstance(field.type_definition, CategoryFieldTypeVO):
+            raise InvalidPublicationOverrideError(
+                "COMPUTED_CATEGORY", "Настройте выбор категории в схеме поля."
+            )
+        value: str | int | bool | PriceAmountVO = command.value
         if isinstance(field.type_definition, MoneyFieldTypeVO):
-            amount = command.value.strip()
+            amount = command.value.strip() if isinstance(command.value, str) else ""
             if re.fullmatch(r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)", amount) is None:
                 raise InvalidPublicationOverrideError(
                     "INVALID_AMOUNT", "Введите десятичную сумму, например 1250.50."

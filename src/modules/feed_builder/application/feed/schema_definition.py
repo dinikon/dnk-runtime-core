@@ -2,6 +2,41 @@
 
 from decimal import Decimal, InvalidOperation
 from typing import cast
+from uuid import NAMESPACE_URL, UUID, uuid5
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.category_property import (
+    CategoryPropertyVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.document_field_export import (
+    DocumentFieldExportVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.category_node import (
+    CategoryNodeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.category_rule import (
+    CategoryRuleVO,
+)
+
+from src.modules.feed_builder.domain.feed.enum.xml_field_placement import (
+    XmlFieldPlacement,
+)
+from src.modules.feed_builder.domain.feed.value_object.text_constant_value_definition import (
+    TextConstantValueDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_calculation import (
+    BooleanCalculationVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
+    BooleanFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.constant_value_definition import (
+    ConstantValueDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
+    IntegerFieldTypeVO,
+)
 from src.modules.feed_builder.application.feed.types import JsonObject, JsonValue
 from src.modules.feed_builder.domain.feed.limits import (
     MAX_FIELDS,
@@ -320,7 +355,9 @@ def decode_transform(value: object) -> TransformDefinitionVO:
     return TransformDefinitionVO(operation, parameters)
 
 
-def decode_field(value: object) -> FieldDefinition:
+def decode_field(
+    value: object, previous: CategoryFieldTypeVO | None = None
+) -> FieldDefinition:
     """Восстанавливает поле через явную фабрику и собственные проверки VO."""
     data = document(value, {"id", "key", "label", "type_definition", "export"}, {"ai"})
     raw_type = data["type_definition"]
@@ -368,6 +405,55 @@ def decode_field(value: object) -> FieldDefinition:
             ),
             transforms=transforms,
         )
+    elif kind in ("integer", "boolean"):
+        definition = document(raw_type, {"kind", "value"}, {"constraints"})
+        constraints = document(
+            definition.get("constraints", {}),
+            set(),
+            (
+                {"required", "min_value", "max_value"}
+                if kind == "integer"
+                else {"required"}
+            ),
+        )
+        raw_value = document(
+            definition["value"],
+            {"kind"},
+            {"source", "value", "condition", "then_value", "else_value"},
+        )
+        match raw_value["kind"]:
+            case "SOURCE":
+                source = document(raw_value, {"kind", "source"})
+                scalar = SourceValueDefinitionVO(decode_source(source["source"]))
+            case "MANUAL":
+                document(raw_value, {"kind"})
+                scalar = ManualValueDefinitionVO()
+            case "CONSTANT":
+                constant = document(raw_value, {"kind", "value"})
+                scalar = ConstantValueDefinitionVO(constant["value"])
+            case "CALCULATED" if kind == "boolean":
+                conditional = document(
+                    raw_value, {"kind", "condition", "then_value", "else_value"}
+                )
+                scalar = BooleanCalculationVO(
+                    DefinitionReader().node(conditional["condition"]),
+                    conditional["then_value"],
+                    conditional["else_value"],
+                )
+            case _:
+                raise InvalidFeedSchemaDocumentError(
+                    "Неизвестное определение значения поля."
+                )
+        required = constraints.get("required", False)
+        if kind == "integer":
+            field_type = IntegerFieldTypeVO(
+                scalar,
+                required,
+                constraints.get("min_value"),
+                constraints.get("max_value"),
+            )
+        else:
+            field_type = BooleanFieldTypeVO(scalar, required)
     elif kind in ("string", "text"):
         definition = document(
             raw_type,
@@ -379,7 +465,7 @@ def decode_field(value: object) -> FieldDefinition:
             set(),
             {"required", "min_length", "max_length"},
         )
-        text_value = document(definition["value"], {"kind"}, {"source"})
+        text_value = document(definition["value"], {"kind"}, {"source", "value"})
         if text_value["kind"] == "SOURCE":
             text_value = document(text_value, {"kind", "source"})
             value_definition = SourceValueDefinitionVO(
@@ -388,6 +474,9 @@ def decode_field(value: object) -> FieldDefinition:
         elif text_value["kind"] == "MANUAL":
             document(text_value, {"kind"})
             value_definition = ManualValueDefinitionVO()
+        elif text_value["kind"] == "CONSTANT":
+            constant = document(text_value, {"kind", "value"})
+            value_definition = TextConstantValueDefinitionVO(constant["value"])
         else:
             raise InvalidFeedSchemaDocumentError("Неизвестное текстовое определение.")
         fallback = None
@@ -416,9 +505,34 @@ def decode_field(value: object) -> FieldDefinition:
             ),
             transforms=transforms,
         )
+    elif kind == "category":
+        field_type = decode_category_field(raw_type, previous)
     else:
         raise InvalidFeedSchemaDocumentError("Неизвестный тип поля.")
-    export = document(data["export"], {"name", "enabled"})
+    export = document(
+        data["export"],
+        {"name", "enabled"},
+        {"xml_placement", "document", "publication"},
+    )
+    xml_document = None
+    if export.get("document") is not None:
+        node = document(
+            export["document"],
+            {"container", "item"},
+            {"parent", "layout", "parent_attribute"},
+        )
+        xml_document = DocumentFieldExportVO(
+            ExportNameVO(string(node["container"])),
+            ExportNameVO(string(node["item"])),
+            node.get("parent", "ROOT"),
+            node.get("layout", "FLAT"),
+            ExportNameVO(string(node.get("parent_attribute", "parentId"))),
+        )
+    publication = (
+        document(export["publication"], {"value_key"}, {"required"})
+        if export.get("publication") is not None
+        else None
+    )
     ai = document(data.get("ai", {"instruction": None}), {"instruction"})
     return FieldDefinition.restore(
         identifier=FieldIdVO.from_value(string(data["id"])),
@@ -426,16 +540,23 @@ def decode_field(value: object) -> FieldDefinition:
         label=FieldLabelVO(string(data["label"])),
         type_definition=field_type,
         export=FieldExportSettingsVO(
-            ExportNameVO(string(export["name"])), export["enabled"]
+            ExportNameVO(string(export["name"])),
+            export["enabled"],
+            XmlFieldPlacement(export.get("xml_placement", XmlFieldPlacement.ELEMENT)),
+            xml_document,
+            ExportNameVO(string(publication["value_key"])) if publication else None,
+            publication.get("required", False) if publication else False,
         ),
         ai_instruction=ai["instruction"],
     )
 
 
-def decode_field_at(value: object, index: int) -> FieldDefinition:
+def decode_field_at(
+    value: object, index: int, previous: CategoryFieldTypeVO | None = None
+) -> FieldDefinition:
     """Дополняет ошибку фабрики адресом поля без потери предметного исключения."""
     try:
-        return decode_field(value)
+        return decode_field(value, previous)
     except DomainError as exc:
         from src.modules.feed_builder.domain.error import FeedBuilderDomainError
 
@@ -457,23 +578,308 @@ def decode_field_at(value: object, index: int) -> FieldDefinition:
         ) from exc
 
 
-def decode_schema(value: object) -> FeedSchemaVO:
-    """Собирает полную схему с путями ошибок, не обращаясь к хранению."""
+def decode_category_field(
+    value: object, previous: CategoryFieldTypeVO | None
+) -> CategoryFieldTypeVO:
+    """Восстанавливает записи категории и назначает свободные ID в пределах поля."""
+    data = document(
+        value, {"kind", "object_schema", "value"}, {"locale", "name_transforms"}
+    )
+    shape = document(data["object_schema"], {"id_key", "label_key", "fields"})
+    props = []
+    for item in array(shape["fields"], 64):
+        prop = document(item, {"key", "kind"}, {"required", "xml", "source"})
+        key = string(prop["key"])
+        xml = document(prop.get("xml", {}), set(), {"placement", "name"})
+        props.append(
+            CategoryPropertyVO(
+                ExportNameVO(key),
+                prop["kind"],
+                prop.get("required", False),
+                xml.get("placement", "NONE"),
+                ExportNameVO(string(xml.get("name") or key)),
+                prop.get("source"),
+            )
+        )
+    block = document(
+        data["value"],
+        {"kind", "nodes", "rules", "fallback"},
+        {"fallback_id", "catalog_priority", "next_export_id"},
+    )
+    if block["kind"] != "INLINE":
+        raise InvalidFeedSchemaDocumentError("Неизвестный источник записей категории.")
+    key = string(shape["id_key"])
+    id_kind = next((prop.kind for prop in props if prop.key.value == key), None)
+    nodes = [
+        document(item, {"id", "values"}, {"parent_id", "catalog_id", "inherit_parent"})
+        for item in array(block["nodes"], 1000)
+    ]
+    raw_values = []
+    for item in nodes:
+        if not isinstance(item["values"], dict):
+            raise InvalidFeedSchemaDocumentError(
+                "Значения записи должны быть объектом."
+            )
+        raw_values.append(cast(JsonObject, item["values"]).copy())
+    old_ids = (
+        {node.id: dict(node.values)[previous.id_key] for node in previous.nodes}
+        if previous
+        else {}
+    )
+    occupied = {str(values[key]) for values in raw_values if key in values} | {
+        str(identifier) for identifier in old_ids.values()
+    }
+    next_id = previous.next_export_id if previous else block.get("next_export_id", 1)
+    if type(next_id) is not int or not 1 <= next_id <= 2**53 - 1:
+        raise InvalidFeedSchemaDocumentError("Некорректный счётчик ID категорий.")
+
+    def optional_id(raw: object) -> UUID | None:
+        """Декодирует необязательную ссылку дерева."""
+        return UUID(string(raw)) if raw is not None else None
+
+    parsed = []
+    for item, values in zip(nodes, raw_values, strict=True):
+        node_id = UUID(string(item["id"]))
+        identifier = values.get(key)
+        if node_id in old_ids:
+            old_id = old_ids[node_id]
+            if identifier is not None and (
+                type(identifier) is not type(old_id) or identifier != old_id
+            ):
+                raise InvalidFeedSchemaDocumentError(
+                    "ID сохранённой категории изменить нельзя."
+                )
+            identifier = old_id
+        elif identifier is None:
+            while str(next_id) in occupied:
+                next_id += 1
+            identifier = next_id if id_kind == "integer" else str(next_id)
+            occupied.add(str(identifier))
+            next_id += 1
+        elif str(identifier) in {str(old) for old in old_ids.values()}:
+            raise InvalidFeedSchemaDocumentError(
+                "ID уже использован другой записью поля."
+            )
+        value_text = str(identifier)
+        if value_text.isascii() and value_text.isdecimal() and len(value_text) <= 16:
+            number = int(value_text)
+            if number < 2**53 - 1 and str(number) == value_text:
+                next_id = max(next_id, number + 1)
+        values[key] = identifier
+        parsed.append(
+            CategoryNodeVO(
+                node_id,
+                tuple(values.items()),
+                optional_id(item.get("parent_id")),
+                optional_id(item.get("catalog_id")),
+                item.get("inherit_parent", False),
+            )
+        )
+    rules = []
+    for item in array(block["rules"], 100):
+        rule = document(
+            item, {"id", "target_id", "condition", "label"}, {"include_descendants"}
+        )
+        rules.append(
+            CategoryRuleVO(
+                UUID(string(rule["id"])),
+                UUID(string(rule["target_id"])),
+                BooleanCalculationVO(DefinitionReader().node(rule["condition"])),
+                string(rule["label"]),
+                rule.get("include_descendants", False),
+            )
+        )
+    return CategoryFieldTypeVO(
+        tuple(props),
+        key,
+        string(shape["label_key"]),
+        LocaleCodeVO(string(data.get("locale", "uk"))),
+        tuple(parsed),
+        tuple(rules),
+        block["fallback"],
+        optional_id(block.get("fallback_id")),
+        tuple(
+            UUID(string(item))
+            for item in array(block.get("catalog_priority", []), 1000)
+        ),
+        next_id,
+        tuple(
+            decode_transform(item)
+            for item in array(data.get("name_transforms", []), MAX_TRANSFORMS)
+        ),
+    )
+
+
+def _legacy_category_field(
+    value: object, fields: list[FieldDefinition]
+) -> FieldDefinition | None:
+    """Читает ранее сохранённый блок как поле, включая снимки ожидающих задач."""
+    if value is None:
+        return None
+    block = document(
+        value,
+        {"version", "enabled", "profile", "locale", "nodes", "rules", "fallback"},
+        {
+            "catalog_priority",
+            "next_export_id",
+            "fallback_id",
+            "attribute_types",
+            "element_types",
+            "name_transforms",
+        },
+    )
+    profile = block["profile"]
+    prop = [
+        {
+            "key": "id",
+            "kind": "string",
+            "required": True,
+            "xml": {"placement": "ATTRIBUTE"},
+        },
+        {
+            "key": "name",
+            "kind": "text",
+            "required": True,
+            "source": "CATALOG_NAME",
+            "xml": {
+                "placement": (
+                    "ELEMENT"
+                    if profile == "GENERIC" and block.get("element_types")
+                    else "TEXT"
+                )
+            },
+        },
+    ]
+    attributes = (
+        block.get("attribute_types", {})
+        if profile == "GENERIC"
+        else (
+            {"portal_id": "string", "portal_url": "string"}
+            if profile == "PROM"
+            else {"rz_id": "string"}
+        )
+    )
+    elements = block.get("element_types", {}) if profile == "GENERIC" else {}
+    used_property_keys = {"id", "name"} | attributes.keys() | elements.keys()
+    property_keys: dict[tuple[str, str], str] = {}
+    for placement, definitions in (("ATTRIBUTE", attributes), ("ELEMENT", elements)):
+        for name, kind in definitions.items():
+            key = name
+            if name in ("id", "name") or (
+                placement == "ELEMENT" and name in attributes
+            ):
+                key = f"legacy_{len(prop)}"
+                while key in used_property_keys:
+                    key += "_"
+                used_property_keys.add(key)
+            property_keys[placement, name] = key
+            prop.append(
+                {
+                    "key": key,
+                    "kind": "integer" if kind == "number" else kind,
+                    "xml": {"placement": placement, "name": name},
+                }
+            )
+
+    nodes = []
+    for item in array(block["nodes"], 1000):
+        node = cast(JsonObject, item)
+        values = {"id": node["export_id"]} if node.get("export_id") is not None else {}
+        if node.get("name") is not None:
+            values["name"] = node["name"]
+        if profile == "GENERIC":
+            for placement, section in (
+                ("ATTRIBUTE", "attributes"),
+                ("ELEMENT", "elements"),
+            ):
+                properties = cast(JsonObject, node.get(section, {}))
+                values.update(
+                    {
+                        property_keys[placement, name]: value
+                        for name, value in properties.items()
+                    }
+                )
+        else:
+            values.update(
+                {key: node[key] for key in attributes if node.get(key) is not None}
+            )
+        nodes.append(
+            {
+                key: node[key]
+                for key in ("id", "parent_id", "catalog_id", "inherit_parent")
+                if key in node
+            }
+            | {"values": values}
+        )
+
+    key = "feed_category"
+    used = {field.key.value for field in fields}
+    while key in used:
+        key += "_"
+    return decode_field(
+        {
+            "id": str(uuid5(NAMESPACE_URL, "feed-builder/category/" + key)),
+            "key": key,
+            "label": "Категория",
+            "export": {
+                "name": "categoryId",
+                "enabled": block["enabled"],
+                "publication": {"value_key": "id", "required": profile != "GENERIC"},
+                "document": {
+                    "parent": "ROOT" if profile == "GENERIC" else "SHOP",
+                    "container": "categories",
+                    "item": "category",
+                },
+            },
+            "type_definition": {
+                "kind": "category",
+                "locale": block["locale"],
+                "name_transforms": block.get("name_transforms", []),
+                "object_schema": {"id_key": "id", "label_key": "name", "fields": prop},
+                "value": {
+                    key: block[key]
+                    for key in (
+                        "rules",
+                        "fallback",
+                        "fallback_id",
+                        "catalog_priority",
+                        "next_export_id",
+                    )
+                    if key in block
+                }
+                | {"kind": "INLINE", "nodes": nodes},
+            },
+        }
+    )
+
+
+def decode_schema(
+    value: object, *, previous_schema: FeedSchemaVO | None = None
+) -> FeedSchemaVO:
+    """Собирает схему полей и читает ранее сохранённые определения категорий."""
     try:
-        data = document(value, {"schema_format_version", "root"})
+        data = document(value, {"schema_format_version", "root"}, {"categories"})
         root = document(data["root"], {"key", "kind", "fields"})
         if root["key"] != "publication" or root["kind"] != "object":
             raise InvalidFeedSchemaDocumentError("Неизвестный корень документа схемы.")
-        return FeedSchemaVO(
-            tuple(
-                decode_field_at(item, index)
-                for index, item in enumerate(array(root["fields"], MAX_FIELDS))
-            ),
-            data["schema_format_version"],
-        )
-    except InvalidFeedSchemaDocumentError:
-        raise
-    except DomainError:
+        previous = {
+            str(field.id.uuid): field.type_definition
+            for field in (previous_schema.fields if previous_schema else ())
+            if isinstance(field.type_definition, CategoryFieldTypeVO)
+        }
+        fields = [
+            decode_field_at(
+                item,
+                index,
+                previous.get(item.get("id")) if isinstance(item, dict) else None,
+            )
+            for index, item in enumerate(array(root["fields"], MAX_FIELDS))
+        ]
+        legacy = _legacy_category_field(data.get("categories"), fields)
+        if legacy is not None:
+            fields.append(legacy)
+        return FeedSchemaVO(tuple(fields), data["schema_format_version"])
+    except (InvalidFeedSchemaDocumentError, DomainError):
         raise
     except (ValueError, TypeError, KeyError, InvalidOperation) as exc:
         raise InvalidFeedSchemaDocumentError("Некорректное определение Feed.") from exc

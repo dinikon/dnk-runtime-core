@@ -1,17 +1,23 @@
+import type { FieldKind } from "./feed-schema.types";
+
+export type PublicationFieldValue = string | number | boolean;
+
 export interface PublicationField {
   id: string;
   label: string;
-  kind: "string" | "text" | "money";
+  kind: FieldKind;
   required: boolean;
+  minValue: number | null;
+  maxValue: number | null;
   minLength: number | null;
   maxLength: number | null;
   minAmount: string | null;
   maxAmount: string | null;
   currency: string | null;
   hasOverride: boolean;
-  overrideValue: string | null;
-  originalValue: string | null;
-  resolvedValue: string | null;
+  overrideValue: PublicationFieldValue | null;
+  originalValue: PublicationFieldValue | null;
+  resolvedValue: PublicationFieldValue | null;
   originalIssues: string[];
   issues: string[];
 }
@@ -29,7 +35,7 @@ export interface PublicationOverrideTarget {
   publicationVersion: number;
 }
 export interface SetPublicationOverride extends PublicationOverrideTarget {
-  value: string;
+  value: PublicationFieldValue;
 }
 export interface PublicationOverrideDraft {
   field: PublicationField;

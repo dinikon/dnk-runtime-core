@@ -1,3 +1,5 @@
+import type { CategoryTypeDTO } from "./feed-categories.dto";
+import type { CategoryType } from "../model/feed-categories.types";
 import type {
   SchemaNode,
   SchemaField,
@@ -22,6 +24,8 @@ import type {
   SourcePathsDTO,
   TransformsDTO,
 } from "./feed-schema.dto.ts";
+import { cloneSchemaValue } from "../model/feed-schema.clone.ts";
+
 export function mapNode(node: SchemaNodeDTO): SchemaNode {
   switch (node.kind) {
     case "scalar":
@@ -143,9 +147,42 @@ export function mapSchemaField(field: SchemaFieldDTO): SchemaField {
     id: field.id,
     key: field.key,
     label: field.label,
-    export: { ...field.export },
+    export: {
+      name: field.export.name,
+      enabled: field.export.enabled,
+      xmlPlacement: field.export.xml_placement ?? "ELEMENT",
+      ...(field.export.document ? { document: {
+        container: field.export.document.container, item: field.export.document.item,
+        parent: field.export.document.parent, layout: field.export.document.layout,
+        parentAttribute: field.export.document.parent_attribute,
+      } } : {}),
+      ...(field.export.publication ? { publication: {
+        valueKey: field.export.publication.value_key, required: field.export.publication.required,
+      } } : {}),
+    },
     aiInstruction: field.ai.instruction,
   };
+  if (type.kind === "category") return { ...common, typeDefinition: mapCategory(type) };
+  if (type.kind === "integer") {
+    return { ...common, typeDefinition: {
+      kind: type.kind, value: cloneSchemaValue(type.value),
+      constraints: {
+        required: type.constraints.required,
+        minValue: type.constraints.min_value, maxValue: type.constraints.max_value,
+      },
+    } };
+  }
+  if (type.kind === "boolean") {
+    const value = type.value;
+    return { ...common, typeDefinition: {
+      kind: type.kind,
+      constraints: { ...type.constraints },
+      value: value.kind === "CALCULATED" ? {
+        kind: value.kind, condition: mapNode(value.condition),
+        thenValue: value.then_value, elseValue: value.else_value,
+      } : cloneSchemaValue(value),
+    } };
+  }
   return {
     ...common,
     typeDefinition:
@@ -184,12 +221,50 @@ export function mapSchemaField(field: SchemaFieldDTO): SchemaField {
 }
 export function schemaFieldPayload(field: SchemaField): SchemaFieldDTO {
   const type = field.typeDefinition;
-  return {
+  const common = {
     id: field.id,
     key: field.key,
     label: field.label,
-    export: { ...field.export },
+    export: {
+      name: field.export.name,
+      enabled: field.export.enabled,
+      ...(field.export.xmlPlacement === "ATTRIBUTE"
+        ? { xml_placement: field.export.xmlPlacement }
+        : {}),
+      ...(field.export.document ? { document: {
+        container: field.export.document.container, item: field.export.document.item,
+        parent: field.export.document.parent, layout: field.export.document.layout,
+        parent_attribute: field.export.document.parentAttribute,
+      } } : {}),
+      ...(field.export.publication ? { publication: {
+        value_key: field.export.publication.valueKey, required: field.export.publication.required,
+      } } : {}),
+    },
     ai: { instruction: field.aiInstruction },
+  };
+  if (type.kind === "category") return { ...common, type_definition: categoryPayload(type) };
+  if (type.kind === "integer") {
+    return { ...common, type_definition: {
+      kind: type.kind, value: cloneSchemaValue(type.value),
+      constraints: {
+        required: type.constraints.required,
+        min_value: type.constraints.minValue, max_value: type.constraints.maxValue,
+      },
+    } };
+  }
+  if (type.kind === "boolean") {
+    const value = type.value;
+    return { ...common, type_definition: {
+      kind: type.kind,
+      constraints: { ...type.constraints },
+      value: value.kind === "CALCULATED" ? {
+        kind: value.kind, condition: nodePayload(value.condition),
+        then_value: value.thenValue, else_value: value.elseValue,
+      } : cloneSchemaValue(value),
+    } };
+  }
+  return {
+    ...common,
     type_definition:
       type.kind === "money"
         ? {
@@ -224,6 +299,52 @@ export function schemaFieldPayload(field: SchemaField): SchemaFieldDTO {
           },
   };
 }
+function mapCategory(type: CategoryTypeDTO): CategoryType {
+  const value = type.value;
+  return {
+    kind: type.kind, locale: type.locale, nameTransforms: type.name_transforms.map(mapTransform),
+    objectSchema: {
+      idKey: type.object_schema.id_key, labelKey: type.object_schema.label_key,
+      fields: cloneSchemaValue(type.object_schema.fields),
+    },
+    value: {
+      kind: value.kind, nextExportId: value.next_export_id,
+      nodes: value.nodes.map((node) => ({
+        id: node.id, parentId: node.parent_id, catalogId: node.catalog_id,
+        inheritParent: node.inherit_parent, values: { ...node.values },
+      })),
+      rules: value.rules.map((rule) => ({
+        id: rule.id, targetId: rule.target_id, label: rule.label,
+        condition: mapNode(rule.condition), includeDescendants: rule.include_descendants,
+      })),
+      fallback: value.fallback, fallbackId: value.fallback_id, catalogPriority: [...value.catalog_priority],
+    },
+  };
+}
+
+function categoryPayload(type: CategoryType): CategoryTypeDTO {
+  const value = type.value;
+  return {
+    kind: type.kind, locale: type.locale, name_transforms: type.nameTransforms.map(transformPayload),
+    object_schema: {
+      id_key: type.objectSchema.idKey, label_key: type.objectSchema.labelKey,
+      fields: cloneSchemaValue(type.objectSchema.fields),
+    },
+    value: {
+      kind: value.kind, next_export_id: value.nextExportId,
+      nodes: value.nodes.map((node) => ({
+        id: node.id, parent_id: node.parentId, catalog_id: node.catalogId,
+        inherit_parent: node.inheritParent, values: { ...node.values },
+      })),
+      rules: value.rules.map((rule) => ({
+        id: rule.id, target_id: rule.targetId, label: rule.label,
+        condition: nodePayload(rule.condition), include_descendants: rule.includeDescendants,
+      })),
+      fallback: value.fallback, fallback_id: value.fallbackId, catalog_priority: [...value.catalogPriority],
+    },
+  };
+}
+
 export function mapDefinition(value: DefinitionDTO): FeedSchemaDefinition {
   return {
     schemaFormatVersion: value.schema_format_version,

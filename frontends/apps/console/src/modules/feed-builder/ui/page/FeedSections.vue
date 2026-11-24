@@ -16,17 +16,19 @@ const emit = defineEmits<{
       ($event === 'settings' ||
         $event === 'schema' ||
         $event === 'publications' ||
-        $event === 'preview') &&
+        $event === 'preview' ||
+        $event === 'export') &&
       emit('navigate', $event)
     "
-    ><TabsList
-      ><TabsTrigger value="settings" :disabled="disabled">Настройки</TabsTrigger
-      ><TabsTrigger value="schema" :disabled="disabled">Схема</TabsTrigger
-      ><TabsTrigger value="publications" :disabled="disabled"
-        >Товары</TabsTrigger
-      ><TabsTrigger value="preview" :disabled="disabled"
-        >Предпросмотр</TabsTrigger
-      ></TabsList
-    ></Tabs
   >
+    <TabsList
+      class="h-auto max-w-full flex-wrap justify-start [&_[data-slot=tabs-trigger]]:h-8"
+    >
+      <TabsTrigger value="settings" :disabled="disabled">Настройки</TabsTrigger>
+      <TabsTrigger value="schema" :disabled="disabled">Схема</TabsTrigger>
+      <TabsTrigger value="publications" :disabled="disabled">Товары</TabsTrigger>
+      <TabsTrigger value="preview" :disabled="disabled">Предпросмотр</TabsTrigger>
+      <TabsTrigger value="export" :disabled="disabled">Экспорт</TabsTrigger>
+    </TabsList>
+  </Tabs>
 </template>

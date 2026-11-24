@@ -162,8 +162,21 @@ function input(event: Event): void {
           <label :for="inputId" class="break-words text-sm font-medium">
             Своё значение для поля «{{ draft.field.label }}»
           </label>
+          <select
+            v-if="draft.field.kind === 'boolean'"
+            :id="inputId"
+            :value="draft.value"
+            :disabled="pending"
+            :aria-invalid="error?.fieldId === draft.field.id"
+            class="w-full rounded-md border bg-background p-2 text-sm"
+            @change="input"
+          >
+            <option value="" disabled>Выберите значение</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
           <textarea
-            v-if="draft.field.kind === 'text'"
+            v-else-if="draft.field.kind === 'text'"
             :id="inputId"
             :value="draft.value"
             rows="3"
@@ -177,7 +190,7 @@ function input(event: Event): void {
             v-else
             :id="inputId"
             type="text"
-            :inputmode="draft.field.kind === 'money' ? 'decimal' : 'text'"
+            :inputmode="draft.field.kind === 'money' ? 'decimal' : draft.field.kind === 'integer' ? 'numeric' : 'text'"
             :value="draft.value"
             :disabled="pending"
             :aria-invalid="invalidLength || error?.fieldId === draft.field.id"
@@ -190,6 +203,8 @@ function input(event: Event): void {
             class="flex flex-wrap gap-2 text-xs text-muted-foreground"
           >
             <span v-if="draft.field.required">Обязательное поле</span>
+            <span v-if="draft.field.minValue !== null">От {{ draft.field.minValue }}</span>
+            <span v-if="draft.field.maxValue !== null">До {{ draft.field.maxValue }}</span>
             <span v-if="draft.field.kind === 'money'"
               >Десятичная сумма{{
                 draft.field.currency ? ` · ${draft.field.currency}` : ""

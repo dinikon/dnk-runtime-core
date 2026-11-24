@@ -399,6 +399,11 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.upgrade_to_revision(
                 connection, first, "0018_remove_currency_settings"
             )
+            tables_at_0018 = set(
+                await connection.run_sync(
+                    lambda conn: inspect(conn).get_table_names(schema=first)
+                )
+            )
             await self.migrator.downgrade(
                 connection, first, "0016_channels_connections_only"
             )
@@ -446,15 +451,14 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
             await self.upgrade_to_revision(
                 connection, first, "0018_remove_currency_settings"
             )
-            for schema in (first, second):
+            head_tables = set(migration_metadata().tables) | {"alembic_version"}
+            for schema, expected in ((first, tables_at_0018), (second, head_tables)):
                 tables = set(
                     await connection.run_sync(
                         lambda conn: inspect(conn).get_table_names(schema=schema)
                     )
                 )
-                self.assertEqual(
-                    tables, set(migration_metadata().tables) | {"alembic_version"}
-                )
+                self.assertEqual(tables, expected)
                 self.assertTrue(retired.isdisjoint(tables))
             self.assertEqual(
                 await connection.scalar(
@@ -482,6 +486,14 @@ class TenantMigrationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             await self.migrator.upgrade(connection, first)
             await self.migrator.upgrade(connection, first)
+            self.assertEqual(
+                set(
+                    await connection.run_sync(
+                        lambda conn: inspect(conn).get_table_names(schema=first)
+                    )
+                ),
+                head_tables,
+            )
 
     async def test_currency_removal_rolls_back_on_an_unexpected_foreign_key(
         self,

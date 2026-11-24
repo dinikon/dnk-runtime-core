@@ -113,6 +113,8 @@ class CatalogExportValues:
                         price.effective,
                         price.purchase,
                         tuple(EntityIdVO(category) for category in price.category_ids),
+                        stock_quantity=price.stock_quantity,
+                        in_stock=price.in_stock,
                     ),
                     texts=tuple(
                         (

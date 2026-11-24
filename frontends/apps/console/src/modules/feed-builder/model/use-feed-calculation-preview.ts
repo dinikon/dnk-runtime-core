@@ -16,7 +16,7 @@ import { useFeedCalculationSource } from "./use-feed-calculation-source";
 import { feedCalculationApi } from "../api/feed-calculation.api";
 import { useFeedScope } from "./use-feed-scope";
 import { cloneSchemaValue } from "./feed-schema.clone";
-import { draftDefinition } from "./feed-schema.draft";
+import { draftDefinition, fieldCanPreview } from "./feed-schema.draft";
 import type { SchemaFieldDraft, SchemaMetadata } from "./feed-schema.types";
 import type { CalculationPreview } from "./feed-calculation.types";
 export interface FeedCalculationPreview {
@@ -64,7 +64,7 @@ export function useFeedCalculationPreview(
     offset,
     computed(
       () =>
-        field.value?.typeDefinition.kind === "money" &&
+        fieldCanPreview(field.value) &&
         (loadCatalogChoices?.value ?? true),
     ),
   );
@@ -128,8 +128,7 @@ export function useFeedCalculationPreview(
       !pending.value &&
       version.value !== null &&
       !!schemaMetadata.value &&
-      field.value?.typeDefinition.kind === "money" &&
-      field.value.typeDefinition.value.mode !== "MANUAL" &&
+      fieldCanPreview(field.value) &&
       !!root.value &&
       (root.value.kind === "simple" || !!variant.value),
   );

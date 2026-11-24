@@ -7,3 +7,6 @@ class FieldValueType(StrEnum):
     STRING = "string"
     TEXT = "text"
     MONEY = "money"
+    INTEGER = "integer"
+    BOOLEAN = "boolean"
+    CATEGORY = "category"

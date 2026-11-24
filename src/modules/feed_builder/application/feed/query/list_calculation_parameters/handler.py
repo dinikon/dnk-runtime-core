@@ -23,6 +23,8 @@ class ListCalculationParametersHandler:
             "product.id": "ID позиции",
             "price.purchase": "Закупочная цена",
             "product.category_ids": "Категории Catalog",
+            "stock.quantity": "Остаток",
+            "stock.in_stock": "В наличии",
         }
         return ListCalculationParametersResultDTO(
             tuple(

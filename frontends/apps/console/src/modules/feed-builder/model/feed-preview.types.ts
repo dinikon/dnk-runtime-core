@@ -1,3 +1,4 @@
+import type { PreviewCategory } from "./feed-categories.types";
 export interface FeedPreviewRequest {
   feedId: string;
   expectedVersion: number;
@@ -18,6 +19,7 @@ export interface FeedPreviewRow {
   sku: string | null;
   values: (string | null)[];
   issues: FeedPreviewIssue[];
+  categories?: PreviewCategory[];
   readiness: "READY" | "NEEDS_INPUT" | "INVALID";
 }
 
@@ -26,7 +28,7 @@ export interface FeedPreview {
   version: number;
   asOf: string;
   totalEnabled: number;
-  columns: { fieldId: string; name: string }[];
+  columns: { fieldId: string; name: string; xmlAttribute: boolean }[];
   rows: FeedPreviewRow[];
 }
 

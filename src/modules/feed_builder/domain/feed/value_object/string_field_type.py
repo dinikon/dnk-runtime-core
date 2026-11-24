@@ -39,5 +39,6 @@ class StringFieldTypeVO:
             fallback_policy=self.fallback_policy,
             constraints=self.constraints,
             transforms=self.transforms,
+            multiline=False,
         )
         object.__setattr__(self, "transforms", transforms)

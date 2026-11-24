@@ -50,7 +50,9 @@ class FeedPublicationMapper:
                 if set(value) != {"amount"} or not isinstance(value["amount"], str):
                     raise InvalidPublicationStorageError("Неверная денежная сумма.")
                 value = PriceAmountVO(Decimal(value["amount"]))
-            if value is not None and not isinstance(value, (str, PriceAmountVO)):
+            if value is not None and not isinstance(
+                value, (str, int, bool, PriceAmountVO)
+            ):
                 raise InvalidPublicationStorageError("Неверный тип ручного значения.")
             values.append(FieldOverrideVO(FieldIdVO(UUID(identifier)), value))
         return tuple(values)

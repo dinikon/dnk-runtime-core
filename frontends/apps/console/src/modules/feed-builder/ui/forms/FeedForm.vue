@@ -22,6 +22,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import type { FeedDraft, FeedFieldErrors } from "../../model/feed.types";
+import { feedValidationLabels } from "../../model/feed.constants";
 import { validateFeedDraft } from "../../model/feed.draft";
 const props = defineProps<{
   draft: FeedDraft;
@@ -215,13 +216,50 @@ async function submit(): Promise<void> {
               }}</FieldError>
             </Field>
           </template>
+          <Field :data-invalid="!!errors.validationPolicy">
+            <FieldLabel for="feed-validation-policy">Проверка данных</FieldLabel>
+            <Select
+              :model-value="draft.validationPolicy"
+              :disabled="busy || readonly"
+              @update:model-value="
+                ($event === 'STRICT' || $event === 'SKIP_INVALID') &&
+                change('validationPolicy', $event)
+              "
+            >
+              <SelectTrigger
+                id="feed-validation-policy"
+                :aria-invalid="!!errors.validationPolicy"
+                :aria-describedby="
+                  errors.validationPolicy
+                    ? 'feed-validation-error'
+                    : 'feed-validation-help'
+                "
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="STRICT">{{ feedValidationLabels.STRICT }}</SelectItem>
+                <SelectItem value="SKIP_INVALID">{{ feedValidationLabels.SKIP_INVALID }}</SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldError v-if="errors.validationPolicy" id="feed-validation-error">
+              {{ errors.validationPolicy }}
+            </FieldError>
+            <FieldDescription v-else id="feed-validation-help">
+              {{
+                draft.validationPolicy === 'STRICT'
+                  ? 'Ошибка любой позиции блокирует обновление файла.'
+                  : 'Позиции с ошибками пропускаются. Если отклонены все позиции, прежний файл сохраняется.'
+              }}
+            </FieldDescription>
+          </Field>
         </FieldGroup>
       </FieldSet>
       <Field>
         <FieldLabel>Обработка товаров</FieldLabel>
         <FieldDescription
           >Простые товары и выбранные варианты выгружаются отдельными строками.
-          Кодировка UTF-8. Проверка данных — строгая.</FieldDescription
+          Кодировка UTF-8.</FieldDescription
         >
       </Field>
     </FieldGroup>

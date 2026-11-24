@@ -30,7 +30,7 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                 for path in (MODULE / "domain").iterdir()
                 if path.is_dir() and path.name != "__pycache__"
             },
-            {"feed", "publication", "generation", "access_key"},
+            {"feed", "publication", "export_state", "access_key"},
         )
         forbidden = {"events.py"}
         for path in MODULE.rglob("*.py"):
@@ -109,7 +109,16 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                     }
                     expected = {"create", "restore"}
                     if path == DOMAIN / "feed/aggregate.py":
-                        expected |= {"change_settings", "change_schema", "archive"}
+                        expected |= {
+                            "change_settings",
+                            "change_schema",
+                            "archive",
+                            "publish_export",
+                            "rotate_public_link",
+                            "_set_public_link",
+                        }
+                    if path == DOMAIN / "export_state/aggregate.py":
+                        expected |= {"request", "start", "finish", "_require_task"}
                     if path == DOMAIN / "publication/aggregate.py":
                         expected |= {
                             "_transition",

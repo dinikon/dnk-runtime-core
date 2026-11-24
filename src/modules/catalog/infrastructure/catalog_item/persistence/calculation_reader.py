@@ -26,6 +26,11 @@ from src.modules.catalog.infrastructure.persistence.models.content_block import 
 from src.modules.catalog.domain.catalog_item.value_object.price import (
     PriceSpecificationVO,
 )
+from src.modules.catalog.domain.catalog_item.policy.stock import resolve_stock
+from src.modules.catalog.domain.catalog_item.value_object.stock import StockStatus
+from src.modules.catalog.infrastructure.catalog_item.persistence.mapper import (
+    CatalogItemMapper,
+)
 
 
 class SqlAlchemyCatalogCalculationReader:
@@ -82,6 +87,10 @@ class SqlAlchemyCatalogCalculationReader:
                     table.c.parent_id,
                     table.c.kind,
                     table.c.sku,
+                    table.c.manage_stock,
+                    table.c.stock_quantity,
+                    table.c.stock_status,
+                    table.c.backorders,
                     table.c.status,
                     table.c.purchase_price,
                     category_ids.label("category_ids"),
@@ -142,6 +151,12 @@ class SqlAlchemyCatalogCalculationReader:
                 if specification is not None and specification.sale_price is not None
                 else []
             )
+            stock = resolve_stock(
+                own=CatalogItemMapper.stock_from_row(own),
+                parent=(
+                    CatalogItemMapper.stock_from_row(root) if ref.variant_id else None
+                ),
+            ).specification
             result.append(
                 CatalogCalculationSnapshot(
                     reference=ref,
@@ -155,6 +170,8 @@ class SqlAlchemyCatalogCalculationReader:
                     as_of=as_of,
                     valid_until=min(boundaries) if boundaries else None,
                     purchase=cast(Decimal | None, own["purchase_price"]),
+                    stock_quantity=stock.stock_quantity,
+                    in_stock=stock.effective_status() is StockStatus.IN_STOCK,
                     category_ids=tuple(
                         sorted(cast(list[UUID] | None, own["category_ids"]) or ())
                     ),

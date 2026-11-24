@@ -28,6 +28,7 @@ export function mapFeedPreview(dto: FeedPreviewDTO): FeedPreview {
     columns: dto.columns.map((column) => ({
       fieldId: column.field_id,
       name: column.name,
+      xmlAttribute: column.xml_attribute,
     })),
     rows: dto.rows.map((row) => ({
       publicationId: row.publication_id,
@@ -37,6 +38,14 @@ export function mapFeedPreview(dto: FeedPreviewDTO): FeedPreview {
       values: row.values,
       issues: row.issues.map(mapIssue),
       readiness: row.readiness,
+      categories: (row.categories ?? []).map(category => ({
+        fieldId: category.field_id,
+        fieldLabel: category.field_label,
+        nodeId: category.node_id,
+        exportId: category.export_id,
+        path: category.path,
+        ruleLabel: category.rule_label,
+      })),
     })),
   };
 }

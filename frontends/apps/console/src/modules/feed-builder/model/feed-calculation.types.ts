@@ -45,7 +45,7 @@ export interface CalculationPreview {
   validUntil: string | null;
   engineVersion: string;
   validationStatus: "VALID" | "INVALID";
-  resolvedValue: { amount: string; currency?: string } | null;
+  resolvedValue: { amount: string; currency?: string } | number | boolean | null;
   selectedRuleId: string | null;
   usedDefault: boolean;
   steps: {

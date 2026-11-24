@@ -1,3 +1,6 @@
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -54,6 +57,7 @@ class PublicationResolver:
         fields = tuple(
             resolver.resolve(field, snapshot, by_field.get(field.id))
             for field in schema.fields
+            if not isinstance(field.type_definition, CategoryFieldTypeVO)
         )
         issues = tuple(issue for field in fields for issue in field.issues)
         if any(issue.code != "REQUIRED_VALUE_MISSING" for issue in issues):

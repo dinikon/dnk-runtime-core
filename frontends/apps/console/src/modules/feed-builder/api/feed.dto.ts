@@ -1,4 +1,9 @@
-import type { FeedStatus, ExportFormat, JsonValue } from "../model/feed.types";
+import type {
+  FeedStatus,
+  ExportFormat,
+  FeedValidationPolicy,
+  JsonValue,
+} from "../model/feed.types";
 export type FormatSettingsDTO =
   | {
       format: "csv";
@@ -10,7 +15,7 @@ export type FormatSettingsDTO =
 export interface ExportSettingsDTO {
   format_settings: FormatSettingsDTO;
   product_mode: "VARIABLE_TO_SINGLE";
-  validation_policy: "STRICT";
+  validation_policy: FeedValidationPolicy;
 }
 export interface CreateFeedDTO {
   name: string;

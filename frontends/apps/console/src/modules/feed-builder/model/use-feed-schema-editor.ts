@@ -42,6 +42,7 @@ export interface FeedSchemaEditor {
   remove(id: string): void;
   move(id: string, delta: number): void;
   change(field: SchemaFieldDraft): void;
+  savedCategoryIds: ComputedRef<string[]>;
   reset(): void;
   save(): Promise<boolean>;
 }
@@ -138,6 +139,7 @@ export function useFeedSchemaEditor(id: Ref<string>): FeedSchemaEditor {
       kind,
       crypto.randomUUID(),
       draft.value!.fields,
+      metadata.data.value.locales[0]?.code,
     );
     draft.value!.fields.push(field);
     selectedId.value = field.id;
@@ -256,6 +258,10 @@ export function useFeedSchemaEditor(id: Ref<string>): FeedSchemaEditor {
     issues,
     error: action.error,
     add,
+    savedCategoryIds: computed(() => {
+      const type = base.value?.definition.fields.find(field => field.id === selectedId.value)?.typeDefinition;
+      return type?.kind === "category" ? type.value.nodes.map(node => node.id) : [];
+    }),
     duplicate,
     remove,
     move,

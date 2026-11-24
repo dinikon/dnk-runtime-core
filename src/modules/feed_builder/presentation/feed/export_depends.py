@@ -4,6 +4,12 @@ from uuid import UUID
 from fastapi import Depends, HTTPException
 from sqlalchemy import text
 
+from src.modules.catalog.infrastructure.catalog_category.query_repository import (
+    SqlAlchemyCatalogCategoryQueryRepository,
+)
+from src.modules.feed_builder.infrastructure.feed.catalog.category_tree import (
+    CatalogCategoryTree,
+)
 from src.modules.catalog.infrastructure.catalog_item.persistence.calculation_reader import (
     SqlAlchemyCatalogCalculationReader,
 )
@@ -104,6 +110,7 @@ def get_publication_export(
         CatalogExportValues(SqlAlchemyCatalogCalculationReader(uow.session)),
         _CatalogAccess(context, authorization),
         clock,
+        CatalogCategoryTree(SqlAlchemyCatalogCategoryQueryRepository(uow.session)),
     )
 
 

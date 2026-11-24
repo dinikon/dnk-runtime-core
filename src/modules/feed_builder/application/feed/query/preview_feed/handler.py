@@ -7,9 +7,16 @@ from src.modules.feed_builder.application.feed.query.preview_feed.dto import (
 from src.modules.feed_builder.application.feed.query.preview_feed.query import (
     PreviewFeedQuery,
 )
+from src.modules.feed_builder.application.feed.export_settings_dto import (
+    XmlExportSettingsDTO,
+)
 from src.modules.feed_builder.application.feed.service.publication_export import (
     PublicationExportService,
     csv_cell,
+    xml_attribute_cell,
+)
+from src.modules.feed_builder.domain.feed.enum.xml_field_placement import (
+    XmlFieldPlacement,
 )
 
 PREVIEW_LIMIT = 20
@@ -30,22 +37,38 @@ class PreviewFeedHandler:
         if context.exported_fields and total:
             items = await self._export.read_enabled(query.feed_id, PREVIEW_LIMIT)
             records = await self._export.resolve(context, items)
+        xml = isinstance(
+            context.feed.export_settings.format_settings, XmlExportSettingsDTO
+        )
+        columns = tuple(
+            PreviewColumnDTO(
+                field.id.uuid,
+                field.export.name.value,
+                xml_attribute=xml
+                and field.export.xml_placement is XmlFieldPlacement.ATTRIBUTE,
+            )
+            for field in context.exported_fields
+        )
         return PreviewFeedResultDTO(
             context.feed.id,
             context.feed.version,
             context.as_of,
             total,
-            tuple(
-                PreviewColumnDTO(field.id.uuid, field.export.name.value)
-                for field in context.exported_fields
-            ),
+            columns,
             tuple(
                 PreviewRowDTO(
                     row.publication_id,
                     row.catalog_item_id,
                     row.catalog_variant_id,
                     row.sku,
-                    tuple(csv_cell(value) for value in row.values),
+                    tuple(
+                        (
+                            xml_attribute_cell(value)
+                            if column.xml_attribute
+                            else csv_cell(value)
+                        )
+                        for column, value in zip(columns, row.values, strict=True)
+                    ),
                     tuple(
                         PreviewIssueDTO(
                             issue.field_id,
@@ -57,6 +80,7 @@ class PreviewFeedHandler:
                         for issue in row.issues
                     ),
                     row.readiness,
+                    row.categories,
                 )
                 for row in records
             ),

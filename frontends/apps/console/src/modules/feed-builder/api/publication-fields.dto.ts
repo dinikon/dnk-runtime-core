@@ -1,17 +1,22 @@
+import type { FieldKind } from "../model/feed-schema.types";
+import type { PublicationFieldValue } from "../model/publication-fields.types";
+
 export interface PublicationFieldDTO {
   field_id: string;
   label: string;
-  kind: "string" | "text" | "money";
+  kind: FieldKind;
   required: boolean;
+  min_value: number | null;
+  max_value: number | null;
   min_length: number | null;
   max_length: number | null;
   min_amount: string | null;
   max_amount: string | null;
   currency: string | null;
   has_override: boolean;
-  override_value: string | null;
-  original_value: string | null;
-  resolved_value: string | null;
+  override_value: PublicationFieldValue | null;
+  original_value: PublicationFieldValue | null;
+  resolved_value: PublicationFieldValue | null;
   original_issues: string[];
   issues: string[];
 }
@@ -27,7 +32,7 @@ export interface PublicationOverrideVersionsDTO {
   expected_version: number;
 }
 export interface SetPublicationOverrideDTO extends PublicationOverrideVersionsDTO {
-  value: string;
+  value: PublicationFieldValue;
 }
 export interface ChangedPublicationOverrideDTO {
   publication_version: number;

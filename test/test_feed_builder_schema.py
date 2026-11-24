@@ -29,6 +29,9 @@ from src.modules.feed_builder.domain.feed.error import (
     FeedArchivedError,
     FeedVersionConflictError,
 )
+from src.modules.feed_builder.domain.feed.enum.xml_field_placement import (
+    XmlFieldPlacement,
+)
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.presentation.feed.http.request.put_feed_schema import (
     PutFeedSchemaRequest,
@@ -138,6 +141,129 @@ class FeedSchemaDomainTests(TestCase):
             wire = schema.model_dump(mode="json", exclude_unset=True)
             self.assertEqual(wire, source)
             self.assertEqual(schema_document(decode_schema(wire)), source)
+
+    def test_category_field_preserves_ids_and_rejects_cycles(self) -> None:
+        """Читает старый документ как поле и сохраняет идентичность его записей."""
+        first, second, third = map(str, (uuid4(), uuid4(), uuid4()))
+        old = source_schema_document()
+        old["categories"] = {
+            "version": 1,
+            "enabled": True,
+            "profile": "GENERIC",
+            "locale": "ru",
+            "nodes": [
+                {"id": first, "name": "Родитель", "export_id": "1"},
+                {
+                    "id": second,
+                    "name": "Дочерняя",
+                    "parent_id": first,
+                    "export_id": "2",
+                },
+            ],
+            "rules": [],
+            "fallback": "NONE",
+        }
+        with self.assertRaises(ValidationError):
+            SchemaDefinition.model_validate(old)
+        previous = decode_schema(old)
+        document = schema_document(previous)
+        self.assertNotIn("categories", document)
+        self.assertEqual(schema_document(decode_schema(document)), document)
+        value = document["root"]["fields"][-1]["type_definition"]["value"]
+        value["nodes"] = [
+            {"id": first, "values": {"name": "Переименована"}},
+            {"id": third, "values": {"name": "Новая"}},
+        ]
+        changed = schema_document(decode_schema(document, previous_schema=previous))
+        nodes = changed["root"]["fields"][-1]["type_definition"]["value"]["nodes"]
+        self.assertEqual([node["values"]["id"] for node in nodes], ["1", "3"])
+        value["nodes"][0]["values"]["id"] = "9"
+        with self.assertRaises(InvalidFeedSchemaDocumentError):
+            decode_schema(document, previous_schema=previous)
+        value["nodes"][0]["values"].pop("id")
+        value["nodes"][0]["parent_id"] = third
+        value["nodes"][1]["parent_id"] = first
+        with self.assertRaises(FeedDomainError):
+            decode_schema(document)
+
+    def test_legacy_category_property_preserves_shared_xml_names(self) -> None:
+        """Сохраняет значения одноимённых атрибута и тега прежнего блока."""
+        definition = source_schema_document()
+        definition["categories"] = {
+            "version": 1,
+            "enabled": True,
+            "profile": "GENERIC",
+            "locale": "ru",
+            "attribute_types": {"code": "string"},
+            "element_types": {"code": "number"},
+            "nodes": [
+                {
+                    "id": str(uuid4()),
+                    "name": "Расходные материалы",
+                    "export_id": "1",
+                    "attributes": {"code": "WH-01"},
+                    "elements": {"code": 0},
+                }
+            ],
+            "rules": [],
+            "fallback": "NONE",
+        }
+        canonical = schema_document(decode_schema(definition))
+        SchemaDefinition.model_validate(canonical)
+        category = canonical["root"]["fields"][-1]["type_definition"]
+        values = category["value"]["nodes"][0]["values"]
+        codes = {
+            prop["xml"]["placement"]: values[prop["key"]]
+            for prop in category["object_schema"]["fields"]
+            if prop["xml"]["name"] == "code"
+        }
+        self.assertEqual(codes, {"ATTRIBUTE": "WH-01", "ELEMENT": 0})
+
+    def test_text_constant_obeys_character_and_length_constraints(self) -> None:
+        """Отличает недопустимый текст константы от обычной ошибки источника."""
+        definition = source_schema_document()
+        settings = definition["root"]["fields"][0]["type_definition"]
+        settings.update(
+            locale=None,
+            fallback_policy=None,
+            transforms=[],
+            constraints={"required": True, "min_length": 1, "max_length": 3},
+        )
+        for value in ("    ", "r\n", "too long", "\x00"):
+            with self.subTest(value=value):
+                settings["value"] = {"kind": "CONSTANT", "value": value}
+                with self.assertRaises(FeedDomainError) as error:
+                    decode_schema(definition)
+                self.assertEqual(
+                    error.exception.path[-3:], ("type_definition", "value", "value")
+                )
+        settings["value"] = {"kind": "CONSTANT", "value": False}
+        with self.assertRaises(ValidationError):
+            SchemaDefinition.model_validate(definition)
+
+    def test_xml_attribute_roundtrip_and_reserved_name(self) -> None:
+        """Читает старое размещение и сохраняет выбор атрибута с проверкой имени."""
+        definition = source_schema_document()
+        self.assertIs(
+            decode_schema(definition).fields[0].export.xml_placement,
+            XmlFieldPlacement.ELEMENT,
+        )
+        export = definition["root"]["fields"][0]["export"]
+        export.update(name="id", xml_placement="ATTRIBUTE")
+        wire = SchemaDefinition.model_validate(definition).model_dump(
+            mode="json", exclude_unset=True
+        )
+        self.assertEqual(schema_document(decode_schema(wire)), definition)
+
+        export["name"] = "xmlns"
+        with self.assertRaises(FeedDomainError) as error:
+            decode_schema(definition)
+        self.assertEqual(
+            error.exception.path, ("definition", "root", "fields", 0, "export", "name")
+        )
+        export["xml_placement"] = True
+        with self.assertRaises(ValidationError):
+            SchemaDefinition.model_validate(definition)
 
     def test_http_rejects_unknown_shapes_cross_type_settings_and_limits(self) -> None:
         """Отклоняет прямые обходы UI, старые aliases, неточные суммы и чужие свойства."""

@@ -189,13 +189,20 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         created = await self.create()
         path = self.base + "/" + created["id"]
         for endpoint, count in [
-            ("field-types", 3),
-            ("source-paths", 4),
+            ("field-types", 6),
+            ("source-paths", 6),
             ("transforms", 3),
         ]:
             response = await self.client.get("/api/console/feed-builder/" + endpoint)
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(len(response.json()["items"]), count)
+            if endpoint == "field-types":
+                modes = {
+                    item["kind"]: item["editable_modes"]
+                    for item in response.json()["items"]
+                }
+                self.assertIn("CONSTANT", modes["string"])
+                self.assertIn("CONSTANT", modes["text"])
         definition = source_schema_document()
         saved = await self.client.put(
             path + "/schema/draft",
@@ -786,7 +793,10 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 .scalars()
                 .all()
             )
-            self.assertEqual(tables, ["fb_feeds", "fb_publications"])
+            self.assertCountEqual(
+                tables,
+                ["fb_feeds", "fb_publications", "fb_export_states", "fb_export_issues"],
+            )
 
 
 if __name__ == "__main__":

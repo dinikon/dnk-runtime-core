@@ -91,6 +91,30 @@ test("Changing format replaces the entire settings object without leaking CSV va
   assert.equal(feedDraft(xml).rootName, "offers");
   assert.equal(feedDraft(xml).format, "xml");
 });
+test("Saving the policy preserves it in the settings payload and the reloaded draft", () => {
+  assert.equal(feedDraft().validationPolicy, "STRICT");
+  const next = draftSettings({
+    ...feedDraft(feed),
+    validationPolicy: "SKIP_INVALID",
+  });
+  const updated = patchFeedPayload({
+    id: feed.id,
+    expectedVersion: feed.version,
+    changes: feedChanges(feed, next),
+  });
+  assert.equal(updated.export_settings?.validation_policy, "SKIP_INVALID");
+  const saved = mapFeed({
+    ...createFeedPayload(next),
+    id: feed.id,
+    status: feed.status,
+    version: feed.version + 1,
+    schema: feed.schema,
+    created_at: feed.createdAt,
+    updated_at: feed.updatedAt,
+  });
+  assert.equal(feedDraft(saved).validationPolicy, "SKIP_INVALID");
+  assert.deepEqual(feedChanges(saved, draftSettings(feedDraft(saved))), {});
+});
 test("PATCH is a minimal diff with a server version, including false and no automatic status/schema edits", () => {
   assert.deepEqual(feedChanges(feed, csv), {});
   const body = patchFeedPayload({

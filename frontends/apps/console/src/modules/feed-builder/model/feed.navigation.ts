@@ -36,6 +36,7 @@ export const feedSectionRoutes = {
   schema: "feed-schema",
   publications: "feed-publications",
   preview: "feed-preview",
+  export: "feed-export",
 } as const;
 
 export type FeedSection = keyof typeof feedSectionRoutes;

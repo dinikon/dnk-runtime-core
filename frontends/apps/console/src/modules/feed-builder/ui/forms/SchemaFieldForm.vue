@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { ArrowUp, ArrowDown, X } from "@lucide/vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -26,6 +27,10 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import PriceCalculationForm from "./PriceCalculationForm.vue";
 import { initialCalculation } from "../../model/feed-calculation.draft";
 import type { CalculationMetadata } from "../../model/feed-calculation.types";
+import type { CatalogCategory } from "@/modules/catalog";
+import type { CategoryType } from "../../model/feed-categories.types";
+import CategoryFieldSettings from "./CategoryFieldSettings.vue";
+import ScalarFieldSettings from "./ScalarFieldSettings.vue";
 import SchemaTransformsForm from "./SchemaTransformsForm.vue";
 import { cloneSchemaValue } from "../../model/feed-schema.clone";
 import { fieldIsReadonly } from "../../model/feed-schema.draft";
@@ -35,6 +40,7 @@ import type {
   SchemaIssue,
   TextTypeDraft,
   MoneyTypeDraft,
+  ScalarTypeDraft,
   FallbackMode,
   SourcePath,
 } from "../../model/feed-schema.types";
@@ -43,16 +49,45 @@ const props = defineProps<{
   metadata: SchemaMetadata;
   issues: SchemaIssue[];
   disabled: boolean;
+  xmlItemName?: string;
   calculationMetadata?: CalculationMetadata;
+  catalogCategories?: CatalogCategory[];
+  catalogLoading?: boolean;
+  catalogError?: boolean;
+  savedCategoryIds?: string[];
 }>();
-const emit = defineEmits<{ change: [field: SchemaFieldDraft] }>();
+const emit = defineEmits<{ change: [field: SchemaFieldDraft]; retryCatalog: [] }>();
 const locked = computed(() => props.disabled || fieldIsReadonly(props.field));
-const type = computed(() => props.field.typeDefinition);
+const isXmlAttribute = computed(
+  () => !!props.xmlItemName && props.field.export.xmlPlacement === "ATTRIBUTE",
+);
+const category = computed(() => props.field.typeDefinition.kind === "category" ? props.field.typeDefinition : undefined);
+const scalar = computed(() => {
+  const value = props.field.typeDefinition;
+  return value.kind === "integer" || value.kind === "boolean" ? value : undefined;
+});
+const type = computed(() => {
+  const value = props.field.typeDefinition;
+  return value.kind === "integer" || value.kind === "boolean" || value.kind === "category" ? undefined : value;
+});
 const mode = computed(() =>
-  type.value.kind === "money" ? type.value.value.mode : type.value.value.kind,
+  type.value?.kind === "money" ? type.value.value.mode : type.value?.value.kind,
 );
 const source = computed(() =>
-  "source" in type.value.value ? type.value.value.source.path : "",
+  type.value && "source" in type.value.value ? type.value.value.source.path : "",
+);
+const sourceOptions = computed(() =>
+  props.metadata.sources.filter((entry) => entry.fieldKinds.includes(props.field.typeDefinition.kind)),
+);
+const editableModes = computed(() =>
+  props.metadata.fieldTypes.find((entry) => entry.kind === props.field.typeDefinition.kind)?.editableModes ?? [],
+);
+const textSettings = computed(() => type.value?.kind === "money" ? undefined : type.value);
+const fallbackOptions = computed(() => props.metadata.locales.filter((entry) =>
+  entry.code !== textSettings.value?.locale && !textSettings.value?.fallbackPolicy?.locales.includes(entry.code),
+));
+const currentLocaleUnavailable = computed(() =>
+  textSettings.value?.locale && !props.metadata.locales.some((entry) => entry.code === textSettings.value?.locale),
 );
 const localized = computed(
   () =>
@@ -68,7 +103,8 @@ function change(update: (field: SchemaFieldDraft) => void): void {
 }
 function textChange(update: (type: TextTypeDraft) => void): void {
   change((f) => {
-    if (f.typeDefinition.kind !== "money") update(f.typeDefinition);
+    if (f.typeDefinition.kind === "string" || f.typeDefinition.kind === "text")
+      update(f.typeDefinition);
   });
 }
 function moneyChange(update: (type: MoneyTypeDraft) => void): void {
@@ -77,7 +113,15 @@ function moneyChange(update: (type: MoneyTypeDraft) => void): void {
   });
 }
 function setMode(value: string): void {
-  if (!["SOURCE", "MANUAL", "CALCULATED"].includes(value)) return;
+  if (!["SOURCE", "MANUAL", "CALCULATED", "CONSTANT"].includes(value)) return;
+  if (value === "CONSTANT") {
+    textChange((t) => {
+      t.value = { kind: "CONSTANT", value: "" };
+      t.locale = null;
+      t.fallbackPolicy = null;
+    });
+    return;
+  }
   if (value === "CALCULATED") {
     if (!props.calculationMetadata) return;
     moneyChange((t) => {
@@ -91,6 +135,7 @@ function setMode(value: string): void {
   }
   change((f) => {
     const settings = f.typeDefinition;
+    if (settings.kind === "integer" || settings.kind === "boolean" || settings.kind === "category") return;
     settings.value =
       settings.kind === "money"
         ? value === "SOURCE"
@@ -105,6 +150,11 @@ function setMode(value: string): void {
           : { kind: "MANUAL" };
   });
 }
+function setConstantValue(value: string): void {
+  textChange((type) => {
+    if (type.value.kind === "CONSTANT") type.value.value = value;
+  });
+}
 function setSource(value: string): void {
   const selected = props.metadata.sources.find(
     (s) =>
@@ -116,7 +166,7 @@ function setSource(value: string): void {
     const settings = f.typeDefinition;
     if ("source" in settings.value)
       settings.value.source.path = selected.path as SourcePath;
-    if (settings.kind !== "money" && !selected.requiresLocale) {
+    if ((settings.kind === "string" || settings.kind === "text") && !selected.requiresLocale) {
       settings.locale = null;
       settings.fallbackPolicy = null;
     }
@@ -148,6 +198,12 @@ function moveFallback(index: number, delta: number): void {
     list.splice(next, 0, item!);
   });
 }
+function changeScalar(value: ScalarTypeDraft): void {
+  change((draft) => { draft.typeDefinition = value; });
+}
+function changeCategory(value: CategoryType, settings: SchemaFieldDraft["export"]): void {
+  change((field) => { field.typeDefinition = value; field.export = settings; });
+}
 function message(key: string): string {
   return props.issues.find((i) => i.path.includes(key))?.message ?? "";
 }
@@ -157,7 +213,7 @@ function message(key: string): string {
     <header class="flex flex-wrap items-center justify-between gap-2">
       <h2 class="text-lg font-semibold">Настройки поля</h2>
       <span class="text-sm text-muted-foreground">{{
-        metadata.fieldTypes.find((t) => t.kind === type.kind)?.label
+        metadata.fieldTypes.find((t) => t.kind === field.typeDefinition.kind)?.label
       }}</span>
     </header>
     <Alert v-if="fieldIsReadonly(field)"
@@ -207,9 +263,9 @@ function message(key: string): string {
             }}</FieldError></Field
           >
           <Field :data-invalid="!!message('export')"
-            ><FieldLabel for="schema-field-export-name"
-              >Имя колонки / XML-тега</FieldLabel
-            ><Input
+            ><FieldLabel for="schema-field-export-name">{{
+              isXmlAttribute ? "Имя XML-атрибута" : xmlItemName ? "Имя XML-тега" : "Имя колонки"
+            }}</FieldLabel><Input
               id="schema-field-export-name"
               :model-value="field.export.name"
               :aria-invalid="!!message('export')"
@@ -220,10 +276,23 @@ function message(key: string): string {
                   f.export.name = String($event);
                 })
               "
-            /><FieldError v-if="message('export')">{{
+            /><FieldDescription v-if="isXmlAttribute">
+              <code class="break-all">{{ `<${xmlItemName} ${field.export.name.trim() || 'id'}="…">` }}</code>
+            </FieldDescription><FieldError v-if="message('export')">{{
               message("export")
             }}</FieldError></Field
           >
+          <Field v-if="xmlItemName && (!category || field.export.publication)" orientation="horizontal">
+            <Checkbox
+              id="schema-field-xml-attribute"
+              :model-value="isXmlAttribute"
+              :disabled="locked"
+              @update:model-value="change((field) => {
+                field.export.xmlPlacement = $event === true ? 'ATTRIBUTE' : 'ELEMENT';
+              })"
+            />
+            <FieldLabel for="schema-field-xml-attribute">Выводить как атрибут предложения</FieldLabel>
+          </Field>
           <Field orientation="horizontal"
             ><Checkbox
               id="schema-field-enabled"
@@ -240,6 +309,30 @@ function message(key: string): string {
           >
         </FieldGroup>
       </FieldSet>
+      <CategoryFieldSettings
+        v-if="category"
+        :value="category"
+        :export-settings="field.export"
+        :saved-ids="savedCategoryIds ?? []"
+        :catalog="catalogCategories ?? []"
+        :catalog-loading="catalogLoading ?? false"
+        :catalog-error="catalogError ?? false"
+        :locales="metadata.locales"
+        :calculation-metadata="calculationMetadata"
+        :disabled="locked"
+        @change="changeCategory"
+        @retry-catalog="emit('retryCatalog')"
+      />
+      <ScalarFieldSettings
+        v-else-if="scalar"
+        :value="scalar"
+        :metadata="metadata"
+        :calculation-metadata="calculationMetadata"
+        :issues="issues"
+        :disabled="locked"
+        @change="changeScalar"
+      />
+      <template v-else-if="type">
       <FieldSet :disabled="locked">
         <FieldLegend>Получение значения</FieldLegend>
         <FieldGroup>
@@ -254,9 +347,7 @@ function message(key: string): string {
               aria-labelledby="schema-value-mode-label"
               @update:model-value="setMode(String($event))"
               ><ToggleGroupItem
-                v-for="valueMode in metadata.fieldTypes.find(
-                  (t) => t.kind === type.kind,
-                )?.editableModes ?? []"
+                v-for="valueMode in editableModes"
                 :key="valueMode"
                 :value="valueMode"
                 :disabled="
@@ -267,7 +358,9 @@ function message(key: string): string {
                     ? "Источник"
                     : valueMode === "CALCULATED"
                       ? "Формула"
-                      : "Вручную"
+                      : valueMode === "CONSTANT"
+                        ? "Заданное значение"
+                        : "Вручную"
                 }}</ToggleGroupItem
               ></ToggleGroup
             ></Field
@@ -295,6 +388,28 @@ function message(key: string): string {
               задаётся только способ получения.</FieldDescription
             ></Field
           >
+          <Field
+            v-if="type.kind !== 'money' && type.value.kind === 'CONSTANT'"
+            :data-invalid="!!message('value')"
+          >
+            <FieldLabel for="schema-text-constant">Статический текст</FieldLabel>
+            <Textarea
+              v-if="type.kind === 'text'"
+              id="schema-text-constant"
+              :model-value="type.value.value"
+              :aria-invalid="!!message('value')"
+              rows="4"
+              @update:model-value="setConstantValue(String($event))"
+            />
+            <Input
+              v-else
+              id="schema-text-constant"
+              :model-value="type.value.value"
+              :aria-invalid="!!message('value')"
+              @update:model-value="setConstantValue(String($event))"
+            />
+            <FieldError v-if="message('value')">{{ message("value") }}</FieldError>
+          </Field>
           <Field v-if="mode === 'SOURCE'" :data-invalid="!!message('source')"
             ><FieldLabel for="schema-field-source">Источник</FieldLabel
             ><Select
@@ -309,9 +424,7 @@ function message(key: string): string {
               ><SelectContent
                 ><SelectGroup
                   ><SelectItem
-                    v-for="item in metadata.sources.filter((s) =>
-                      s.fieldKinds.includes(type.kind),
-                    )"
+                    v-for="item in sourceOptions"
                     :key="item.path"
                     :value="item.path"
                     >{{ item.label }}</SelectItem
@@ -350,13 +463,7 @@ function message(key: string): string {
                       :value="locale.code"
                       >{{ locale.name }} ({{ locale.code }})</SelectItem
                     ><SelectItem
-                      v-if="
-                        type.locale &&
-                        !metadata.locales.some(
-                          (l) =>
-                            type.kind !== 'money' && l.code === type.locale,
-                        )
-                      "
+                      v-if="type.locale && currentLocaleUnavailable"
                       :value="type.locale"
                       >{{ type.locale }} — недоступна</SelectItem
                     ></SelectGroup
@@ -444,15 +551,7 @@ function message(key: string): string {
                 ><SelectContent
                   ><SelectGroup
                     ><SelectItem
-                      v-for="locale in metadata.locales.filter(
-                        (l) =>
-                          l.code !==
-                            (type.kind !== 'money' ? type.locale : null) &&
-                          !(
-                            type.kind !== 'money' &&
-                            type.fallbackPolicy?.locales.includes(l.code)
-                          ),
-                      )"
+                      v-for="locale in fallbackOptions"
                       :key="locale.code"
                       :value="locale.code"
                       >{{ locale.name }} ({{ locale.code }})</SelectItem
@@ -497,7 +596,7 @@ function message(key: string): string {
               :disabled="locked"
               @update:model-value="
                 change((f) => {
-                  f.typeDefinition.constraints.required = $event === true;
+                  if (f.typeDefinition.kind !== 'category') f.typeDefinition.constraints.required = $event === true;
                 })
               "
             /><FieldLabel for="schema-field-required"
@@ -580,13 +679,16 @@ function message(key: string): string {
         :disabled="locked"
         @change="
           change((f) => {
-            f.typeDefinition.transforms = $event;
+            const settings = f.typeDefinition;
+            if (settings.kind !== 'integer' && settings.kind !== 'boolean' && settings.kind !== 'category')
+              settings.transforms = $event;
           })
         "
       />
       <FieldError v-if="message('transforms')">{{
         message("transforms")
       }}</FieldError>
+      </template>
     </FieldGroup>
   </section>
 </template>

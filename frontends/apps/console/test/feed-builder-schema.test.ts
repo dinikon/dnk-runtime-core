@@ -10,6 +10,7 @@ import {
   validateSchemaDraft,
   acknowledgeSchemaDraft,
   fieldIsReadonly,
+  newSchemaField,
 } from "../src/modules/feed-builder/model/feed-schema.draft.ts";
 import {
   definitionPayload,
@@ -50,6 +51,104 @@ test("Four-field schema maps to exact nested definitions with fixed source paths
     }).status,
     "ARCHIVED",
   );
+});
+test("Two category fields keep independent object schemas and output bindings", () => {
+  const draft = schemaDraft(fourFieldSchema());
+  const first = newSchemaField("category", "00000000-0000-4000-8000-000000000012", draft.fields, "ru");
+  draft.fields.push(first);
+  const second = newSchemaField("category", "00000000-0000-4000-8000-000000000013", draft.fields, "ru");
+  draft.fields.push(second);
+  if (first.typeDefinition.kind !== "category" || second.typeDefinition.kind !== "category") throw new Error("fixture");
+  first.export.document = { container: "categories", item: "category", parent: "ROOT", layout: "FLAT", parentAttribute: "parentId" };
+  first.typeDefinition.objectSchema.fields.push({
+    key: "prom_id", kind: "string", required: false, source: null,
+    xml: { name: "portal_id", placement: "ATTRIBUTE" },
+  });
+  const id = "00000000-0000-4000-8000-000000000014";
+  first.typeDefinition.value.nodes.push({ id, values: { id: "20", name: "Биодобавки", prom_id: "12345" }, parentId: null, catalogId: null, inheritParent: false });
+  second.typeDefinition.value.nodes.push({ id, values: { id: "20", name: "Склад" }, parentId: null, catalogId: null, inheritParent: false });
+  const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
+  assert.equal("categories" in payload, false);
+  assert.equal(payload.root.fields.at(-2)?.export.document?.container, "categories");
+  assert.equal(payload.root.fields.at(-1)?.export.document, undefined);
+  assert.deepEqual(schemaDraft(mapDefinition(payload)), draft);
+});
+
+test("Static text in short and multiline fields round-trips through the schema API", () => {
+  const draft = schemaDraft(fourFieldSchema());
+  const texts = [" r ", "Первая строка\nВторая строка"];
+  for (const [index, value] of texts.entries()) {
+    const type = draft.fields[index]!.typeDefinition;
+    if (type.kind !== "string" && type.kind !== "text") throw new Error("fixture");
+    type.locale = null;
+    type.value = { kind: "CONSTANT", value };
+  }
+  const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
+  assert.deepEqual(
+    payload.root.fields.slice(0, 2).map((field) => field.type_definition.value),
+    texts.map((value) => ({ kind: "CONSTANT", value })),
+  );
+  assert.deepEqual(schemaDraft(mapDefinition(payload)), draft);
+});
+test("XML placement survives API mapping and returning to element restores the default", () => {
+  const draft = schemaDraft(fourFieldSchema());
+  const field = draft.fields[0]!;
+  assert.equal(field.export.xmlPlacement, "ELEMENT");
+  field.export.xmlPlacement = "ATTRIBUTE";
+  const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
+  assert.equal(payload.root.fields[0]!.export.xml_placement, "ATTRIBUTE");
+  const reloaded = schemaDraft(mapDefinition(payload));
+  assert.equal(reloaded.fields[0]!.export.xmlPlacement, "ATTRIBUTE");
+
+  field.export.name = "xmlns";
+  assert.ok(validateSchemaDraft(draft, schemaMetadata).some((error) =>
+    error.fieldId === field.id && error.path.at(-1) === "name"
+  ));
+  field.export.xmlPlacement = "ELEMENT";
+  const reset = definitionPayload(draftDefinition(draft, schemaMetadata));
+  assert.equal(reset.root.fields[0]!.export.xml_placement, undefined);
+});
+test("Integer zero and false IF/ELSE values round-trip through the draft and API", () => {
+  const integer = newSchemaField("integer", "00000000-0000-4000-8000-000000000001", []);
+  const boolean = newSchemaField("boolean", "00000000-0000-4000-8000-000000000002", [integer]);
+  const quantity = integer.typeDefinition;
+  const availability = boolean.typeDefinition;
+  if (quantity.kind !== "integer" || availability.kind !== "boolean") throw new Error("fixture");
+
+  const condition = {
+    kind: "logical",
+    operator: "ALL",
+    operands: [
+      { kind: "presence", operator: "EXISTS", parameter: "stock.quantity" },
+      {
+        kind: "comparison",
+        operator: "LT",
+        left: { kind: "parameter", parameter: "stock.quantity" },
+        right: { kind: "decimal", value: "2" },
+      },
+    ],
+  } as const;
+  quantity.value = { kind: "CONSTANT", value: "0" };
+  quantity.constraints.minValue = "0";
+  availability.value = {
+    kind: "CALCULATED",
+    condition: { ...condition, operands: [...condition.operands] },
+    thenValue: true,
+    elseValue: false,
+  };
+  const draft = { fields: [integer, boolean] };
+  const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
+  assert.deepEqual(payload.root.fields[0]!.type_definition.value, { kind: "CONSTANT", value: 0 });
+  assert.deepEqual(payload.root.fields[1]!.type_definition.value, {
+    kind: "CALCULATED",
+    condition,
+    then_value: true,
+    else_value: false,
+  });
+  assert.deepEqual(schemaDraft(mapDefinition(payload)), draft);
+
+  quantity.value.value = "-1";
+  assert.ok(validateSchemaDraft(draft, schemaMetadata).some((error) => error.fieldId === integer.id));
 });
 test("Vue query proxy inputs produce independent drafts; moves retain IDs and copies get independent settings", () => {
   const original = reactive(fourFieldSchema()),

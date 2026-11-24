@@ -2,6 +2,8 @@ import type { SchemaCalculation, SchemaNode } from "./feed-schema.types.ts";
 import type { NodeCategory, NodeKind } from "./feed-calculation.types.ts";
 export const parameterTypes: Readonly<Record<string, string>> = {
   "price.regular": "number",
+  "stock.quantity": "number",
+  "stock.in_stock": "boolean",
   "price.sale": "number",
   "price.effective": "number",
   "product.sku": "string",

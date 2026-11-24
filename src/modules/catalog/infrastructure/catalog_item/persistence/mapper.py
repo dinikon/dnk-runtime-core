@@ -67,6 +67,16 @@ class CatalogItemMapper:
     """Чистые преобразования значений хранения и доменного состояния."""
 
     @staticmethod
+    def stock_from_row(row: Mapping[str, Any]) -> StockSpecificationVO:
+        """Восстанавливает собственные параметры остатка записи Catalog."""
+        return StockSpecificationVO(
+            row["manage_stock"],
+            row["stock_quantity"],
+            StockStatus(row["stock_status"]) if row["stock_status"] else None,
+            BackorderPolicy(row["backorders"]),
+        )
+
+    @staticmethod
     def to_values(
         row: Mapping[str, Any],
         parts: Mapping[str, list[dict[str, Any]]],
@@ -104,12 +114,7 @@ class CatalogItemMapper:
         dimensions = (
             DimensionsVO(*sizes) if any((v is not None for v in sizes)) else None
         )
-        stock = StockSpecificationVO(
-            row["manage_stock"],
-            row["stock_quantity"],
-            StockStatus(row["stock_status"]) if row["stock_status"] else None,
-            BackorderPolicy(row["backorders"]),
-        )
+        stock = CatalogItemMapper.stock_from_row(row)
         translations = {r["locale"]: {} for r in rows("catalog_item_translations")}
         for r in rows("catalog_item_content_values"):
             if r["mode"] == "set":

@@ -1,6 +1,9 @@
 from src.modules.feed_builder.presentation.publication.router import (
     router as feed_publications_router,
 )
+from src.modules.feed_builder.presentation.export_state.router import (
+    router as feed_export_router,
+)
 from src.modules.catalog.presentation.router import router as catalog_router
 from src.modules.feed_builder.presentation.feed.router import (
     router as feeds_router,
@@ -25,6 +28,7 @@ router = APIRouter(prefix="/api/console")
 router.include_router(catalog_router)
 router.include_router(feeds_router)
 router.include_router(feeds_metadata_router)
+router.include_router(feed_export_router)
 from src.modules.files.presentation.router import router as files_router
 
 router.include_router(files_router)

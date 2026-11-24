@@ -24,6 +24,8 @@ class ListSourcePathsHandler:
             CatalogSourcePath.DESCRIPTION: "Описание товара",
             CatalogSourcePath.SKU: "SKU товара",
             CatalogSourcePath.REGULAR_PRICE: "Обычная цена",
+            CatalogSourcePath.STOCK_QUANTITY: "Остаток",
+            CatalogSourcePath.IN_STOCK: "В наличии",
         }
         return ListSourcePathsResultDTO(
             tuple(

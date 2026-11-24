@@ -7,6 +7,9 @@ from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
 from src.modules.feed_builder.domain.feed.value_object.feed_code import FeedCodeVO
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
+from src.modules.feed_builder.domain.feed.value_object.feed_public_link_id import (
+    FeedPublicLinkIdVO,
+)
 from src.modules.feed_builder.application.feed.schema_document import schema_document
 from src.modules.feed_builder.infrastructure.feed.persistence.definition_mapper import (
     decode_schema,
@@ -37,6 +40,11 @@ class FeedMapper:
                 version=FeedVersionVO(row["row_version"]),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
+                public_link_id=(
+                    FeedPublicLinkIdVO.from_value(row["public_link_id"])
+                    if row["public_link_id"] is not None
+                    else None
+                ),
             )
         except (DomainError, ValueError, TypeError, KeyError) as exc:
             raise InvalidFeedStorageError(
@@ -56,6 +64,7 @@ class FeedMapper:
             "export_settings": settings_document(feed.export_settings),
             "created_at": feed.created_at,
             "updated_at": feed.updated_at,
+            "public_link_id": feed.public_link_id.uuid if feed.public_link_id else None,
         }
 
     @staticmethod

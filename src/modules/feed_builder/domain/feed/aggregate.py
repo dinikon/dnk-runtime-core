@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Self
 from src.modules.feed_builder.domain.feed.enum.feed_status import FeedStatus
@@ -18,6 +18,9 @@ from src.modules.feed_builder.domain.feed.error import (
     FeedArchivedError,
 )
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
+from src.modules.feed_builder.domain.feed.value_object.feed_public_link_id import (
+    FeedPublicLinkIdVO,
+)
 from src.modules.feed_builder.domain.validation import require_datetime
 from src.modules.feed_builder.domain.feed.policy.schema_sources import (
     FeedSchemaSourcePolicy,
@@ -37,6 +40,7 @@ class Feed:
     schema: FeedSchemaVO
     export_settings: FeedExportSettingsVO
     version: FeedVersionVO = FeedVersionVO(1)
+    public_link_id: FeedPublicLinkIdVO | None = None
 
     @classmethod
     def create(
@@ -74,6 +78,7 @@ class Feed:
         created_at: datetime,
         updated_at: datetime,
         version: FeedVersionVO = FeedVersionVO(1),
+        public_link_id: FeedPublicLinkIdVO | None = None,
     ) -> Self:
         """Восстанавливает состав и проверяет собственные инварианты без I/O."""
         if (
@@ -84,6 +89,10 @@ class Feed:
             or not isinstance(schema, FeedSchemaVO)
             or not isinstance(export_settings, FeedExportSettingsVO)
             or not isinstance(version, FeedVersionVO)
+            or (
+                public_link_id is not None
+                and not isinstance(public_link_id, FeedPublicLinkIdVO)
+            )
         ):
             raise InvalidFeedValueError("Нужны типизированные свойства Feed.")
         for value in (created_at, updated_at):
@@ -108,6 +117,7 @@ class Feed:
             created_at=created_at,
             updated_at=updated_at,
             version=version,
+            public_link_id=public_link_id,
         )
 
     def change_settings(
@@ -146,6 +156,7 @@ class Feed:
             created_at=self.created_at,
             updated_at=now,
             version=FeedVersionVO(self.version.value + 1),
+            public_link_id=self.public_link_id,
         )
 
     def change_schema(self, *, schema: FeedSchemaVO, now: datetime) -> Self:
@@ -169,6 +180,7 @@ class Feed:
             created_at=self.created_at,
             updated_at=now,
             version=FeedVersionVO(self.version.value + 1),
+            public_link_id=self.public_link_id,
         )
 
     def archive(self, *, now: datetime) -> Self:
@@ -186,6 +198,43 @@ class Feed:
             schema=self.schema,
             export_settings=self.export_settings,
             created_at=self.created_at,
+            updated_at=now,
+            version=FeedVersionVO(self.version.value + 1),
+            public_link_id=self.public_link_id,
+        )
+
+    def publish_export(self, link: FeedPublicLinkIdVO, *, now: datetime) -> Self:
+        """Активирует первый файл и сохраняет адрес при следующих обновлениях."""
+        if self.status not in (FeedStatus.DRAFT, FeedStatus.ACTIVE):
+            raise InvalidFeedValueError("Этот Feed не может опубликовать файл.")
+        if self.status is FeedStatus.ACTIVE and self.public_link_id is not None:
+            return self
+        return self._set_public_link(
+            self.public_link_id or link, status=FeedStatus.ACTIVE, now=now
+        )
+
+    def rotate_public_link(self, link: FeedPublicLinkIdVO, *, now: datetime) -> Self:
+        """Меняет только адрес уже опубликованного фида."""
+        if (
+            self.status not in (FeedStatus.ACTIVE, FeedStatus.PAUSED)
+            or self.public_link_id is None
+        ):
+            raise InvalidFeedValueError("Сначала опубликуйте файл.")
+        if link == self.public_link_id:
+            raise InvalidFeedValueError("Требуется новый идентификатор ссылки.")
+        return self._set_public_link(link, status=self.status, now=now)
+
+    def _set_public_link(
+        self, link: FeedPublicLinkIdVO, *, status: FeedStatus, now: datetime
+    ) -> Self:
+        """Применяет идентификатор адреса и увеличивает версию Feed."""
+        require_datetime(now, error=InvalidFeedValueError)
+        if not isinstance(link, FeedPublicLinkIdVO) or now < self.updated_at:
+            raise InvalidFeedValueError("Некорректное изменение публичной ссылки.")
+        return replace(
+            self,
+            public_link_id=link,
+            status=status,
             updated_at=now,
             version=FeedVersionVO(self.version.value + 1),
         )

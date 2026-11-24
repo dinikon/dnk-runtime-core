@@ -1,4 +1,4 @@
-from pydantic import Field, StrictStr
+from pydantic import Field, StrictBool, StrictInt, StrictStr
 
 from src.modules.feed_builder.presentation.feed.http.schema.definition import (
     ClosedSchema,
@@ -10,4 +10,4 @@ class SetPublicationOverrideRequest(ClosedSchema):
 
     expected_feed_version: int = Field(ge=1, le=9223372036854775807)
     expected_version: int = Field(ge=1, le=9223372036854775807)
-    value: StrictStr
+    value: StrictStr | StrictInt | StrictBool

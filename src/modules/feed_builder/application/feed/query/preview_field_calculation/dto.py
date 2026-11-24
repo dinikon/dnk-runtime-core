@@ -50,3 +50,4 @@ class PreviewFieldCalculationResultDTO:
     steps: tuple[CalculationPreviewStepDTO, ...]
     parameters: tuple[tuple[str, TraceValue], ...]
     issues: tuple[CalculationPreviewIssueDTO, ...]
+    scalar_value: int | bool | None = None

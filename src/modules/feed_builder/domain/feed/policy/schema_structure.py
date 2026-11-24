@@ -1,3 +1,6 @@
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
 from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
 from src.modules.feed_builder.domain.feed.error import (
     DuplicateExportNameError,
@@ -22,6 +25,7 @@ class FeedSchemaStructurePolicy:
         identifiers: set[FieldIdVO] = set()
         keys: set[FieldKeyVO] = set()
         export_names: set[ExportNameVO] = set()
+        containers: set[tuple[str, ExportNameVO]] = set()
         restored_fields: list[FieldDefinition] = []
         for index, definition in enumerate(schema.fields):
             definition = FieldDefinition.restore(
@@ -42,13 +46,32 @@ class FeedSchemaStructurePolicy:
                     "Ключ поля повторяется в Feed.",
                     path=("schema", "fields", index, "key"),
                 )
-            if definition.export.name in export_names:
-                raise DuplicateExportNameError(
-                    "Экспортное имя повторяется в Feed.",
-                    path=("schema", "fields", index, "export", "name"),
-                )
+            export = definition.export
+            if (
+                not isinstance(definition.type_definition, CategoryFieldTypeVO)
+                or export.publication_key is not None
+            ):
+                output = export.name
+                if output in export_names:
+                    raise DuplicateExportNameError(
+                        "Экспортное имя повторяется в Feed.",
+                        path=("schema", "fields", index, "export", "name"),
+                    )
+                export_names.add(output)
+            if export.enabled and export.document is not None:
+                container = (export.document.parent, export.document.container)
+                if (
+                    container in containers
+                    or export.document.parent == "SHOP"
+                    and export.document.container.value
+                    in ("name", "company", "currencies", "offers")
+                ):
+                    raise DuplicateExportNameError(
+                        "Имя контейнера XML уже занято.",
+                        path=("schema", "fields", index, "export", "document"),
+                    )
+                containers.add(container)
             identifiers.add(definition.id)
             keys.add(definition.key)
-            export_names.add(definition.export.name)
             restored_fields.append(definition)
         return FeedSchemaVO(tuple(restored_fields), schema.schema_format_version)

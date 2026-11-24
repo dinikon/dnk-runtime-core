@@ -1,3 +1,6 @@
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
 from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.command import (
     SaveFeedSchemaDraftCommand,
 )
@@ -11,6 +14,12 @@ from src.modules.feed_builder.application.feed.schema_definition import decode_s
 from src.modules.feed_builder.application.feed.schema_document import schema_document
 from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
+from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
+    StringFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
+    TextFieldTypeVO,
+)
 from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
     MoneyFieldTypeVO,
 )
@@ -53,7 +62,7 @@ class SaveFeedSchemaDraftHandler:
             raise FeedVersionConflictError("Feed уже изменён.")
         if original.status is FeedStatus.ARCHIVED:
             raise FeedArchivedError("Архивный Feed нельзя редактировать.")
-        schema = decode_schema(command.definition)
+        schema = decode_schema(command.definition, previous_schema=original.schema)
         previous_fields = {field.id: field for field in original.schema.fields}
         for index, field in enumerate(schema.fields):
             settings = field.type_definition
@@ -92,7 +101,11 @@ class SaveFeedSchemaDraftHandler:
         needed: list[tuple[int, str]] = []
         for index, field in enumerate(schema.fields):
             settings = field.type_definition
-            if not isinstance(settings, MoneyFieldTypeVO):
+            if isinstance(settings, CategoryFieldTypeVO) and any(
+                node.catalog_id is not None for node in settings.nodes
+            ):
+                needed.append((index, settings.locale.value))
+            if isinstance(settings, (StringFieldTypeVO, TextFieldTypeVO)):
                 if settings.locale is not None:
                     needed.append((index, settings.locale.value))
                 if settings.fallback_policy is not None:

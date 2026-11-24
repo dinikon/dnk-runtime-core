@@ -1,5 +1,6 @@
 export type FeedStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED";
 export type ExportFormat = "csv" | "xml";
+export type FeedValidationPolicy = "STRICT" | "SKIP_INVALID";
 export type FormatSettings =
   | {
       format: "csv";
@@ -11,7 +12,7 @@ export type FormatSettings =
 export interface ExportSettings {
   formatSettings: FormatSettings;
   productMode: "VARIABLE_TO_SINGLE";
-  validationPolicy: "STRICT";
+  validationPolicy: FeedValidationPolicy;
 }
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -59,6 +60,7 @@ export interface FeedDraft {
   includeHeader: boolean;
   rootName: string;
   itemName: string;
+  validationPolicy: FeedValidationPolicy;
 }
 export type FeedFieldErrors = Partial<Record<keyof FeedDraft, string>>;
 export interface FeedChanges {

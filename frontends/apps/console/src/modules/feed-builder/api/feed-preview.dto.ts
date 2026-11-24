@@ -1,3 +1,4 @@
+import type { PreviewCategoryDTO } from "./feed-categories.dto";
 export interface FeedPreviewIssueDTO {
   field_id: string | null;
   code: string;
@@ -11,7 +12,7 @@ export interface FeedPreviewDTO {
   version: number;
   as_of: string;
   total_enabled: number;
-  columns: { field_id: string; name: string }[];
+  columns: { field_id: string; name: string; xml_attribute: boolean }[];
   rows: {
     publication_id: string;
     catalog_item_id: string;
@@ -19,6 +20,7 @@ export interface FeedPreviewDTO {
     sku: string | null;
     values: (string | null)[];
     issues: FeedPreviewIssueDTO[];
+    categories?: PreviewCategoryDTO[];
     readiness: "READY" | "NEEDS_INPUT" | "INVALID";
   }[];
 }

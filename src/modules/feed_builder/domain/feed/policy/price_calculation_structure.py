@@ -70,6 +70,16 @@ class PriceCalculationStructurePolicy:
                     (rule.expression, 1, ("rules", index, "expression")),
                 )
             )
+        uses_purchase = PriceCalculationStructurePolicy.validate_nodes(stack)
+        if calculation.purchase_source is not None and not uses_purchase:
+            raise InvalidPriceCalculationDefinitionError(
+                "Прежняя закупочная привязка допустима только для price.purchase.",
+                path=("purchase_source",),
+            )
+
+    @staticmethod
+    def validate_nodes(stack: list[tuple[object, int, tuple[str | int, ...]]]) -> bool:
+        """Проверяет бюджет и состав AST, возвращает использование закупочной цены."""
         count = 0
         uses_purchase = False
         while stack:
@@ -114,8 +124,4 @@ class PriceCalculationStructurePolicy:
                 (child, depth + 1, (*path, *relative_path))
                 for relative_path, child in children
             )
-        if calculation.purchase_source is not None and not uses_purchase:
-            raise InvalidPriceCalculationDefinitionError(
-                "Прежняя закупочная привязка допустима только для price.purchase.",
-                path=("purchase_source",),
-            )
+        return uses_purchase

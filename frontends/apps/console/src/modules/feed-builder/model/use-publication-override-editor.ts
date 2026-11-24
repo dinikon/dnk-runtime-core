@@ -3,12 +3,14 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { publicationFieldsApi } from "../api/publication-fields.api";
 import { feedPreviewKeys } from "./feed-preview.query-keys";
 import { publicationKeys } from "./feed-publication.query-keys";
+import { parseFeedInteger } from "./feed-schema.draft";
 import { SchemaApiError } from "./feed-schema.types";
 import { useFeedAction } from "./use-feed-action";
 import { useFeedScope } from "./use-feed-scope";
 import { usePublicationFields } from "./use-publication-fields";
 import type {
   PublicationField,
+  PublicationFieldValue,
   PublicationOverrideDraft,
   PublicationOverrideTarget,
 } from "./publication-fields.types";
@@ -77,7 +79,7 @@ export function usePublicationOverrideEditor(
     const current = target(field.id);
     if (!current || pending.value || draft.value) return;
     error.value = undefined;
-    draft.value = { field, target: current, value: field.overrideValue ?? "" };
+    draft.value = { field, target: current, value: String(field.overrideValue ?? "") };
   }
 
   function update(value: string): void {
@@ -102,7 +104,7 @@ export function usePublicationOverrideEditor(
 
   async function persist(
     current: PublicationOverrideTarget,
-    value?: string,
+    value?: PublicationFieldValue,
   ): Promise<void> {
     if (pending.value) return;
     const startedAt = revision;
@@ -157,10 +159,23 @@ export function usePublicationOverrideEditor(
       !target(current.field.id)
     )
       return;
-    const value =
-      current.field.kind === "money"
-        ? current.value.replace(",", ".")
-        : current.value;
+    let value: PublicationFieldValue = current.value;
+    if (current.field.kind === "money") value = current.value.replace(",", ".");
+    if (current.field.kind === "integer") {
+      const parsed = parseFeedInteger(current.value);
+      if (parsed === undefined) {
+        error.value = { fieldId: current.field.id, message: "Введите целое число." };
+        return;
+      }
+      value = parsed;
+    }
+    if (current.field.kind === "boolean") {
+      if (value !== "true" && value !== "false") {
+        error.value = { fieldId: current.field.id, message: "Выберите true или false." };
+        return;
+      }
+      value = value === "true";
+    }
     await persist(current.target, value);
   }
 

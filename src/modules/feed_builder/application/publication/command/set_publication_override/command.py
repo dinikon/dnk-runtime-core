@@ -11,4 +11,4 @@ class SetPublicationOverrideCommand:
     field_id: UUID
     expected_feed_version: int
     expected_version: int
-    value: str
+    value: str | int | bool

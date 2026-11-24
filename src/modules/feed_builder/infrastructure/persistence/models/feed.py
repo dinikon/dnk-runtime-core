@@ -15,6 +15,7 @@ class FeedModel(AudienceMixin, TenantBase):
     __tablename__ = "fb_feeds"
     __table_args__ = (
         sa.UniqueConstraint("code", name="uq_fb_feeds_code"),
+        sa.UniqueConstraint("public_link_id", name="uq_fb_feeds_public_link_id"),
         sa.CheckConstraint(
             "char_length(btrim(name)) BETWEEN 1 AND 255", name="ck_fb_feeds_name"
         ),
@@ -41,3 +42,4 @@ class FeedModel(AudienceMixin, TenantBase):
     row_version: Mapped[int] = mapped_column(sa.BigInteger, nullable=False)
     schema_definition: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
     export_settings: Mapped[JsonObject] = mapped_column(JSONB, nullable=False)
+    public_link_id: Mapped[UUID | None] = mapped_column(StringUUID)

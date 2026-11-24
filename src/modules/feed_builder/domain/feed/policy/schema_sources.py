@@ -1,5 +1,14 @@
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
 from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
     CatalogSourcePath,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
+    BooleanFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
+    IntegerFieldTypeVO,
 )
 from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
 from src.modules.feed_builder.domain.feed.error import InvalidFieldDefinitionError
@@ -20,6 +29,10 @@ class FeedSchemaSourcePolicy:
         """Возвращает типы результата зарегистрированного логического пути."""
         if path is CatalogSourcePath.REGULAR_PRICE:
             return (FieldValueType.MONEY,)
+        if path is CatalogSourcePath.STOCK_QUANTITY:
+            return (FieldValueType.INTEGER,)
+        if path is CatalogSourcePath.IN_STOCK:
+            return (FieldValueType.BOOLEAN,)
         return (FieldValueType.STRING, FieldValueType.TEXT)
 
     @staticmethod
@@ -32,6 +45,8 @@ class FeedSchemaSourcePolicy:
         """Отклоняет несовместимый тип и языковые настройки прямого источника."""
         for index, field in enumerate(schema.fields):
             definition = field.type_definition
+            if isinstance(definition, CategoryFieldTypeVO):
+                continue
             source = (
                 definition.value_definition.source
                 if isinstance(definition, MoneyFieldTypeVO)
@@ -46,7 +61,9 @@ class FeedSchemaSourcePolicy:
                     "Источник несовместим с типом поля.",
                     path=path + ("value", "source"),
                 )
-            if not isinstance(definition, MoneyFieldTypeVO):
+            if not isinstance(
+                definition, (MoneyFieldTypeVO, IntegerFieldTypeVO, BooleanFieldTypeVO)
+            ):
                 if cls.requires_locale(source.path) and definition.locale is None:
                     raise InvalidFieldDefinitionError(
                         "Для источника текста нужна локаль.", path=path + ("locale",)

@@ -16,3 +16,6 @@ export {
   searchCatalogPublicationProducts,
   searchCatalogPublicationVariants,
 } from "./model/catalog-public";
+
+export { listCategories } from "./api/category.api";
+export type { CatalogCategory } from "./model/category.types";

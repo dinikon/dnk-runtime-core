@@ -2,8 +2,8 @@ from collections.abc import Iterator
 import csv
 from io import TextIOWrapper
 from tempfile import SpooledTemporaryFile
+from typing import BinaryIO
 
-from src.modules.feed_builder.application.feed.port.test_csv import TestCsvWriter
 from src.modules.feed_builder.domain.feed.value_object.csv_export_settings import (
     CsvExportSettingsVO,
 )
@@ -35,6 +35,13 @@ class _TemporaryCsv:
         finally:
             self.close()
 
+    def upload_source(self) -> tuple[BinaryIO, int]:
+        """Передаёт готовый источник Files с точным размером."""
+        self._text.flush()
+        size = self._binary.seek(0, 2)
+        self._binary.seek(0)
+        return self._binary, size
+
     def close(self) -> None:
         """Закрывает и удаляет временный файл."""
         self._text.close()
@@ -43,6 +50,6 @@ class _TemporaryCsv:
 class TemporaryCsvStorage:
     """Предоставляет временное хранилище пробного CSV."""
 
-    def open(self, settings: CsvExportSettingsVO) -> TestCsvWriter:
+    def open(self, settings: CsvExportSettingsVO) -> _TemporaryCsv:
         """Создаёт writer одного HTTP-запроса."""
         return _TemporaryCsv(settings)

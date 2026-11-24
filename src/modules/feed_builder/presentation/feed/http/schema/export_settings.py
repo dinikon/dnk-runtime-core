@@ -28,14 +28,14 @@ class XmlExportSettingsSchema(BaseModel):
 
 
 class FeedExportSettingsSchema(BaseModel):
-    """Передаёт одно обязательное описание формата с фиксированными режимами."""
+    """Передаёт настройки выбранного формата и политику проверки."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
     format_settings: Annotated[
         CsvExportSettingsSchema | XmlExportSettingsSchema, Field(discriminator="format")
     ]
     product_mode: Literal["VARIABLE_TO_SINGLE"] = "VARIABLE_TO_SINGLE"
-    validation_policy: Literal["STRICT"] = "STRICT"
+    validation_policy: Literal["STRICT", "SKIP_INVALID"] = "STRICT"
 
     def to_dto(self) -> FeedExportSettingsDTO:
         """Переводит транспортные значения в контракт сценария."""

@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
+from src.modules.feed_builder.application.feed.service.category_export import (
+    CategoryAssignment,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -9,6 +12,7 @@ class PreviewColumnDTO:
 
     field_id: UUID
     name: str
+    xml_attribute: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +37,7 @@ class PreviewRowDTO:
     values: tuple[str | None, ...]
     issues: tuple[PreviewIssueDTO, ...]
     readiness: str
+    categories: tuple[CategoryAssignment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -25,6 +25,22 @@ from src.modules.feed_builder.domain.feed.calculation.error import (
 )
 from src.modules.feed_builder.domain.feed.calculation.evaluator import (
     MoneyFieldCalculator,
+    calculate_boolean,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_calculation import (
+    BooleanCalculationVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
+    BooleanFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
+    IntegerFieldTypeVO,
+)
+from src.modules.feed_builder.domain.publication.service.field_value_resolver import (
+    FieldValueResolver,
+)
+from src.modules.feed_builder.domain.publication.value_object.publication_catalog_snapshot import (
+    PublicationCatalogSnapshotVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
     MoneyFieldTypeVO,
@@ -92,18 +108,62 @@ class PreviewFieldCalculationHandler:
             fields += (field,)
         FeedSchemaStructurePolicy.validate(FeedSchemaVO(fields))
         FeedSchemaSourcePolicy.ensure_valid(FeedSchemaVO((field,)))
-        if not isinstance(field.type_definition, MoneyFieldTypeVO):
+        settings = field.type_definition
+        if not isinstance(
+            settings, (MoneyFieldTypeVO, IntegerFieldTypeVO, BooleanFieldTypeVO)
+        ):
             raise CalculationDefinitionError(
-                "INVALID_EXPRESSION_TYPE", "Предпросмотр цены требует MONEY-поле."
+                "INVALID_EXPRESSION_TYPE",
+                "Выберите денежное, целое или логическое поле.",
             )
-        calculation = field.type_definition.value_definition.calculation
-        if calculation is not None:
-            PriceCalculationSemanticPolicy.ensure_valid(calculation)
+        if (
+            isinstance(settings, MoneyFieldTypeVO)
+            and settings.value_definition.calculation is not None
+        ):
+            PriceCalculationSemanticPolicy.ensure_valid(
+                settings.value_definition.calculation
+            )
         as_of = self._clock.now()
         product = await self._products.read(
             query.catalog_item_id, query.catalog_variant_id, as_of
         )
-        result = MoneyFieldCalculator.calculate(field, product.inputs)
+        amount = currency = selected_rule_id = scalar_value = None
+        used_default = False
+        steps = parameters = ()
+        valid = False
+        if isinstance(settings, MoneyFieldTypeVO):
+            result = MoneyFieldCalculator.calculate(field, product.inputs)
+            valid = result.value is not None
+            if result.value is not None:
+                amount = format(result.value.amount.amount, "f")
+                currency = (
+                    result.value.currency.value
+                    if result.value.currency is not None
+                    else None
+                )
+            selected_rule_id, used_default = (
+                result.selected_rule_id,
+                result.used_default,
+            )
+            steps, parameters, issues = result.steps, result.parameters, result.issues
+        elif isinstance(settings.value_definition, BooleanCalculationVO):
+            calculated = calculate_boolean(settings.value_definition, product.inputs)
+            scalar_value = calculated.value
+            used_default = calculated.used_default
+            steps, parameters, issues = (
+                calculated.steps,
+                calculated.parameters,
+                calculated.issues,
+            )
+            valid = scalar_value is not None
+        else:
+            resolved = FieldValueResolver().resolve(
+                field, PublicationCatalogSnapshotVO(product.inputs, ()), None
+            )
+            if type(resolved.value) in (int, bool):
+                scalar_value = resolved.value
+            valid = not resolved.issues
+            issues = resolved.issues
         definition_hash = hashlib.sha256(
             json.dumps(
                 field_document(field),
@@ -126,30 +186,23 @@ class PreviewFieldCalculationHandler:
             as_of=as_of,
             valid_until=product.valid_until,
             calculation_engine_version=ENGINE_VERSION,
-            validation_status="VALID" if result.value is not None else "INVALID",
-            amount=(
-                format(result.value.amount.amount, "f")
-                if result.value is not None
-                else None
-            ),
-            currency=(
-                result.value.currency.value
-                if result.value is not None and result.value.currency is not None
-                else None
-            ),
-            selected_rule_id=result.selected_rule_id,
-            used_default=result.used_default,
+            validation_status="VALID" if valid else "INVALID",
+            amount=amount,
+            currency=currency,
+            selected_rule_id=selected_rule_id,
+            used_default=used_default,
             steps=tuple(
                 CalculationPreviewStepDTO(
                     step.path, step.operation, step.value, step.rule_id
                 )
-                for step in result.steps
+                for step in steps
             ),
-            parameters=result.parameters,
+            parameters=parameters,
             issues=tuple(
                 CalculationPreviewIssueDTO(
                     issue.code, issue.message, field.id.uuid, issue.rule_id, issue.path
                 )
-                for issue in result.issues
+                for issue in issues
             ),
+            scalar_value=scalar_value,
         )

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import {
   Table,
   TableBody,
@@ -9,7 +10,8 @@ import {
 } from "@/components/ui/table";
 import type { FeedPreview } from "../../model/feed-preview.types";
 
-defineProps<{ preview: FeedPreview }>();
+const props = defineProps<{ preview: FeedPreview }>();
+const hasCategories = computed(() => props.preview.rows.some(row => row.categories?.length));
 defineEmits<{ openPublication: [id: string] }>();
 </script>
 
@@ -18,12 +20,14 @@ defineEmits<{ openPublication: [id: string] }>();
     <TableHeader>
       <TableRow>
         <TableHead scope="col">Публикация</TableHead>
+        <TableHead v-if="hasCategories" scope="col">Категория</TableHead>
         <TableHead
           v-for="column in preview.columns"
           :key="column.fieldId"
           scope="col"
+          :title="column.xmlAttribute ? 'Атрибут XML-предложения' : undefined"
         >
-          {{ column.name }}
+          {{ column.xmlAttribute ? `@${column.name}` : column.name }}
         </TableHead>
       </TableRow>
     </TableHeader>
@@ -49,6 +53,14 @@ defineEmits<{ openPublication: [id: string] }>();
           >
             {{ issue.message }}
           </p>
+        </TableCell>
+        <TableCell v-if="hasCategories" class="min-w-48 align-top">
+          <div v-for="category in row.categories" :key="category.fieldId" class="mb-2 last:mb-0">
+            <p class="text-sm font-medium">{{ category.fieldLabel }}</p>
+            <p>{{ category.path.join(" / ") }} · #{{ category.exportId }}</p>
+            <p v-if="category.ruleLabel" class="text-sm text-muted-foreground">{{ category.ruleLabel }}</p>
+          </div>
+          <span v-if="!row.categories?.length">—</span>
         </TableCell>
         <TableCell
           v-for="(column, index) in preview.columns"

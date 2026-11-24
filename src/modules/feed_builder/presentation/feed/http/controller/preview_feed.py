@@ -10,6 +10,7 @@ from src.modules.feed_builder.application.feed.query.preview_feed.query import (
 )
 from src.modules.feed_builder.domain.feed.error import (
     FeedArchivedError,
+    InvalidFeedValueError,
     FeedNotFoundError,
     FeedVersionConflictError,
 )
@@ -59,6 +60,10 @@ async def preview_feed(
     except (FeedArchivedError, FeedVersionConflictError) as exc:
         raise HTTPException(
             409, {"code": "FEED_CONFLICT", "message": str(exc)}
+        ) from exc
+    except InvalidFeedValueError as exc:
+        raise HTTPException(
+            422, {"code": "CATEGORY_CONFIGURATION_INVALID", "message": str(exc)}
         ) from exc
     except CalculationDependencyUnavailableError as exc:
         raise HTTPException(

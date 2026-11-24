@@ -26,6 +26,7 @@ const fieldNames: Record<string, keyof FeedFieldErrors> = {
   include_header: "includeHeader",
   root_name: "rootName",
   item_name: "itemName",
+  validation_policy: "validationPolicy",
 };
 async function request<T>(run: () => Promise<T>): Promise<T> {
   try {

@@ -1,5 +1,26 @@
 """Чистое представление Domain-схемы в версионируемом документе результатов."""
 
+from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
+    CategoryFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.enum.xml_field_placement import (
+    XmlFieldPlacement,
+)
+from src.modules.feed_builder.domain.feed.value_object.text_constant_value_definition import (
+    TextConstantValueDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_calculation import (
+    BooleanCalculationVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
+    BooleanFieldTypeVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.constant_value_definition import (
+    ConstantValueDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
+    IntegerFieldTypeVO,
+)
 from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.feed_builder.domain.feed.types import (
@@ -158,11 +179,34 @@ def transform_document(value: TransformDefinitionVO) -> JsonObject:
 def field_document(value: FieldDefinition) -> JsonObject:
     """Представляет поле с единственным вложенным описанием типа."""
     definition = value.type_definition
-    settings: JsonObject = {
-        "kind": definition.kind.value,
-        "transforms": [transform_document(item) for item in definition.transforms],
-    }
-    if isinstance(definition, MoneyFieldTypeVO):
+    settings: JsonObject = {"kind": definition.kind.value}
+    if isinstance(definition, CategoryFieldTypeVO):
+        settings = category_field_document(definition)
+    elif isinstance(definition, (IntegerFieldTypeVO, BooleanFieldTypeVO)):
+        scalar_constraints: JsonObject = {"required": definition.required}
+        if isinstance(definition, IntegerFieldTypeVO):
+            scalar_constraints.update(
+                min_value=definition.min_value, max_value=definition.max_value
+            )
+        settings["constraints"] = scalar_constraints
+        scalar = definition.value_definition
+        if isinstance(scalar, SourceValueDefinitionVO):
+            settings["value"] = {
+                "kind": "SOURCE",
+                "source": source_document(scalar.source),
+            }
+        elif isinstance(scalar, ConstantValueDefinitionVO):
+            settings["value"] = {"kind": "CONSTANT", "value": scalar.value}
+        elif isinstance(scalar, BooleanCalculationVO):
+            settings["value"] = {
+                "kind": "CALCULATED",
+                "condition": node_document(scalar.condition),
+                "then_value": scalar.then_value,
+                "else_value": scalar.else_value,
+            }
+        else:
+            settings["value"] = {"kind": "MANUAL"}
+    elif isinstance(definition, MoneyFieldTypeVO):
         settings["currency"] = (
             definition.currency.value if definition.currency is not None else None
         )
@@ -206,26 +250,106 @@ def field_document(value: FieldDefinition) -> JsonObject:
             "min_length": definition.constraints.min_length,
             "max_length": definition.constraints.max_length,
         }
-        settings["value"] = (
-            {
+        text = definition.value_definition
+        if isinstance(text, SourceValueDefinitionVO):
+            settings["value"] = {
                 "kind": "SOURCE",
-                "source": source_document(definition.value_definition.source),
+                "source": source_document(text.source),
             }
-            if isinstance(definition.value_definition, SourceValueDefinitionVO)
-            else {"kind": "MANUAL"}
-        )
+        elif isinstance(text, TextConstantValueDefinitionVO):
+            settings["value"] = {"kind": "CONSTANT", "value": text.value}
+        else:
+            settings["value"] = {"kind": "MANUAL"}
+    if not isinstance(
+        definition, (IntegerFieldTypeVO, BooleanFieldTypeVO, CategoryFieldTypeVO)
+    ):
+        settings["transforms"] = [
+            transform_document(item) for item in definition.transforms
+        ]
+    export: JsonObject = {
+        "name": value.export.name.value,
+        "enabled": value.export.enabled,
+    }
+    if value.export.xml_placement is XmlFieldPlacement.ATTRIBUTE:
+        export["xml_placement"] = value.export.xml_placement.value
+    if value.export.document is not None:
+        layout = value.export.document
+        export["document"] = {
+            "container": layout.container.value,
+            "item": layout.item.value,
+            "parent": layout.parent,
+            "layout": layout.layout,
+            "parent_attribute": layout.parent_attribute.value,
+        }
+    if value.export.publication_key is not None:
+        export["publication"] = {
+            "value_key": value.export.publication_key.value,
+            "required": value.export.required,
+        }
     return {
         "id": str(value.id.uuid),
         "key": value.key.value,
         "label": value.label.value,
         "type_definition": settings,
-        "export": {"name": value.export.name.value, "enabled": value.export.enabled},
+        "export": export,
         "ai": {"instruction": value.ai_instruction},
     }
 
 
+def category_field_document(value: CategoryFieldTypeVO) -> JsonObject:
+    """Представляет описание и данные одного поля категории."""
+    return {
+        "kind": "category",
+        "locale": value.locale.value,
+        "name_transforms": [transform_document(item) for item in value.name_transforms],
+        "object_schema": {
+            "id_key": value.id_key,
+            "label_key": value.label_key,
+            "fields": [
+                {
+                    "key": prop.key.value,
+                    "kind": prop.kind,
+                    "required": prop.required,
+                    "xml": {"placement": prop.placement, "name": prop.name.value},
+                    "source": prop.source,
+                }
+                for prop in value.properties
+            ],
+        },
+        "value": {
+            "kind": "INLINE",
+            "next_export_id": value.next_export_id,
+            "nodes": [
+                {
+                    "id": str(node.id),
+                    "values": dict(node.values),
+                    "parent_id": str(node.parent_id) if node.parent_id else None,
+                    "catalog_id": str(node.catalog_id) if node.catalog_id else None,
+                    "inherit_parent": node.inherit_parent,
+                }
+                for node in value.nodes
+            ],
+            "rules": [
+                {
+                    "id": str(rule.id),
+                    "target_id": str(rule.target_id),
+                    "label": rule.label,
+                    "condition": node_document(rule.calculation.condition),
+                    "include_descendants": rule.include_descendants,
+                }
+                for rule in value.rules
+            ],
+            "fallback": value.fallback,
+            "fallback_id": str(value.fallback_id) if value.fallback_id else None,
+            "catalog_priority": [
+                str(identifier) for identifier in value.catalog_priority
+            ],
+        },
+    }
+
+
 def schema_document(value: FeedSchemaVO) -> JsonObject:
-    """Возвращает полный документ, сохраняя порядок, Decimal-строки и необязательные метки."""
+    """Возвращает порядок и описание полей в рабочей схеме."""
     return {
         "schema_format_version": value.schema_format_version,
         "root": {

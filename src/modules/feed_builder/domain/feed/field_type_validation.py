@@ -21,8 +21,14 @@ from src.modules.feed_builder.domain.feed.value_object.source_value_definition i
 from src.modules.feed_builder.domain.feed.value_object.text_constraints import (
     TextConstraintsVO,
 )
+from src.modules.feed_builder.domain.feed.value_object.text_constant_value_definition import (
+    TextConstantValueDefinitionVO,
+)
 from src.modules.feed_builder.domain.feed.value_object.transform_definition import (
     TransformDefinitionVO,
+)
+from src.modules.feed_builder.domain.feed.value_object.truncate_parameters import (
+    TruncateParametersVO,
 )
 
 if TYPE_CHECKING:
@@ -51,10 +57,16 @@ def validate_text_settings(
     fallback_policy: LocaleFallbackPolicyVO | None,
     constraints: TextConstraintsVO,
     transforms: tuple[TransformDefinitionVO, ...],
+    multiline: bool,
 ) -> tuple[TransformDefinitionVO, ...]:
     """Проверяет общий состав двух текстовых типов без денежной ветви."""
     if not isinstance(
-        value_definition, (SourceValueDefinitionVO, ManualValueDefinitionVO)
+        value_definition,
+        (
+            SourceValueDefinitionVO,
+            ManualValueDefinitionVO,
+            TextConstantValueDefinitionVO,
+        ),
     ) or not isinstance(constraints, TextConstraintsVO):
         raise InvalidFieldDefinitionError(
             "Текстовый тип требует текстовое определение и TextConstraintsVO."
@@ -68,9 +80,49 @@ def validate_text_settings(
             raise InvalidFieldDefinitionError(
                 "Fallback требует целевую локаль и не повторяет её."
             )
-    return validate_transforms(
+    result = validate_transforms(
         transforms,
         allowed=frozenset(
             (TransformOperation.STRING_TRIM, TransformOperation.STRING_TRUNCATE)
         ),
     )
+    if isinstance(value_definition, TextConstantValueDefinitionVO):
+        path = ("type_definition", "value", "value")
+        if locale is not None or fallback_policy is not None:
+            raise InvalidFieldDefinitionError(
+                "Заданное текстовое значение не использует локаль и резервные переводы.",
+                path=("type_definition", "locale"),
+            )
+        if not valid_text_characters(value_definition.value, multiline=multiline):
+            raise InvalidFieldDefinitionError(
+                "Недопустимые символы для этого текстового поля.", path=path
+            )
+        value = apply_text_transforms(value_definition.value, result)
+        if constraints.required and not value.strip():
+            raise InvalidFieldDefinitionError("Требуется значение поля.", path=path)
+        if not constraints.accepts_length(value):
+            raise InvalidFieldDefinitionError(
+                "Длина текста вне границ поля.", path=path
+            )
+    return result
+
+
+def valid_text_characters(value: str, *, multiline: bool) -> bool:
+    """Проверяет сохраняемый текст и переносы в однострочном поле."""
+    return (
+        "\x00" not in value
+        and not any("\ud800" <= character <= "\udfff" for character in value)
+        and (multiline or ("\n" not in value and "\r" not in value))
+    )
+
+
+def apply_text_transforms(
+    value: str, transforms: tuple[TransformDefinitionVO, ...]
+) -> str:
+    """Применяет упорядоченные преобразования короткого и длинного текста."""
+    for transform in transforms:
+        if transform.operation is TransformOperation.STRING_TRIM:
+            value = value.strip()
+        elif isinstance(transform.parameters, TruncateParametersVO):
+            value = value[: transform.parameters.max_length]
+    return value

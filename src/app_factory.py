@@ -6,6 +6,9 @@ from fastapi.responses import JSONResponse
 from src.config import dnk_config
 from src.dnk_app import DnkApp
 from src.modules.router import router as api_router
+from src.modules.feed_builder.presentation.export_state.router import (
+    public_router as public_feed_router,
+)
 from src.modules.control_plane.presentation.router import router as control_plane_router
 from src.modules.identity.presentation.auth.http.csrf_router import (
     router as identity_csrf_router,
@@ -84,6 +87,7 @@ def create_app() -> DnkApp:
         ],
     )
     app.include_router(api_router)
+    app.include_router(public_feed_router)
     app.include_router(control_plane_router)
     app.include_router(identity_csrf_router)
     app.include_router(identity_access_router)
