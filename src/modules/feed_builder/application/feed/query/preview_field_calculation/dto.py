@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
-from src.modules.feed_builder.domain.feed.calculation.result import TraceValue
+from src.modules.feed_builder.domain.feed.expression.result import TraceValue
 
 
 @dataclass(frozen=True, slots=True)

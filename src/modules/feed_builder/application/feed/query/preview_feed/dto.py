@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
-from src.modules.feed_builder.application.feed.service.category_export import (
+from src.modules.feed_builder.application.feed.category.assignments import (
     CategoryAssignment,
 )
 

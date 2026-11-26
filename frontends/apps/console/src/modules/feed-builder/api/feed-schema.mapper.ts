@@ -14,9 +14,12 @@ import type {
 import type {
   SchemaNodeDTO,
   SchemaFieldDTO,
+  FieldTypeDTO,
   CalculationDTO,
   TransformDTO,
   DefinitionDTO,
+  GraphFieldDTO,
+  GraphDefinitionDTO,
   FeedSchemaDTO,
   SavedFeedSchemaDTO,
   SaveFeedSchemaDTO,
@@ -322,10 +325,10 @@ function mapCategory(type: CategoryTypeDTO): CategoryType {
   };
 }
 
-function categoryPayload(type: CategoryType): CategoryTypeDTO {
+function categoryTreePayload(type: CategoryType): Omit<CategoryTypeDTO, "kind"> {
   const value = type.value;
   return {
-    kind: type.kind, locale: type.locale, name_transforms: type.nameTransforms.map(transformPayload),
+    locale: type.locale, name_transforms: type.nameTransforms.map(transformPayload),
     object_schema: {
       id_key: type.objectSchema.idKey, label_key: type.objectSchema.labelKey,
       fields: cloneSchemaValue(type.objectSchema.fields),
@@ -345,20 +348,92 @@ function categoryPayload(type: CategoryType): CategoryTypeDTO {
   };
 }
 
-export function mapDefinition(value: DefinitionDTO): FeedSchemaDefinition {
+function categoryPayload(type: CategoryType): CategoryTypeDTO {
+  return { kind: type.kind, ...categoryTreePayload(type) };
+}
+
+const nodeIds = {
+  string: "core.short_text",
+  text: "core.long_text",
+  money: "core.money",
+  integer: "core.integer",
+  boolean: "core.boolean",
+  category: "core.category_reference",
+} satisfies Record<SchemaField["typeDefinition"]["kind"], string>;
+
+function mapGraphField(
+  node: GraphFieldDTO, trees: NonNullable<GraphDefinitionDTO["categoryTrees"]>,
+): SchemaField {
+  const kind = (Object.keys(nodeIds) as (keyof typeof nodeIds)[]).find(
+    (kind) => nodeIds[kind] === node.typeId,
+  );
+  if (!kind || node.typeVersion !== 1)
+    throw new Error("Тип ноды недоступен в текущей версии Console.");
+  const treeId = "treeId" in node.data ? node.data.treeId : undefined;
+  const source = treeId ? trees.find((tree) => tree.id === treeId) : undefined;
+  if (kind === "category" && !source)
+    throw new Error("Дерево категорий этой ноды отсутствует.");
   return {
-    schemaFormatVersion: value.schema_format_version,
-    fields: value.root.fields.map(mapSchemaField),
+    ...mapSchemaField({
+    id: node.id,
+    key: node.key,
+    label: node.name,
+    type_definition: { ...(source?.data ?? node.data), kind } as FieldTypeDTO,
+    export: node.export,
+    ai: { instruction: node.aiInstruction },
+    }),
+    ...(treeId ? { categoryTreeId: treeId } : {}),
   };
 }
+
+export function mapDefinition(value: DefinitionDTO): FeedSchemaDefinition {
+  if (value.schema_format_version === 2) {
+    const trees = value.categoryTrees ?? [];
+    return {
+      schemaFormatVersion: 2,
+      fields: value.fields.map((node) => mapGraphField(node, trees)),
+      categoryTrees: trees.map(({ id, data }) => ({
+        id, settings: mapCategory({ ...data, kind: "category" }),
+      })),
+    };
+  }
+  return { schemaFormatVersion: 1, fields: value.root.fields.map(mapSchemaField) };
+}
 export function definitionPayload(value: FeedSchemaDefinition): DefinitionDTO {
+  if (value.schemaFormatVersion === 2) {
+    const trees = new Map<string, Omit<CategoryTypeDTO, "kind">>(
+      value.categoryTrees?.map(({ id, settings }) => [id, categoryTreePayload(settings)]),
+    );
+    const graphFields = value.fields.map((model): GraphFieldDTO => {
+      const field = schemaFieldPayload(model);
+      const { kind, ...data } = field.type_definition;
+      const node = {
+        id: field.id,
+        key: field.key,
+        name: field.label,
+        typeId: nodeIds[kind],
+        typeVersion: 1,
+        scope: "offer" as const,
+        data,
+        export: field.export,
+        aiInstruction: field.ai.instruction,
+      };
+      if (model.typeDefinition.kind === "category") {
+        const treeId = model.categoryTreeId ?? field.id;
+        trees.set(treeId, categoryTreePayload(model.typeDefinition));
+        return { ...node, data: { source: "feed", treeId } };
+      }
+      return node;
+    });
+    return {
+      schema_format_version: 2,
+      fields: graphFields,
+      categoryTrees: Array.from(trees, ([id, data]) => ({ id, data })),
+    };
+  }
   return {
-    schema_format_version: value.schemaFormatVersion,
-    root: {
-      key: "publication",
-      kind: "object",
-      fields: value.fields.map(schemaFieldPayload),
-    },
+    schema_format_version: 1,
+    root: { key: "publication", kind: "object", fields: value.fields.map(schemaFieldPayload) },
   };
 }
 export function mapFeedSchema(value: FeedSchemaDTO): FeedSchema {
@@ -394,6 +469,9 @@ export function mapSchemaMetadata(
       supportsLocale: t.supports_locale,
       supportsCurrency: t.supports_currency,
       editableModes: [...t.editable_modes],
+      typeId: t.type_id,
+      typeVersion: t.type_version,
+      forms: t.forms,
     })),
     locales: types.locales.map((l) => ({ ...l })),
     maxFields: types.max_fields,

@@ -1,5 +1,5 @@
 import { newCategoryType } from "./feed-categories.draft.ts";
-import { calculationIsSupported } from "./feed-calculation.draft.ts";
+import { calculationIsSupported, categoryMembershipIssuePath } from "./feed-calculation.draft.ts";
 import { cloneSchemaValue } from "./feed-schema.clone.ts";
 import type {
   FieldKind,
@@ -71,7 +71,7 @@ export function fieldDraft(field: SchemaField): SchemaFieldDraft {
   };
 }
 export function schemaDraft(schema: FeedSchemaDefinition): FeedSchemaDraft {
-  return { fields: schema.fields.map(fieldDraft) };
+  return { fields: schema.fields.map(fieldDraft), ...(schema.categoryTrees ? { categoryTrees: cloneSchemaValue(schema.categoryTrees) } : {}) };
 }
 export function newSchemaField(
   kind: FieldKind,
@@ -157,6 +157,7 @@ export function duplicateSchemaField(
   return {
     ...clone,
     id,
+    ...(clone.categoryTreeId ? { categoryTreeId: id } : {}),
     key: `${key}_copy_${n}`,
     label: `${field.label.slice(0, 247)} (копия)`,
     export: {
@@ -249,7 +250,7 @@ export function validateSchemaDraft(
     });
   draft.fields.forEach((field, index) => {
     const path = ["definition", "root", "fields", index];
-    const error = (suffix: string[], message: string): void => {
+    const error = (suffix: (string | number)[], message: string): void => {
       errors.push({
         code: "SCHEMA_INVALID",
         message,
@@ -295,6 +296,11 @@ export function validateSchemaDraft(
         error(["export"], "Выберите вывод дерева или ссылки.");
       if (field.export.publication && !type.objectSchema.fields.some((prop) => prop.key === field.export.publication?.valueKey))
         error(["export", "publication"], "Выберите свойство для ссылки.");
+      type.value.rules.forEach((rule, index) => {
+        const issue = categoryMembershipIssuePath(rule.condition, ["value", "rules", index, "condition"]);
+        if (issue)
+          error(issue, `В правиле «${rule.label}» укажите справа UUID категории Catalog.`);
+      });
       return;
     }
     const source =
@@ -464,6 +470,7 @@ export function draftDefinition(
     throw new Error("Invalid schema draft");
   return {
     schemaFormatVersion: 1,
+    ...(draft.categoryTrees ? { categoryTrees: cloneSchemaValue(draft.categoryTrees) } : {}),
     fields: draft.fields.map((f) => {
       const field = cloneSchemaValue(f),
         type = field.typeDefinition;

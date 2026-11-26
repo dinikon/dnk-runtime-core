@@ -30,6 +30,9 @@ async def list_field_types(
                 supports_locale=item.supports_locale,
                 supports_currency=item.supports_currency,
                 editable_modes=item.editable_modes,
+                type_id=item.type_id,
+                type_version=item.type_version,
+                forms=item.forms,
             )
             for item in result.items
         ),

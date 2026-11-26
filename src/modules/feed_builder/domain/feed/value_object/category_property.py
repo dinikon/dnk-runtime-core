@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
-from src.modules.feed_builder.domain.feed.field_type_validation import (
+from src.modules.feed_builder.domain.feed.field_node.value_validation import (
     valid_text_characters,
 )
 from src.modules.feed_builder.domain.feed.validation import is_xml_text

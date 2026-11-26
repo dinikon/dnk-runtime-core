@@ -6,41 +6,41 @@ from unittest import TestCase, IsolatedAsyncioTestCase
 from unittest.mock import Mock, AsyncMock
 from uuid import uuid4, UUID
 
-from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
+from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
 from src.modules.feed_builder.domain.feed.types import Expression
 from test.test_feed_builder_domain import money_field, rule, feed, NOW
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
-from src.modules.feed_builder.domain.feed.value_object.calculation_inputs import (
+from src.modules.feed_builder.domain.feed.expression.value_object.calculation_inputs import (
     CalculationInputsVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.price_calculation import (
+from src.modules.feed_builder.domain.feed.expression.value_object.price_calculation import (
     PriceCalculationVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.parameter_reference import (
+from src.modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
     ParameterReferenceVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.decimal_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.decimal_literal import (
     DecimalLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.arithmetic_expression import (
+from src.modules.feed_builder.domain.feed.expression.value_object.arithmetic_expression import (
     ArithmeticExpressionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.function_expression import (
+from src.modules.feed_builder.domain.feed.expression.value_object.function_expression import (
     FunctionExpressionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.presence_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.presence_condition import (
     PresenceConditionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.logical_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.logical_condition import (
     LogicalConditionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.comparison_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.comparison_condition import (
     ComparisonConditionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.scalar_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.scalar_literal import (
     ScalarLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.collection_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.collection_literal import (
     CollectionLiteralVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.money_constraints import (
@@ -52,33 +52,33 @@ from src.modules.feed_builder.domain.feed.value_object.transform_definition impo
 from src.modules.feed_builder.domain.feed.value_object.money_ceil_step_parameters import (
     MoneyCeilStepParametersVO,
 )
-from src.modules.feed_builder.domain.feed.enum.arithmetic_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.arithmetic_operator import (
     ArithmeticOperator as A,
 )
-from src.modules.feed_builder.domain.feed.enum.price_function import PriceFunction as F
-from src.modules.feed_builder.domain.feed.enum.comparison_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.price_function import PriceFunction as F
+from src.modules.feed_builder.domain.feed.expression.enum.comparison_operator import (
     ComparisonOperator as C,
 )
-from src.modules.feed_builder.domain.feed.enum.presence_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import (
     PresenceOperator as P,
 )
-from src.modules.feed_builder.domain.feed.enum.logical_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import (
     LogicalOperator as L,
 )
-from src.modules.feed_builder.domain.feed.enum.literal_value_type import (
+from src.modules.feed_builder.domain.feed.expression.enum.literal_value_type import (
     LiteralValueType as V,
 )
 from src.modules.feed_builder.domain.feed.enum.transform_operation import (
     TransformOperation as T,
 )
-from src.modules.feed_builder.domain.feed.calculation.evaluator import (
+from src.modules.feed_builder.domain.feed.expression.evaluation import (
     MoneyFieldCalculator,
     ceil_step,
 )
-from src.modules.feed_builder.domain.feed.calculation.error import (
+from src.modules.feed_builder.domain.feed.expression.error import (
     CalculationDefinitionError,
 )
-from src.modules.feed_builder.domain.feed.policy.calculation_semantics import (
+from src.modules.feed_builder.domain.feed.expression.calculation_policy import (
     PriceCalculationSemanticPolicy,
 )
 from src.modules.feed_builder.application.feed.query.preview_field_calculation.handler import (
@@ -93,10 +93,8 @@ from src.modules.feed_builder.application.feed.query.get_feed_schema.dto import 
 from src.modules.feed_builder.application.feed.port.calculation_product import (
     CalculationProductSnapshot,
 )
-from src.modules.feed_builder.application.feed.schema_document import (
-    schema_document,
-    field_document,
-)
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
+from src.modules.feed_builder.application.feed.graph.node_codec import field_document
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.domain.feed.error import (
     FeedArchivedError,
@@ -127,7 +125,7 @@ def inputs(
     )
 
 
-def calculation_field() -> FieldDefinition:
+def calculation_field() -> FieldNodeDefinition:
     """Описывает IF sale EXISTS, ELSE regular с независимыми коэффициентами."""
     return money_field(
         PriceCalculationVO(

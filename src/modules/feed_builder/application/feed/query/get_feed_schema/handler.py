@@ -1,6 +1,6 @@
 from dataclasses import replace
-from src.modules.feed_builder.application.feed.schema_definition import decode_schema
-from src.modules.feed_builder.application.feed.schema_document import schema_document
+from src.modules.feed_builder.application.feed.graph.codec import decode_schema
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.application.feed.query.get_feed_schema.query import (
     GetFeedSchemaQuery,
 )

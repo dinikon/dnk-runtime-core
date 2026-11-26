@@ -1,5 +1,5 @@
 import { httpClient } from "@/app/providers/http";
-import { schemaRequest } from "./feed-schema.api";
+import { feedRequest } from "./feed-request";
 import type {
   ChangedPublicationOverrideDTO,
   PublicationFieldsDTO,
@@ -24,7 +24,7 @@ function overrideUrl(target: PublicationOverrideTarget): string {
 
 export const publicationFieldsApi = {
   get(publicationId: string, signal: AbortSignal): Promise<PublicationFields> {
-    return schemaRequest(async () => {
+    return feedRequest(async () => {
       const response = await httpClient.get<PublicationFieldsDTO>(
         `${publicationUrl(publicationId)}/fields`,
         { signal },
@@ -33,7 +33,7 @@ export const publicationFieldsApi = {
     });
   },
   set(input: SetPublicationOverride, signal: AbortSignal): Promise<number> {
-    return schemaRequest(async () => {
+    return feedRequest(async () => {
       const payload: SetPublicationOverrideDTO = {
         ...overrideVersions(input),
         value: input.value,
@@ -50,7 +50,7 @@ export const publicationFieldsApi = {
     input: PublicationOverrideTarget,
     signal: AbortSignal,
   ): Promise<number> {
-    return schemaRequest(async () => {
+    return feedRequest(async () => {
       const response = await httpClient.delete<ChangedPublicationOverrideDTO>(
         overrideUrl(input),
         { signal, params: overrideVersions(input) },

@@ -5,6 +5,7 @@ import type {
   SchemaNode,
   SchemaSource,
   SchemaMetadata,
+  NodeForms,
 } from "../model/feed-schema.types";
 import type { FeedStatus } from "../model/feed.types";
 export type SchemaNodeDTO =
@@ -115,10 +116,28 @@ export interface SchemaFieldDTO {
   };
   ai: { instruction: string | null };
 }
-export interface DefinitionDTO {
+export interface LegacyDefinitionDTO {
   schema_format_version: 1;
   root: { key: "publication"; kind: "object"; fields: SchemaFieldDTO[] };
 }
+export interface GraphFieldDTO {
+  id: string;
+  key: string;
+  name: string;
+  typeId: string;
+  typeVersion: number;
+  scope: "offer";
+  forms?: NodeForms;
+  data: Omit<FieldTypeDTO, "kind"> | { source: "feed"; treeId: string };
+  export: SchemaFieldDTO["export"];
+  aiInstruction: string | null;
+}
+export interface GraphDefinitionDTO {
+  schema_format_version: 2;
+  fields: GraphFieldDTO[];
+  categoryTrees?: { id: string; data: Omit<CategoryTypeDTO, "kind"> }[];
+}
+export type DefinitionDTO = LegacyDefinitionDTO | GraphDefinitionDTO;
 export interface FeedSchemaDTO {
   feed_id: string;
   version: number;
@@ -141,6 +160,9 @@ export interface FieldTypesDTO {
     supports_locale: boolean;
     supports_currency: boolean;
     editable_modes: string[];
+    type_id?: string;
+    type_version?: number;
+    forms?: NodeForms;
   }[];
   locales: { code: string; name: string }[];
   max_fields: number;

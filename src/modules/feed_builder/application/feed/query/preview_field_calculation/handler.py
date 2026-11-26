@@ -14,36 +14,32 @@ from src.modules.feed_builder.application.feed.port.query_repository import (
 from src.modules.feed_builder.application.feed.port.calculation_product import (
     CalculationProductReaderProtocol,
 )
-from src.modules.feed_builder.application.feed.schema_definition import (
-    decode_schema,
-    decode_field_at,
-)
-from src.modules.feed_builder.application.feed.schema_document import field_document
-from src.modules.feed_builder.domain.feed.calculation.parameters import ENGINE_VERSION
-from src.modules.feed_builder.domain.feed.calculation.error import (
+from src.modules.feed_builder.application.feed.graph.codec import decode_schema
+from src.modules.feed_builder.application.feed.graph.node_codec import decode_field_at
+from src.modules.feed_builder.application.feed.graph.node_codec import field_document
+from src.modules.feed_builder.domain.feed.expression.parameters import ENGINE_VERSION
+from src.modules.feed_builder.domain.feed.expression.error import (
     CalculationDefinitionError,
 )
-from src.modules.feed_builder.domain.feed.calculation.evaluator import (
+from src.modules.feed_builder.domain.feed.expression.evaluation import (
     MoneyFieldCalculator,
     calculate_boolean,
 )
-from src.modules.feed_builder.domain.feed.value_object.boolean_calculation import (
+from src.modules.feed_builder.domain.feed.expression.value_object.boolean_calculation import (
     BooleanCalculationVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
-    BooleanFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.boolean.value_object.data import (
+    BooleanNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
-    IntegerFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.integer.value_object.data import (
+    IntegerNodeDataVO,
 )
-from src.modules.feed_builder.domain.publication.service.field_value_resolver import (
-    FieldValueResolver,
-)
+from src.modules.feed_builder.domain.publication.field_node.resolver import NodeValueResolver
 from src.modules.feed_builder.domain.publication.value_object.publication_catalog_snapshot import (
     PublicationCatalogSnapshotVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
+    MoneyNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.domain.feed.policy.schema_structure import (
@@ -52,7 +48,7 @@ from src.modules.feed_builder.domain.feed.policy.schema_structure import (
 from src.modules.feed_builder.domain.feed.policy.schema_sources import (
     FeedSchemaSourcePolicy,
 )
-from src.modules.feed_builder.domain.feed.policy.calculation_semantics import (
+from src.modules.feed_builder.domain.feed.expression.calculation_policy import (
     PriceCalculationSemanticPolicy,
 )
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
@@ -110,14 +106,14 @@ class PreviewFieldCalculationHandler:
         FeedSchemaSourcePolicy.ensure_valid(FeedSchemaVO((field,)))
         settings = field.type_definition
         if not isinstance(
-            settings, (MoneyFieldTypeVO, IntegerFieldTypeVO, BooleanFieldTypeVO)
+            settings, (MoneyNodeDataVO, IntegerNodeDataVO, BooleanNodeDataVO)
         ):
             raise CalculationDefinitionError(
                 "INVALID_EXPRESSION_TYPE",
                 "Выберите денежное, целое или логическое поле.",
             )
         if (
-            isinstance(settings, MoneyFieldTypeVO)
+            isinstance(settings, MoneyNodeDataVO)
             and settings.value_definition.calculation is not None
         ):
             PriceCalculationSemanticPolicy.ensure_valid(
@@ -131,7 +127,7 @@ class PreviewFieldCalculationHandler:
         used_default = False
         steps = parameters = ()
         valid = False
-        if isinstance(settings, MoneyFieldTypeVO):
+        if isinstance(settings, MoneyNodeDataVO):
             result = MoneyFieldCalculator.calculate(field, product.inputs)
             valid = result.value is not None
             if result.value is not None:
@@ -157,7 +153,7 @@ class PreviewFieldCalculationHandler:
             )
             valid = scalar_value is not None
         else:
-            resolved = FieldValueResolver().resolve(
+            resolved = NodeValueResolver().resolve(
                 field, PublicationCatalogSnapshotVO(product.inputs, ()), None
             )
             if type(resolved.value) in (int, bool):

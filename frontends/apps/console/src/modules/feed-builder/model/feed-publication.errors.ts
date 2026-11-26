@@ -1,5 +1,5 @@
 import { FeedApiError } from "./feed.types.ts";
-import { SchemaApiError } from "./feed-schema.types.ts";
+import { FeedRequestError } from "./feed-request-error.ts";
 export function publicationErrorMessage(error: unknown): string {
   if (!error) return "";
   if (error instanceof FeedApiError) {
@@ -11,7 +11,7 @@ export function publicationErrorMessage(error: unknown): string {
       return "Недостаточно прав для управления составом или чтения Catalog.";
     if (error.status === 503)
       return "Каталог временно недоступен. Повторите позже.";
-    if (error.status === 422 && error instanceof SchemaApiError)
+    if (error.status === 422 && error instanceof FeedRequestError)
       return (
         error.issues.map((i) => i.message).join("; ") ||
         "Проверьте выбранные позиции."

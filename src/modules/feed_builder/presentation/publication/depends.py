@@ -4,7 +4,7 @@ from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
 from src.modules.feed_builder.presentation.feed.depends import (
-    FeedRepositoryDep,
+    FeedSettingsRepositoryDep,
     FeedQueryRepositoryDep,
 )
 from src.modules.feed_builder.domain.publication.repository import (
@@ -78,7 +78,7 @@ PublicationCatalogDep = Annotated[
 
 
 def get_add_catalog_items_handler(
-    feeds: FeedRepositoryDep,
+    feeds: FeedSettingsRepositoryDep,
     publications: PublicationsDep,
     catalog: PublicationCatalogDep,
     clock: ClockDep,
@@ -94,7 +94,7 @@ AddCatalogItemsHandlerDep = Annotated[
 
 
 def get_change_publication_status_handler(
-    feeds: FeedRepositoryDep, publications: PublicationsDep, clock: ClockDep
+    feeds: FeedSettingsRepositoryDep, publications: PublicationsDep, clock: ClockDep
 ) -> ChangePublicationStatusHandler:
     """Собирает конкретный сценарий из портов общей tenant-транзакции."""
     return ChangePublicationStatusHandler(feeds, publications, clock)
@@ -106,7 +106,7 @@ ChangePublicationStatusHandlerDep = Annotated[
 
 
 def get_remove_publication_handler(
-    feeds: FeedRepositoryDep, publications: PublicationsDep, clock: ClockDep
+    feeds: FeedSettingsRepositoryDep, publications: PublicationsDep, clock: ClockDep
 ) -> RemovePublicationHandler:
     """Собирает конкретный сценарий из портов общей tenant-транзакции."""
     return RemovePublicationHandler(feeds, publications, clock)
@@ -118,7 +118,7 @@ RemovePublicationHandlerDep = Annotated[
 
 
 def get_restore_publication_handler(
-    feeds: FeedRepositoryDep,
+    feeds: FeedSettingsRepositoryDep,
     publications: PublicationsDep,
     clock: ClockDep,
     catalog: PublicationCatalogDep,

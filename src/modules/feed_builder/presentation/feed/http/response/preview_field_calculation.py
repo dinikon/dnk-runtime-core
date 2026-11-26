@@ -5,7 +5,7 @@ from pydantic import BaseModel, model_serializer
 from src.modules.feed_builder.application.feed.query.preview_field_calculation.dto import (
     PreviewFieldCalculationResultDTO,
 )
-from src.modules.feed_builder.domain.feed.calculation.result import TraceValue
+from src.modules.feed_builder.domain.feed.expression.result import TraceValue
 
 
 class ResolvedPriceResponse(BaseModel):

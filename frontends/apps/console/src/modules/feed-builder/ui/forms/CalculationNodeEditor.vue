@@ -12,7 +12,9 @@ import {
 } from "@/components/ui/select";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { cloneSchemaValue } from "../../model/feed-schema.clone";
-import { newNode } from "../../model/feed-calculation.draft";
+import {
+  isCatalogCategoryMembership, isUuidOperand, newNode,
+} from "../../model/feed-calculation.draft";
 import type { SchemaNode, SchemaIssue } from "../../model/feed-schema.types";
 import type {
   CalculationMetadata,
@@ -27,11 +29,14 @@ const props = defineProps<{
   depth?: number;
   path: (string | number)[];
   issues: SchemaIssue[];
+  expectedUuid?: boolean;
 }>();
 const emit = defineEmits<{ change: [node: SchemaNode] }>();
 const depth = computed(() => props.depth ?? 0);
 const kinds = computed(() =>
-  props.category === "condition"
+  props.expectedUuid
+    ? (parameters.value.length ? ["scalar", "parameter"] : ["scalar"])
+    : props.category === "condition"
     ? ["comparison", "presence", "logical"]
     : props.category === "number"
       ? ["parameter", "decimal", "arithmetic", "function"]
@@ -67,7 +72,8 @@ const operations = computed(() =>
 );
 const parameters = computed(() =>
   props.metadata.parameters.filter(
-    (p) => props.category !== "number" || p.valueType === "number",
+    (p) => props.expectedUuid ? p.valueType === "uuid"
+      : props.category !== "number" || p.valueType === "number",
   ),
 );
 const messages = computed(() =>
@@ -81,11 +87,19 @@ function change(update: (node: SchemaNode) => void): void {
   if (props.disabled) return;
   const node = cloneSchemaValue(props.node);
   update(node);
+  if (isCatalogCategoryMembership(node) && !isUuidOperand(node.right))
+    node.right = { kind: "scalar", valueType: "uuid", value: "" };
   emit("change", node);
 }
 function setKind(value: string): void {
-  if (!props.disabled && kinds.value.includes(value))
+  if (props.disabled || !kinds.value.includes(value)) return;
+  if (props.expectedUuid) {
+    emit("change", value === "parameter"
+      ? { kind: "parameter", parameter: parameters.value[0]!.id }
+      : { kind: "scalar", valueType: "uuid", value: "" });
+  } else {
     emit("change", newNode(value as NodeKind, props.category));
+  }
 }
 function setOperation(value: string): void {
   if (!operations.value.some((o) => o.code === value)) return;
@@ -245,6 +259,7 @@ const nestedDisabled = computed(
     />
     <template v-if="node.kind === 'scalar' || node.kind === 'collection'">
       <Select
+        v-if="!expectedUuid"
         :model-value="node.kind === 'scalar' ? node.valueType : node.itemType"
         :disabled="disabled"
         @update:model-value="setScalarType(String($event))"
@@ -259,8 +274,8 @@ const nestedDisabled = computed(
       >
       <template v-if="node.kind === 'scalar'">
         <Select
-          v-if="node.valueType === 'boolean'"
-          :model-value="String(node.value)"
+          v-if="node.valueType === 'boolean' && !expectedUuid"
+          :model-value="expectedUuid && !isUuidOperand(node) ? '' : String(node.value)"
           :disabled="disabled"
           @update:model-value="
             change((n) => {
@@ -279,10 +294,14 @@ const nestedDisabled = computed(
           v-else
           :model-value="String(node.value)"
           :disabled="disabled"
-          aria-label="Значение"
+          :aria-label="expectedUuid ? 'UUID категории Catalog' : 'Значение'"
+          :aria-invalid="expectedUuid && messages.length > 0"
           @update:model-value="
             change((n) => {
-              if (n.kind === 'scalar') n.value = String($event);
+              if (n.kind === 'scalar') {
+                if (expectedUuid) n.valueType = 'uuid';
+                n.value = String($event);
+              }
             })
           "
         />
@@ -385,6 +404,7 @@ const nestedDisabled = computed(
             )[key]!
           "
           :category="node.kind === 'comparison' ? 'value' : 'number'"
+          :expected-uuid="key === 'right' && isCatalogCategoryMembership(node)"
           :metadata="metadata"
           :disabled="nestedDisabled"
           :depth="depth + 1"

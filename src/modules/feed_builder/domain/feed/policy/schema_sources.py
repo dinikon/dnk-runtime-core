@@ -1,20 +1,20 @@
-from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
-    CategoryFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
+    CategoryNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
     CatalogSourcePath,
 )
-from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
-    BooleanFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.boolean.value_object.data import (
+    BooleanNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
-    IntegerFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.integer.value_object.data import (
+    IntegerNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
 from src.modules.feed_builder.domain.feed.error import InvalidFieldDefinitionError
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
+    MoneyNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
@@ -45,11 +45,11 @@ class FeedSchemaSourcePolicy:
         """Отклоняет несовместимый тип и языковые настройки прямого источника."""
         for index, field in enumerate(schema.fields):
             definition = field.type_definition
-            if isinstance(definition, CategoryFieldTypeVO):
+            if isinstance(definition, CategoryNodeDataVO):
                 continue
             source = (
                 definition.value_definition.source
-                if isinstance(definition, MoneyFieldTypeVO)
+                if isinstance(definition, MoneyNodeDataVO)
                 or isinstance(definition.value_definition, SourceValueDefinitionVO)
                 else None
             )
@@ -62,7 +62,7 @@ class FeedSchemaSourcePolicy:
                     path=path + ("value", "source"),
                 )
             if not isinstance(
-                definition, (MoneyFieldTypeVO, IntegerFieldTypeVO, BooleanFieldTypeVO)
+                definition, (MoneyNodeDataVO, IntegerNodeDataVO, BooleanNodeDataVO)
             ):
                 if cls.requires_locale(source.path) and definition.locale is None:
                     raise InvalidFieldDefinitionError(

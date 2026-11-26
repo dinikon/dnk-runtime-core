@@ -9,7 +9,7 @@ from src.modules.feed_builder.application.publication.port.catalog_subjects impo
     PublicationCatalogReaderProtocol,
     PublicationSourceNotFoundError,
 )
-from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
 from src.modules.feed_builder.domain.publication.repository import (
     FeedPublicationRepositoryProtocol,
@@ -33,7 +33,7 @@ class AddCatalogItemsHandler:
 
     def __init__(
         self,
-        feeds: FeedRepositoryProtocol,
+        feeds: FeedSettingsRepositoryProtocol,
         publications: FeedPublicationRepositoryProtocol,
         catalog: PublicationCatalogReaderProtocol,
         clock: ClockPort,
@@ -54,7 +54,7 @@ class AddCatalogItemsHandler:
         """Сериализует изменения состава блокировкой Feed и проверяет весь пакет до записи."""
         if not 1 <= len(command.item_references) <= 100:
             raise InvalidPublicationValueError("Выберите от 1 до 100 позиций.")
-        feed = await self._feeds.get_for_update(command.feed_id)
+        feed = (await self._feeds.get_settings_for_update(command.feed_id)).feed
         PublicationParticipationPolicy.ensure_editable(
             feed, FeedVersionVO(command.expected_feed_version)
         )

@@ -1,8 +1,6 @@
 from pydantic import Field, StrictBool, StrictInt, StrictStr
 
-from src.modules.feed_builder.presentation.feed.http.schema.definition import (
-    ClosedSchema,
-)
+from src.modules.feed_builder.presentation.strict_request import ClosedSchema
 
 
 class SetPublicationOverrideRequest(ClosedSchema):

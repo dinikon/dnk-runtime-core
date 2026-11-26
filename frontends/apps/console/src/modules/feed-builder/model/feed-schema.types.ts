@@ -1,5 +1,5 @@
 import type { CategoryType, CategoryDocumentExport, CategoryPublicationExport } from "./feed-categories.types";
-import { FeedApiError, type FeedStatus } from "./feed.types.ts";
+import type { FeedStatus } from "./feed.types.ts";
 export type FieldKind = "string" | "text" | "money" | "integer" | "boolean" | "category";
 export type XmlFieldPlacement = "ELEMENT" | "ATTRIBUTE";
 export type SourcePath =
@@ -119,10 +119,16 @@ export interface SchemaField {
   typeDefinition: TextType | MoneyType | IntegerType | BooleanType | CategoryType;
   export: { name: string; enabled: boolean; xmlPlacement: XmlFieldPlacement; document?: CategoryDocumentExport; publication?: CategoryPublicationExport };
   aiInstruction: string | null;
+  categoryTreeId?: string;
+}
+export interface FeedCategoryTree {
+  id: string;
+  settings: CategoryType;
 }
 export interface FeedSchemaDefinition {
-  schemaFormatVersion: 1;
+  schemaFormatVersion: 1 | 2;
   fields: SchemaField[];
+  categoryTrees?: FeedCategoryTree[];
 }
 export interface FeedSchema {
   feedId: string;
@@ -140,6 +146,20 @@ export interface SaveFeedSchema {
   expectedVersion: number;
   definition: FeedSchemaDefinition;
 }
+export interface NodeFormControl {
+  kind: "input" | "textarea" | "select" | "number" | "decimal" | "checkbox" |
+    "conditions" | "categories" | "transforms";
+  path: string;
+  label: string;
+  options?: string[];
+  optionsSource?: string;
+  visibleInModes?: string[];
+  maxLength?: number;
+}
+export interface NodeForms {
+  settings: NodeFormControl[];
+  publicationOverride: NodeFormControl[];
+}
 export interface SchemaMetadata {
   fieldTypes: {
     kind: FieldKind;
@@ -147,6 +167,9 @@ export interface SchemaMetadata {
     supportsLocale: boolean;
     supportsCurrency: boolean;
     editableModes: string[];
+    typeId?: string;
+    typeVersion?: number;
+    forms?: NodeForms;
   }[];
   locales: { code: string; name: string }[];
   maxFields: number;
@@ -165,19 +188,7 @@ export interface SchemaMetadata {
     parameterKind: "none" | "max_length" | "step";
   }[];
 }
-export interface SchemaIssue {
-  code: string;
-  message: string;
-  fieldId?: string;
-  path: (string | number)[];
-}
-export class SchemaApiError extends FeedApiError {
-  readonly issues: SchemaIssue[];
-  constructor(status: number | undefined, issues: SchemaIssue[]) {
-    super(status);
-    this.issues = issues;
-  }
-}
+export { FeedRequestError as SchemaApiError, type FeedRequestIssue as SchemaIssue } from "./feed-request-error.ts";
 export type DraftTransform = {
   operation: SchemaTransform["operation"];
   parameter: string;
@@ -217,4 +228,5 @@ export type SchemaFieldDraft = Omit<SchemaField, "typeDefinition"> & {
 };
 export interface FeedSchemaDraft {
   fields: SchemaFieldDraft[];
+  categoryTrees?: FeedCategoryTree[];
 }

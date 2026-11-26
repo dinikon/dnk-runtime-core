@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
-from src.modules.feed_builder.domain.feed.value_object.boolean_calculation import (
+from src.modules.feed_builder.domain.feed.expression.value_object.boolean_calculation import (
     BooleanCalculationVO,
 )
 

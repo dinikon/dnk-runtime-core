@@ -13,6 +13,7 @@ from src.modules.feed_builder.infrastructure.feed.persistence.query_repository i
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
+from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
 from src.modules.feed_builder.application.feed.command.create_feed.handler import (
     CreateFeedHandler,
 )
@@ -96,8 +97,18 @@ def get_create_feed_handler(
 CreateFeedHandlerDep = Annotated[CreateFeedHandler, Depends(get_create_feed_handler)]
 
 
+def get_feed_settings_repository(uow: UoWDep) -> FeedSettingsRepositoryProtocol:
+    """Собирает порт управления фидом на общей tenant-сессии."""
+    return SqlAlchemyFeedRepository(uow.session)
+
+
+FeedSettingsRepositoryDep = Annotated[
+    FeedSettingsRepositoryProtocol, Depends(get_feed_settings_repository)
+]
+
+
 def get_update_feed_handler(
-    repository: FeedRepositoryDep, clock: ClockDep
+    repository: FeedSettingsRepositoryDep, clock: ClockDep
 ) -> UpdateFeedHandler:
     """Собирает сценарий update_feed из контрактов и общих зависимостей."""
     return UpdateFeedHandler(repository, clock)
@@ -107,7 +118,7 @@ UpdateFeedHandlerDep = Annotated[UpdateFeedHandler, Depends(get_update_feed_hand
 
 
 def get_archive_feed_handler(
-    repository: FeedRepositoryDep, clock: ClockDep
+    repository: FeedSettingsRepositoryDep, clock: ClockDep
 ) -> ArchiveFeedHandler:
     """Собирает сценарий archive_feed из контрактов и общих зависимостей."""
     return ArchiveFeedHandler(repository, clock)
@@ -141,10 +152,10 @@ SchemaLocalesDep = Annotated[SchemaLocalesPort, Depends(get_schema_locales)]
 
 
 def get_save_feed_schema_draft_handler(
-    repository: FeedRepositoryDep, locales: SchemaLocalesDep, clock: ClockDep
+    repository: FeedRepositoryDep, clock: ClockDep, locales: SchemaLocalesDep
 ) -> SaveFeedSchemaDraftHandler:
     """Собирает атомарное сохранение рабочей схемы на существующих портах."""
-    return SaveFeedSchemaDraftHandler(repository, locales, clock)
+    return SaveFeedSchemaDraftHandler(repository, clock, locales)
 
 
 SaveFeedSchemaDraftHandlerDep = Annotated[

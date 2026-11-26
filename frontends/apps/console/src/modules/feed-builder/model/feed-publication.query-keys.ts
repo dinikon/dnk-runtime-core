@@ -3,6 +3,7 @@ import type { PublicationFilters } from "./feed-publication.types.ts";
 import { feedKeys } from "./feed.query-keys.ts";
 type Key = readonly unknown[];
 export const publicationKeys = {
+  locales: (scope: FeedScope) => [...feedKeys.root(scope), "publication-locales"] as const,
   fields: (scope: FeedScope, feedId: string, publicationId: string) =>
     [
       ...feedKeys.root(scope),

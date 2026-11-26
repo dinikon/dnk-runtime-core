@@ -192,6 +192,12 @@ export function useFeedSchemaEditor(id: Ref<string>): FeedSchemaEditor {
     const index = draft.value!.fields.findIndex((f) => f.id === field.id);
     if (index < 0) return;
     draft.value!.fields[index] = field;
+    if (field.categoryTreeId && field.typeDefinition.kind === "category") {
+      for (const other of draft.value!.fields) {
+        if (other.id !== field.id && other.categoryTreeId === field.categoryTreeId)
+          other.typeDefinition = cloneSchemaValue(field.typeDefinition);
+      }
+    }
     clearErrors();
   }
   function reset(): void {
@@ -214,7 +220,7 @@ export function useFeedSchemaEditor(id: Ref<string>): FeedSchemaEditor {
     const result = await action.execute({
       id: id.value,
       expectedVersion: base.value.version,
-      definition: draftDefinition(sent, metadata.data.value),
+      definition: { ...draftDefinition(sent, metadata.data.value), schemaFormatVersion: 2 },
     });
     if (captured !== contextKey.value) return false;
     if (!result) {

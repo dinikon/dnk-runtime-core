@@ -49,7 +49,7 @@ class ListPublicationsHandler:
             )
         ):
             raise InvalidPublicationValueError("Неверные параметры страницы.")
-        feed = await self._feeds.get_schema(FeedIdVO(query.feed_id))
+        feed = await self._feeds.get_details(FeedIdVO(query.feed_id))
         if feed is None:
             raise FeedNotFoundError("Feed не найден.")
         matched = (
@@ -61,7 +61,7 @@ class ListPublicationsHandler:
             FeedIdVO(query.feed_id), query.status, matched, query.limit, query.offset
         )
         return ListPublicationsResultDTO(
-            feed.feed_id,
+            feed.id,
             feed.version,
             feed.status,
             await enrich_publications(page.items, self._catalog, query.locale),

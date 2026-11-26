@@ -1,5 +1,5 @@
-from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
-    CategoryFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
+    CategoryNodeDataVO,
 )
 from datetime import timedelta
 
@@ -31,13 +31,13 @@ from src.modules.feed_builder.domain.feed.error import (
     FeedVersionConflictError,
     InvalidFeedValueError,
 )
-from src.modules.feed_builder.domain.feed.policy.calculation_semantics import (
+from src.modules.feed_builder.domain.feed.expression.calculation_policy import (
     PriceCalculationSemanticPolicy,
 )
 from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
+    MoneyNodeDataVO,
 )
 from src.modules.shared.application.jobs.schedule_scheduled_job_command import (
     ScheduleScheduledJobCommand,
@@ -84,7 +84,7 @@ class RequestFeedRefreshHandler:
         xml = isinstance(feed.export_settings.format_settings, XmlExportSettingsVO)
         if not any(
             field.export.enabled
-            and (xml or not isinstance(field.type_definition, CategoryFieldTypeVO))
+            and (xml or not isinstance(field.type_definition, CategoryNodeDataVO))
             for field in feed.schema.fields
         ):
             raise InvalidFeedValueError(
@@ -93,7 +93,7 @@ class RequestFeedRefreshHandler:
         for field in feed.schema.fields:
             definition = field.type_definition
             if (
-                isinstance(definition, MoneyFieldTypeVO)
+                isinstance(definition, MoneyNodeDataVO)
                 and definition.value_definition.calculation is not None
             ):
                 PriceCalculationSemanticPolicy.ensure_valid(

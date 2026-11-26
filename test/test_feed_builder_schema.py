@@ -10,9 +10,9 @@ from uuid import uuid4
 from pydantic import ValidationError
 from test.test_feed_builder_domain import feed, NOW
 from test.test_feed_builder_crud import rich_feed
-from src.modules.feed_builder.application.feed.schema_definition import decode_schema
-from src.modules.feed_builder.application.feed.schema_document import schema_document
-from src.modules.feed_builder.application.feed.schema_error import (
+from src.modules.feed_builder.application.feed.graph.codec import decode_schema
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
+from src.modules.feed_builder.application.feed.graph.error import (
     InvalidFeedSchemaDocumentError,
 )
 from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.command import (
@@ -20,9 +20,6 @@ from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.co
 )
 from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.handler import (
     SaveFeedSchemaDraftHandler,
-)
-from src.modules.feed_builder.application.feed.port.schema_locales import (
-    SchemaLocaleDTO,
 )
 from src.modules.feed_builder.domain.feed.error import (
     FeedDomainError,
@@ -36,7 +33,7 @@ from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSc
 from src.modules.feed_builder.presentation.feed.http.request.put_feed_schema import (
     PutFeedSchemaRequest,
 )
-from src.modules.feed_builder.presentation.feed.http.schema.definition import (
+from src.modules.feed_builder.presentation.feed.http.schema.legacy_graph import (
     SchemaDefinition,
 )
 from src.modules.feed_builder.presentation.feed.http.schema.body_limit import (
@@ -186,6 +183,41 @@ class FeedSchemaDomainTests(TestCase):
         with self.assertRaises(FeedDomainError):
             decode_schema(document)
 
+    def test_v2_category_nodes_reference_one_feed_tree(self) -> None:
+        """Хранит дерево отдельно, связывает его с нодой и сохраняет экспортный ID."""
+        legacy = source_schema_document()
+        legacy["categories"] = {
+            "version": 1,
+            "enabled": True,
+            "profile": "GENERIC",
+            "locale": "ru",
+            "nodes": [{"id": str(uuid4()), "name": "Аудио", "export_id": "100"}],
+            "rules": [],
+            "fallback": "NONE",
+        }
+        inline = schema_document(decode_schema(legacy))["root"]["fields"][-1]
+        settings = dict(inline["type_definition"])
+        settings.pop("kind")
+        graph = {
+            "schema_format_version": 2,
+            "fields": [{
+                "id": inline["id"], "key": inline["key"], "name": inline["label"],
+                "typeId": "core.category_reference", "typeVersion": 1, "scope": "offer",
+                "data": {"source": "feed", "treeId": inline["id"]},
+                "export": inline["export"],
+            }],
+            "categoryTrees": [{"id": inline["id"], "data": settings}],
+        }
+        saved = feed().change_schema(schema=decode_schema(graph), now=NOW)
+        self.assertEqual(saved.schema.fields[0].category_tree_id, saved.schema.category_trees[0].id)
+        wire = schema_document(saved.schema)
+        self.assertEqual(wire["fields"][0]["data"], graph["fields"][0]["data"])
+        self.assertEqual(wire["categoryTrees"][0]["data"]["value"]["nodes"][0]["values"]["id"], "100")
+        self.assertEqual(schema_document(decode_schema(wire)), wire)
+        graph["categoryTrees"] = []
+        with self.assertRaises(InvalidFeedSchemaDocumentError):
+            decode_schema(graph)
+
     def test_legacy_category_property_preserves_shared_xml_names(self) -> None:
         """Сохраняет значения одноимённых атрибута и тега прежнего блока."""
         definition = source_schema_document()
@@ -287,9 +319,7 @@ class FeedSchemaDomainTests(TestCase):
             )
             item[key] = value
             with self.subTest(key=key), self.assertRaises(ValidationError):
-                PutFeedSchemaRequest.model_validate(
-                    {"expected_version": 1, "definition": source}
-                )
+                SchemaDefinition.model_validate(source)
         value = copy.deepcopy(document)
         value["root"]["fields"][-1]["type_definition"]["constraints"][
             "min_amount"
@@ -315,61 +345,70 @@ class FeedSchemaDomainTests(TestCase):
         self.assertTrue(excessive_json_depth(b"[" * 200 + b"0" + b"]" * 200))
         self.assertFalse(excessive_json_depth(b'{"text":"' + b"[" * 200 + b'"}'))
 
+    def test_save_request_clears_fields_before_nested_validation(self) -> None:
+        """Произвольный вход полей заменяется пустым списком без изменения запроса."""
+        document = source_schema_document()
+        for fields in (
+            document["root"]["fields"],
+            [{"kind": "unknown"}],
+            {},
+            None,
+            42,
+            "text",
+            False,
+        ):
+            with self.subTest(fields=fields):
+                definition = {
+                    **document,
+                    "root": {**document["root"], "fields": fields},
+                }
+                payload = PutFeedSchemaRequest.model_validate(
+                    {"expected_version": 1, "definition": definition}
+                )
+                self.assertEqual(payload.definition.root.fields, [])
+                self.assertIs(definition["root"]["fields"], fields)
+        definition = {**document, "root": {"key": "publication", "kind": "object"}}
+        self.assertEqual(
+            PutFeedSchemaRequest.model_validate(
+                {"expected_version": 1, "definition": definition}
+            ).definition.root.fields,
+            [],
+        )
+
 
 class FeedSchemaApplicationTests(IsolatedAsyncioTestCase):
-    """Проверяет версию, locale port и сохранение после чистой проверки Domain."""
+    """Проверяет очистку схемы, ожидаемую версию и правила записи."""
 
     async def asyncSetUp(self) -> None:
         """Собирает сценарий без инфраструктуры."""
-        self.original = feed()
+        self.original = rich_feed()
         self.repository = Mock(
             get_for_update=AsyncMock(return_value=self.original), save=AsyncMock()
         )
-        self.locales = Mock(
-            list_available=AsyncMock(
-                return_value=(
-                    SchemaLocaleDTO("uk", "Українська"),
-                    SchemaLocaleDTO("ru", "Русский"),
-                )
-            )
-        )
         self.handler = SaveFeedSchemaDraftHandler(
-            self.repository, self.locales, Mock(now=lambda: NOW)
+            self.repository, Mock(now=lambda: NOW), AsyncMock()
         )
 
-    async def test_save_and_noop_use_one_snapshot_and_one_locale_lookup(self) -> None:
-        """Записывает через корень и не обновляет версию неизменённого определения."""
-        command = SaveFeedSchemaDraftCommand(
-            self.original.id, 1, source_schema_document()
-        )
+    async def test_save_clears_fields_once(self) -> None:
+        """Очищает старые поля через корень и сохраняет версию при повторе."""
+        command = SaveFeedSchemaDraftCommand(self.original.id, 1)
         result = await self.handler.execute(command)
         self.assertEqual(result.version, 2)
-        self.locales.list_available.assert_awaited_once()
+        self.assertEqual(result.definition["root"]["fields"], [])
         saved = self.repository.save.call_args.args[0]
+        self.assertEqual(saved.schema.fields, ())
+        self.assertEqual(saved.export_settings, self.original.export_settings)
         self.repository.get_for_update.return_value = saved
         self.repository.save.reset_mock()
-        same = await self.handler.execute(
-            replace(command, expected_version=2, definition=result.definition)
-        )
+        same = await self.handler.execute(replace(command, expected_version=2))
         self.assertEqual(same.version, 2)
         self.repository.save.assert_not_awaited()
 
-    async def test_conflict_archive_and_unavailable_locale_do_not_write(self) -> None:
+    async def test_conflict_and_archive_do_not_write(self) -> None:
         """Ожидаемые отказы оставляют хранилище и исходный агрегат нетронутыми."""
-        document = source_schema_document()
         with self.assertRaises(FeedVersionConflictError):
-            await self.handler.execute(
-                SaveFeedSchemaDraftCommand(self.original.id, 2, document)
-            )
-        self.locales.list_available.assert_not_awaited()
-        self.locales.list_available.return_value = ()
-        with self.assertRaises(FeedDomainError):
-            await self.handler.execute(
-                SaveFeedSchemaDraftCommand(self.original.id, 1, document)
-            )
+            await self.handler.execute(SaveFeedSchemaDraftCommand(self.original.id, 2))
         self.repository.get_for_update.return_value = self.original.archive(now=NOW)
         with self.assertRaises(FeedArchivedError):
-            await self.handler.execute(
-                SaveFeedSchemaDraftCommand(self.original.id, 2, document)
-            )
+            await self.handler.execute(SaveFeedSchemaDraftCommand(self.original.id, 2))
         self.repository.save.assert_not_awaited()

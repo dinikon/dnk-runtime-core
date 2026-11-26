@@ -1,5 +1,5 @@
 import { httpClient } from "@/app/providers/http";
-import { schemaRequest } from "./feed-schema.api";
+import { feedRequest } from "./feed-request";
 import {
   mapPublication,
   mapPublications,
@@ -33,7 +33,7 @@ export const feedPublicationApi = {
     filters: PublicationFilters,
     signal: AbortSignal,
   ): Promise<PublicationPage> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapPublications(
         (
           await httpClient.get<ListPublicationsDTO>(
@@ -56,7 +56,7 @@ export const feedPublicationApi = {
     locale: string,
     signal: AbortSignal,
   ): Promise<Publication> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapPublication(
         (
           await httpClient.get<GetPublicationDTO>(
@@ -71,7 +71,7 @@ export const feedPublicationApi = {
     value: AddPublications,
     signal: AbortSignal,
   ): Promise<AddedPublications> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapAddedPublications(
         (
           await httpClient.post<AddedPublicationsDTO>(
@@ -87,7 +87,7 @@ export const feedPublicationApi = {
     value: ChangePublication,
     signal: AbortSignal,
   ): Promise<ChangedPublication> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapChangedPublication(
         (
           await httpClient.patch<ChangedPublicationDTO>(
@@ -103,7 +103,7 @@ export const feedPublicationApi = {
     value: PublicationVersionAction,
     signal: AbortSignal,
   ): Promise<void> {
-    return schemaRequest(async () => {
+    return feedRequest(async () => {
       await httpClient.delete(
         `${root}/publications/${encodeURIComponent(value.id)}`,
         { signal, params: { expected_version: value.expectedVersion } },
@@ -114,7 +114,7 @@ export const feedPublicationApi = {
     value: PublicationVersionAction,
     signal: AbortSignal,
   ): Promise<ChangedPublication> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapChangedPublication(
         (
           await httpClient.post<ChangedPublicationDTO>(
@@ -132,7 +132,7 @@ export const feedPublicationApi = {
     locale: string,
     signal: AbortSignal,
   ): Promise<PublicationChoice[]> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapVariantSelection(
         (
           await httpClient.get<VariantSelectionDTO>(

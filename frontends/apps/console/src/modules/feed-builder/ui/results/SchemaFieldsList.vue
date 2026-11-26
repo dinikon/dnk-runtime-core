@@ -11,11 +11,13 @@ import type {
 } from "../../model/feed-schema.types";
 defineProps<{
   fields: SchemaFieldDraft[];
+  totalFields: number;
   selectedId: string;
   metadata: SchemaMetadata;
   issues: SchemaIssue[];
   disabled: boolean;
   readonly: boolean;
+  categories: boolean;
 }>();
 defineEmits<{
   select: [id: string];
@@ -26,29 +28,31 @@ defineEmits<{
 }>();
 </script>
 <template>
-  <section class="flex min-w-0 flex-col gap-4" aria-label="Поля схемы">
+  <section class="flex min-w-0 flex-col gap-4" :aria-label="categories ? 'Категории схемы' : 'Поля схемы'">
     <div v-if="!readonly" class="flex flex-wrap gap-2">
       <Button
-        v-for="type in metadata.fieldTypes"
+        v-for="type in metadata.fieldTypes.filter((type) => (type.kind === 'category') === categories)"
         :key="type.kind"
         type="button"
         variant="outline"
         size="sm"
-        :disabled="disabled || fields.length >= metadata.maxFields"
+        :disabled="disabled || totalFields >= metadata.maxFields"
         @click="$emit('add', type.kind)"
         ><Plus data-icon="inline-start" />{{ type.label }}</Button
       >
     </div>
     <p class="text-sm text-muted-foreground">
-      Поля: {{ fields.length }} / {{ metadata.maxFields }}
+      Полей в схеме {{ totalFields }} из {{ metadata.maxFields }}
     </p>
     <EmptyState
       v-if="!fields.length"
-      title="В схеме пока нет полей"
+      :title="categories ? 'Категории пока не настроены' : 'В схеме пока нет полей предложения'"
       :description="
         readonly
-          ? 'Этот фид сохранён с пустой схемой.'
-          : 'Добавьте поле нужного типа и выберите источник значения.'
+          ? undefined
+          : categories
+            ? 'Добавьте категорию и настройте дерево фида.'
+            : 'Добавьте поле нужного типа и выберите источник значения.'
       "
     />
     <ol v-else class="flex flex-col gap-2">
@@ -89,7 +93,7 @@ defineEmits<{
         </p>
         <p
           v-if="
-            issues.some((i) => i.fieldId === field.id || i.path[3] === index)
+            issues.some((i) => i.fieldId === field.id)
           "
           class="text-sm text-destructive"
         >
@@ -118,7 +122,7 @@ defineEmits<{
             type="button"
             variant="ghost"
             size="icon-sm"
-            :disabled="disabled || fields.length >= metadata.maxFields"
+            :disabled="disabled || totalFields >= metadata.maxFields"
             :aria-label="`Дублировать поле ${field.label}`"
             @click="$emit('duplicate', field.id)"
             ><Copy

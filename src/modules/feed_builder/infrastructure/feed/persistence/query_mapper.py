@@ -1,4 +1,7 @@
 from collections.abc import Mapping
+from typing import cast
+
+from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.application.feed.query.get_feed.dto import FeedDetailsDTO
 from src.modules.feed_builder.application.feed.query.get_feed_schema.dto import (
     FeedSchemaDetailsDTO,
@@ -7,8 +10,8 @@ from src.modules.feed_builder.application.feed.query.list_feeds.dto import (
     FeedListItemDTO,
 )
 from src.modules.feed_builder.application.feed.export_settings import settings_to_dto
-from src.modules.feed_builder.application.feed.schema_document import schema_document
-from src.modules.feed_builder.infrastructure.feed.persistence.definition_mapper import (
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
+from src.modules.feed_builder.infrastructure.feed.persistence.graph_mapper import (
     decode_schema,
 )
 from src.modules.feed_builder.infrastructure.feed.persistence.settings_mapper import (
@@ -31,7 +34,7 @@ class FeedQueryMapper:
 
     @staticmethod
     def to_details(row: Mapping[str, object]) -> FeedDetailsDTO:
-        """Возвращает карточку и проверенное представление схемы."""
+        """Возвращает карточку и исходный документ схемы."""
         return FeedDetailsDTO(
             id=row["id"],
             name=row["name"],
@@ -41,7 +44,7 @@ class FeedQueryMapper:
             export_settings=settings_to_dto(
                 settings_from_document(row["export_settings"])
             ),
-            schema=schema_document(decode_schema(row["schema_definition"])),
+            schema=cast(JsonObject, row["schema_definition"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

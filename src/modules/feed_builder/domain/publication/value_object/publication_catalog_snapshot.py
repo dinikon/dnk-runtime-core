@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from src.modules.feed_builder.domain.feed.value_object.calculation_inputs import (
+from src.modules.feed_builder.domain.feed.expression.value_object.calculation_inputs import (
     CalculationInputsVO,
 )
 

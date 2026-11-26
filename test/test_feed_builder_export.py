@@ -23,8 +23,8 @@ from src.modules.feed_builder.application.feed.query.preview_feed.handler import
 from src.modules.feed_builder.application.feed.query.preview_feed.query import (
     PreviewFeedQuery,
 )
-from src.modules.feed_builder.application.feed.schema_document import schema_document
-from src.modules.feed_builder.application.feed.schema_definition import decode_schema
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
+from src.modules.feed_builder.application.feed.graph.codec import decode_schema
 from src.modules.feed_builder.application.feed.service.publication_export import (
     PublicationExportService,
 )
@@ -51,16 +51,16 @@ from src.modules.feed_builder.domain.feed.value_object.field_export_settings imp
 )
 from src.modules.feed_builder.domain.feed.value_object.field_key import FieldKeyVO
 from src.modules.feed_builder.domain.feed.value_object.locale_code import LocaleCodeVO
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
+    MoneyNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.locale_fallback_policy import (
     LocaleFallbackPolicyVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.parameter_reference import (
+from src.modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
     ParameterReferenceVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.price_calculation import (
+from src.modules.feed_builder.domain.feed.expression.value_object.price_calculation import (
     PriceCalculationVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.source_reference import (
@@ -69,14 +69,14 @@ from src.modules.feed_builder.domain.feed.value_object.source_reference import (
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
-    StringFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.short_text.value_object.data import (
+    ShortTextNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.text_constraints import (
     TextConstraintsVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
-    TextFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data import (
+    LongTextNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.transform_definition import (
     TransformDefinitionVO,
@@ -116,7 +116,7 @@ class FeedExportTests(IsolatedAsyncioTestCase):
         category = EntityIdVO(uuid4())
         title = text_field(
             "name",
-            type_definition=StringFieldTypeVO(
+            type_definition=ShortTextNodeDataVO(
                 SourceValueDefinitionVO(
                     SourceReferenceVO(SourceProvider.CATALOG, CatalogSourcePath.TITLE)
                 ),
@@ -130,7 +130,7 @@ class FeedExportTests(IsolatedAsyncioTestCase):
         )
         description = text_field(
             "details",
-            type_definition=TextFieldTypeVO(
+            type_definition=LongTextNodeDataVO(
                 SourceValueDefinitionVO(
                     SourceReferenceVO(
                         SourceProvider.CATALOG, CatalogSourcePath.DESCRIPTION
@@ -320,7 +320,7 @@ class FeedExportTests(IsolatedAsyncioTestCase):
                     tuple(
                         field
                         for field in schema.fields
-                        if not isinstance(field.type_definition, MoneyFieldTypeVO)
+                        if not isinstance(field.type_definition, MoneyNodeDataVO)
                     )
                 )
             ),

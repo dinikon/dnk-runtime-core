@@ -7,7 +7,7 @@ from src.modules.feed_builder.domain.feed.enum.money_value_mode import MoneyValu
 from src.modules.feed_builder.domain.feed.value_object.source_reference import (
     SourceReferenceVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.price_calculation import (
+from src.modules.feed_builder.domain.feed.expression.value_object.price_calculation import (
     PriceCalculationVO,
 )
 from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError

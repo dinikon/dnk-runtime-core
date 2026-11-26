@@ -11,6 +11,7 @@ from uuid import uuid4
 import unittest
 
 from test.test_feed_builder_domain import feed, text_field, money_field, rule, NOW, UAH
+from src.modules.feed_builder.application.feed.port.settings_repository import LockedFeedSettings
 from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.feed_builder.domain.feed.enum.feed_status import FeedStatus
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
@@ -28,44 +29,44 @@ from src.modules.feed_builder.domain.feed.value_object.xml_export_settings impor
     XmlExportSettingsVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.export_name import ExportNameVO
-from src.modules.feed_builder.domain.feed.value_object.price_calculation import (
+from src.modules.feed_builder.domain.feed.expression.value_object.price_calculation import (
     PriceCalculationVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.parameter_reference import (
+from src.modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
     ParameterReferenceVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.decimal_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.decimal_literal import (
     DecimalLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.scalar_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.scalar_literal import (
     ScalarLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.collection_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.collection_literal import (
     CollectionLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.arithmetic_expression import (
+from src.modules.feed_builder.domain.feed.expression.value_object.arithmetic_expression import (
     ArithmeticExpressionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.function_expression import (
+from src.modules.feed_builder.domain.feed.expression.value_object.function_expression import (
     FunctionExpressionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.comparison_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.comparison_condition import (
     ComparisonConditionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.logical_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.logical_condition import (
     LogicalConditionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.presence_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.presence_condition import (
     PresenceConditionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.purchase_price_source import (
+from src.modules.feed_builder.domain.feed.expression.value_object.purchase_price_source import (
     PurchasePriceSourceVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
-    StringFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.short_text.value_object.data import (
+    ShortTextNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
-    TextFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data import (
+    LongTextNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.manual_value_definition import (
     ManualValueDefinitionVO,
@@ -97,18 +98,18 @@ from src.modules.feed_builder.domain.feed.value_object.truncate_parameters impor
 from src.modules.feed_builder.domain.feed.value_object.money_ceil_step_parameters import (
     MoneyCeilStepParametersVO,
 )
-from src.modules.feed_builder.domain.feed.enum.literal_value_type import (
+from src.modules.feed_builder.domain.feed.expression.enum.literal_value_type import (
     LiteralValueType,
 )
-from src.modules.feed_builder.domain.feed.enum.logical_operator import LogicalOperator
-from src.modules.feed_builder.domain.feed.enum.comparison_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import LogicalOperator
+from src.modules.feed_builder.domain.feed.expression.enum.comparison_operator import (
     ComparisonOperator,
 )
-from src.modules.feed_builder.domain.feed.enum.arithmetic_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.arithmetic_operator import (
     ArithmeticOperator,
 )
-from src.modules.feed_builder.domain.feed.enum.presence_operator import PresenceOperator
-from src.modules.feed_builder.domain.feed.enum.price_function import PriceFunction
+from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import PresenceOperator
+from src.modules.feed_builder.domain.feed.expression.enum.price_function import PriceFunction
 from src.modules.feed_builder.domain.feed.enum.locale_fallback_mode import (
     LocaleFallbackMode,
 )
@@ -154,12 +155,12 @@ from src.modules.feed_builder.application.feed.export_settings_dto import (
     CsvExportSettingsDTO,
     XmlExportSettingsDTO,
 )
-from src.modules.feed_builder.application.feed.schema_document import schema_document
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.infrastructure.feed.persistence.mapper import FeedMapper
 from src.modules.feed_builder.infrastructure.feed.persistence.query_mapper import (
     FeedQueryMapper,
 )
-from src.modules.feed_builder.infrastructure.feed.persistence.definition_mapper import (
+from src.modules.feed_builder.infrastructure.feed.persistence.graph_mapper import (
     decode_schema,
 )
 from src.modules.feed_builder.infrastructure.feed.persistence.error import (
@@ -243,7 +244,7 @@ def rich_feed() -> Feed:
     )
     short = text_field(
         "short_text",
-        type_definition=StringFieldTypeVO(
+        type_definition=ShortTextNodeDataVO(
             ManualValueDefinitionVO(),
             locale=LocaleCodeVO("uk"),
             fallback_policy=LocaleFallbackPolicyVO(
@@ -254,7 +255,7 @@ def rich_feed() -> Feed:
     )
     long = text_field(
         "long_text",
-        type_definition=TextFieldTypeVO(
+        type_definition=LongTextNodeDataVO(
             ManualValueDefinitionVO(),
             transforms=(
                 TransformDefinitionVO(
@@ -407,7 +408,7 @@ class FeedCrudMapperTests(unittest.TestCase):
         """Прямые источники и MANUAL не превращаются в расчёт или другой тип поля."""
         short = text_field(
             "source_title",
-            type_definition=StringFieldTypeVO(
+            type_definition=ShortTextNodeDataVO(
                 SourceValueDefinitionVO(
                     SourceReferenceVO(SourceProvider.CATALOG, CatalogSourcePath.TITLE)
                 ),
@@ -417,7 +418,7 @@ class FeedCrudMapperTests(unittest.TestCase):
         )
         long = text_field(
             "source_description",
-            type_definition=TextFieldTypeVO(
+            type_definition=LongTextNodeDataVO(
                 SourceValueDefinitionVO(
                     SourceReferenceVO(
                         SourceProvider.CATALOG, CatalogSourcePath.DESCRIPTION
@@ -516,8 +517,8 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.original = rich_feed()
         self.repository = SimpleNamespace(
             add=AsyncMock(),
-            get_for_update=AsyncMock(return_value=self.original),
-            save=AsyncMock(),
+            get_settings_for_update=AsyncMock(return_value=LockedFeedSettings(self.original, schema_document(self.original.schema))),
+            save_settings=AsyncMock(),
         )
         self.clock = SimpleNamespace(now=Mock(return_value=NOW + timedelta(seconds=1)))
 
@@ -551,12 +552,12 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
                 name="Новое имя",
             )
         )
-        saved = self.repository.save.call_args.args[0]
+        saved = self.repository.save_settings.call_args.args[0]
         self.assertEqual(saved.schema, self.original.schema)
         self.assertEqual(saved.code, self.original.code)
         self.assertEqual(result.version, 2)
         self.assertEqual(
-            self.repository.save.call_args.kwargs["expected_version"], FeedVersionVO(1)
+            self.repository.save_settings.call_args.kwargs["expected_version"], FeedVersionVO(1)
         )
 
     async def test_noop_does_not_save_and_stale_patch_does_not_overwrite(self) -> None:
@@ -566,10 +567,10 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
             UpdateFeedCommand(self.original.id, 1, name=self.original.name.value)
         )
         self.assertEqual(result.version, 1)
-        self.repository.save.assert_not_awaited()
+        self.repository.save_settings.assert_not_awaited()
         with self.assertRaises(FeedVersionConflictError):
             await handler.execute(UpdateFeedCommand(self.original.id, 2, name="Другой"))
-        self.repository.save.assert_not_awaited()
+        self.repository.save_settings.assert_not_awaited()
         with self.assertRaises(InvalidFeedValueError):
             await handler.execute(UpdateFeedCommand(self.original.id, 1))
 
@@ -577,13 +578,13 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
         """Архивация сохраняет агрегат, повторный DELETE не увеличивает версию."""
         handler = ArchiveFeedHandler(self.repository, self.clock)
         await handler.execute(ArchiveFeedCommand(self.original.id, 1))
-        archived = self.repository.save.call_args.args[0]
+        archived = self.repository.save_settings.call_args.args[0]
         self.assertEqual(archived.status, FeedStatus.ARCHIVED)
         self.assertEqual(archived.version.value, 2)
-        self.repository.get_for_update.return_value = archived
-        self.repository.save.reset_mock()
+        self.repository.get_settings_for_update.return_value = LockedFeedSettings(archived, schema_document(archived.schema))
+        self.repository.save_settings.reset_mock()
         await handler.execute(ArchiveFeedCommand(self.original.id, 1))
-        self.repository.save.assert_not_awaited()
+        self.repository.save_settings.assert_not_awaited()
 
     async def test_missing_query_and_invalid_page(self) -> None:
         """Чтение не подменяет отсутствие и не отправляет неверную страницу в SQL."""

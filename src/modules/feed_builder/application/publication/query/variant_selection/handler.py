@@ -30,7 +30,7 @@ class VariantSelectionHandler:
 
     async def execute(self, query: VariantSelectionQuery) -> VariantSelectionResultDTO:
         """Читает ограниченный снимок без создания публикаций."""
-        feed = await self._feeds.get_schema(FeedIdVO(query.feed_id))
+        feed = await self._feeds.get_details(FeedIdVO(query.feed_id))
         if feed is None:
             raise FeedNotFoundError("Feed не найден.")
         if feed.status == "ARCHIVED":

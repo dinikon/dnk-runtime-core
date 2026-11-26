@@ -22,7 +22,7 @@ from src.modules.catalog.application.catalog_item.port.calculation_reader import
 from src.modules.catalog.infrastructure.catalog_item.persistence.calculation_reader import (
     SqlAlchemyCatalogCalculationReader,
 )
-from src.modules.feed_builder.application.feed.schema_document import field_document
+from src.modules.feed_builder.application.feed.graph.node_codec import field_document
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.identity.domain.auth.principal import Principal
@@ -38,6 +38,7 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
     refresh_csrf = crud_support.FeedCrudPostgresTests.refresh_csrf
     scoped_session = crud_support.FeedCrudPostgresTests.scoped_session
     create = crud_support.FeedCrudPostgresTests.create
+    seed_feed_schema = crud_support.FeedCrudPostgresTests.seed_feed_schema
     asyncTearDown = crud_support.FeedCrudPostgresTests.asyncTearDown
 
     async def asyncSetUp(self) -> None:
@@ -108,7 +109,9 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, status, response.text)
         return response.json()
 
-    async def test_preview_unsaved_save_reopen_and_read_only_version(self) -> None:
+    async def test_preview_unsaved_and_existing_schema_with_read_only_version(
+        self,
+    ) -> None:
         """Проверяет несохранённый AST, round-trip и неизменность Feed после расчёта."""
         item = await self.item()
         with patch.object(
@@ -130,25 +133,14 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
         before = (await self.client.get(f"{self.base}/{self.feed['id']}")).json()
         self.assertEqual(before["version"], 1)
         self.assertEqual(before["schema"]["root"]["fields"], [])
-        response = await self.client.put(
-            f"{self.base}/{self.feed['id']}/schema/draft",
-            headers=self.headers,
-            json={
-                "expected_version": 1,
-                "definition": {
-                    "schema_format_version": 1,
-                    "root": {
-                        "key": "publication",
-                        "kind": "object",
-                        "fields": [self.field],
-                    },
-                },
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        saved = response.json()
-        self.assertEqual(saved["version"], 2)
-        self.assertEqual(saved["definition"]["root"]["fields"][0], self.field)
+        definition = {
+            "schema_format_version": 1,
+            "root": {"key": "publication", "kind": "object", "fields": [self.field]},
+        }
+        stored = await self.seed_feed_schema(self.feed["id"], definition, 1)
+        self.assertEqual(stored.version.value, 2)
+        read = (await self.client.get(f"{self.base}/{self.feed['id']}/schema")).json()
+        self.assertEqual(read["definition"]["root"]["fields"], [self.field])
         await self.preview(item, status=409)
         result = await self.preview(item, expected=2)
         self.assertEqual(result["version"], 2)
@@ -224,9 +216,9 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 },
             },
         )
-        self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual(response.json()["detail"]["code"], "INVALID_EXPRESSION_TYPE")
-        self.assertEqual(response.json()["detail"]["field_id"], self.field["id"])
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["definition"]["root"]["fields"], [])
+        self.assertEqual(response.json()["version"], 1)
         invalid = copy.deepcopy(self.field)
         calc = invalid["type_definition"]["value"]["calculation"]
         calc["rules"][0]["condition"] = {

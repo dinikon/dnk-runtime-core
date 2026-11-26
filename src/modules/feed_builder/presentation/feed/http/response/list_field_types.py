@@ -1,3 +1,4 @@
+from src.modules.feed_builder.application.feed.types import JsonObject
 from pydantic import BaseModel
 
 
@@ -9,6 +10,9 @@ class FieldTypeResponse(BaseModel):
     supports_locale: bool
     supports_currency: bool
     editable_modes: tuple[str, ...]
+    type_id: str
+    type_version: int
+    forms: JsonObject
 
 
 class SchemaLocaleResponse(BaseModel):

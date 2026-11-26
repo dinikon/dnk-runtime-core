@@ -8,7 +8,7 @@ from src.modules.feed_builder.application.feed.export_settings import (
     settings_from_dto,
     settings_to_dto,
 )
-from src.modules.feed_builder.application.feed.schema_document import schema_document
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
 from src.modules.feed_builder.domain.feed.value_object.feed_code import FeedCodeVO

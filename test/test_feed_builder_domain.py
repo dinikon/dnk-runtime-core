@@ -11,14 +11,14 @@ from src.modules.shared.domain.domain_error import DomainError
 from src.modules.shared.domain.value_object.currency import CurrencyVO
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.feed_builder.domain.feed.aggregate import Feed
-from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
-from src.modules.feed_builder.domain.feed.entity.conditional_price_rule import (
+from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
+from src.modules.feed_builder.domain.feed.expression.entity.conditional_price_rule import (
     ConditionalPriceRule,
 )
-from src.modules.feed_builder.domain.feed.enum.arithmetic_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.arithmetic_operator import (
     ArithmeticOperator,
 )
-from src.modules.feed_builder.domain.feed.enum.comparison_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.comparison_operator import (
     ComparisonOperator,
 )
 from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
@@ -29,16 +29,16 @@ from src.modules.feed_builder.domain.feed.enum.export_format import ExportFormat
 from src.modules.feed_builder.domain.feed.enum.feed_status import FeedStatus
 from src.modules.feed_builder.domain.feed.enum.feed_product_mode import FeedProductMode
 from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
-from src.modules.feed_builder.domain.feed.enum.literal_value_type import (
+from src.modules.feed_builder.domain.feed.expression.enum.literal_value_type import (
     LiteralValueType,
 )
 from src.modules.feed_builder.domain.feed.enum.locale_fallback_mode import (
     LocaleFallbackMode,
 )
-from src.modules.feed_builder.domain.feed.enum.logical_operator import LogicalOperator
+from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import LogicalOperator
 from src.modules.feed_builder.domain.feed.enum.money_value_mode import MoneyValueMode
-from src.modules.feed_builder.domain.feed.enum.presence_operator import PresenceOperator
-from src.modules.feed_builder.domain.feed.enum.price_function import PriceFunction
+from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import PresenceOperator
+from src.modules.feed_builder.domain.feed.expression.enum.price_function import PriceFunction
 from src.modules.feed_builder.domain.feed.enum.transform_operation import (
     TransformOperation,
 )
@@ -60,22 +60,22 @@ from src.modules.feed_builder.domain.feed.limits import (
     MAX_TRANSFORMS,
 )
 from src.modules.feed_builder.domain.feed.types import Condition, Expression
-from src.modules.feed_builder.domain.feed.policy.price_calculation_structure import (
+from src.modules.feed_builder.domain.feed.expression.structure_policy import (
     PriceCalculationStructurePolicy,
 )
-from src.modules.feed_builder.domain.feed.value_object.arithmetic_expression import (
+from src.modules.feed_builder.domain.feed.expression.value_object.arithmetic_expression import (
     ArithmeticExpressionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.collection_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.collection_literal import (
     CollectionLiteralVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.comparison_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.comparison_condition import (
     ComparisonConditionVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.csv_export_settings import (
     CsvExportSettingsVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.decimal_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.decimal_literal import (
     DecimalLiteralVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.export_name import ExportNameVO
@@ -93,14 +93,14 @@ from src.modules.feed_builder.domain.feed.value_object.text_constraints import (
 from src.modules.feed_builder.domain.feed.value_object.money_constraints import (
     MoneyConstraintsVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
-    StringFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.short_text.value_object.data import (
+    ShortTextNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
-    TextFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data import (
+    LongTextNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
+    MoneyNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.field_export_settings import (
     FieldExportSettingsVO,
@@ -108,14 +108,14 @@ from src.modules.feed_builder.domain.feed.value_object.field_export_settings imp
 from src.modules.feed_builder.domain.feed.value_object.field_id import FieldIdVO
 from src.modules.feed_builder.domain.feed.value_object.field_key import FieldKeyVO
 from src.modules.feed_builder.domain.feed.value_object.field_label import FieldLabelVO
-from src.modules.feed_builder.domain.feed.value_object.function_expression import (
+from src.modules.feed_builder.domain.feed.expression.value_object.function_expression import (
     FunctionExpressionVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.locale_code import LocaleCodeVO
 from src.modules.feed_builder.domain.feed.value_object.locale_fallback_policy import (
     LocaleFallbackPolicyVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.logical_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.logical_condition import (
     LogicalConditionVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.manual_value_definition import (
@@ -128,22 +128,22 @@ from src.modules.feed_builder.domain.feed.value_object.price_amount import Price
 from src.modules.feed_builder.domain.feed.value_object.money_value_definition import (
     MoneyValueDefinitionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.parameter_reference import (
+from src.modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
     ParameterReferenceVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.presence_condition import (
+from src.modules.feed_builder.domain.feed.expression.value_object.presence_condition import (
     PresenceConditionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.price_calculation import (
+from src.modules.feed_builder.domain.feed.expression.value_object.price_calculation import (
     PriceCalculationVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.price_rule_id import (
+from src.modules.feed_builder.domain.feed.expression.value_object.price_rule_id import (
     PriceRuleIdVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.purchase_price_source import (
+from src.modules.feed_builder.domain.feed.expression.value_object.purchase_price_source import (
     PurchasePriceSourceVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.scalar_literal import (
+from src.modules.feed_builder.domain.feed.expression.value_object.scalar_literal import (
     ScalarLiteralVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.source_reference import (
@@ -166,21 +166,21 @@ NOW = datetime(2026, 11, 20, 10, tzinfo=UTC)
 UAH = CurrencyVO("UAH")
 
 
-def text_field(name: str = "custom_name", **changes: object) -> FieldDefinition:
+def text_field(name: str = "custom_name", **changes: object) -> FieldNodeDefinition:
     """Создаёт произвольное ручное поле без привилегированных ключей."""
     values = dict(
         identifier=FieldIdVO(uuid4()),
         key=FieldKeyVO(name),
         label=FieldLabelVO(name),
-        type_definition=StringFieldTypeVO(ManualValueDefinitionVO()),
+        type_definition=ShortTextNodeDataVO(ManualValueDefinitionVO()),
         export=FieldExportSettingsVO(ExportNameVO(name)),
     )
-    return FieldDefinition.create(**(values | changes))
+    return FieldNodeDefinition.create(**(values | changes))
 
 
 def money_field(
     calculation: PriceCalculationVO | None = None, **changes: object
-) -> FieldDefinition:
+) -> FieldNodeDefinition:
     """Создаёт денежное поле с прямым источником либо переданным определением."""
     definition = (
         MoneyValueDefinitionVO(
@@ -196,10 +196,10 @@ def money_field(
         identifier=FieldIdVO(uuid4()),
         key=FieldKeyVO("partner_amount"),
         label=FieldLabelVO("Цена партнёра"),
-        type_definition=MoneyFieldTypeVO(currency=UAH, value_definition=definition),
+        type_definition=MoneyNodeDataVO(currency=UAH, value_definition=definition),
         export=FieldExportSettingsVO(ExportNameVO("partner_amount")),
     )
-    return FieldDefinition.create(**(values | changes))
+    return FieldNodeDefinition.create(**(values | changes))
 
 
 def feed(schema: FeedSchemaVO | None = None, **changes: object) -> Feed:
@@ -394,7 +394,7 @@ class FeedConstructionTests(unittest.TestCase):
         transforms = [TransformDefinitionVO(TransformOperation.STRING_TRIM)]
         reconstituted = replace(
             original,
-            type_definition=StringFieldTypeVO(
+            type_definition=ShortTextNodeDataVO(
                 ManualValueDefinitionVO(), transforms=transforms
             ),
         )
@@ -448,14 +448,14 @@ class FeedConstructionTests(unittest.TestCase):
     def test_field_and_rule_restore_preserve_identifiers(self) -> None:
         """Entity восстанавливаются без генерации новой идентичности и скрытых defaults."""
         source = text_field(
-            type_definition=StringFieldTypeVO(
+            type_definition=ShortTextNodeDataVO(
                 ManualValueDefinitionVO(),
                 locale=LocaleCodeVO("uk"),
                 constraints=TextConstraintsVO(required=True),
             ),
             ai_instruction="Будущий контекст",
         )
-        restored = FieldDefinition.restore(
+        restored = FieldNodeDefinition.restore(
             identifier=source.id,
             **{
                 item.name: getattr(source, item.name)
@@ -480,7 +480,7 @@ class FeedConstructionTests(unittest.TestCase):
             with self.subTest(name=name):
                 field = text_field(
                     name,
-                    type_definition=StringFieldTypeVO(
+                    type_definition=ShortTextNodeDataVO(
                         ManualValueDefinitionVO(),
                         constraints=TextConstraintsVO(required=True),
                     ),
@@ -542,7 +542,7 @@ class FeedConstructionTests(unittest.TestCase):
                     created_at=created,
                     updated_at=updated,
                 )
-        for version in (True, 0, 2):
+        for version in (True, 0, 3):
             with self.assertRaises(InvalidFeedValueError):
                 FeedSchemaVO(schema_format_version=version)
 
@@ -558,7 +558,7 @@ class FeedConstructionTests(unittest.TestCase):
         calculation = PriceCalculationVO(expression, rules)
         schema_fields = [
             text_field(
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     ManualValueDefinitionVO(), transforms=transforms
                 )
             ),
@@ -682,7 +682,7 @@ class FeedValuesTests(unittest.TestCase):
         definitions = (
             text_field(
                 "title",
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     SourceValueDefinitionVO(
                         SourceReferenceVO(
                             SourceProvider.CATALOG, CatalogSourcePath.TITLE
@@ -693,7 +693,7 @@ class FeedValuesTests(unittest.TestCase):
             ),
             text_field(
                 "description",
-                type_definition=TextFieldTypeVO(
+                type_definition=LongTextNodeDataVO(
                     SourceValueDefinitionVO(
                         SourceReferenceVO(
                             SourceProvider.CATALOG, CatalogSourcePath.DESCRIPTION
@@ -704,7 +704,7 @@ class FeedValuesTests(unittest.TestCase):
             ),
             text_field(
                 "sku",
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     SourceValueDefinitionVO(
                         SourceReferenceVO(SourceProvider.CATALOG, CatalogSourcePath.SKU)
                     ),
@@ -713,7 +713,7 @@ class FeedValuesTests(unittest.TestCase):
             money_field(),
         )
         restored_fields = tuple(
-            FieldDefinition.restore(
+            FieldNodeDefinition.restore(
                 identifier=definition.id,
                 key=definition.key,
                 label=definition.label,
@@ -841,7 +841,7 @@ class FeedValuesTests(unittest.TestCase):
 
     def test_type_settings_reject_incompatible_definitions_and_operations(self) -> None:
         """Каждый тип принимает только свои значения, ограничения и преобразования."""
-        for constructor in (StringFieldTypeVO, TextFieldTypeVO):
+        for constructor in (ShortTextNodeDataVO, LongTextNodeDataVO):
             for changes in (
                 {"constraints": MoneyConstraintsVO(min_amount=Decimal("0"))},
                 {
@@ -875,7 +875,7 @@ class FeedValuesTests(unittest.TestCase):
                 self.subTest(changes=changes),
                 self.assertRaises(InvalidFieldDefinitionError),
             ):
-                MoneyFieldTypeVO(
+                MoneyNodeDataVO(
                     **(
                         {
                             "currency": UAH,
@@ -891,13 +891,13 @@ class FeedValuesTests(unittest.TestCase):
             {"fallback_policy": LocaleFallbackPolicyVO()},
         ):
             with self.assertRaises(TypeError):
-                MoneyFieldTypeVO(
+                MoneyNodeDataVO(
                     currency=UAH,
                     value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
                     **forbidden,
                 )
         self.assertIsNone(
-            MoneyFieldTypeVO(
+            MoneyNodeDataVO(
                 value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL)
             ).currency
         )
@@ -909,7 +909,7 @@ class FeedValuesTests(unittest.TestCase):
         original = text_field("sku")
         self.assertEqual(
             {item.name for item in fields(original)},
-            {"id", "key", "label", "type_definition", "export", "ai_instruction"},
+            {"id", "key", "label", "type_definition", "export", "ai_instruction", "category_tree_id"},
         )
         self.assertIsNone(original.type_definition.locale)
         for name in (
@@ -930,11 +930,11 @@ class FeedValuesTests(unittest.TestCase):
                 self.assertRaises(InvalidFieldDefinitionError),
             ):
                 text_field(type_definition=invalid)
-        for constructor in (StringFieldTypeVO, TextFieldTypeVO):
+        for constructor in (ShortTextNodeDataVO, LongTextNodeDataVO):
             with self.assertRaisesRegex(TypeError, "kind"):
                 constructor(ManualValueDefinitionVO(), kind=FieldValueType.MONEY)
         with self.assertRaisesRegex(TypeError, "kind"):
-            MoneyFieldTypeVO(
+            MoneyNodeDataVO(
                 currency=UAH,
                 value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
                 kind=FieldValueType.STRING,
@@ -949,14 +949,14 @@ class FeedValuesTests(unittest.TestCase):
             SourceReferenceVO(SourceProvider.CATALOG, CatalogSourcePath.TITLE)
         )
         variants = (
-            StringFieldTypeVO(
+            ShortTextNodeDataVO(
                 source,
                 TextConstraintsVO(True, 1, 100),
                 LocaleCodeVO("uk"),
                 fallback,
                 (TransformDefinitionVO(TransformOperation.STRING_TRIM),),
             ),
-            TextFieldTypeVO(
+            LongTextNodeDataVO(
                 ManualValueDefinitionVO(),
                 TextConstraintsVO(False, 0, 5000),
                 LocaleCodeVO("uk"),
@@ -967,7 +967,7 @@ class FeedValuesTests(unittest.TestCase):
                     ),
                 ),
             ),
-            MoneyFieldTypeVO(
+            MoneyNodeDataVO(
                 currency=UAH,
                 value_definition=MoneyValueDefinitionVO(MoneyValueMode.MANUAL),
                 constraints=MoneyConstraintsVO(True, Decimal("0"), Decimal("1000")),
@@ -992,7 +992,7 @@ class FeedValuesTests(unittest.TestCase):
                 type_definition=variant,
                 ai_instruction="Пример метаданных",
             )
-            restored = FieldDefinition.restore(
+            restored = FieldNodeDefinition.restore(
                 identifier=created.id,
                 **{
                     item.name: getattr(created, item.name)
@@ -1027,8 +1027,8 @@ class FeedValuesTests(unittest.TestCase):
 
     def test_type_transforms_are_detached_and_bounded_for_all_variants(self) -> None:
         """Входной список не остаётся mutable-ссылкой, лимит одинаков у трёх типов."""
-        for constructor in (StringFieldTypeVO, TextFieldTypeVO, MoneyFieldTypeVO):
-            is_money = constructor is MoneyFieldTypeVO
+        for constructor in (ShortTextNodeDataVO, LongTextNodeDataVO, MoneyNodeDataVO):
+            is_money = constructor is MoneyNodeDataVO
             arguments = (
                 {
                     "currency": UAH,
@@ -1077,7 +1077,7 @@ class FeedValuesTests(unittest.TestCase):
         self.assertEqual(fallback.locales, (LocaleCodeVO("ru"),))
         self.assertEqual(
             text_field(
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     ManualValueDefinitionVO(),
                     locale=LocaleCodeVO("uk"),
                     fallback_policy=fallback,
@@ -1093,9 +1093,9 @@ class FeedValuesTests(unittest.TestCase):
             with self.assertRaises(InvalidFeedValueError):
                 LocaleFallbackPolicyVO(mode, chain)
         with self.assertRaises(InvalidFieldDefinitionError):
-            StringFieldTypeVO(ManualValueDefinitionVO(), fallback_policy=fallback)
+            ShortTextNodeDataVO(ManualValueDefinitionVO(), fallback_policy=fallback)
         with self.assertRaises(InvalidFieldDefinitionError):
-            StringFieldTypeVO(
+            ShortTextNodeDataVO(
                 ManualValueDefinitionVO(),
                 locale=LocaleCodeVO("ru"),
                 fallback_policy=fallback,
@@ -1365,7 +1365,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
             ),
         )
         original = money_field(
-            type_definition=MoneyFieldTypeVO(value_definition=source)
+            type_definition=MoneyNodeDataVO(value_definition=source)
         )
         labelled = replace(
             original,
@@ -1463,14 +1463,14 @@ class FeedCalculationStructureTests(unittest.TestCase):
         calculation = PriceCalculationVO(
             ParameterReferenceVO("price.regular"), (duplicate, duplicate)
         )
-        invalid_type = MoneyFieldTypeVO(
+        invalid_type = MoneyNodeDataVO(
             currency=UAH,
             value_definition=MoneyValueDefinitionVO(
                 MoneyValueMode.CALCULATED, calculation=calculation
             ),
         )
         with self.assertRaises(DuplicatePriceRuleIdentifierError):
-            FieldDefinition.restore(
+            FieldNodeDefinition.restore(
                 identifier=original.id,
                 key=original.key,
                 label=original.label,
@@ -1502,7 +1502,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
             ),
         )
         for currency in (None, UAH, CurrencyVO("USD")):
-            definition = MoneyFieldTypeVO(
+            definition = MoneyNodeDataVO(
                 value_definition=MoneyValueDefinitionVO(
                     MoneyValueMode.CALCULATED, calculation=calculation
                 ),

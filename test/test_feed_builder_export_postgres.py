@@ -22,8 +22,9 @@ from src.modules.feed_builder.application.export_state.job_types import (
     REFRESH_JOB_TYPE,
     RETIRE_FILE_JOB_TYPE,
 )
-from src.modules.feed_builder.application.feed.schema_definition import decode_schema
-from src.modules.feed_builder.application.feed.schema_document import field_document, schema_document
+from src.modules.feed_builder.application.feed.graph.codec import decode_schema
+from src.modules.feed_builder.application.feed.graph.node_codec import field_document
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
     CatalogSourcePath,
 )
@@ -44,14 +45,14 @@ from src.modules.feed_builder.domain.feed.value_object.source_reference import (
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
-    StringFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.short_text.value_object.data import (
+    ShortTextNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.text_constraints import (
     TextConstraintsVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
-    TextFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data import (
+    LongTextNodeDataVO,
 )
 from src.modules.feed_builder.infrastructure.persistence.models.export_state import (
     FeedExportStateModel,
@@ -127,6 +128,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
     refresh_csrf = fixture.FeedPublicationsPostgresTests.refresh_csrf
     scoped_session = fixture.FeedPublicationsPostgresTests.scoped_session
     create = fixture.FeedPublicationsPostgresTests.create
+    seed_feed_schema = fixture.FeedPublicationsPostgresTests.seed_feed_schema
     item = fixture.FeedPublicationsPostgresTests.item
     add = fixture.FeedPublicationsPostgresTests.add
 
@@ -228,23 +230,16 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def save_schema(self, version: int, fields: list[dict]) -> int:
         """Сохраняет рабочую схему перед постановкой."""
-        saved = await self.client.put(
-            f"{self.root}/schema/draft",
-            headers=self.headers,
-            json={
-                "expected_version": version,
-                "definition": {
-                    "schema_format_version": 1,
-                    "root": {
-                        "key": "publication",
-                        "kind": "object",
-                        "fields": fields,
-                    },
-                },
+        feed_id = self.root.rsplit("/", 1)[-1]
+        saved = await self.seed_feed_schema(
+            feed_id,
+            {
+                "schema_format_version": 1,
+                "root": {"key": "publication", "kind": "object", "fields": fields},
             },
+            version,
         )
-        self.assertEqual(saved.status_code, 200, saved.text)
-        return saved.json()["version"]
+        return saved.version.value
 
     async def enqueue(self, version: int) -> None:
         """Вызывает реальный refresh c CSRF и проверяет постановку."""
@@ -288,7 +283,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         field = field_document(
             text_field(
                 "item_sku",
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     SourceValueDefinitionVO(
                         SourceReferenceVO(SourceProvider.CATALOG, CatalogSourcePath.SKU)
                     ),
@@ -300,7 +295,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         title = field_document(
             text_field(
                 "title",
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     SourceValueDefinitionVO(
                         SourceReferenceVO(
                             SourceProvider.CATALOG, CatalogSourcePath.TITLE
@@ -515,7 +510,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Публикует XML по действующей схеме, сохраняя CSV до успеха STRICT."""
         title = field_document(
             text_field(
-                "title", type_definition=TextFieldTypeVO(ManualValueDefinitionVO())
+                "title", type_definition=LongTextNodeDataVO(ManualValueDefinitionVO())
             )
         )
         title["export"]["xml_placement"] = "ATTRIBUTE"
@@ -853,26 +848,15 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
                         "element_types": {"department_code": "number"},
                     },
                 }
-                saved = await self.client.put(
-                    f"{self.root}/schema/draft",
-                    headers=self.headers,
-                    json={
-                        "expected_version": 1,
-                        "definition": schema_document(decode_schema(schema)),
-                    },
+                version = await self.save_schema(
+                    1, schema_document(decode_schema(schema))["root"]["fields"]
                 )
-                self.assertEqual(saved.status_code, 200, saved.text)
-                version = saved.json()["version"]
-                persisted = saved.json()["definition"]["root"]["fields"][1][
-                    "type_definition"
-                ]["value"]
+                saved = (await self.client.get(f"{self.root}/schema")).json()
+                persisted = saved["definition"]["root"]["fields"][1]["type_definition"][
+                    "value"
+                ]
                 self.assertEqual(persisted["nodes"][0]["values"]["id"], "1")
-                self.assertEqual(
-                    (await self.client.get(f"{self.root}/schema")).json()["definition"][
-                        "root"
-                    ]["fields"][1]["type_definition"]["value"],
-                    persisted,
-                )
+                self.assertEqual(saved["version"], version)
                 await self.add(
                     [{"catalog_item_id": item}, {"catalog_item_id": other}],
                     expected=version,
@@ -1093,7 +1077,27 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         description["type_definition"].update(
             kind="text", value={"kind": "CONSTANT", "value": long_text}
         )
-        fields = [selling_type, description]
+        fields = []
+        for field, type_id in (
+            (selling_type, "core.short_text"),
+            (description, "core.long_text"),
+        ):
+            fields.append(
+                {
+                    "id": field["id"],
+                    "key": field["key"],
+                    "name": field["label"],
+                    "typeId": type_id,
+                    "typeVersion": 1,
+                    "scope": "offer",
+                    "export": field["export"],
+                    "data": {
+                        key: value
+                        for key, value in field["type_definition"].items()
+                        if key != "kind"
+                    },
+                }
+            )
         refs = [{"catalog_item_id": await self.item()} for _ in range(2)]
         for export_format in ("csv", "xml"):
             with self.subTest(export_format=export_format):
@@ -1104,9 +1108,18 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.root = f"{self.base}/{feed['id']}"
                 self.path = f"{self.root}/publications"
-                version = await self.save_schema(1, fields)
+                saved = await self.client.put(
+                    f"{self.root}/schema/draft",
+                    headers=self.headers,
+                    json={
+                        "expected_version": 1,
+                        "definition": {"schema_format_version": 2, "fields": fields},
+                    },
+                )
+                self.assertEqual(saved.status_code, 200, saved.text)
+                version = saved.json()["version"]
                 schema = await self.client.get(f"{self.root}/schema")
-                self.assertEqual(schema.json()["definition"]["root"]["fields"], fields)
+                self.assertEqual(schema.json()["definition"], saved.json()["definition"])
                 added = await self.add(refs, expected=version)
                 publication_id = added["items"][0]["id"]
                 override = await self.client.put(
@@ -1160,7 +1173,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         required = field_document(
             text_field(
                 "identifier",
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     ManualValueDefinitionVO(),
                     constraints=TextConstraintsVO(required=True),
                 ),
@@ -1169,7 +1182,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         title = field_document(
             text_field(
                 "title",
-                type_definition=StringFieldTypeVO(
+                type_definition=ShortTextNodeDataVO(
                     SourceValueDefinitionVO(
                         SourceReferenceVO(
                             SourceProvider.CATALOG, CatalogSourcePath.TITLE
@@ -1508,7 +1521,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Показывает первый отчёт без публичной ссылки и записи Storage."""
         required = text_field(
             "title",
-            type_definition=StringFieldTypeVO(
+            type_definition=ShortTextNodeDataVO(
                 ManualValueDefinitionVO(), constraints=TextConstraintsVO(required=True)
             ),
         )

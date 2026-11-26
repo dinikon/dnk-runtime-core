@@ -1,3 +1,4 @@
+from src.modules.feed_builder.application.feed.types import JsonObject
 from dataclasses import dataclass
 from src.modules.feed_builder.application.feed.port.schema_locales import (
     SchemaLocaleDTO,
@@ -13,6 +14,9 @@ class FieldTypeItemDTO:
     supports_locale: bool
     supports_currency: bool
     editable_modes: tuple[str, ...]
+    type_id: str
+    type_version: int
+    forms: JsonObject
 
 
 @dataclass(frozen=True, slots=True)

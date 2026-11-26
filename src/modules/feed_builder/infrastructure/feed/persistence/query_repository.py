@@ -86,7 +86,10 @@ class SqlAlchemyFeedQueryRepository:
                         "format"
                     ),
                     func.jsonb_array_length(
-                        table.c.schema_definition["root"]["fields"]
+                        func.coalesce(
+                            table.c.schema_definition["fields"],
+                            table.c.schema_definition["root"]["fields"],
+                        )
                     ).label("fields_count"),
                 )
                 .where(*conditions)

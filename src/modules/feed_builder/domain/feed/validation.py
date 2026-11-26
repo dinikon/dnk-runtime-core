@@ -58,16 +58,16 @@ def sequence[T](
 
 def is_expression(value: object) -> bool:
     """Распознаёт только разрешённые узлы, откладывая импорты рекурсивного графа."""
-    from src.modules.feed_builder.domain.feed.value_object.parameter_reference import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
         ParameterReferenceVO,
     )
-    from src.modules.feed_builder.domain.feed.value_object.decimal_literal import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.decimal_literal import (
         DecimalLiteralVO,
     )
-    from src.modules.feed_builder.domain.feed.value_object.arithmetic_expression import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.arithmetic_expression import (
         ArithmeticExpressionVO,
     )
-    from src.modules.feed_builder.domain.feed.value_object.function_expression import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.function_expression import (
         FunctionExpressionVO,
     )
 
@@ -84,10 +84,10 @@ def is_expression(value: object) -> bool:
 
 def is_condition_operand(value: object) -> bool:
     """Распознаёт выражение или типизированный литерал сравнения."""
-    from src.modules.feed_builder.domain.feed.value_object.scalar_literal import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.scalar_literal import (
         ScalarLiteralVO,
     )
-    from src.modules.feed_builder.domain.feed.value_object.collection_literal import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.collection_literal import (
         CollectionLiteralVO,
     )
 
@@ -98,13 +98,13 @@ def is_condition_operand(value: object) -> bool:
 
 def is_condition(value: object) -> bool:
     """Распознаёт только зарегистрированные структуры условий."""
-    from src.modules.feed_builder.domain.feed.value_object.comparison_condition import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.comparison_condition import (
         ComparisonConditionVO,
     )
-    from src.modules.feed_builder.domain.feed.value_object.logical_condition import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.logical_condition import (
         LogicalConditionVO,
     )
-    from src.modules.feed_builder.domain.feed.value_object.presence_condition import (
+    from src.modules.feed_builder.domain.feed.expression.value_object.presence_condition import (
         PresenceConditionVO,
     )
 

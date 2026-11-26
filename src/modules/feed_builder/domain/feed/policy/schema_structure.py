@@ -1,7 +1,7 @@
-from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
-    CategoryFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
+    CategoryNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
+from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
 from src.modules.feed_builder.domain.feed.error import (
     DuplicateExportNameError,
     DuplicateFieldIdentifierError,
@@ -22,19 +22,23 @@ class FeedSchemaStructurePolicy:
         """Возвращает проверенный снимок без повторов ID, ключей и экспортных имён."""
         if not isinstance(schema, FeedSchemaVO):
             raise InvalidFeedValueError("Нужен FeedSchemaVO.")
+        trees = {tree.id: tree.settings for tree in schema.category_trees}
+        if len(trees) != len(schema.category_trees):
+            raise InvalidFeedValueError("Дерево категорий повторяется в графе.")
         identifiers: set[FieldIdVO] = set()
         keys: set[FieldKeyVO] = set()
         export_names: set[ExportNameVO] = set()
         containers: set[tuple[str, ExportNameVO]] = set()
-        restored_fields: list[FieldDefinition] = []
+        restored_fields: list[FieldNodeDefinition] = []
         for index, definition in enumerate(schema.fields):
-            definition = FieldDefinition.restore(
+            definition = FieldNodeDefinition.restore(
                 identifier=definition.id,
                 key=definition.key,
                 label=definition.label,
                 type_definition=definition.type_definition,
                 export=definition.export,
                 ai_instruction=definition.ai_instruction,
+                category_tree_id=definition.category_tree_id,
             )
             if definition.id in identifiers:
                 raise DuplicateFieldIdentifierError(
@@ -46,11 +50,16 @@ class FeedSchemaStructurePolicy:
                     "Ключ поля повторяется в Feed.",
                     path=("schema", "fields", index, "key"),
                 )
-            export = definition.export
-            if (
-                not isinstance(definition.type_definition, CategoryFieldTypeVO)
-                or export.publication_key is not None
+            if schema.schema_format_version == 2 and isinstance(
+                definition.type_definition, CategoryNodeDataVO
             ):
+                if trees.get(definition.category_tree_id) != definition.type_definition:
+                    raise InvalidFeedValueError(
+                        "Нода категории ссылается на неизвестное дерево.",
+                        path=("schema", "fields", index, "data", "treeId"),
+                    )
+            export = definition.export
+            if definition.type_definition.has_publication_output(export):
                 output = export.name
                 if output in export_names:
                     raise DuplicateExportNameError(
@@ -74,4 +83,6 @@ class FeedSchemaStructurePolicy:
             identifiers.add(definition.id)
             keys.add(definition.key)
             restored_fields.append(definition)
-        return FeedSchemaVO(tuple(restored_fields), schema.schema_format_version)
+        return FeedSchemaVO(
+            tuple(restored_fields), schema.schema_format_version, schema.category_trees
+        )

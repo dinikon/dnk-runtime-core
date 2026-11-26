@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
-from src.modules.feed_builder.presentation.feed.http.schema.definition import (
+from src.modules.feed_builder.presentation.feed.http.schema.legacy_graph import (
     DefinitionFieldSchema,
 )
 

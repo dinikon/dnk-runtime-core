@@ -1,8 +1,16 @@
+from collections.abc import Mapping
+from typing import cast
+
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    LockedFeedSettings,
+)
+from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.aggregate import Feed
+from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
 from src.modules.feed_builder.domain.feed.error import (
@@ -42,6 +50,18 @@ class SqlAlchemyFeedRepository:
 
     async def get_for_update(self, feed_id: FeedIdVO) -> Feed:
         """Блокирует строку текущего tenant и восстанавливает агрегат."""
+        return FeedMapper.to_domain(await self._lock_row(feed_id))
+
+    async def get_settings_for_update(self, feed_id: FeedIdVO) -> LockedFeedSettings:
+        """Возвращает метаданные и сохранённый JSON без разбора нод."""
+        row = await self._lock_row(feed_id)
+        return LockedFeedSettings(
+            FeedMapper.to_domain(row, schema=FeedSchemaVO()),
+            cast(JsonObject, row["schema_definition"]),
+        )
+
+    async def _lock_row(self, feed_id: FeedIdVO) -> Mapping[str, object]:
+        """Блокирует одну строку для обоих сценариев записи."""
         row = (
             (
                 await self._session.execute(
@@ -55,10 +75,22 @@ class SqlAlchemyFeedRepository:
         )
         if row is None:
             raise FeedNotFoundError("Feed не найден.")
-        return FeedMapper.to_domain(row)
+        return row
 
     async def save(self, feed: Feed, *, expected_version: FeedVersionVO) -> None:
         """Обновляет ожидаемую версию атомарно и не выполняет commit."""
+        await self._save(feed, expected_version, FeedMapper.to_update_values(feed))
+
+    async def save_settings(
+        self, feed: Feed, *, expected_version: FeedVersionVO
+    ) -> None:
+        """Сохраняет версию и настройки без записи документа нод."""
+        await self._save(feed, expected_version, FeedMapper.to_settings_values(feed))
+
+    async def _save(
+        self, feed: Feed, expected_version: FeedVersionVO, values: Mapping[str, object]
+    ) -> None:
+        """Выполняет один UPDATE через ожидаемую версию для обоих сценариев."""
         if feed.version.value != expected_version.value + 1:
             raise FeedVersionConflictError("Новая версия не следует за ожидаемой.")
         try:
@@ -68,7 +100,7 @@ class SqlAlchemyFeedRepository:
                     FeedModel.id == feed.id.uuid,
                     FeedModel.row_version == expected_version.value,
                 )
-                .values(FeedMapper.to_update_values(feed))
+                .values(values)
                 .returning(FeedModel.id)
             )
         except IntegrityError as exc:

@@ -36,7 +36,7 @@ from src.modules.feed_builder.infrastructure.export_state.persistence.repository
 from src.modules.feed_builder.infrastructure.export_state.tenancy import (
     TenancyPublicFeedTenantResolver,
 )
-from src.modules.feed_builder.presentation.feed.depends import FeedRepositoryDep
+from src.modules.feed_builder.presentation.feed.depends import FeedRepositoryDep, FeedSettingsRepositoryDep
 from src.modules.shared.presentation.jobs.management import (
     build_schedule_scheduled_job_use_case,
 )
@@ -74,13 +74,13 @@ def get_request_feed_refresh_handler(
 
 def get_rotate_feed_public_link_handler(
     uow: UoWDep,
-    feeds: FeedRepositoryDep,
+    feeds: FeedSettingsRepositoryDep,
     clock: ClockDep,
     ids: UuidDep,
 ) -> RotateFeedPublicLinkHandler:
     """Собирает смену адреса на общей tenant-сессии."""
     return RotateFeedPublicLinkHandler(
-        feeds, SqlAlchemyFeedExportStateRepository(uow.session), clock, ids
+        feeds, SqlAlchemyFeedExportQueryRepository(uow.session), clock, ids
     )
 
 

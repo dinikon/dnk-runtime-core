@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID
-from src.modules.feed_builder.domain.feed.value_object.calculation_inputs import (
+from src.modules.feed_builder.domain.feed.expression.value_object.calculation_inputs import (
     CalculationInputsVO,
 )
 

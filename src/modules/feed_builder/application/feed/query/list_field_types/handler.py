@@ -1,3 +1,5 @@
+from src.modules.feed_builder.application.feed.graph.forms import node_forms
+from src.modules.feed_builder.application.feed.graph.registry import NODE_CODECS
 from src.modules.feed_builder.application.feed.query.list_field_types.query import (
     ListFieldTypesQuery,
 )
@@ -21,30 +23,19 @@ class ListFieldTypesHandler:
 
     async def execute(self, query: ListFieldTypesQuery) -> ListFieldTypesResultDTO:
         """Возвращает только реализованные режимы редактирования определения."""
-        labels = {
-            FieldValueType.STRING: "Короткий текст",
-            FieldValueType.TEXT: "Длинный текст",
-            FieldValueType.MONEY: "Денежное значение",
-            FieldValueType.INTEGER: "Целое число",
-            FieldValueType.BOOLEAN: "Логическое значение",
-            FieldValueType.CATEGORY: "Категория",
-        }
-        modes = ("SOURCE", "MANUAL", "CONSTANT")
-        specialized_modes = {
-            FieldValueType.MONEY: ("SOURCE", "MANUAL", "CALCULATED"),
-            FieldValueType.BOOLEAN: (*modes, "CALCULATED"),
-            FieldValueType.CATEGORY: ("INLINE",),
-        }
         return ListFieldTypesResultDTO(
             tuple(
                 FieldTypeItemDTO(
-                    kind.value,
-                    labels[kind],
-                    kind in (FieldValueType.STRING, FieldValueType.TEXT),
-                    kind is FieldValueType.MONEY,
-                    specialized_modes.get(kind, modes),
+                    codec.kind.value,
+                    codec.label,
+                    codec.kind in (FieldValueType.STRING, FieldValueType.TEXT),
+                    codec.kind is FieldValueType.MONEY,
+                    codec.modes,
+                    codec.type_id,
+                    codec.version,
+                    node_forms(codec),
                 )
-                for kind in FieldValueType
+                for codec in NODE_CODECS
             ),
             await self._locales.list_available(),
             MAX_FIELDS,

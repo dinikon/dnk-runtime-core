@@ -23,6 +23,7 @@ import {
   usePublications,
   usePublication,
   usePublicationProducts,
+  usePublicationLocales,
   usePublicationVariants,
 } from "../model/feed-publication.queries";
 import { usePublicationsPageState } from "../model/use-publications-page-state";
@@ -63,7 +64,8 @@ const id = computed(() => String(route.params.id ?? "")),
 const query = usePublications(id, state.filters),
   feed = useFeed(id),
   schema = useFeedSchema(id),
-  metadata = useSchemaMetadata();
+  metadata = useSchemaMetadata(),
+  locales = usePublicationLocales();
 const selectedId = computed(() =>
   typeof route.query.publication === "string" ? route.query.publication : "",
 );
@@ -481,7 +483,7 @@ function retrySources(): void {
     >
     <PublicationsToolbar
       :filters="state.filters.value"
-      :locales="metadata.data.value?.locales ?? []"
+      :locales="locales.data.value ?? []"
       :disabled="busy"
       @search="state.setSearch"
       @status="state.setStatus"

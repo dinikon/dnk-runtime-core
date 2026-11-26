@@ -1,6 +1,7 @@
 export {
   catalogItemLocation,
   invalidateCatalogItems,
+  listCatalogLocales,
 } from "./model/catalog-public";
 
 export { default as CatalogContentEditor } from "./ui/product/ProductRichText.vue";

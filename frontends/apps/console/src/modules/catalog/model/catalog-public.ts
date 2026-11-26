@@ -185,3 +185,10 @@ export async function searchCatalogPublicationVariants(
     })),
   };
 }
+
+export async function listCatalogLocales(
+  signal: AbortSignal,
+): Promise<{ code: string; name: string }[]> {
+  const { catalogApi } = await import("../api/catalog.api");
+  return catalogApi.locales(signal);
+}

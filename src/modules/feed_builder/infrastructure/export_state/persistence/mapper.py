@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from src.modules.feed_builder.application.feed.schema_document import schema_document
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.domain.export_state.aggregate import FeedExportState
 from src.modules.feed_builder.domain.export_state.enum.export_outcome import (
     ExportOutcome,
@@ -24,7 +24,7 @@ from src.modules.feed_builder.domain.export_state.value_object.export_task impor
 from src.modules.feed_builder.domain.feed.enum.export_format import ExportFormat
 from src.modules.feed_builder.domain.feed.enum.validation_policy import ValidationPolicy
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
-from src.modules.feed_builder.infrastructure.feed.persistence.definition_mapper import (
+from src.modules.feed_builder.infrastructure.feed.persistence.graph_mapper import (
     decode_schema,
 )
 from src.modules.feed_builder.infrastructure.feed.persistence.settings_mapper import (

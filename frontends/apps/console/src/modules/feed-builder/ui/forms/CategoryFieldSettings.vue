@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CatalogCategory } from "@/modules/catalog";
@@ -7,7 +7,7 @@ import { cloneSchemaValue } from "../../model/feed-schema.clone";
 import { newCategory } from "../../model/feed-categories.draft";
 import type { CategoryFallback, CategoryPropertyDefinition, CategoryPropertyPlacement, CategoryPropertyType, CategoryType, FeedCategoryNode, FeedCategoryRule } from "../../model/feed-categories.types";
 import type { CalculationMetadata } from "../../model/feed-calculation.types";
-import type { SchemaFieldDraft, SchemaMetadata } from "../../model/feed-schema.types";
+import type { SchemaFieldDraft, SchemaIssue, SchemaMetadata } from "../../model/feed-schema.types";
 import CalculationNodeEditor from "./CalculationNodeEditor.vue";
 import CategoryObjectEditor from "./CategoryObjectEditor.vue";
 
@@ -20,6 +20,7 @@ const props = defineProps<{
   catalogLoading: boolean;
   catalogError: boolean;
   calculationMetadata?: CalculationMetadata;
+  issues: SchemaIssue[];
   disabled: boolean;
 }>();
 const emit = defineEmits<{ change: [value: CategoryType, settings: SchemaFieldDraft["export"]]; retryCatalog: [] }>();
@@ -33,7 +34,17 @@ const propertyKey = ref("");
 const propertyKind = ref<CategoryPropertyType>("string");
 const selectClass = "w-full rounded-md border bg-background px-2 py-2 text-sm";
 const node = computed(() => props.value.value.nodes.find((item) => item.id === selected.value));
-const rule = computed(() => props.value.value.rules.find((item) => item.id === selectedRule.value));
+const ruleIndex = computed(() => props.value.value.rules.findIndex((item) => item.id === selectedRule.value));
+const rule = computed(() => props.value.value.rules[ruleIndex.value]);
+watch(() => props.issues, (issues) => {
+  for (const issue of issues) {
+    const index = issue.path[issue.path.indexOf("rules") + 1];
+    const invalidRule = typeof index === "number" ? props.value.value.rules[index] : undefined;
+    if (!invalidRule) continue;
+    selectedRule.value = invalidRule.id;
+    break;
+  }
+}, { immediate: true });
 const catalogById = computed(() => new Map(props.catalog.map((item) => [item.id, item])));
 const linkedByCatalogId = computed(() => new Map(props.value.value.nodes.flatMap((item) => item.catalogId ? [[item.catalogId, item] as const] : [])));
 const nodesById = computed(() => new Map(props.value.value.nodes.map((item) => [item.id, item])));
@@ -447,8 +458,8 @@ function addRule(): void {
               @change="changeRule({ includeDescendants: ($event.target as HTMLInputElement).checked })" />
             Учитывать дочерние категории Catalog в условии
           </label>
-          <CalculationNodeEditor :node="rule.condition" :metadata="calculationMetadata" :issues="[]"
-            category="condition" :path="['condition']" :disabled="disabled"
+          <CalculationNodeEditor :node="rule.condition" :metadata="calculationMetadata" :issues="issues"
+            category="condition" :path="['value', 'rules', ruleIndex, 'condition']" :disabled="disabled"
             @change="changeRule({ condition: $event })" />
           <label class="grid gap-1 text-sm">Назначить категорию
             <select :class="selectClass" :value="rule.targetId" @change="changeRule({ targetId: input($event) })">

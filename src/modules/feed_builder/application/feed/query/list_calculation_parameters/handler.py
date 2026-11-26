@@ -5,7 +5,7 @@ from src.modules.feed_builder.application.feed.query.list_calculation_parameters
     ListCalculationParametersResultDTO,
     CalculationParameterDTO,
 )
-from src.modules.feed_builder.domain.feed.calculation.parameters import PARAMETER_TYPES
+from src.modules.feed_builder.domain.feed.expression.parameters import PARAMETER_TYPES
 
 
 class ListCalculationParametersHandler:

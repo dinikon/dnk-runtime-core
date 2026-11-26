@@ -1,8 +1,6 @@
 from uuid import UUID
 from pydantic import Field
-from src.modules.feed_builder.presentation.feed.http.schema.definition import (
-    ClosedSchema,
-)
+from src.modules.feed_builder.presentation.strict_request import ClosedSchema
 
 
 class PublicationReferenceRequest(ClosedSchema):

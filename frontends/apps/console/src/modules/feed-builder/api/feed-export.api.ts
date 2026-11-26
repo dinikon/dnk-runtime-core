@@ -1,5 +1,5 @@
 import { httpClient } from "@/app/providers/http";
-import { schemaRequest } from "./feed-schema.api";
+import { feedRequest } from "./feed-request";
 import { mapFeedExport, mapFeedExportIssues } from "./feed-export.mapper";
 import type {
   FeedExportIssuesDTO,
@@ -21,7 +21,7 @@ function root(id: string): string {
 }
 export const feedExportApi = {
   get(id: string, signal: AbortSignal): Promise<FeedExportState> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapFeedExport(
         (
           await httpClient.get<FeedExportStateDTO>(`${root(id)}/export`, {
@@ -37,7 +37,7 @@ export const feedExportApi = {
     offset: number,
     signal: AbortSignal,
   ): Promise<FeedExportIssues> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapFeedExportIssues(
         (
           await httpClient.get<FeedExportIssuesDTO>(
@@ -55,7 +55,7 @@ export const feedExportApi = {
     action: FeedExportAction,
     signal: AbortSignal,
   ): Promise<FeedExportTask> {
-    return schemaRequest(async () => {
+    return feedRequest(async () => {
       const { data } = await httpClient.post<RequestFeedRefreshDTO>(
         `${root(action.feedId)}/export/refresh`,
         { expected_version: action.version },
@@ -72,7 +72,7 @@ export const feedExportApi = {
     action: FeedExportAction,
     signal: AbortSignal,
   ): Promise<RotatedFeedLink> {
-    return schemaRequest(async () => {
+    return feedRequest(async () => {
       const { data } = await httpClient.post<RotatedFeedLinkDTO>(
         `${root(action.feedId)}/public-link/rotate`,
         { expected_version: action.version },

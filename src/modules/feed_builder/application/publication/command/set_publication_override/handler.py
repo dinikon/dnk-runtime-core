@@ -1,20 +1,18 @@
-from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
-    CategoryFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
+    CategoryNodeDataVO,
 )
 from decimal import Decimal
 import re
 
 from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
+    MoneyNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.price_amount import PriceAmountVO
 from src.modules.feed_builder.domain.publication.error import (
     InvalidPublicationOverrideError,
 )
-from src.modules.feed_builder.domain.publication.service.field_value_resolver import (
-    FieldValueResolver,
-)
+from src.modules.feed_builder.domain.publication.field_node.resolver import NodeValueResolver
 from src.modules.feed_builder.domain.publication.value_object.field_override import (
     FieldOverrideVO,
 )
@@ -59,12 +57,12 @@ class SetPublicationOverrideHandler:
             expected_feed_version=command.expected_feed_version,
             expected_version=command.expected_version,
         )
-        if isinstance(field.type_definition, CategoryFieldTypeVO):
+        if isinstance(field.type_definition, CategoryNodeDataVO):
             raise InvalidPublicationOverrideError(
                 "COMPUTED_CATEGORY", "Настройте выбор категории в схеме поля."
             )
         value: str | int | bool | PriceAmountVO = command.value
-        if isinstance(field.type_definition, MoneyFieldTypeVO):
+        if isinstance(field.type_definition, MoneyNodeDataVO):
             amount = command.value.strip() if isinstance(command.value, str) else ""
             if re.fullmatch(r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)", amount) is None:
                 raise InvalidPublicationOverrideError(
@@ -78,7 +76,7 @@ class SetPublicationOverrideHandler:
                 ) from exc
         override = FieldOverrideVO(field.id, value)
         reference = original.product_reference
-        resolved = FieldValueResolver().resolve_manual(
+        resolved = NodeValueResolver().resolve_manual(
             field, override, reference.catalog_variant_id or reference.catalog_item_id
         )
         if resolved.issues:

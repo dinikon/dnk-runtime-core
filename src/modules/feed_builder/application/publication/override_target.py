@@ -3,7 +3,7 @@ from uuid import UUID
 from src.modules.feed_builder.application.publication.participation import (
     load_publication_for_update,
 )
-from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
+from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
 from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
@@ -28,7 +28,7 @@ async def load_override_target(
     field_id: UUID,
     expected_feed_version: int,
     expected_version: int,
-) -> tuple[FeedPublication, FieldDefinition]:
+) -> tuple[FeedPublication, FieldNodeDefinition]:
     """Фиксирует схему и публикацию в установленном порядке блокировок."""
     feed = await feeds.get_for_update(FeedIdVO(feed_id))
     PublicationParticipationPolicy.ensure_editable(

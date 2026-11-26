@@ -1,12 +1,12 @@
-from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
-    CategoryFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
+    CategoryNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.types import ResolvedFieldValue
-from src.modules.feed_builder.domain.feed.value_object.boolean_field_type import (
-    BooleanFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.boolean.value_object.data import (
+    BooleanNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.integer_field_type import (
-    IntegerFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.integer.value_object.data import (
+    IntegerNodeDataVO,
 )
 from src.modules.feed_builder.application.feed.service.publication_export import (
     PublicationExportService,
@@ -23,13 +23,13 @@ from src.modules.feed_builder.application.publication.query.get_publication_fiel
     GetPublicationFieldsQuery,
 )
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
-from src.modules.feed_builder.domain.feed.value_object.money_field_type import (
-    MoneyFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
+    MoneyNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.value_object.price_amount import PriceAmountVO
 from src.modules.feed_builder.domain.publication.error import PublicationNotFoundError
-from src.modules.feed_builder.domain.publication.service.publication_resolver import (
-    PublicationResolver,
+from src.modules.feed_builder.domain.publication.field_node.publication import (
+    PublicationNodeResolver,
 )
 
 
@@ -59,7 +59,7 @@ class GetPublicationFieldsHandler:
             snapshot = (await self._export.read_catalog(context, (item,))).get(
                 item.reference
             )
-        resolver = PublicationResolver()
+        resolver = PublicationNodeResolver()
         original = resolver.resolve(item.id, context.schema, (), snapshot)
         current = (
             resolver.resolve(item.id, context.schema, item.overrides, snapshot)
@@ -79,11 +79,11 @@ class GetPublicationFieldsHandler:
         fields: list[PublicationFieldDTO] = []
         for field in context.schema.fields:
             settings = field.type_definition
-            if isinstance(settings, CategoryFieldTypeVO):
+            if isinstance(settings, CategoryNodeDataVO):
                 continue
-            scalar = isinstance(settings, (IntegerFieldTypeVO, BooleanFieldTypeVO))
+            scalar = isinstance(settings, (IntegerNodeDataVO, BooleanNodeDataVO))
             constraints = None if scalar else settings.constraints
-            money = settings if isinstance(settings, MoneyFieldTypeVO) else None
+            money = settings if isinstance(settings, MoneyNodeDataVO) else None
             inherited = originals.get(field.id.uuid)
             effective = resolved.get(field.id.uuid)
             raw = manual.get(field.id)
@@ -95,12 +95,12 @@ class GetPublicationFieldsHandler:
                     required=settings.required if scalar else constraints.required,
                     min_value=(
                         settings.min_value
-                        if isinstance(settings, IntegerFieldTypeVO)
+                        if isinstance(settings, IntegerNodeDataVO)
                         else None
                     ),
                     max_value=(
                         settings.max_value
-                        if isinstance(settings, IntegerFieldTypeVO)
+                        if isinstance(settings, IntegerNodeDataVO)
                         else None
                     ),
                     min_length=(

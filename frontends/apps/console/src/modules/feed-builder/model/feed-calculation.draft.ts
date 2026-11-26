@@ -11,6 +11,32 @@ export const parameterTypes: Readonly<Record<string, string>> = {
   "price.purchase": "number",
   "product.category_ids": "collection:uuid",
 };
+export function isCatalogCategoryMembership(
+  node: SchemaNode,
+): node is Extract<SchemaNode, { kind: "comparison" }> {
+  return node.kind === "comparison" && node.operator === "CONTAINS" &&
+    node.left.kind === "parameter" && node.left.parameter === "product.category_ids";
+}
+export function isUuidOperand(node: SchemaNode): boolean {
+  return (node.kind === "scalar" && node.valueType === "uuid") ||
+    (node.kind === "parameter" && parameterTypes[node.parameter] === "uuid");
+}
+export function categoryMembershipIssuePath(
+  node: SchemaNode,
+  path: (string | number)[],
+): (string | number)[] | undefined {
+  if (node.kind === "logical") {
+    for (const [index, operand] of node.operands.entries()) {
+      const issue = categoryMembershipIssuePath(operand, [...path, "operands", index]);
+      if (issue) return issue;
+    }
+  }
+  if (!isCatalogCategoryMembership(node)) return;
+  const right = node.right;
+  if (!isUuidOperand(right) || (right.kind === "scalar" &&
+    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(String(right.value))))
+    return [...path, "right"];
+}
 export function initialCalculation(): SchemaCalculation {
   return {
     defaultExpression: { kind: "parameter", parameter: "price.regular" },

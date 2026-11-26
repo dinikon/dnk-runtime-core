@@ -192,7 +192,7 @@ class _Runtime:
 
 
 class _BatchReader:
-    """Переиспользует общий PublicationResolver с отдельным UoW на пакет."""
+    """Переиспользует общий PublicationNodeResolver с отдельным UoW на пакет."""
 
     def __init__(
         self, runtime: _Runtime, feed_id: FeedIdVO, access: _CatalogAccess

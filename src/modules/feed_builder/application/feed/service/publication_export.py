@@ -1,5 +1,5 @@
-from src.modules.feed_builder.domain.feed.value_object.category_field_type import (
-    CategoryFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
+    CategoryNodeDataVO,
 )
 from src.modules.feed_builder.application.feed.port.catalog_category_tree import (
     SourceCategoryDTO,
@@ -15,15 +15,15 @@ from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
 from src.modules.feed_builder.application.feed.port.catalog_category_tree import (
     CatalogCategoryTreePort,
 )
-from src.modules.feed_builder.application.feed.service.category_export import (
+from src.modules.feed_builder.application.feed.category.assignments import (
     CategoryAssignment,
-    CategoryExportResolver,
+    CategoryTreeAssignments,
 )
-from src.modules.feed_builder.domain.feed.value_object.string_field_type import (
-    StringFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.short_text.value_object.data import (
+    ShortTextNodeDataVO,
 )
-from src.modules.feed_builder.domain.feed.value_object.text_field_type import (
-    TextFieldTypeVO,
+from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data import (
+    LongTextNodeDataVO,
 )
 from src.modules.feed_builder.application.feed.export_settings_dto import (
     CsvExportSettingsDTO,
@@ -33,9 +33,9 @@ from src.modules.feed_builder.application.feed.port.query_repository import (
     FeedQueryRepositoryProtocol,
 )
 from src.modules.feed_builder.application.feed.query.get_feed.dto import FeedDetailsDTO
-from src.modules.feed_builder.application.feed.schema_definition import decode_schema
+from src.modules.feed_builder.application.feed.graph.codec import decode_schema
 from src.modules.feed_builder.application.feed.export_settings import settings_to_dto
-from src.modules.feed_builder.application.feed.schema_document import schema_document
+from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.domain.export_state.value_object.export_snapshot import (
     ExportSnapshotVO,
 )
@@ -47,7 +47,7 @@ from src.modules.feed_builder.application.publication.port.export_source import 
     PublicationExportSource,
     CatalogReference,
 )
-from src.modules.feed_builder.domain.feed.entity.field_definition import FieldDefinition
+from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
 from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
     CatalogSourcePath,
 )
@@ -62,11 +62,9 @@ from src.modules.feed_builder.domain.feed.value_object.price_value import PriceV
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
 )
-from src.modules.feed_builder.domain.publication.service.field_value_resolver import (
-    FieldIssue,
-)
-from src.modules.feed_builder.domain.publication.service.publication_resolver import (
-    PublicationResolver,
+from src.modules.feed_builder.domain.publication.field_node.result import FieldIssue
+from src.modules.feed_builder.domain.publication.field_node.publication import (
+    PublicationNodeResolver,
 )
 from src.modules.feed_builder.domain.publication.value_object.publication_catalog_snapshot import (
     PublicationCatalogSnapshotVO,
@@ -80,11 +78,11 @@ class PublicationExportContext:
 
     feed: FeedDetailsDTO
     schema: FeedSchemaVO
-    exported_fields: tuple[FieldDefinition, ...]
+    exported_fields: tuple[FieldNodeDefinition, ...]
     as_of: datetime
     locales: frozenset[str]
     sources: frozenset[str]
-    category_fields: tuple[CategoryExportResolver, ...] = ()
+    category_fields: tuple[CategoryTreeAssignments, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,7 +180,7 @@ class PublicationExportService:
         for field in schema.fields:
             settings = field.type_definition
             if not isinstance(
-                settings, (StringFieldTypeVO, TextFieldTypeVO)
+                settings, (ShortTextNodeDataVO, LongTextNodeDataVO)
             ) or not isinstance(settings.value_definition, SourceValueDefinitionVO):
                 continue
             path = settings.value_definition.source.path
@@ -202,7 +200,7 @@ class PublicationExportService:
             for field in schema.fields:
                 definition = field.type_definition
                 if not field.export.enabled or not isinstance(
-                    definition, CategoryFieldTypeVO
+                    definition, CategoryNodeDataVO
                 ):
                     continue
                 source = ()
@@ -215,7 +213,7 @@ class PublicationExportService:
                     if locale not in catalog_trees:
                         catalog_trees[locale] = await self._categories.read(locale)
                     source = catalog_trees[locale]
-                category_fields.append(CategoryExportResolver(field, source))
+                category_fields.append(CategoryTreeAssignments(field, source))
         references = {
             resolver.field.id
             for resolver in category_fields
@@ -226,7 +224,7 @@ class PublicationExportService:
             for field in schema.fields
             if field.export.enabled
             and (
-                not isinstance(field.type_definition, CategoryFieldTypeVO)
+                not isinstance(field.type_definition, CategoryNodeDataVO)
                 or field.id in references
             )
         )
@@ -262,11 +260,11 @@ class PublicationExportService:
         if not items:
             return ()
         snapshots = await self.read_catalog(context, items)
-        resolver = PublicationResolver()
+        resolver = PublicationNodeResolver()
         locales = {
             field.id.uuid: field.type_definition.locale.value
             for field in context.schema.fields
-            if isinstance(field.type_definition, (StringFieldTypeVO, TextFieldTypeVO))
+            if isinstance(field.type_definition, (ShortTextNodeDataVO, LongTextNodeDataVO))
             and field.type_definition.locale
         }
         records: list[ExportRecord] = []

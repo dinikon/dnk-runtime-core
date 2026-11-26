@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { toast } from "vue-sonner";
 import { Button } from "@/components/ui/button";
@@ -14,19 +14,44 @@ import { calculationErrorMessage } from "../model/feed-calculation.errors";
 import { useFeedCalculationPreview } from "../model/use-feed-calculation-preview";
 import { fieldCanPreview, fieldIsReadonly } from "../model/feed-schema.draft";
 import { useFeedCategoryTree } from "../model/feed-categories.queries";
-import SchemaFieldForm from "../ui/forms/SchemaFieldForm.vue";
+import FieldNodeForm from "../ui/forms/FieldNodeForm.vue";
 import { useFeedSchemaEditor } from "../model/use-feed-schema-editor";
 import { useFeed } from "../model/feed.queries";
 import { useFeedEditorNavigation } from "../model/use-feed-editor-navigation";
 import { feedListReturnTo, feedSectionRoutes } from "../model/feed.navigation";
 import { feedErrorMessage } from "../model/feed.errors";
-import { SchemaApiError } from "../model/feed-schema.types";
+import { SchemaApiError, type SchemaIssue } from "../model/feed-schema.types";
 import { FeedApiError } from "../model/feed.types";
 const route = useRoute(),
   router = useRouter();
 const id = computed(() => String(route.params.id ?? ""));
 const editor = useFeedSchemaEditor(id),
   feed = useFeed(id);
+const categorySection = ref(false);
+const sections = [
+  { categories: false, label: "Поля предложения" },
+  { categories: true, label: "Категории" },
+] as const;
+const visibleFields = computed(() =>
+  (editor.draft.value?.fields ?? []).filter(
+    (field) => !categorySection.value || field.typeDefinition.kind === "category",
+  ),
+);
+watch(id, () => { categorySection.value = false; });
+watch(editor.selected, (field) => {
+  if (field && field.typeDefinition.kind !== "category") categorySection.value = false;
+});
+function selectSection(categories: boolean): void {
+  categorySection.value = categories;
+  editor.selectedId.value = visibleFields.value[0]?.id ?? "";
+}
+function moveVisibleField(identifier: string, delta: number): void {
+  const visibleIndex = visibleFields.value.findIndex((field) => field.id === identifier);
+  const target = visibleFields.value[visibleIndex + delta];
+  const fields = editor.draft.value?.fields;
+  if (!target || !fields) return;
+  editor.move(identifier, fields.indexOf(target) - fields.findIndex((field) => field.id === identifier));
+}
 const xmlItemName = computed(() => {
   const settings = feed.data.value?.exportSettings.formatSettings;
   return settings?.format === "xml" ? settings.itemName : undefined;
@@ -58,15 +83,18 @@ const errorMessage = computed(() => {
     return "Feed изменён или архивирован. Ваш ввод сохранён.";
   return feedErrorMessage(error);
 });
+function issueFieldId(issue: SchemaIssue): string | undefined {
+  if (issue.fieldId) return issue.fieldId;
+  const fieldsPosition = issue.path.indexOf("fields");
+  const index = issue.path[fieldsPosition + 1];
+  if (fieldsPosition >= 0 && typeof index === "number")
+    return editor.draft.value?.fields[index]?.id;
+}
+const fieldIssues = computed(() =>
+  editor.issues.value.map((issue) => ({ ...issue, fieldId: issueFieldId(issue) })),
+);
 const selectedIssues = computed(() =>
-  editor.issues.value.filter(
-    (i) =>
-      i.fieldId === editor.selectedId.value ||
-      i.path[3] ===
-        editor.draft.value?.fields.findIndex(
-          (f) => f.id === editor.selectedId.value,
-        ),
-  ),
+  fieldIssues.value.filter((issue) => issue.fieldId === editor.selectedId.value),
 );
 const blocked = computed(
   () => editor.busy.value || editor.conflict.value || editor.readonly.value,
@@ -240,17 +268,12 @@ async function save(): Promise<void> {
     <Alert v-if="editor.issues.value.length" variant="destructive"
       ><AlertDescription
         ><ul class="flex flex-col gap-2">
-          <li v-for="(issue, index) in editor.issues.value" :key="index">
+          <li v-for="(issue, index) in fieldIssues" :key="index">
             <button
-              v-if="issue.fieldId || typeof issue.path[3] === 'number'"
+              v-if="issue.fieldId"
               type="button"
               class="text-left underline underline-offset-4"
-              @click="
-                editor.selectedId.value =
-                  issue.fieldId ??
-                  editor.draft.value?.fields[Number(issue.path[3])]?.id ??
-                  ''
-              "
+              @click="editor.selectedId.value = issue.fieldId"
             >
               {{ issue.message }}</button
             ><span v-else>{{ issue.message }}</span>
@@ -267,24 +290,41 @@ async function save(): Promise<void> {
       <Skeleton v-for="row in 6" :key="row" class="h-12 w-full" />
     </div>
     <div
+      v-if="editor.metadata.data.value"
+      role="group"
+      aria-label="Раздел конструктора"
+      class="flex flex-wrap gap-2"
+    >
+      <Button
+        v-for="section in sections"
+        :key="section.label"
+        type="button"
+        :aria-pressed="categorySection === section.categories"
+        :variant="categorySection === section.categories ? 'secondary' : 'outline'"
+        @click="selectSection(section.categories)"
+      >{{ section.label }}</Button>
+    </div>
+    <div
       v-if="editor.draft.value && editor.metadata.data.value"
       class="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(300px,400px)_minmax(0,1fr)]"
     >
       <SchemaFieldsList
-        :fields="editor.draft.value.fields"
+        :fields="visibleFields"
+        :total-fields="editor.draft.value.fields.length"
         :selected-id="editor.selectedId.value"
         :metadata="editor.metadata.data.value"
-        :issues="editor.issues.value"
+        :issues="fieldIssues"
+        :categories="categorySection"
         :disabled="blocked"
         :readonly="editor.readonly.value"
         @select="editor.selectedId.value = $event"
         @add="editor.add"
-        @move="editor.move"
+        @move="moveVisibleField"
         @duplicate="editor.duplicate"
         @remove="remove"
       />
       <div v-if="editor.selected.value" class="flex min-w-0 flex-col gap-6">
-        <SchemaFieldForm
+        <FieldNodeForm
           :key="editor.selected.value.id"
           :field="editor.selected.value"
           :xml-item-name="exportedItemName"

@@ -37,7 +37,7 @@ class GetPublicationHandler:
         record = await self._publications.get(query.publication_id)
         if record is None:
             raise PublicationNotFoundError("Публикация не найдена.")
-        feed = await self._feeds.get_schema(FeedIdVO(record.feed_id))
+        feed = await self._feeds.get_details(FeedIdVO(record.feed_id))
         if feed is None:
             raise PublicationNotFoundError("Feed не найден.")
         return GetPublicationResultDTO(

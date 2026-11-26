@@ -11,7 +11,7 @@ import {
   type FeedSection,
 } from "../model/feed.navigation";
 import { feedErrorMessage } from "../model/feed.errors";
-import { SchemaApiError } from "../model/feed-schema.types";
+import { FeedRequestError } from "../model/feed-request-error";
 import { useFeed } from "../model/feed.queries";
 import { feedKeys } from "../model/feed.query-keys";
 import { useFeedScope } from "../model/use-feed-scope";
@@ -45,7 +45,7 @@ const rotate = useRotateFeedLink();
 const busy = computed(() => refresh.pending.value || rotate.pending.value);
 const actionError = computed(() => {
   const error = refresh.error.value || rotate.error.value;
-  if (error instanceof SchemaApiError && error.issues[0]) {
+  if (error instanceof FeedRequestError && error.issues[0]) {
     return error.issues[0].message;
   }
   return error ? feedErrorMessage(error) : "";

@@ -11,7 +11,7 @@ from src.modules.feed_builder.application.feed.port.calculation_product import (
     CalculationProductNotFoundError,
     CalculationDependencyUnavailableError,
 )
-from src.modules.feed_builder.domain.feed.value_object.calculation_inputs import (
+from src.modules.feed_builder.domain.feed.expression.value_object.calculation_inputs import (
     CalculationInputsVO,
 )
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO

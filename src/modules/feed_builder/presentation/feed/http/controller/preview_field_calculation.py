@@ -8,12 +8,12 @@ from src.modules.feed_builder.application.feed.port.calculation_product import (
     CalculationProductNotFoundError,
     CalculationDependencyUnavailableError,
 )
-from src.modules.feed_builder.application.feed.schema_error import (
+from src.modules.feed_builder.application.feed.graph.error import (
     InvalidFeedSchemaDocumentError,
 )
 from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.error import FeedBuilderDomainError
-from src.modules.feed_builder.domain.feed.calculation.error import (
+from src.modules.feed_builder.domain.feed.expression.error import (
     CalculationDefinitionError,
 )
 from src.modules.feed_builder.domain.feed.error import (

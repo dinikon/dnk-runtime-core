@@ -13,7 +13,7 @@ from src.modules.feed_builder.application.feed.port.calculation_product import (
 from src.modules.feed_builder.application.publication.port.export_source import (
     CatalogReference,
 )
-from src.modules.feed_builder.domain.feed.value_object.calculation_inputs import (
+from src.modules.feed_builder.domain.feed.expression.value_object.calculation_inputs import (
     CalculationInputsVO,
 )
 from src.modules.feed_builder.domain.publication.value_object.publication_catalog_snapshot import (

@@ -1,6 +1,6 @@
 from uuid import UUID
 from src.modules.feed_builder.domain.feed.aggregate import Feed
-from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.publication.repository import (
     FeedPublicationRepositoryProtocol,
@@ -22,14 +22,14 @@ from src.modules.feed_builder.domain.publication.error import (
 
 
 async def load_editable_publication(
-    feeds: FeedRepositoryProtocol,
+    feeds: FeedSettingsRepositoryProtocol,
     publications: FeedPublicationRepositoryProtocol,
     feed_id: UUID,
     identifier: UUID,
     expected_version: int,
 ) -> FeedPublication:
     """Загружает и проверяет объекты в едином порядке блокировок Feed → Publication."""
-    feed = await feeds.get_for_update(FeedIdVO(feed_id))
+    feed = (await feeds.get_settings_for_update(FeedIdVO(feed_id))).feed
     PublicationParticipationPolicy.ensure_editable(feed)
     return await load_publication_for_update(
         publications, feed, identifier, expected_version

@@ -1,5 +1,5 @@
 import { httpClient } from "@/app/providers/http";
-import { schemaRequest } from "./feed-schema.api";
+import { feedRequest } from "./feed-request";
 import {
   calculationMetadata,
   mapPreview,
@@ -18,7 +18,7 @@ import type {
 const root = "/console/feed-builder";
 export const feedCalculationApi = {
   async metadata(signal: AbortSignal): Promise<CalculationMetadata> {
-    return schemaRequest(async () => {
+    return feedRequest(async () => {
       const [p, o] = await Promise.all([
         httpClient.get<CalculationParametersDTO>(
           `${root}/calculation-parameters`,
@@ -36,7 +36,7 @@ export const feedCalculationApi = {
     value: PreviewRequest,
     signal: AbortSignal,
   ): Promise<CalculationPreview> {
-    return schemaRequest(async () =>
+    return feedRequest(async () =>
       mapPreview(
         (
           await httpClient.post<CalculationPreviewDTO>(

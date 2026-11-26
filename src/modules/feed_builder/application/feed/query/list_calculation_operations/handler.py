@@ -5,16 +5,16 @@ from src.modules.feed_builder.application.feed.query.list_calculation_operations
     ListCalculationOperationsResultDTO,
     CalculationOperationDTO,
 )
-from src.modules.feed_builder.domain.feed.enum.arithmetic_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.arithmetic_operator import (
     ArithmeticOperator,
 )
-from src.modules.feed_builder.domain.feed.enum.price_function import PriceFunction
-from src.modules.feed_builder.domain.feed.enum.comparison_operator import (
+from src.modules.feed_builder.domain.feed.expression.enum.price_function import PriceFunction
+from src.modules.feed_builder.domain.feed.expression.enum.comparison_operator import (
     ComparisonOperator,
 )
-from src.modules.feed_builder.domain.feed.enum.logical_operator import LogicalOperator
-from src.modules.feed_builder.domain.feed.enum.presence_operator import PresenceOperator
-from src.modules.feed_builder.domain.feed.calculation.parameters import (
+from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import LogicalOperator
+from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import PresenceOperator
+from src.modules.feed_builder.domain.feed.expression.parameters import (
     ENGINE_VERSION,
     PRECISION,
 )

@@ -1,7 +1,6 @@
 """Полная вертикаль Feed CRUD на изолированных PostgreSQL tenant-схемах."""
 
 import asyncio
-import copy
 import os
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -35,6 +34,7 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
     bind_tenant_schema,
 )
+from src.modules.feed_builder.application.feed.graph.codec import decode_schema
 from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
@@ -179,7 +179,23 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-    async def test_schema_full_workflow_metadata_reorder_empty_and_archive(
+    async def seed_feed_schema(
+        self, feed_id: str, definition: dict, expected_version: int
+    ) -> Feed:
+        """Готовит сохранённую схему для проверок остальных API фида."""
+        async with self.scoped_session() as session:
+            repository = SqlAlchemyFeedRepository(session)
+            original = await repository.get_for_update(FeedIdVO.from_value(feed_id))
+            self.assertEqual(original.version.value, expected_version)
+            saved = original.change_schema(
+                schema=decode_schema(definition, previous_schema=original.schema),
+                now=original.updated_at,
+            )
+            if saved is not original:
+                await repository.save(saved, expected_version=original.version)
+            return saved
+
+    async def test_schema_save_clears_fields_and_keeps_metadata_and_archive(
         self,
     ) -> None:
         """Проходит рабочий сценарий схемы с настоящими auth, CSRF, SQL и UoW."""
@@ -204,43 +220,53 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("CONSTANT", modes["string"])
                 self.assertIn("CONSTANT", modes["text"])
         definition = source_schema_document()
+        original = await self.seed_feed_schema(created["id"], definition, 1)
+        self.assertEqual(original.version.value, 2)
+        before = (await self.client.get(path + "/schema")).json()
+        self.assertEqual(len(before["definition"]["root"]["fields"]), 4)
+        expected = {**definition, "root": {**definition["root"], "fields": []}}
         saved = await self.client.put(
             path + "/schema/draft",
             headers=self.headers,
-            json={"expected_version": 1, "definition": definition},
+            json={"expected_version": 2, "definition": definition},
         )
         self.assertEqual(saved.status_code, 200, saved.text)
-        self.assertEqual(saved.json()["definition"], definition)
-        self.assertEqual(saved.json()["version"], 2)
+        self.assertEqual(saved.json()["definition"], expected)
+        self.assertEqual(saved.json()["version"], 3)
         self.assertEqual(
             (await self.client.get(path + "/schema")).json(),
             {
                 "feed_id": created["id"],
-                "version": 2,
+                "version": 3,
                 "status": "DRAFT",
-                "definition": definition,
+                "definition": expected,
             },
         )
         self.assertEqual(
-            (await self.client.get(self.base)).json()["items"][0]["fields_count"], 4
+            (await self.client.get(self.base)).json()["items"][0]["fields_count"], 0
         )
-        noop = await self.client.put(
-            path + "/schema/draft",
-            headers=self.headers,
-            json={"expected_version": 2, "definition": definition},
-        )
-        self.assertEqual(noop.json()["version"], 2)
-        fields = definition["root"]["fields"]
-        fields.reverse()
-        fields[0]["label"] = "Цена партнёра"
-        changed = await self.client.put(
-            path + "/schema/draft",
-            headers=self.headers,
-            json={"expected_version": 2, "definition": definition},
-        )
-        self.assertEqual(changed.status_code, 200, changed.text)
-        self.assertEqual(changed.json()["definition"], definition)
-        self.assertEqual(changed.json()["version"], 3)
+        for incoming in (
+            definition["root"]["fields"],
+            [{"unknown": "field"}],
+            False,
+            {},
+            "ignored",
+            None,
+        ):
+            with self.subTest(incoming=incoming):
+                noop = await self.client.put(
+                    path + "/schema/draft",
+                    headers=self.headers,
+                    json={
+                        "expected_version": 3,
+                        "definition": {
+                            **definition,
+                            "root": {**definition["root"], "fields": incoming},
+                        },
+                    },
+                )
+                self.assertEqual(noop.status_code, 200, noop.text)
+                self.assertEqual(noop.json(), saved.json())
         self.assertEqual(
             (await self.client.get(path)).json()["export_settings"],
             created["export_settings"],
@@ -260,58 +286,81 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(denied.status_code, 409)
         self.assertEqual(denied.json()["detail"]["code"], "FEED_ARCHIVED")
 
-    async def test_schema_invalid_payload_limits_and_rollback(self) -> None:
-        """Недопустимые данные, chunked-лимиты и ошибки локалей не оставляют записи."""
-        from test.test_feed_builder_schema import source_schema_document
+    async def test_category_membership_requires_a_catalog_uuid(self) -> None:
+        """Адресует несовместимый операнд и сохраняет исправленное правило."""
+        feed = await self.create()
+        tree_id, field_id, target_id, catalog_id = (str(uuid4()) for _ in range(4))
+        condition = {
+            "kind": "comparison",
+            "operator": "CONTAINS",
+            "left": {"kind": "parameter", "parameter": "product.category_ids"},
+            "right": {"kind": "scalar", "value_type": "boolean", "value": True},
+        }
+        definition = {
+            "schema_format_version": 2,
+            "fields": [{
+                "id": field_id, "key": "category", "name": "Категория",
+                "typeId": "core.category_reference", "typeVersion": 1,
+                "scope": "offer", "data": {"source": "feed", "treeId": tree_id},
+                "export": {"name": "category", "enabled": True,
+                           "publication": {"value_key": "id"}},
+            }],
+            "categoryTrees": [{"id": tree_id, "data": {
+                "object_schema": {"id_key": "id", "label_key": "name", "fields": [
+                    {"key": "id", "kind": "string", "required": True},
+                    {"key": "name", "kind": "string"},
+                ]},
+                "value": {
+                    "kind": "INLINE", "fallback": "FIXED", "fallback_id": target_id,
+                    "nodes": [{"id": target_id, "values": {"id": "987", "name": "Подборка"}}],
+                    "rules": [{"id": str(uuid4()), "target_id": target_id,
+                               "label": "По категории Catalog", "condition": condition}],
+                },
+            }}],
+        }
+        path = f"{self.base}/{feed['id']}/schema/draft"
+        payload = {"expected_version": 1, "definition": definition}
+        invalid = await self.client.put(path, headers=self.headers, json=payload)
+        self.assertEqual(invalid.status_code, 422, invalid.text)
+        detail = invalid.json()["detail"]
+        self.assertEqual(detail["code"], "INVALID_EXPRESSION_TYPE")
+        self.assertIn("uuid", detail["message"])
+        self.assertEqual(detail["field_id"], field_id)
+        self.assertEqual(detail["path"], [
+            "definition", "categoryTrees", 0, "data", "value", "rules", 0,
+            "condition", "right",
+        ])
 
-        await self.seed_schema_locales()
+        condition["right"] = {"kind": "scalar", "value_type": "uuid", "value": catalog_id}
+        saved = await self.client.put(path, headers=self.headers, json=payload)
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["version"], 2)
+        rule = saved.json()["definition"]["categoryTrees"][0]["data"]["value"]["rules"][0]
+        self.assertEqual(rule["condition"], condition)
+
+    async def test_schema_invalid_payload_limits_and_rollback(self) -> None:
+        """Некорректная оболочка и ограничения тела отклоняются до записи."""
         created = await self.create()
         path = self.base + "/" + created["id"]
-        definition = source_schema_document()
-        invalid = []
-        value = copy.deepcopy(definition)
-        value["root"]["fields"][1]["key"] = value["root"]["fields"][0]["key"]
-        invalid.append(value)
-        value = copy.deepcopy(definition)
-        value["root"]["fields"][0]["type_definition"]["locale"] = None
-        invalid.append(value)
-        value = copy.deepcopy(definition)
-        value["root"]["fields"][0]["type_definition"]["locale"] = "xx-NotHere"
-        invalid.append(value)
-        value = copy.deepcopy(definition)
-        value["root"]["fields"][0]["type_definition"]["value"]["source"][
-            "path"
-        ] = "item.regular_price"
-        invalid.append(value)
-        value = copy.deepcopy(definition)
-        value["root"]["fields"][0]["type_definition"]["currency"] = "USD"
-        invalid.append(value)
-        value = copy.deepcopy(definition)
-        value["root"]["fields"][0]["type_definition"]["value"]["source"][
-            "path"
-        ] = "item.password"
-        invalid.append(value)
-        for definition in invalid:
-            result = await self.client.put(
-                path + "/schema/draft",
-                headers=self.headers,
-                json={"expected_version": 1, "definition": definition},
-            )
-            self.assertEqual(result.status_code, 422, result.text)
-            self.assertEqual((await self.client.get(path)).json(), created)
-        duplicate = await self.client.put(
-            path + "/schema/draft",
-            headers=self.headers,
-            json={"expected_version": 1, "definition": invalid[0]},
-        )
-        self.assertEqual(
-            duplicate.json()["detail"]["field_id"],
-            invalid[0]["root"]["fields"][1]["id"],
-        )
-        self.assertEqual(
-            duplicate.json()["detail"]["path"],
-            ["definition", "root", "fields", 1, "key"],
-        )
+        for definition in (
+            None,
+            [],
+            {},
+            {"schema_format_version": 1, "root": None},
+            {"schema_format_version": 1, "root": {"key": "feed", "kind": "object"}},
+            {
+                "schema_format_version": 2,
+                "root": {"key": "publication", "kind": "object"},
+            },
+        ):
+            with self.subTest(definition=definition):
+                result = await self.client.put(
+                    path + "/schema/draft",
+                    headers=self.headers,
+                    json={"expected_version": 1, "definition": definition},
+                )
+                self.assertEqual(result.status_code, 422, result.text)
+                self.assertEqual((await self.client.get(path)).json(), created)
 
         async def chunks():
             yield b"{" + b" " * (1024 * 1024)
@@ -337,29 +386,29 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Общая версия защищает схему/настройки, tenant и auth не обходятся через новый URL."""
         from test.test_feed_builder_schema import source_schema_document
 
-        await self.seed_schema_locales()
         created = await self.create()
         path = self.base + "/" + created["id"]
         definition = source_schema_document()
+        await self.seed_feed_schema(created["id"], definition, 1)
         first, second = await asyncio.gather(
             self.client.put(
                 path + "/schema/draft",
                 headers=self.headers,
-                json={"expected_version": 1, "definition": definition},
+                json={"expected_version": 2, "definition": definition},
             ),
             self.client.patch(
                 path,
                 headers=self.headers,
-                json={"expected_version": 1, "name": "Конкурентные настройки"},
+                json={"expected_version": 2, "name": "Конкурентные настройки"},
             ),
         )
         self.assertEqual(sorted([first.status_code, second.status_code]), [200, 409])
-        self.assertEqual((await self.client.get(path)).json()["version"], 2)
+        self.assertEqual((await self.client.get(path)).json()["version"], 3)
         self.assertEqual(
             (
                 await self.client.put(
                     path + "/schema/draft",
-                    json={"expected_version": 2, "definition": definition},
+                    json={"expected_version": 3, "definition": definition},
                 )
             ).status_code,
             403,
@@ -377,7 +426,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.client.put(
                     path + "/schema/draft",
                     headers=self.headers,
-                    json={"expected_version": 2, "definition": definition},
+                    json={"expected_version": 3, "definition": definition},
                 )
             ).status_code,
             403,
@@ -394,24 +443,22 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.client.put(
                     path + "/schema/draft",
                     headers=self.headers,
-                    json={"expected_version": 2, "definition": definition},
+                    json={"expected_version": 3, "definition": definition},
                 )
             ).status_code,
             404,
         )
 
-    async def test_schema_calculation_roundtrip_and_commit_failure_rollback(
+    async def test_schema_clear_commit_failure_rolls_back(
         self,
     ) -> None:
-        """Известный сложный AST не теряется; сбой commit не превращается в успех."""
-        await self.seed_schema_locales()
+        """Сбой commit при очистке сохраняет старую схему и её версию."""
         original = rich_feed()
         async with self.scoped_session() as session:
             await SqlAlchemyFeedRepository(session).add(original)
         path = self.base + "/" + str(original.id.uuid)
         read = (await self.client.get(path + "/schema")).json()
-        definition = copy.deepcopy(read["definition"])
-        definition["root"]["fields"][1]["label"] = "Подробное описание"
+        definition = read["definition"]
         with patch.object(
             UnitOfWork, "commit", side_effect=RuntimeError("test commit failure")
         ):
@@ -428,7 +475,8 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             json={"expected_version": 1, "definition": definition},
         )
         self.assertEqual(saved.status_code, 200, saved.text)
-        self.assertEqual(saved.json()["definition"], definition)
+        self.assertEqual(saved.json()["definition"]["root"]["fields"], [])
+        self.assertEqual(saved.json()["version"], 2)
 
     async def test_http_create_list_get_patch_archive_and_repeat(self) -> None:
         """Проходит полный путь CRUD с сохранением настроек и логическим удалением."""
@@ -618,11 +666,15 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         ):
             response = await self.client.get(path)
         self.assertEqual(response.status_code, 200)
-        changed = await self.client.patch(
-            path,
-            headers=self.headers,
-            json={"expected_version": 1, "name": "Сохранить схему"},
-        )
+        with patch(
+            "src.modules.feed_builder.infrastructure.feed.persistence.mapper.decode_schema",
+            side_effect=AssertionError("settings decoded graph"),
+        ):
+            changed = await self.client.patch(
+                path,
+                headers=self.headers,
+                json={"expected_version": 1, "name": "Сохранить схему"},
+            )
         self.assertEqual(changed.status_code, 200, changed.text)
         self.assertEqual(changed.json()["schema"], before["schema"])
         async with self.scoped_session() as session:

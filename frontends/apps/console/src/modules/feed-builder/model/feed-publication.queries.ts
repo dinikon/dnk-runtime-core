@@ -1,6 +1,7 @@
 import { computed, type Ref } from "vue";
 import { useQuery, type UseQueryReturnType } from "@tanstack/vue-query";
 import {
+  listCatalogLocales,
   searchCatalogPublicationProducts,
   searchCatalogPublicationVariants,
 } from "@/modules/catalog";
@@ -100,6 +101,19 @@ export function usePublication(
     queryFn: ({ signal }) =>
       feedPublicationApi.get(id.value, locale.value, signal),
     enabled: computed(() => !!scope.value[0] && !!scope.value[1] && !!id.value),
+    retry: false,
+  });
+}
+
+export function usePublicationLocales(): UseQueryReturnType<
+  { code: string; name: string }[],
+  Error
+> {
+  const scope = useFeedScope();
+  return useQuery({
+    queryKey: computed(() => publicationKeys.locales(scope.value)),
+    queryFn: ({ signal }) => listCatalogLocales(signal),
+    enabled: computed(() => Boolean(scope.value[0] && scope.value[1])),
     retry: false,
   });
 }

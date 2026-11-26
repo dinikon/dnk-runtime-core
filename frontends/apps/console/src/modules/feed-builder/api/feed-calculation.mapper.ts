@@ -9,7 +9,7 @@ import type {
   CalculationPreview,
   PreviewRequest,
 } from "../model/feed-calculation.types.ts";
-import { definitionPayload } from "./feed-schema.mapper.ts";
+import { schemaFieldPayload } from "./feed-schema.mapper.ts";
 export function calculationMetadata(
   parameters: CalculationParametersDTO,
   operations: CalculationOperationsDTO,
@@ -42,10 +42,7 @@ export function previewPayload(request: PreviewRequest): PreviewRequestDTO {
     field_id: request.field.id,
     catalog_item_id: request.itemId,
     catalog_variant_id: request.variantId,
-    definition_override: definitionPayload({
-      schemaFormatVersion: 1,
-      fields: [request.field],
-    }).root.fields[0]!,
+    definition_override: schemaFieldPayload(request.field),
   };
 }
 export function mapPreview(d: CalculationPreviewDTO): CalculationPreview {

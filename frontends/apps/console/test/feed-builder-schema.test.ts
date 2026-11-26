@@ -18,7 +18,8 @@ import {
   mapFeedSchema,
   saveSchemaPayload,
 } from "../src/modules/feed-builder/api/feed-schema.mapper.ts";
-import type { SchemaCalculation } from "../src/modules/feed-builder/model/feed-schema.types.ts";
+import type { SchemaCalculation, SchemaNode } from "../src/modules/feed-builder/model/feed-schema.types.ts";
+import type { FeedCategoryRule } from "../src/modules/feed-builder/model/feed-categories.types.ts";
 
 test("Four-field schema maps to exact nested definitions with fixed source paths and no implicit currency", () => {
   const schema = fourFieldSchema(),
@@ -72,6 +73,57 @@ test("Two category fields keep independent object schemas and output bindings", 
   assert.equal(payload.root.fields.at(-2)?.export.document?.container, "categories");
   assert.equal(payload.root.fields.at(-1)?.export.document, undefined);
   assert.deepEqual(schemaDraft(mapDefinition(payload)), draft);
+});
+
+test("The flat graph writes a shared category tree once and keeps Offer references by ID", () => {
+  const draft = schemaDraft(fourFieldSchema());
+  const treeId = "00000000-0000-4000-8000-000000000017";
+  const first = newSchemaField("category", "00000000-0000-4000-8000-000000000012", draft.fields);
+  draft.fields.push({ ...first, categoryTreeId: treeId });
+  const second = newSchemaField("category", "00000000-0000-4000-8000-000000000013", draft.fields);
+  draft.fields.push({ ...second, categoryTreeId: treeId });
+  const payload = definitionPayload({ ...draftDefinition(draft, schemaMetadata), schemaFormatVersion: 2 });
+  assert.equal(payload.schema_format_version, 2);
+  assert.equal("root" in payload, false);
+  assert.deepEqual(payload.categoryTrees?.map((tree) => tree.id), [treeId]);
+  assert.deepEqual(
+    payload.fields.slice(-2).map((node) => ({ id: node.id, typeId: node.typeId, data: node.data })),
+    [first, second].map((field) => ({
+      id: field.id, typeId: "core.category_reference", data: { source: "feed", treeId },
+    })),
+  );
+  const reloaded = mapDefinition(payload);
+  assert.equal(reloaded.fields.at(-1)?.categoryTreeId, treeId);
+  assert.deepEqual(definitionPayload(reloaded), payload);
+});
+
+test("Category membership validation identifies a nested operand and accepts a Catalog UUID", () => {
+  const field = newSchemaField("category", "00000000-0000-4000-8000-000000000012", []);
+  if (field.typeDefinition.kind !== "category") throw new Error("fixture");
+  const membership: Extract<SchemaNode, { kind: "comparison" }> = {
+    kind: "comparison",
+    operator: "CONTAINS",
+    left: { kind: "parameter", parameter: "product.category_ids" },
+    right: { kind: "scalar", valueType: "boolean", value: true },
+  };
+  const rule: FeedCategoryRule = {
+    id: "rule",
+    targetId: "local-category",
+    label: "По Catalog",
+    includeDescendants: false,
+    condition: {
+      kind: "logical",
+      operator: "ALL",
+      operands: [membership],
+    },
+  };
+  field.typeDefinition.value.rules.push(rule);
+  const draft = { fields: [field] };
+  const [error] = validateSchemaDraft(draft, schemaMetadata);
+  assert.equal(error?.fieldId, field.id);
+  assert.deepEqual(error?.path.slice(-6), ["rules", 0, "condition", "operands", 0, "right"]);
+  membership.right = { kind: "scalar", valueType: "uuid", value: "00000000-0000-4000-8000-000000000077" };
+  assert.deepEqual(validateSchemaDraft(draft, schemaMetadata), []);
 });
 
 test("Static text in short and multiline fields round-trips through the schema API", () => {

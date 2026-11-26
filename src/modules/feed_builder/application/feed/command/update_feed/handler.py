@@ -8,8 +8,7 @@ from src.modules.feed_builder.application.feed.export_settings import (
     settings_from_dto,
     settings_to_dto,
 )
-from src.modules.feed_builder.application.feed.schema_document import schema_document
-from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
 from src.modules.feed_builder.domain.feed.value_object.feed_code import FeedCodeVO
 from src.modules.shared.domain.time.clock_port import ClockPort
@@ -23,7 +22,7 @@ from src.modules.feed_builder.domain.feed.error import (
 class UpdateFeedHandler:
     """Атомарно меняет настройки загруженного агрегата без изменения схемы."""
 
-    def __init__(self, repository: FeedRepositoryProtocol, clock: ClockPort) -> None:
+    def __init__(self, repository: FeedSettingsRepositoryProtocol, clock: ClockPort) -> None:
         """Принимает зависимости сценария без сессии или собственного UoW."""
         self._repository = repository
         self._clock = clock
@@ -37,7 +36,8 @@ class UpdateFeedHandler:
             and command.export_settings is None
         ):
             raise InvalidFeedValueError("Нужно передать хотя бы одно изменение.")
-        original = await self._repository.get_for_update(command.feed_id)
+        locked = await self._repository.get_settings_for_update(command.feed_id)
+        original = locked.feed
         if original.version != expected:
             raise FeedVersionConflictError("Feed уже изменён.")
         result = original.change_settings(
@@ -55,14 +55,14 @@ class UpdateFeedHandler:
             now=self._clock.now(),
         )
         if result is not original:
-            await self._repository.save(result, expected_version=expected)
+            await self._repository.save_settings(result, expected_version=expected)
         return UpdateFeedResultDTO(
             id=result.id.uuid,
             name=result.name.value,
             code=result.code.value,
             status=result.status.value,
             export_settings=settings_to_dto(result.export_settings),
-            schema=schema_document(result.schema),
+            schema=locked.graph_document,
             version=result.version.value,
             created_at=result.created_at,
             updated_at=result.updated_at,
