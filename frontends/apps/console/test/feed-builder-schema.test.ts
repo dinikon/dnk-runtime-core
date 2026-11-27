@@ -25,16 +25,14 @@ test("Four-field schema maps to exact nested definitions with fixed source paths
   const schema = fourFieldSchema(),
     dto = definitionPayload(schema);
   assert.deepEqual(
-    dto.root.fields.map((f) => f.type_definition.kind),
-    ["string", "text", "string", "money"],
+    dto.fields.map((f) => f.typeId),
+    ["core.short_text", "core.long_text", "core.short_text", "core.money"],
   );
-  const price = dto.root.fields[3]!.type_definition;
-  assert.equal(price.kind, "money");
-  if (price.kind === "money") {
-    assert.equal(price.currency, null);
-    assert.equal("locale" in price, false);
-    assert.equal(price.value.mode, "SOURCE");
-  }
+  const price = dto.fields[3]!.data;
+  assert.ok("currency" in price);
+  assert.equal(price.currency, null);
+  assert.equal("locale" in price, false);
+  assert.equal(price.value.mode, "SOURCE");
   assert.deepEqual(mapDefinition(dto), schema);
   const request = saveSchemaPayload({
     id: "feed",
@@ -70,9 +68,9 @@ test("Two category fields keep independent object schemas and output bindings", 
   second.typeDefinition.value.nodes.push({ id, values: { id: "20", name: "Склад" }, parentId: null, catalogId: null, inheritParent: false });
   const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
   assert.equal("categories" in payload, false);
-  assert.equal(payload.root.fields.at(-2)?.export.document?.container, "categories");
-  assert.equal(payload.root.fields.at(-1)?.export.document, undefined);
-  assert.deepEqual(schemaDraft(mapDefinition(payload)), draft);
+  assert.equal(payload.fields.at(-2)?.export.document?.container, "categories");
+  assert.equal(payload.fields.at(-1)?.export.document, undefined);
+  assert.deepEqual(definitionPayload(mapDefinition(payload)), payload);
 });
 
 test("The flat graph writes a shared category tree once and keeps Offer references by ID", () => {
@@ -82,7 +80,7 @@ test("The flat graph writes a shared category tree once and keeps Offer referenc
   draft.fields.push({ ...first, categoryTreeId: treeId });
   const second = newSchemaField("category", "00000000-0000-4000-8000-000000000013", draft.fields);
   draft.fields.push({ ...second, categoryTreeId: treeId });
-  const payload = definitionPayload({ ...draftDefinition(draft, schemaMetadata), schemaFormatVersion: 2 });
+  const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
   assert.equal(payload.schema_format_version, 2);
   assert.equal("root" in payload, false);
   assert.deepEqual(payload.categoryTrees?.map((tree) => tree.id), [treeId]);
@@ -139,7 +137,7 @@ test("Rich text fields keep the HTML source and locale chain through V2", () => 
   };
   const draft = { fields: [field] };
   assert.deepEqual(validateSchemaDraft(draft, metadata), []);
-  const payload = definitionPayload({ ...draftDefinition(draft, metadata), schemaFormatVersion: 2 });
+  const payload = definitionPayload(draftDefinition(draft, metadata));
   assert.equal(payload.schema_format_version, 2);
   assert.equal(payload.fields[0]?.typeId, "core.rich_text");
   assert.deepEqual(payload.fields[0]?.data, {
@@ -161,7 +159,7 @@ test("Static text in short and multiline fields round-trips through the schema A
   }
   const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
   assert.deepEqual(
-    payload.root.fields.slice(0, 2).map((field) => field.type_definition.value),
+    payload.fields.slice(0, 2).map((field) => field.data.value),
     texts.map((value) => ({ kind: "CONSTANT", value })),
   );
   assert.deepEqual(schemaDraft(mapDefinition(payload)), draft);
@@ -172,7 +170,7 @@ test("XML placement survives API mapping and returning to element restores the d
   assert.equal(field.export.xmlPlacement, "ELEMENT");
   field.export.xmlPlacement = "ATTRIBUTE";
   const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
-  assert.equal(payload.root.fields[0]!.export.xml_placement, "ATTRIBUTE");
+  assert.equal(payload.fields[0]!.export.xml_placement, "ATTRIBUTE");
   const reloaded = schemaDraft(mapDefinition(payload));
   assert.equal(reloaded.fields[0]!.export.xmlPlacement, "ATTRIBUTE");
 
@@ -182,7 +180,7 @@ test("XML placement survives API mapping and returning to element restores the d
   ));
   field.export.xmlPlacement = "ELEMENT";
   const reset = definitionPayload(draftDefinition(draft, schemaMetadata));
-  assert.equal(reset.root.fields[0]!.export.xml_placement, undefined);
+  assert.equal(reset.fields[0]!.export.xml_placement, undefined);
 });
 test("Integer zero and false IF/ELSE values round-trip through the draft and API", () => {
   const integer = newSchemaField("integer", "00000000-0000-4000-8000-000000000001", []);
@@ -214,8 +212,8 @@ test("Integer zero and false IF/ELSE values round-trip through the draft and API
   };
   const draft = { fields: [integer, boolean] };
   const payload = definitionPayload(draftDefinition(draft, schemaMetadata));
-  assert.deepEqual(payload.root.fields[0]!.type_definition.value, { kind: "CONSTANT", value: 0 });
-  assert.deepEqual(payload.root.fields[1]!.type_definition.value, {
+  assert.deepEqual(payload.fields[0]!.data.value, { kind: "CONSTANT", value: 0 });
+  assert.deepEqual(payload.fields[1]!.data.value, {
     kind: "CALCULATED",
     condition,
     then_value: true,
@@ -411,7 +409,7 @@ test("Acknowledgement replaces only the sent snapshot, retaining later local inp
   assert.equal(acknowledgeSchemaDraft(later, sent, schema), later);
   assert.deepEqual(acknowledgeSchemaDraft(sent, sent, schema), sent);
   assert.deepEqual(draftDefinition({ fields: [] }, schemaMetadata), {
-    schemaFormatVersion: 1,
+    schemaFormatVersion: 2,
     fields: [],
   });
 });

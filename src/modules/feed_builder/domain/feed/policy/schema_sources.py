@@ -61,7 +61,7 @@ class FeedSchemaSourcePolicy:
             )
             if source is None:
                 continue
-            path = ("definition", "root", "fields", index, "type_definition")
+            path = ("definition", "fields", index, "data")
             if definition.kind not in cls.allowed_kinds(source.path):
                 raise InvalidFieldDefinitionError(
                     "Источник несовместим с типом поля.",

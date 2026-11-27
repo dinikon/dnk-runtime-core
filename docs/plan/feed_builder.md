@@ -28,8 +28,10 @@ CSV и XML собираются через `scheduled_jobs` и доступны 
 выгрузки. API формирует `forms` на основе регистрации типа. В `categoryTrees`
 хранятся локальные деревья и правила присвоения. Нода категории в Offer ссылается на
 дерево по `treeId`. При расчёте явно заданная перезапись публикации имеет приоритет.
-Консоль и воркер читают сохранённые схемы и снимки задач версии 1.
-Запись определения версии 1 очищает список полей, как и в переходном контракте.
+Сохранённые схемы и снимки фоновых задач используют граф V2. Новый Feed получает
+пустой V2. Запрос записи с неподдерживаемой версией получает 422.
+Перед выкладкой проверяются версии сохранённых графов, включая архивные фиды,
+и схем в снимках незавершённых задач. Выкладка требует V2 во всех этих документах.
 
 ## **1. Цель, границы и порядок реализации**
 
@@ -799,146 +801,142 @@ package __init__.py пустые. Агрегаты и Entity frozen в объе�
 Feed также может не содержать ни одного текстового или денежного поля.
 Default-выражение даёт +15% к `price.regular`. Правило категории при наличии
 закупочной цены даёт +25% к `price.purchase`. Схема хранит выражения в AST.
-Тип поля и все его настройки вложены в type_definition; верхнего value_type нет.
-Пример показывает целевую форму schema_format_version=1. Переход с текущей
-формы сохранённых схем описан в 16.6.2.
+Пара `typeId` и `typeVersion` выбирает зарегистрированный тип ноды. Настройки
+ноды находятся в `data`. API добавляет `forms` из метаданных реестра при чтении.
 
 ```json
 {
-  "schema_format_version": 1,
-  "root": {
-    "key": "publication",
-    "kind": "object",
-    "fields": [
-      {
-        "id": "11111111-1111-4111-8111-111111111111",
-        "key": "title_uk",
-        "label": "Назва",
-        "type_definition": {
-          "kind": "string",
-          "locale": "uk",
-          "value": {
-            "kind": "SOURCE",
-            "source": {
-              "provider": "catalog",
-              "path": "item.title"
-            }
-          },
-          "fallback_policy": {
-            "mode": "NONE"
-          },
-          "constraints": {
-            "required": true,
-            "max_length": 160
-          },
-          "transforms": [
-            {
-              "op": "string.trim",
-              "params": {}
-            }
-          ]
+  "schema_format_version": 2,
+  "fields": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "key": "title_uk",
+      "name": "Назва",
+      "typeId": "core.short_text",
+      "typeVersion": 1,
+      "scope": "offer",
+      "data": {
+        "locale": "uk",
+        "value": {
+          "kind": "SOURCE",
+          "source": {
+            "provider": "catalog",
+            "path": "item.title"
+          }
         },
-        "export": {
-          "enabled": true,
-          "name": "title_uk"
+        "fallback_policy": {
+          "mode": "NONE"
         },
-        "ai": {
-          "instruction": null
-        }
+        "constraints": {
+          "required": true,
+          "max_length": 160
+        },
+        "transforms": [
+          {
+            "op": "string.trim",
+            "params": {}
+          }
+        ]
       },
-      {
-        "id": "33333333-3333-4333-8333-333333333333",
-        "key": "partner_price",
-        "label": "Партнёрская цена",
-        "type_definition": {
-          "kind": "money",
-          "currency": "UAH",
-          "value": {
-            "kind": "MONEY",
-            "mode": "CALCULATED",
-            "calculation": {
-              "rules": [
-                {
-                  "id": "77777777-7777-4777-8777-777777777777",
-                  "condition": {
-                    "kind": "logical",
-                    "operator": "ALL",
-                    "operands": [
-                      {
-                        "kind": "comparison",
-                        "operator": "CONTAINS",
-                        "left": {
-                          "kind": "parameter",
-                          "parameter": "product.category_ids"
-                        },
-                        "right": {
-                          "kind": "scalar",
-                          "value_type": "uuid",
-                          "value": "66666666-6666-4666-8666-666666666666"
-                        }
+      "export": {
+        "enabled": true,
+        "name": "title_uk"
+      },
+      "aiInstruction": null
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "key": "partner_price",
+      "name": "Партнёрская цена",
+      "typeId": "core.money",
+      "typeVersion": 1,
+      "scope": "offer",
+      "data": {
+        "currency": "UAH",
+        "value": {
+          "kind": "MONEY",
+          "mode": "CALCULATED",
+          "calculation": {
+            "rules": [
+              {
+                "id": "77777777-7777-4777-8777-777777777777",
+                "condition": {
+                  "kind": "logical",
+                  "operator": "ALL",
+                  "operands": [
+                    {
+                      "kind": "comparison",
+                      "operator": "CONTAINS",
+                      "left": {
+                        "kind": "parameter",
+                        "parameter": "product.category_ids"
                       },
-                      {
-                        "kind": "presence",
-                        "operator": "EXISTS",
-                        "parameter": "price.purchase"
+                      "right": {
+                        "kind": "scalar",
+                        "value_type": "uuid",
+                        "value": "66666666-6666-4666-8666-666666666666"
                       }
-                    ]
-                  },
-                  "expression": {
-                    "kind": "arithmetic",
-                    "operator": "MULTIPLY",
-                    "left": {
-                      "kind": "parameter",
-                      "parameter": "price.purchase"
                     },
-                    "right": {
-                      "kind": "decimal",
-                      "value": "1.25"
+                    {
+                      "kind": "presence",
+                      "operator": "EXISTS",
+                      "parameter": "price.purchase"
                     }
+                  ]
+                },
+                "expression": {
+                  "kind": "arithmetic",
+                  "operator": "MULTIPLY",
+                  "left": {
+                    "kind": "parameter",
+                    "parameter": "price.purchase"
+                  },
+                  "right": {
+                    "kind": "decimal",
+                    "value": "1.25"
                   }
                 }
-              ],
-              "default_expression": {
-                "kind": "arithmetic",
-                "operator": "MULTIPLY",
-                "left": {
-                  "kind": "parameter",
-                  "parameter": "price.regular"
-                },
-                "right": {
-                  "kind": "decimal",
-                  "value": "1.15"
-                }
+              }
+            ],
+            "default_expression": {
+              "kind": "arithmetic",
+              "operator": "MULTIPLY",
+              "left": {
+                "kind": "parameter",
+                "parameter": "price.regular"
+              },
+              "right": {
+                "kind": "decimal",
+                "value": "1.15"
               }
             }
-          },
-          "constraints": {
-            "required": true,
-            "min_amount": "0"
-          },
-          "transforms": [
-            {
-              "op": "money.ceil_step",
-              "params": {
-                "step": "0.1"
-              }
+          }
+        },
+        "constraints": {
+          "required": true,
+          "min_amount": "0"
+        },
+        "transforms": [
+          {
+            "op": "money.ceil_step",
+            "params": {
+              "step": "0.1"
             }
-          ]
-        },
-        "export": {
-          "enabled": true,
-          "name": "partner_price"
-        },
-        "ai": {
-          "instruction": null
-        }
-      }
-    ]
-  }
+          }
+        ]
+      },
+      "export": {
+        "enabled": true,
+        "name": "partner_price"
+      },
+      "aiInstruction": null
+    }
+  ],
+  "categoryTrees": []
 }
 ```
 
-Для прямого MONEY-источника type_definition.value имеет вид:
+Для прямого MONEY-источника data.value имеет вид:
 
 ```json
 {"kind": "MONEY", "mode": "SOURCE", "source": {"provider": "catalog", "path": "item.regular_price"}}
@@ -948,7 +946,6 @@ Default-выражение даёт +15% к `price.regular`. Правило ка
 
 ```json
 {
-  "kind": "money",
   "currency": null,
   "value": {
     "kind": "MONEY",
@@ -962,13 +959,11 @@ Default-выражение даёт +15% к `price.regular`. Правило ка
 нормализует трёхбуквенный код в верхний регистр; пустая строка не заменяет None.
 
 Для ручного MONEY: `{"kind":"MONEY","mode":"MANUAL"}`; для ручного текста:
-`{"kind":"MANUAL"}`. У текстового SOURCE источник находится в type_definition.value.source.
+`{"kind":"MANUAL"}`. У текстового SOURCE источник находится в data.value.source.
 Неактивные варианты source/calculation отсутствуют; неизвестные свойства и
-смешанные варианты отклоняются. JSON-имя type_definition.value соответствует
-Domain-свойству type_definition.value_definition. В JSON kind передаётся как
-дискриминатор string/text/money/integer/boolean; mapper выбирает класс VO и не передаёт
-kind в его конструктор. Денежный value.kind=MONEY обозначает определение значения,
-а type_definition.kind=money — класс типа поля; противоречивый вариант отклоняется.
+смешанные варианты отклоняются. JSON-свойство `data.value` соответствует
+`type_definition.value_definition` в Domain. У денежной ноды `typeId` равен
+`core.money`, а `data.value.kind` равен `MONEY`.
 JSON-коды source.provider/source.path соответствуют значениям SourceProvider и
 CatalogSourcePath. На границе ввода они явно преобразуются в нужные Enum;
 неизвестные значения отклоняются до создания Domain-объекта.
@@ -978,25 +973,25 @@ CatalogSourcePath. На границе ввода они явно преобра
 | Свойство | Смысл |
 | --- | --- |
 | id | Стабильный field_id, не зависит от порядка/названия |
-| key / label | Уникальный внутренний ключ / подпись |
-| type_definition.kind | string / text / money / integer / boolean, определяет класс VO |
-| type_definition.locale | Только STRING/TEXT, локаль либо null для языконезависимого текста |
-| type_definition.currency | Только MONEY, необязательный код результата; null не наследует валюту источника |
-| type_definition.value | Один типизированный способ получения значения |
-| type_definition.fallback_policy | Только STRING/TEXT, явная политика отсутствующих переводов |
-| type_definition.constraints | Обязательность, границы длины, суммы или целого числа по типу |
-| type_definition.transforms | Допустимые данному типу упорядоченные преобразования |
+| key / name | Уникальный внутренний ключ / подпись |
+| typeId / typeVersion | Зарегистрированный тип ноды и версия его контракта |
+| data.locale | Только STRING/TEXT, локаль либо null для языконезависимого текста |
+| data.currency | Только MONEY, необязательный код результата; null не наследует валюту источника |
+| data.value | Один типизированный способ получения значения |
+| data.fallback_policy | Только STRING/TEXT, явная политика отсутствующих переводов |
+| data.constraints | Обязательность, границы длины, суммы или целого числа по типу |
+| data.transforms | Допустимые данному типу упорядоченные преобразования |
 | export.enabled / name | Участие в выгрузке / имя колонки, XML-элемента или XML-атрибута |
 | export.xml_placement | `ELEMENT` по умолчанию или `ATTRIBUTE` в открывающем теге предложения |
-| ai.instruction | Только метаданные будущего сценария |
+| aiInstruction | Только метаданные будущего сценария |
 
 Текстовые пути item.title/item.description не содержат языка; locale передаётся
-в текстовом type_definition. NONE не подставляет другой перевод, LOCALE_CHAIN последовательно
+в текстовом data. NONE не подставляет другой перевод, LOCALE_CHAIN последовательно
 проверяет заданные locales после целевой, MANUAL_REQUIRED требует ручного значения
 при отсутствии целевого перевода. Фактическая локаль возвращается preview.
 Цепочки конечны и не рекурсивны; языконезависимый текст не имеет fallback.
 
-STRING и TEXT поддерживают `CONSTANT` со строкой в `type_definition.value.value`.
+STRING и TEXT поддерживают `CONSTANT` со строкой в `data.value.value`.
 Этот текст используется во всех публикациях фида и проходит текстовые преобразования
 и проверку длины. Для отдельной публикации можно задать переопределение. Например,
 константа `r` с именем экспорта `selling_type` и размещением `ATTRIBUTE` даст
@@ -1720,8 +1715,7 @@ CollectionLiteralVO — для однородных tuples литералов у
 В JSON Decimal — строка; boolean и UUID проверяются явно. Каждый вид узла
 имеет конкретный контракт/арность; неизвестные свойства/операции отклоняются.
 Пользовательские функции, внешний код и ссылки на вычисляемые поля не входят в MVP.
-MoneyLiteralVO удалён; schema_format_version остаётся 1 до выпуска persistence/API,
-совместимые aliases прежнего денежного AST не вводятся.
+Граф версии 2 сохраняет денежные литералы как Decimal-строки в AST.
 
 Канонические свойства узлов:
 
@@ -2063,10 +2057,10 @@ Generic CSV/XML дают свободные имена и порядок в пр
 
 ### **10.5.1. Поле категории в конструкторе схемы**
 
-Тип `category` хранится в `root.fields[]` и использует обычное сохранение схемы.
-`type_definition.object_schema` описывает свойства записи, ключи ID и названия
-и их XML-размещение. `type_definition.value` хранит записи, родителей и
-упорядоченные правила выбора. У каждого поля свой набор записей и собственные ID.
+Нода `core.category_reference` в `fields` ссылается через `data.treeId` на запись
+в `categoryTrees`. Дерево определяет свойства записи, ключи ID и названия и их
+XML-размещение в `data.object_schema`. `data.value` содержит записи, ссылки на
+родителей и упорядоченные правила выбора.
 
 `export.document` задаёт контейнер, имя записи, место вывода и форму вложенности.
 `export.publication` выбирает свойство, которое экспортируется в предложение
@@ -2076,9 +2070,8 @@ Generic CSV/XML дают свободные имена и порядок в пр
 категорий пропускаются.
 
 Сериализатор получает готовые XML-узлы. Атрибуты площадок, включая `portal_id`
-и `rz_id`, описываются свойствами записи. Старый корневой `categories` читается
-через совместимость со старыми документами и задачами. Сохранение записывает
-только поля. Таблицы базы данных для этой структуры не нужны.
+и `rz_id`, описываются свойствами записи. Поля и деревья хранятся в одном
+JSONB-документе графа.
 
 ### **10.6. Точность и профиль формата**
 
@@ -2231,8 +2224,8 @@ router только регистрирует маршруты/статусы/Dep
 CreateFeed принимает только name/code/export_settings: всегда создаётся пустой
 DRAFT. Передать definition/schema/status/id/version нельзя.
 Карточка GET возвращает schema, export_settings, version, ID, статус и даты.
-Редактор рабочей схемы реализован в срезе 1.3.3. Поле передаёт общие свойства и type_definition с
-дискриминатором kind по разделу 4. STRING/TEXT принимают locale/fallback,
+Редактор рабочей схемы передаёт граф V2. Каждая нода содержит `typeId`,
+`typeVersion` и типизированные настройки в `data` по разделу 4. STRING/TEXT принимают locale/fallback,
 MONEY — необязательную currency (null или код); неизвестные/чужие свойства отклоняются, в том числе
 старые плоские value_type/locale/currency. export_settings.product_mode принимает
 только VARIABLE_TO_SINGLE и по умолчанию получает это значение при создании.
@@ -2263,8 +2256,7 @@ POST возвращает 201; GET/PATCH — 200; DELETE — 204 без тела
 проверяет tenant-контекст и AuthorizationService.can для resource_type=feed_builder.feed
 с действиями feed_builder.feed.create/read/update/archive. Клиент не выбирает SQL-схему.
 UoW завершается до отправки ответа; ошибка не превращается в успешный CRUD.
-Схема сохраняется и возвращается в
-единственной форме type_definition без параллельных aliases. Реестры /field-types
+Схема сохраняется и возвращается в формате V2. Реестры /field-types
 описывают возможности типов для UI и не заменяют типизированную схему параметрами
 вида {name, value}. Предустановленные схемы появятся позднее через применение пресета.
 ListSourcePaths выдаёт только источники из Domain-контракта с метаданными доступа
@@ -2275,16 +2267,16 @@ ListSourcePaths выдаёт только источники из Domain-кон�
 
 GET /feeds/{id}/schema возвращает feed_id, общую version, status и definition.
 PUT /feeds/{id}/schema/draft принимает только expected_version (положительный
-BIGINT) и полный definition. Сегмент `/draft` сохранён для совместимости с
+BIGINT) и полный definition графа V2. Сегмент `/draft` сохранён для совместимости с
 Console. Метод записывает актуальную схему в Feed, а expected_version — это
 текущая `Feed.version`.
 Ответ 200: feed_id/version/канонический definition; no-op сохраняет версию/дату.
 PATCH настроек не меняет схему, сохранение схемы не меняет настройки/статус.
 Одновременные изменения обоих экранов защищаются одной Feed.version.
 
-Закрытые Pydantic-описания различают текст/деньги, источники, преобразования и все
-известные узлы AST. Лишние поля, неизвестные пути, старые aliases и числовые JSON
-значения вместо Decimal-строк отклоняются. До JSON decoding проверяется лимит
+Pydantic проверяет оболочку V2 и поля ноды. Кодеки зарегистрированных типов
+проверяют настройки, пути, преобразования и узлы AST. Числа JSON вместо
+Decimal-строк и неизвестные ключи отклоняются. До JSON decoding проверяется лимит
 тела 1 МиБ, включая chunked-запросы, и ограничение вложенности; Domain сохраняет
 свои бюджеты AST/полей/правил/литералов. Сохранение схемы не исполняет выражения;
 вычисление выполняется отдельным read-only preview после семантической проверки.
@@ -2321,7 +2313,7 @@ string.trim/string.truncate/money.ceil_step и конкретные типы и�
 
 POST принимает expected_version (текущую Feed.version), field_id,
 catalog_item_id, catalog_variant_id=null либо UUID выбранного варианта и optional
-полное definition_override этого поля в существующем HTTP-формате. Допускается
+полное definition_override одной ноды V2. Допускается
 новое несохранённое поле с собственным ID; временная схема проверяет уникальность
 его ID/key/export.name. Передать цены, as_of или произвольные пути нельзя.
 

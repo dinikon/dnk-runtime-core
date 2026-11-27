@@ -11,7 +11,9 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, func, update, delete, text
 from sqlalchemy.exc import IntegrityError
 from test import test_feed_builder_calculation_postgres as fixture
-from src.modules.feed_builder.application.feed.graph.node_codec import field_document
+from src.modules.feed_builder.application.feed.graph.versioned_node import (
+    versioned_node_document,
+)
 from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
     CatalogSourcePath,
 )
@@ -436,7 +438,7 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
         """Проверяет предел образца, все строки CSV и ошибку за пределами образца."""
         await fixture.crud_support.FeedCrudPostgresTests.seed_schema_locales(self)
         fields = [
-            field_document(
+            versioned_node_document(
                 text_field(
                     "sku",
                     type_definition=ShortTextNodeDataVO(
@@ -448,7 +450,7 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
                     ),
                 )
             ),
-            field_document(
+            versioned_node_document(
                 text_field(
                     "title",
                     type_definition=ShortTextNodeDataVO(
@@ -461,7 +463,7 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
                     ),
                 )
             ),
-            field_document(
+            versioned_node_document(
                 text_field(
                     "description",
                     type_definition=LongTextNodeDataVO(
@@ -480,8 +482,8 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.seed_feed_schema(
             self.feed["id"],
             {
-                "schema_format_version": 1,
-                "root": {"key": "publication", "kind": "object", "fields": fields},
+                "schema_format_version": 2,
+                "fields": fields,
             },
             1,
         )
@@ -557,7 +559,7 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_set_and_reset_overrides_flow_through_editor_and_csv(self) -> None:
         """Проверяет независимость полей, актуальную схему и строгую запись значений."""
-        title = field_document(
+        title = versioned_node_document(
             text_field(
                 "title",
                 type_definition=ShortTextNodeDataVO(
@@ -568,7 +570,7 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
         )
-        description = field_document(
+        description = versioned_node_document(
             text_field(
                 "description",
                 type_definition=LongTextNodeDataVO(
@@ -578,23 +580,14 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         price = deepcopy(self.field)
-        price["type_definition"]["constraints"]["max_amount"] = "1500"
+        price["data"]["constraints"]["max_amount"] = "1500"
         second_price = deepcopy(self.field)
-        second_price.update(id=str(uuid4()), key="second_price", label="Вторая цена")
+        second_price.update(id=str(uuid4()), key="second_price", name="Вторая цена")
         second_price["export"]["name"] = "second_price"
         root = f"{self.base}/{self.feed['id']}"
-        identifiers = {"string": "core.short_text", "text": "core.long_text", "money": "core.money"}
         definition = {
             "schema_format_version": 2,
-            "fields": [
-                {
-                    "id": field["id"], "key": field["key"], "name": field["label"],
-                    "typeId": identifiers[field["type_definition"]["kind"]],
-                    "typeVersion": 1, "scope": "offer", "export": field["export"],
-                    "data": {key: value for key, value in field["type_definition"].items() if key != "kind"},
-                }
-                for field in (title, description, price, second_price)
-            ],
+            "fields": [title, description, price, second_price],
         }
         saved = await self.client.put(
             f"{root}/schema/draft",
@@ -604,7 +597,8 @@ class FeedPublicationsPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved.status_code, 200, saved.text)
         self.assertEqual(saved.json()["version"], 2)
         self.assertEqual(
-            saved.json()["definition"]["fields"][0]["forms"]["settings"][0]["kind"], "input"
+            saved.json()["definition"]["fields"][0]["forms"]["settings"][0]["kind"],
+            "input",
         )
         self.assertEqual(
             (await self.client.get(f"{root}/schema")).json()["definition"],

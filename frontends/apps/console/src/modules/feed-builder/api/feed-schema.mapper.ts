@@ -13,11 +13,9 @@ import type {
 } from "../model/feed-schema.types.ts";
 import type {
   SchemaNodeDTO,
-  SchemaFieldDTO,
   FieldTypeDTO,
   CalculationDTO,
   TransformDTO,
-  DefinitionDTO,
   GraphFieldDTO,
   GraphDefinitionDTO,
   FeedSchemaDTO,
@@ -144,12 +142,24 @@ function transformPayload(t: SchemaTransform): TransformDTO {
       ? { op: t.operation, params: { step: t.parameters.step } }
       : { op: t.operation, params: {} };
 }
-export function mapSchemaField(field: SchemaFieldDTO): SchemaField {
-  const type = field.type_definition;
+function mapGraphField(
+  field: GraphFieldDTO,
+  trees: NonNullable<GraphDefinitionDTO["categoryTrees"]>,
+): SchemaField {
+  const kind = (Object.keys(nodeIds) as (keyof typeof nodeIds)[]).find(
+    (kind) => nodeIds[kind] === field.typeId,
+  );
+  if (!kind || field.typeVersion !== 1)
+    throw new Error("Тип ноды недоступен в текущей версии Console.");
+  const treeId = "treeId" in field.data ? field.data.treeId : undefined;
+  const source = treeId ? trees.find((tree) => tree.id === treeId) : undefined;
+  if (kind === "category" && !source)
+    throw new Error("Дерево категорий этой ноды отсутствует.");
+  const type = { ...(source?.data ?? field.data), kind } as FieldTypeDTO;
   const common = {
     id: field.id,
     key: field.key,
-    label: field.label,
+    label: field.name,
     export: {
       name: field.export.name,
       enabled: field.export.enabled,
@@ -163,7 +173,8 @@ export function mapSchemaField(field: SchemaFieldDTO): SchemaField {
         valueKey: field.export.publication.value_key, required: field.export.publication.required,
       } } : {}),
     },
-    aiInstruction: field.ai.instruction,
+    aiInstruction: field.aiInstruction,
+    ...(treeId ? { categoryTreeId: treeId } : {}),
   };
   if (type.kind === "category") return { ...common, typeDefinition: mapCategory(type) };
   if (type.kind === "integer") {
@@ -222,85 +233,57 @@ export function mapSchemaField(field: SchemaFieldDTO): SchemaField {
           },
   };
 }
-export function schemaFieldPayload(field: SchemaField): SchemaFieldDTO {
-  const type = field.typeDefinition;
-  const common = {
-    id: field.id,
-    key: field.key,
-    label: field.label,
-    export: {
-      name: field.export.name,
-      enabled: field.export.enabled,
-      ...(field.export.xmlPlacement === "ATTRIBUTE"
-        ? { xml_placement: field.export.xmlPlacement }
-        : {}),
-      ...(field.export.document ? { document: {
-        container: field.export.document.container, item: field.export.document.item,
-        parent: field.export.document.parent, layout: field.export.document.layout,
-        parent_attribute: field.export.document.parentAttribute,
-      } } : {}),
-      ...(field.export.publication ? { publication: {
-        value_key: field.export.publication.valueKey, required: field.export.publication.required,
-      } } : {}),
-    },
-    ai: { instruction: field.aiInstruction },
-  };
-  if (type.kind === "category") return { ...common, type_definition: categoryPayload(type) };
+function fieldDataPayload(
+  type: Exclude<SchemaField["typeDefinition"], CategoryType>,
+): GraphFieldDTO["data"] {
   if (type.kind === "integer") {
-    return { ...common, type_definition: {
-      kind: type.kind, value: cloneSchemaValue(type.value),
+    return {
+      value: cloneSchemaValue(type.value),
       constraints: {
         required: type.constraints.required,
         min_value: type.constraints.minValue, max_value: type.constraints.maxValue,
       },
-    } };
+    };
   }
   if (type.kind === "boolean") {
     const value = type.value;
-    return { ...common, type_definition: {
-      kind: type.kind,
+    return {
       constraints: { ...type.constraints },
       value: value.kind === "CALCULATED" ? {
         kind: value.kind, condition: nodePayload(value.condition),
         then_value: value.thenValue, else_value: value.elseValue,
       } : cloneSchemaValue(value),
-    } };
+    };
   }
-  return {
-    ...common,
-    type_definition:
-      type.kind === "money"
-        ? {
-            kind: type.kind,
-            currency: type.currency,
-            constraints: {
-              required: type.constraints.required,
-              min_amount: type.constraints.minAmount,
-              max_amount: type.constraints.maxAmount,
-            },
-            value:
-              type.value.mode === "CALCULATED"
-                ? {
-                    kind: "MONEY",
-                    mode: "CALCULATED",
-                    calculation: calculationPayload(type.value.calculation),
-                  }
-                : structuredClone(type.value),
-            transforms: type.transforms.map(transformPayload),
-          }
-        : {
-            kind: type.kind,
-            locale: type.locale,
-            fallback_policy: structuredClone(type.fallbackPolicy),
-            constraints: {
-              required: type.constraints.required,
-              min_length: type.constraints.minLength,
-              max_length: type.constraints.maxLength,
-            },
-            value: structuredClone(type.value),
-            transforms: type.transforms.map(transformPayload),
-          },
-  };
+  return type.kind === "money"
+    ? {
+        currency: type.currency,
+        constraints: {
+          required: type.constraints.required,
+          min_amount: type.constraints.minAmount,
+          max_amount: type.constraints.maxAmount,
+        },
+        value:
+          type.value.mode === "CALCULATED"
+            ? {
+                kind: "MONEY",
+                mode: "CALCULATED",
+                calculation: calculationPayload(type.value.calculation),
+              }
+            : structuredClone(type.value),
+        transforms: type.transforms.map(transformPayload),
+      }
+    : {
+        locale: type.locale,
+        fallback_policy: structuredClone(type.fallbackPolicy),
+        constraints: {
+          required: type.constraints.required,
+          min_length: type.constraints.minLength,
+          max_length: type.constraints.maxLength,
+        },
+        value: structuredClone(type.value),
+        transforms: type.transforms.map(transformPayload),
+      };
 }
 function mapCategory(type: CategoryTypeDTO): CategoryType {
   const value = type.value;
@@ -348,10 +331,6 @@ function categoryTreePayload(type: CategoryType): Omit<CategoryTypeDTO, "kind"> 
   };
 }
 
-function categoryPayload(type: CategoryType): CategoryTypeDTO {
-  return { kind: type.kind, ...categoryTreePayload(type) };
-}
-
 const nodeIds = {
   string: "core.short_text",
   text: "core.long_text",
@@ -362,81 +341,74 @@ const nodeIds = {
   category: "core.category_reference",
 } satisfies Record<SchemaField["typeDefinition"]["kind"], string>;
 
-function mapGraphField(
-  node: GraphFieldDTO, trees: NonNullable<GraphDefinitionDTO["categoryTrees"]>,
-): SchemaField {
-  const kind = (Object.keys(nodeIds) as (keyof typeof nodeIds)[]).find(
-    (kind) => nodeIds[kind] === node.typeId,
-  );
-  if (!kind || node.typeVersion !== 1)
-    throw new Error("Тип ноды недоступен в текущей версии Console.");
-  const treeId = "treeId" in node.data ? node.data.treeId : undefined;
-  const source = treeId ? trees.find((tree) => tree.id === treeId) : undefined;
-  if (kind === "category" && !source)
-    throw new Error("Дерево категорий этой ноды отсутствует.");
+export function graphFieldPayload(field: SchemaField): GraphFieldDTO {
+  const type = field.typeDefinition;
+  const common = {
+    id: field.id,
+    key: field.key,
+    name: field.label,
+    typeId: nodeIds[type.kind],
+    typeVersion: 1,
+    scope: "offer" as const,
+    export: {
+      name: field.export.name,
+      enabled: field.export.enabled,
+      ...(field.export.xmlPlacement === "ATTRIBUTE"
+        ? { xml_placement: field.export.xmlPlacement }
+        : {}),
+      ...(field.export.document ? { document: {
+        container: field.export.document.container, item: field.export.document.item,
+        parent: field.export.document.parent, layout: field.export.document.layout,
+        parent_attribute: field.export.document.parentAttribute,
+      } } : {}),
+      ...(field.export.publication ? { publication: {
+        value_key: field.export.publication.valueKey, required: field.export.publication.required,
+      } } : {}),
+    },
+    aiInstruction: field.aiInstruction,
+  };
+  if (type.kind === "category") {
+    return {
+      ...common,
+      data: { source: "feed", treeId: field.categoryTreeId ?? field.id },
+    };
+  }
+  return { ...common, data: fieldDataPayload(type) };
+}
+
+export function mapDefinition(value: GraphDefinitionDTO): FeedSchemaDefinition {
+  if (value.schema_format_version !== 2) {
+    throw new Error("Версия схемы Feed недоступна в текущей версии Console.");
+  }
+  const trees = value.categoryTrees ?? [];
   return {
-    ...mapSchemaField({
-    id: node.id,
-    key: node.key,
-    label: node.name,
-    type_definition: { ...(source?.data ?? node.data), kind } as FieldTypeDTO,
-    export: node.export,
-    ai: { instruction: node.aiInstruction },
+    schemaFormatVersion: 2,
+    fields: value.fields.map((node) => mapGraphField(node, trees)),
+    ...(trees.length > 0 && {
+      categoryTrees: trees.map(({ id, data }) => ({
+        id,
+        settings: mapCategory({ ...data, kind: "category" }),
+      })),
     }),
-    ...(treeId ? { categoryTreeId: treeId } : {}),
   };
 }
 
-export function mapDefinition(value: DefinitionDTO): FeedSchemaDefinition {
-  if (value.schema_format_version === 2) {
-    const trees = value.categoryTrees ?? [];
-    return {
-      schemaFormatVersion: 2,
-      fields: value.fields.map((node) => mapGraphField(node, trees)),
-      categoryTrees: trees.map(({ id, data }) => ({
-        id, settings: mapCategory({ ...data, kind: "category" }),
-      })),
-    };
-  }
-  return { schemaFormatVersion: 1, fields: value.root.fields.map(mapSchemaField) };
-}
-export function definitionPayload(value: FeedSchemaDefinition): DefinitionDTO {
-  if (value.schemaFormatVersion === 2) {
-    const trees = new Map<string, Omit<CategoryTypeDTO, "kind">>(
-      value.categoryTrees?.map(({ id, settings }) => [id, categoryTreePayload(settings)]),
-    );
-    const graphFields = value.fields.map((model): GraphFieldDTO => {
-      const field = schemaFieldPayload(model);
-      const { kind, ...data } = field.type_definition;
-      const node = {
-        id: field.id,
-        key: field.key,
-        name: field.label,
-        typeId: nodeIds[kind],
-        typeVersion: 1,
-        scope: "offer" as const,
-        data,
-        export: field.export,
-        aiInstruction: field.ai.instruction,
-      };
-      if (model.typeDefinition.kind === "category") {
-        const treeId = model.categoryTreeId ?? field.id;
-        trees.set(treeId, categoryTreePayload(model.typeDefinition));
-        return { ...node, data: { source: "feed", treeId } };
-      }
-      return node;
-    });
-    return {
-      schema_format_version: 2,
-      fields: graphFields,
-      categoryTrees: Array.from(trees, ([id, data]) => ({ id, data })),
-    };
+export function definitionPayload(value: FeedSchemaDefinition): GraphDefinitionDTO {
+  const trees = new Map<string, Omit<CategoryTypeDTO, "kind">>(
+    value.categoryTrees?.map(({ id, settings }) => [id, categoryTreePayload(settings)]),
+  );
+  for (const field of value.fields) {
+    if (field.typeDefinition.kind === "category") {
+      trees.set(field.categoryTreeId ?? field.id, categoryTreePayload(field.typeDefinition));
+    }
   }
   return {
-    schema_format_version: 1,
-    root: { key: "publication", kind: "object", fields: value.fields.map(schemaFieldPayload) },
+    schema_format_version: 2,
+    fields: value.fields.map(graphFieldPayload),
+    categoryTrees: Array.from(trees, ([id, data]) => ({ id, data })),
   };
 }
+
 export function mapFeedSchema(value: FeedSchemaDTO): FeedSchema {
   return {
     feedId: value.feed_id,

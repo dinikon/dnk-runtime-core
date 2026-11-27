@@ -4,9 +4,6 @@ from src.modules.feed_builder.domain.error import FeedBuilderDomainError
 from src.modules.feed_builder.application.feed.graph.error import (
     InvalidFeedSchemaDocumentError,
 )
-from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
-    CategoryNodeDataVO,
-)
 from src.modules.feed_builder.application.feed.graph.category_codec import (
     category_field_document,
     decode_category_field,
@@ -31,12 +28,6 @@ def decode_category_trees(
     known = (
         {tree.id: tree.settings for tree in previous.category_trees} if previous else {}
     )
-    if previous is not None and previous.schema_format_version == 1:
-        known.update(
-            (field.id.uuid, field.type_definition)
-            for field in previous.fields
-            if isinstance(field.type_definition, CategoryNodeDataVO)
-        )
     trees = []
     for index, item in enumerate(array(value, MAX_FIELDS)):
         data = document(item, {"id", "data"})

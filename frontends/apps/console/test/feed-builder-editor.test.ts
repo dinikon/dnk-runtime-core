@@ -20,7 +20,7 @@ const original: Feed = {
   version: 1,
   createdAt: "2026-11-22T10:00:00Z",
   updatedAt: "2026-11-22T10:00:00Z",
-  schema: { root: { fields: [] } },
+  schema: { schema_format_version: 2, fields: [], categoryTrees: [] },
   exportSettings: {
     formatSettings: {
       format: "csv",

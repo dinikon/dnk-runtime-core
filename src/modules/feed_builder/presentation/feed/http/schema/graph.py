@@ -7,9 +7,6 @@ from src.modules.feed_builder.domain.feed.limits import MAX_FIELDS
 from src.modules.feed_builder.presentation.feed.http.schema.field_export import (
     FieldExportSchema,
 )
-from src.modules.feed_builder.presentation.feed.http.schema.legacy_graph import (
-    SchemaDefinition,
-)
 from src.modules.feed_builder.presentation.strict_request import ClosedSchema
 
 
@@ -51,6 +48,3 @@ class FieldGraphSchema(ClosedSchema):
         if type(value) is not int or value != 2:
             raise ValueError("Поддерживается целая версия графа 2.")
         return value
-
-
-type SchemaDocument = SchemaDefinition | FieldGraphSchema

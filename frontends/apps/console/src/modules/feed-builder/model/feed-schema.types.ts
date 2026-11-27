@@ -126,7 +126,7 @@ export interface FeedCategoryTree {
   settings: CategoryType;
 }
 export interface FeedSchemaDefinition {
-  schemaFormatVersion: 1 | 2;
+  schemaFormatVersion: 2;
   fields: SchemaField[];
   categoryTrees?: FeedCategoryTree[];
 }

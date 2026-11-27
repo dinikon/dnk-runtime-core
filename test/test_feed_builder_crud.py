@@ -11,7 +11,9 @@ from uuid import uuid4
 import unittest
 
 from test.test_feed_builder_domain import feed, text_field, money_field, rule, NOW, UAH
-from src.modules.feed_builder.application.feed.port.settings_repository import LockedFeedSettings
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    LockedFeedSettings,
+)
 from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.feed_builder.domain.feed.enum.feed_status import FeedStatus
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
@@ -101,15 +103,21 @@ from src.modules.feed_builder.domain.feed.value_object.money_ceil_step_parameter
 from src.modules.feed_builder.domain.feed.expression.enum.literal_value_type import (
     LiteralValueType,
 )
-from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import LogicalOperator
+from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import (
+    LogicalOperator,
+)
 from src.modules.feed_builder.domain.feed.expression.enum.comparison_operator import (
     ComparisonOperator,
 )
 from src.modules.feed_builder.domain.feed.expression.enum.arithmetic_operator import (
     ArithmeticOperator,
 )
-from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import PresenceOperator
-from src.modules.feed_builder.domain.feed.expression.enum.price_function import PriceFunction
+from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import (
+    PresenceOperator,
+)
+from src.modules.feed_builder.domain.feed.expression.enum.price_function import (
+    PriceFunction,
+)
 from src.modules.feed_builder.domain.feed.enum.locale_fallback_mode import (
     LocaleFallbackMode,
 )
@@ -484,7 +492,7 @@ class FeedCrudMapperTests(unittest.TestCase):
                 FeedMapper.to_domain(row | {"export_settings": settings})
         document = schema_document(original.schema)
         for changed in (
-            {"schema_format_version": 2},
+            {"schema_format_version": 1},
             {"unknown": 1},
             {"root": {}},
         ):
@@ -494,15 +502,17 @@ class FeedCrudMapperTests(unittest.TestCase):
             ):
                 decode_schema(document | changed)
         bad = copy.deepcopy(document)
-        bad["root"]["fields"][3]["type_definition"]["value"]["calculation"][
-            "default_expression"
-        ] = {"kind": "python", "code": "unsafe"}
+        bad["fields"][3]["data"]["value"]["calculation"]["default_expression"] = {
+            "kind": "python",
+            "code": "unsafe",
+        }
         with self.assertRaises(InvalidFeedStorageError):
             FeedMapper.to_domain(row | {"schema_definition": bad})
         bad = copy.deepcopy(document)
-        bad["root"]["fields"][3]["type_definition"]["value"]["calculation"][
-            "default_expression"
-        ] = {"kind": "decimal", "value": 1.234}
+        bad["fields"][3]["data"]["value"]["calculation"]["default_expression"] = {
+            "kind": "decimal",
+            "value": 1.234,
+        }
         with self.assertRaises(InvalidFeedStorageError):
             FeedMapper.to_domain(row | {"schema_definition": bad})
 
@@ -514,13 +524,11 @@ class FeedCrudMapperTests(unittest.TestCase):
         for _ in range(33):
             value = {"kind": "arithmetic", "operator": "NEGATE", "operand": value}
         bad = copy.deepcopy(document)
-        bad["root"]["fields"][3]["type_definition"]["value"]["calculation"][
-            "default_expression"
-        ] = value
+        bad["fields"][3]["data"]["value"]["calculation"]["default_expression"] = value
         with self.assertRaises(InvalidFeedStorageError):
             decode_schema(bad)
         bad = copy.deepcopy(document)
-        bad["root"]["fields"].append(copy.deepcopy(bad["root"]["fields"][0]))
+        bad["fields"].append(copy.deepcopy(bad["fields"][0]))
         row = FeedMapper.to_insert_values(original) | {"schema_definition": bad}
         with self.assertRaises(InvalidFeedStorageError):
             FeedMapper.to_domain(row)
@@ -533,7 +541,7 @@ class FeedCrudMapperTests(unittest.TestCase):
         ):
             result = FeedQueryMapper.to_details(row)
         self.assertEqual(result.version, 1)
-        self.assertEqual(len(result.schema["root"]["fields"]), 4)
+        self.assertEqual(len(result.schema["fields"]), 4)
 
 
 class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
@@ -544,7 +552,11 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.original = rich_feed()
         self.repository = SimpleNamespace(
             add=AsyncMock(),
-            get_settings_for_update=AsyncMock(return_value=LockedFeedSettings(self.original, schema_document(self.original.schema))),
+            get_settings_for_update=AsyncMock(
+                return_value=LockedFeedSettings(
+                    self.original, schema_document(self.original.schema)
+                )
+            ),
             save_settings=AsyncMock(),
         )
         self.clock = SimpleNamespace(now=Mock(return_value=NOW + timedelta(seconds=1)))
@@ -567,7 +579,7 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved.schema.fields, ())
         self.assertEqual(saved.status, FeedStatus.DRAFT)
         self.assertEqual(result.version, 1)
-        self.assertEqual(result.schema["root"]["fields"], [])
+        self.assertEqual(result.schema["fields"], [])
         self.assertEqual(result.export_settings.format_settings.delimiter, ";")
 
     async def test_patch_preserves_unspecified_properties_and_schema(self) -> None:
@@ -584,7 +596,8 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved.code, self.original.code)
         self.assertEqual(result.version, 2)
         self.assertEqual(
-            self.repository.save_settings.call_args.kwargs["expected_version"], FeedVersionVO(1)
+            self.repository.save_settings.call_args.kwargs["expected_version"],
+            FeedVersionVO(1),
         )
 
     async def test_noop_does_not_save_and_stale_patch_does_not_overwrite(self) -> None:
@@ -608,7 +621,9 @@ class FeedCrudApplicationTests(unittest.IsolatedAsyncioTestCase):
         archived = self.repository.save_settings.call_args.args[0]
         self.assertEqual(archived.status, FeedStatus.ARCHIVED)
         self.assertEqual(archived.version.value, 2)
-        self.repository.get_settings_for_update.return_value = LockedFeedSettings(archived, schema_document(archived.schema))
+        self.repository.get_settings_for_update.return_value = LockedFeedSettings(
+            archived, schema_document(archived.schema)
+        )
         self.repository.save_settings.reset_mock()
         await handler.execute(ArchiveFeedCommand(self.original.id, 1))
         self.repository.save_settings.assert_not_awaited()

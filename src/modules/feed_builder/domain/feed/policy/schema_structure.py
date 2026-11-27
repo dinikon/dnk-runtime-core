@@ -15,7 +15,7 @@ from src.modules.feed_builder.domain.feed.value_object.export_name import Export
 
 
 class FeedSchemaStructurePolicy:
-    """Проверяет состав определения в фабриках Feed и снимка FeedGeneration."""
+    """Проверяет целостность графа в Feed и снимке экспорта."""
 
     @staticmethod
     def validate(schema: FeedSchemaVO) -> FeedSchemaVO:
@@ -50,9 +50,7 @@ class FeedSchemaStructurePolicy:
                     "Ключ поля повторяется в Feed.",
                     path=("schema", "fields", index, "key"),
                 )
-            if schema.schema_format_version == 2 and isinstance(
-                definition.type_definition, CategoryNodeDataVO
-            ):
+            if isinstance(definition.type_definition, CategoryNodeDataVO):
                 if trees.get(definition.category_tree_id) != definition.type_definition:
                     raise InvalidFeedValueError(
                         "Нода категории ссылается на неизвестное дерево.",
@@ -84,5 +82,5 @@ class FeedSchemaStructurePolicy:
             keys.add(definition.key)
             restored_fields.append(definition)
         return FeedSchemaVO(
-            tuple(restored_fields), schema.schema_format_version, schema.category_trees
+            tuple(restored_fields), category_trees=schema.category_trees
         )

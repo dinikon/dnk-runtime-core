@@ -55,7 +55,9 @@ from src.modules.feed_builder.domain.feed.value_object.money_ceil_step_parameter
 from src.modules.feed_builder.domain.feed.expression.enum.arithmetic_operator import (
     ArithmeticOperator as A,
 )
-from src.modules.feed_builder.domain.feed.expression.enum.price_function import PriceFunction as F
+from src.modules.feed_builder.domain.feed.expression.enum.price_function import (
+    PriceFunction as F,
+)
 from src.modules.feed_builder.domain.feed.expression.enum.comparison_operator import (
     ComparisonOperator as C,
 )
@@ -94,7 +96,9 @@ from src.modules.feed_builder.application.feed.port.calculation_product import (
     CalculationProductSnapshot,
 )
 from src.modules.feed_builder.application.feed.graph.codec import schema_document
-from src.modules.feed_builder.application.feed.graph.node_codec import field_document
+from src.modules.feed_builder.application.feed.graph.versioned_node import (
+    versioned_node_document,
+)
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.domain.feed.error import (
     FeedArchivedError,
@@ -440,7 +444,7 @@ class FeedPricePreviewApplicationTests(IsolatedAsyncioTestCase):
             replace(
                 self.query,
                 field_id=new_field.id.uuid,
-                definition_override=field_document(new_field),
+                definition_override=versioned_node_document(new_field),
             )
         )
         self.assertEqual(result.amount, "123.1234567890123456789")
@@ -458,7 +462,7 @@ class FeedPricePreviewApplicationTests(IsolatedAsyncioTestCase):
         with self.assertRaises(FeedArchivedError):
             await self.handler.execute(self.query)
         self.repository.get_schema.return_value = self.current
-        bad = field_document(
+        bad = versioned_node_document(
             replace(
                 money_field(
                     PriceCalculationVO(ParameterReferenceVO("product.category_ids"))

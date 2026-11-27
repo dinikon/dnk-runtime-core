@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping
+from decimal import InvalidOperation
 from uuid import UUID
 
 from src.modules.feed_builder.domain.feed.category.value_object.tree import (
@@ -9,7 +10,7 @@ from src.modules.feed_builder.domain.error import FeedBuilderDomainError
 from src.modules.feed_builder.application.feed.graph.forms import node_forms
 from src.modules.feed_builder.application.feed.graph.json_values import document, string
 from src.modules.feed_builder.application.feed.graph.node_codec import (
-    decode_field_at,
+    decode_field_export,
     field_export_document,
 )
 from src.modules.feed_builder.application.feed.graph.registry import (
@@ -21,6 +22,10 @@ from src.modules.feed_builder.application.feed.graph.error import (
 )
 from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
+from src.modules.feed_builder.domain.feed.value_object.field_id import FieldIdVO
+from src.modules.feed_builder.domain.feed.value_object.field_key import FieldKeyVO
+from src.modules.feed_builder.domain.feed.value_object.field_label import FieldLabelVO
+from src.modules.shared.domain.domain_error import DomainError
 from src.modules.feed_builder.domain.feed.field_node.value_validation import (
     valid_text_characters,
 )
@@ -28,13 +33,12 @@ from src.modules.feed_builder.domain.feed.field_node.value_validation import (
 
 def decode_versioned_node(
     value: object,
-    index: int,
+    path: tuple[str | int, ...],
     trees: Mapping[UUID, FeedCategoryTreeVO],
     *,
     clean_html: Callable[[str], str] | None = None,
 ) -> FieldNodeDefinition:
     """Сопоставляет ноду с зарегистрированным типом и проверяет её данные."""
-    path = ("definition", "fields", index)
     try:
         data = document(
             value,
@@ -71,28 +75,34 @@ def decode_versioned_node(
             and valid_text_characters(html, multiline=True)
         ):
             settings = {**settings, "value": {**constant, "value": clean_html(html)}}
-    except (InvalidFeedSchemaDocumentError, ValueError) as exc:
-        raise InvalidFeedSchemaDocumentError(str(exc), path=path) from exc
-    try:
-        return decode_field_at(
-            {
-                "id": data["id"],
-                "key": data["key"],
-                "label": data["name"],
-                "type_definition": {**settings, "kind": codec.kind.value},
-                "export": data["export"],
-                "ai": {"instruction": data.get("aiInstruction")},
-            },
-            index,
-            tree=tree,
+        field_type = (
+            tree.settings
+            if tree is not None
+            else codec.read({**settings, "kind": codec.kind.value}, None)
+        )
+        return FieldNodeDefinition.restore(
+            identifier=FieldIdVO.from_value(string(data["id"])),
+            key=FieldKeyVO(string(data["key"])),
+            label=FieldLabelVO(string(data["name"])),
+            type_definition=field_type,
+            export=decode_field_export(data["export"]),
+            ai_instruction=data.get("aiInstruction"),
+            category_tree_id=tree.id if tree is not None else None,
         )
     except FeedBuilderDomainError as exc:
-        tail = exc.path[4:]
-        if tail[:1] == ("type_definition",):
-            tail = ("data", *tail[1:])
-        exc.path = (*path, *tail)
+        suffix = exc.path
+        if suffix[:1] == ("type_definition",):
+            suffix = ("data", *suffix[1:])
+        exc.path = (*path, *suffix)
         raise
-    except InvalidFeedSchemaDocumentError as exc:
+    except (
+        InvalidFeedSchemaDocumentError,
+        DomainError,
+        ValueError,
+        TypeError,
+        KeyError,
+        InvalidOperation,
+    ) as exc:
         raise InvalidFeedSchemaDocumentError(str(exc), path=path) from exc
 
 

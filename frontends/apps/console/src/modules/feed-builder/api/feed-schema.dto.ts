@@ -102,24 +102,15 @@ export type FieldTypeDTO =
         | { kind: "MONEY"; mode: "CALCULATED"; calculation: CalculationDTO };
       transforms: TransformDTO[];
     };
-export interface SchemaFieldDTO {
-  id: string;
-  key: string;
-  label: string;
-  type_definition: FieldTypeDTO;
-  export: {
-    name: string;
-    enabled: boolean;
-    xml_placement?: "ELEMENT" | "ATTRIBUTE";
-    document?: CategoryDocumentExportDTO;
-    publication?: CategoryPublicationExportDTO;
-  };
-  ai: { instruction: string | null };
+interface FieldExportDTO {
+  name: string;
+  enabled: boolean;
+  xml_placement?: "ELEMENT" | "ATTRIBUTE";
+  document?: CategoryDocumentExportDTO;
+  publication?: CategoryPublicationExportDTO;
 }
-export interface LegacyDefinitionDTO {
-  schema_format_version: 1;
-  root: { key: "publication"; kind: "object"; fields: SchemaFieldDTO[] };
-}
+type FieldDataDTO<T extends FieldTypeDTO = FieldTypeDTO> =
+  T extends FieldTypeDTO ? Omit<T, "kind"> : never;
 export interface GraphFieldDTO {
   id: string;
   key: string;
@@ -128,8 +119,8 @@ export interface GraphFieldDTO {
   typeVersion: number;
   scope: "offer";
   forms?: NodeForms;
-  data: Omit<FieldTypeDTO, "kind"> | { source: "feed"; treeId: string };
-  export: SchemaFieldDTO["export"];
+  data: FieldDataDTO | { source: "feed"; treeId: string };
+  export: FieldExportDTO;
   aiInstruction: string | null;
 }
 export interface GraphDefinitionDTO {
@@ -137,21 +128,20 @@ export interface GraphDefinitionDTO {
   fields: GraphFieldDTO[];
   categoryTrees?: { id: string; data: Omit<CategoryTypeDTO, "kind"> }[];
 }
-export type DefinitionDTO = LegacyDefinitionDTO | GraphDefinitionDTO;
 export interface FeedSchemaDTO {
   feed_id: string;
   version: number;
   status: FeedStatus;
-  definition: DefinitionDTO;
+  definition: GraphDefinitionDTO;
 }
 export interface SavedFeedSchemaDTO {
   feed_id: string;
   version: number;
-  definition: DefinitionDTO;
+  definition: GraphDefinitionDTO;
 }
 export interface SaveFeedSchemaDTO {
   expected_version: number;
-  definition: DefinitionDTO;
+  definition: GraphDefinitionDTO;
 }
 export interface FieldTypesDTO {
   items: {

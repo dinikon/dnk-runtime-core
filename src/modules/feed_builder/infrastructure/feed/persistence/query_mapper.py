@@ -1,7 +1,4 @@
 from collections.abc import Mapping
-from typing import cast
-
-from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.application.feed.query.get_feed.dto import FeedDetailsDTO
 from src.modules.feed_builder.application.feed.query.get_feed_schema.dto import (
     FeedSchemaDetailsDTO,
@@ -34,7 +31,7 @@ class FeedQueryMapper:
 
     @staticmethod
     def to_details(row: Mapping[str, object]) -> FeedDetailsDTO:
-        """Возвращает карточку и исходный документ схемы."""
+        """Возвращает карточку и документ графа версии 2."""
         settings, _ = feed_settings_from_document(row["export_settings"])
         return FeedDetailsDTO(
             id=row["id"],
@@ -43,7 +40,7 @@ class FeedQueryMapper:
             status=row["status"],
             version=row["row_version"],
             export_settings=settings_to_dto(settings),
-            schema=cast(JsonObject, row["schema_definition"]),
+            schema=schema_document(decode_schema(row["schema_definition"])),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

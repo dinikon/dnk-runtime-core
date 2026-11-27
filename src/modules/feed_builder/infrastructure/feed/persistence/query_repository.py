@@ -85,12 +85,9 @@ class SqlAlchemyFeedQueryRepository:
                     table.c.export_settings["format_settings"]["format"].astext.label(
                         "format"
                     ),
-                    func.jsonb_array_length(
-                        func.coalesce(
-                            table.c.schema_definition["fields"],
-                            table.c.schema_definition["root"]["fields"],
-                        )
-                    ).label("fields_count"),
+                    func.jsonb_array_length(table.c.schema_definition["fields"]).label(
+                        "fields_count"
+                    ),
                 )
                 .where(*conditions)
                 .order_by(table.c.updated_at.desc(), table.c.id.desc())

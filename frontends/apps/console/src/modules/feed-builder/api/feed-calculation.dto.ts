@@ -1,4 +1,4 @@
-import type { SchemaFieldDTO } from "./feed-schema.dto.ts";
+import type { GraphFieldDTO } from "./feed-schema.dto.ts";
 export interface CalculationParametersDTO {
   items: { id: string; label: string; value_type: string; nullable: boolean }[];
 }
@@ -22,7 +22,7 @@ export interface PreviewRequestDTO {
   field_id: string;
   catalog_item_id: string;
   catalog_variant_id: string | null;
-  definition_override: SchemaFieldDTO;
+  definition_override: GraphFieldDTO;
 }
 export type TraceValueDTO = string | boolean | (string | boolean)[] | null;
 export interface CalculationPreviewDTO {

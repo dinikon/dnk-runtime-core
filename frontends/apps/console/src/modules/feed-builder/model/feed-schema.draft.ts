@@ -249,7 +249,7 @@ export function validateSchemaDraft(
       path: [],
     });
   draft.fields.forEach((field, index) => {
-    const path = ["definition", "root", "fields", index];
+    const path = ["definition", "fields", index];
     const error = (suffix: (string | number)[], message: string): void => {
       errors.push({
         code: "SCHEMA_INVALID",
@@ -320,15 +320,15 @@ export function validateSchemaDraft(
       );
       if (!entry)
         error(
-          ["type_definition", "value", "source"],
+          ["data", "value", "source"],
           "Выберите совместимый источник.",
         );
       else if (type.kind === "string" || type.kind === "text" || type.kind === "rich_text") {
         if (entry.requiresLocale && !type.locale)
-          error(["type_definition", "locale"], "Выберите локаль источника.");
+          error(["data", "locale"], "Выберите локаль источника.");
         if (!entry.requiresLocale && (type.locale || type.fallbackPolicy))
           error(
-            ["type_definition", "locale"],
+            ["data", "locale"],
             "Этот источник не использует локаль или fallback.",
           );
       }
@@ -342,12 +342,12 @@ export function validateSchemaDraft(
         (minValue.trim() && minimum === undefined) ||
         (maxValue.trim() && maximum === undefined) ||
         (minimum !== undefined && maximum !== undefined && minimum > maximum)
-      ) error(["type_definition", "constraints"], "Укажите целые границы от меньшей к большей.");
+      ) error(["data", "constraints"], "Укажите целые границы от меньшей к большей.");
       if (type.value.kind === "CONSTANT") {
         const value = parseFeedInteger(type.value.value);
         if (value === undefined || (minimum !== undefined && value < minimum) ||
             (maximum !== undefined && value > maximum))
-          error(["type_definition", "value"], "Укажите целое число в границах поля.");
+          error(["data", "value"], "Укажите целое число в границах поля.");
       }
       return;
     }
@@ -355,7 +355,7 @@ export function validateSchemaDraft(
       const available = new Set(metadata.locales.map((l) => l.code));
       if (type.locale && !available.has(type.locale))
         error(
-          ["type_definition", "locale"],
+          ["data", "locale"],
           "Локаль недоступна в справочнике.",
         );
       if (type.fallbackPolicy) {
@@ -370,7 +370,7 @@ export function validateSchemaDraft(
             !type.fallbackPolicy.locales.length)
         )
           error(
-            ["type_definition", "fallback_policy"],
+            ["data", "fallback_policy"],
             "Укажите непустую цепочку доступных локалей без повторов и основной локали.",
           );
       }
@@ -381,7 +381,7 @@ export function validateSchemaDraft(
             !Number.isSafeInteger(Number(type.constraints[key])))
         )
           error(
-            ["type_definition", "constraints"],
+            ["data", "constraints"],
             "Длина должна быть неотрицательным целым числом.",
           );
       if (
@@ -390,19 +390,19 @@ export function validateSchemaDraft(
         Number(type.constraints.minLength) > Number(type.constraints.maxLength)
       )
         error(
-          ["type_definition", "constraints"],
+          ["data", "constraints"],
           "Минимальная длина превышает максимальную.",
         );
     } else {
       if (type.currency && !/^[A-Za-z]{3}$/.test(type.currency.trim()))
         error(
-          ["type_definition", "currency"],
+          ["data", "currency"],
           "Укажите трёхбуквенный код валюты или оставьте поле пустым.",
         );
       for (const key of ["minAmount", "maxAmount"] as const)
         if (type.constraints[key] && !decimalParts(type.constraints[key]))
           error(
-            ["type_definition", "constraints"],
+            ["data", "constraints"],
             "Сумма должна быть конечным числом с точкой без потери точности.",
           );
       if (
@@ -414,13 +414,13 @@ export function validateSchemaDraft(
         ) === 1
       )
         error(
-          ["type_definition", "constraints"],
+          ["data", "constraints"],
           "Минимальная сумма превышает максимальную.",
         );
     }
     if (type.transforms.length > metadata.maxTransforms)
       error(
-        ["type_definition", "transforms"],
+        ["data", "transforms"],
         "Превышен лимит преобразований.",
       );
     type.transforms.forEach((t) => {
@@ -431,7 +431,7 @@ export function validateSchemaDraft(
         )
       )
         error(
-          ["type_definition", "transforms"],
+          ["data", "transforms"],
           "Преобразование несовместимо с типом.",
         );
       if (
@@ -440,7 +440,7 @@ export function validateSchemaDraft(
           !Number.isSafeInteger(Number(t.parameter)))
       )
         error(
-          ["type_definition", "transforms"],
+          ["data", "transforms"],
           "Длина обрезания должна быть неотрицательным целым числом.",
         );
       if (
@@ -448,7 +448,7 @@ export function validateSchemaDraft(
         (compareDecimals(t.parameter, "0") ?? 0) <= 0
       )
         error(
-          ["type_definition", "transforms"],
+          ["data", "transforms"],
           "Шаг округления должен быть положительным числом.",
         );
     });
@@ -469,7 +469,7 @@ export function draftDefinition(
   if (validateSchemaDraft(draft, metadata).length)
     throw new Error("Invalid schema draft");
   return {
-    schemaFormatVersion: 1,
+    schemaFormatVersion: 2,
     ...(draft.categoryTrees ? { categoryTrees: cloneSchemaValue(draft.categoryTrees) } : {}),
     fields: draft.fields.map((f) => {
       const field = cloneSchemaValue(f),

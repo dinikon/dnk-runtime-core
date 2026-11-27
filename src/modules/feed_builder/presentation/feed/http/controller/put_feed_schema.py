@@ -55,13 +55,9 @@ async def put_feed_schema(
             SaveFeedSchemaDraftCommand(
                 FeedIdVO.from_value(feed_id),
                 payload.expected_version,
-                (
-                    cast(
-                        JsonObject,
-                        payload.definition.model_dump(mode="json", exclude_unset=True),
-                    )
-                    if isinstance(payload.definition, FieldGraphSchema)
-                    else None
+                cast(
+                    JsonObject,
+                    payload.definition.model_dump(mode="json", exclude_unset=True),
                 ),
             )
         )
@@ -81,9 +77,7 @@ async def put_feed_schema(
         path = exc.path
         if path[:2] == ("schema", "fields"):
             path = ("definition", "fields", *path[2:])
-        field_id = None
-        if isinstance(payload.definition, FieldGraphSchema) and len(path) >= 3:
-            field_id = _issue_field_id(payload.definition, path)
+        field_id = _issue_field_id(payload.definition, path) if len(path) >= 3 else None
         raise HTTPException(
             422,
             {
@@ -100,9 +94,7 @@ async def put_feed_schema(
     return PutFeedSchemaResponse.from_dto(result)
 
 
-def _issue_field_id(
-    graph: FieldGraphSchema, path: tuple[str | int, ...]
-) -> str | None:
+def _issue_field_id(graph: FieldGraphSchema, path: tuple[str | int, ...]) -> str | None:
     """Находит ноду ошибки либо первую ноду, ссылающуюся на дерево."""
     index = path[2]
     if not isinstance(index, int) or index < 0:

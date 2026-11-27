@@ -158,7 +158,7 @@ _BY_ID = {(item.type_id, item.version): item for item in NODE_CODECS}
 
 
 def node_codec(kind: object) -> NodeCodec:
-    """Находит кодек по идентификатору прежнего формата."""
+    """Находит кодек по доменному типу ноды."""
     codec = _BY_KIND.get(kind) if isinstance(kind, str) else None
     if codec is None:
         raise InvalidFeedSchemaDocumentError("Неизвестный тип поля.")

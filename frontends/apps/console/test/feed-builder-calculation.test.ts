@@ -122,7 +122,10 @@ test("Preview maps source identity, absent/zero/empty inputs and trace without i
   });
   assert.equal(payload.catalog_variant_id, "white");
   assert.equal(payload.expected_version, 7);
-  assert.ok(payload.definition_override.type_definition);
+  assert.equal(payload.definition_override.typeId, "core.money");
+  assert.equal(payload.definition_override.typeVersion, 1);
+  assert.ok("value" in payload.definition_override.data);
+  assert.equal("type_definition" in payload.definition_override, false);
   assert.equal("prices" in payload, false);
   assert.equal("as_of" in payload, false);
 });

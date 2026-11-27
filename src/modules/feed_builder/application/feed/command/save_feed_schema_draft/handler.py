@@ -22,7 +22,6 @@ from src.modules.feed_builder.domain.feed.error import (
     FeedVersionConflictError,
 )
 from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
-from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
 from src.modules.shared.domain.time.clock_port import ClockPort
 
@@ -53,18 +52,13 @@ class SaveFeedSchemaDraftHandler:
             raise FeedVersionConflictError("Feed уже изменён.")
         if original.status is FeedStatus.ARCHIVED:
             raise FeedArchivedError("Архивный Feed нельзя редактировать.")
-        schema = (
-            decode_schema(
-                command.definition,
-                previous_schema=original.schema,
-                clean_html=self._clean_html,
-            )
-            if command.definition is not None
-            else FeedSchemaVO()
+        schema = decode_schema(
+            command.definition,
+            previous_schema=original.schema,
+            clean_html=self._clean_html,
         )
         result = original.change_schema(schema=schema, now=self._clock.now())
-        if schema.schema_format_version == 2:
-            await validate_saved_graph(schema, original.schema, self._locales)
+        await validate_saved_graph(schema, original.schema, self._locales)
         if result is not original:
             await self._repository.save(result, expected_version=expected)
         return SaveFeedSchemaDraftResultDTO(

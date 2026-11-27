@@ -1,13 +1,12 @@
 from uuid import UUID
 from typing import Self
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
 from src.modules.feed_builder.application.feed.query.get_feed_schema.dto import (
     FeedSchemaDetailsDTO,
 )
-from src.modules.feed_builder.presentation.feed.http.schema.graph import SchemaDocument
-
-
-_SCHEMA_DOCUMENT = TypeAdapter(SchemaDocument)
+from src.modules.feed_builder.presentation.feed.http.schema.graph import (
+    FieldGraphSchema,
+)
 
 
 class GetFeedSchemaResponse(BaseModel):
@@ -16,7 +15,7 @@ class GetFeedSchemaResponse(BaseModel):
     feed_id: UUID
     version: int
     status: str
-    definition: SchemaDocument
+    definition: FieldGraphSchema
 
     @classmethod
     def from_dto(cls, value: FeedSchemaDetailsDTO) -> Self:
@@ -25,5 +24,5 @@ class GetFeedSchemaResponse(BaseModel):
             feed_id=value.feed_id,
             version=value.version,
             status=value.status,
-            definition=_SCHEMA_DOCUMENT.validate_python(value.definition),
+            definition=FieldGraphSchema.model_validate(value.definition),
         )

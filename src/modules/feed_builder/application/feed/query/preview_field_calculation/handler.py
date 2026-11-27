@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import replace
 from src.modules.feed_builder.application.feed.query.preview_field_calculation.query import (
     PreviewFieldCalculationQuery,
 )
@@ -15,8 +16,10 @@ from src.modules.feed_builder.application.feed.port.calculation_product import (
     CalculationProductReaderProtocol,
 )
 from src.modules.feed_builder.application.feed.graph.codec import decode_schema
-from src.modules.feed_builder.application.feed.graph.node_codec import decode_field_at
-from src.modules.feed_builder.application.feed.graph.node_codec import field_document
+from src.modules.feed_builder.application.feed.graph.versioned_node import (
+    decode_versioned_node,
+    versioned_node_document,
+)
 from src.modules.feed_builder.domain.feed.expression.parameters import ENGINE_VERSION
 from src.modules.feed_builder.domain.feed.expression.error import (
     CalculationDefinitionError,
@@ -34,7 +37,9 @@ from src.modules.feed_builder.domain.feed.field_node.boolean.value_object.data i
 from src.modules.feed_builder.domain.feed.field_node.integer.value_object.data import (
     IntegerNodeDataVO,
 )
-from src.modules.feed_builder.domain.publication.field_node.resolver import NodeValueResolver
+from src.modules.feed_builder.domain.publication.field_node.resolver import (
+    NodeValueResolver,
+)
 from src.modules.feed_builder.domain.publication.value_object.publication_catalog_snapshot import (
     PublicationCatalogSnapshotVO,
 )
@@ -93,7 +98,11 @@ class PreviewFieldCalculationHandler:
                 raise FeedNotFoundError("Поле Feed не найдено.")
             field = original
         else:
-            field = decode_field_at(query.definition_override, 0)
+            field = decode_versioned_node(
+                query.definition_override,
+                ("definition_override",),
+                {tree.id: tree for tree in schema.category_trees},
+            )
             if field.id.uuid != query.field_id:
                 raise CalculationDefinitionError(
                     "FIELD_ID_MISMATCH",
@@ -102,7 +111,7 @@ class PreviewFieldCalculationHandler:
         fields = tuple(field if old.id == field.id else old for old in schema.fields)
         if original is None:
             fields += (field,)
-        FeedSchemaStructurePolicy.validate(FeedSchemaVO(fields))
+        FeedSchemaStructurePolicy.validate(replace(schema, fields=fields))
         FeedSchemaSourcePolicy.ensure_valid(FeedSchemaVO((field,)))
         settings = field.type_definition
         if not isinstance(
@@ -160,9 +169,11 @@ class PreviewFieldCalculationHandler:
                 scalar_value = resolved.value
             valid = not resolved.issues
             issues = resolved.issues
+        field_document = versioned_node_document(field)
+        field_document.pop("forms")
         definition_hash = hashlib.sha256(
             json.dumps(
-                field_document(field),
+                field_document,
                 sort_keys=True,
                 separators=(",", ":"),
                 ensure_ascii=False,

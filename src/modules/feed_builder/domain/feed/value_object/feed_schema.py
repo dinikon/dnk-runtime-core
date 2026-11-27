@@ -13,7 +13,7 @@ class FeedSchemaVO:
     """Хранит полный упорядоченный снимок полей, включая пустую схему."""
 
     fields: tuple[FieldNodeDefinition, ...] = ()
-    schema_format_version: int = 1
+    schema_format_version: int = 2
     category_trees: tuple[FeedCategoryTreeVO, ...] = ()
 
     def __post_init__(self) -> None:
@@ -22,7 +22,7 @@ class FeedSchemaVO:
         if (
             not all(isinstance(value, FieldNodeDefinition) for value in fields)
             or type(self.schema_format_version) is not int
-            or self.schema_format_version not in (1, 2)
+            or self.schema_format_version != 2
         ):
             raise InvalidFeedValueError(
                 "Нужны FieldNodeDefinition и поддержанный формат схемы."
@@ -30,9 +30,7 @@ class FeedSchemaVO:
         trees = sequence(
             self.category_trees, label="Feed category trees", maximum=MAX_FIELDS
         )
-        if not all(isinstance(tree, FeedCategoryTreeVO) for tree in trees) or (
-            trees and self.schema_format_version == 1
-        ):
-            raise InvalidFeedValueError("Деревья категорий доступны в графе версии 2.")
+        if not all(isinstance(tree, FeedCategoryTreeVO) for tree in trees):
+            raise InvalidFeedValueError("Нужны типизированные деревья категорий.")
         object.__setattr__(self, "fields", fields)
         object.__setattr__(self, "category_trees", trees)

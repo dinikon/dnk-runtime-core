@@ -22,7 +22,9 @@ from src.modules.catalog.application.catalog_item.port.calculation_reader import
 from src.modules.catalog.infrastructure.catalog_item.persistence.calculation_reader import (
     SqlAlchemyCatalogCalculationReader,
 )
-from src.modules.feed_builder.application.feed.graph.node_codec import field_document
+from src.modules.feed_builder.application.feed.graph.versioned_node import (
+    versioned_node_document,
+)
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.identity.domain.auth.principal import Principal
@@ -50,8 +52,8 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await initialize_catalog(session, tenant, EntityIdVO(self.actor))
         self.app.state.clock = Mock(now=lambda: NOW)
         self.feed = await self.create()
-        self.field = field_document(calculation_field())
-        self.field["type_definition"]["currency"] = None
+        self.field = versioned_node_document(calculation_field())
+        self.field["data"]["currency"] = None
         self.catalog = "/api/console/catalog/items"
 
     async def item(
@@ -123,7 +125,7 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["resolved_value"], {"amount": "990.00"})
         self.assertEqual(
             result["selected_rule_id"],
-            self.field["type_definition"]["value"]["calculation"]["rules"][0]["id"],
+            self.field["data"]["value"]["calculation"]["rules"][0]["id"],
         )
         self.assertFalse(result["used_default"])
         self.assertEqual(result["source_revision"], 1)
@@ -132,15 +134,15 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result["valid_until"])
         before = (await self.client.get(f"{self.base}/{self.feed['id']}")).json()
         self.assertEqual(before["version"], 1)
-        self.assertEqual(before["schema"]["root"]["fields"], [])
+        self.assertEqual(before["schema"]["fields"], [])
         definition = {
-            "schema_format_version": 1,
-            "root": {"key": "publication", "kind": "object", "fields": [self.field]},
+            "schema_format_version": 2,
+            "fields": [self.field],
         }
         stored = await self.seed_feed_schema(self.feed["id"], definition, 1)
         self.assertEqual(stored.version.value, 2)
         read = (await self.client.get(f"{self.base}/{self.feed['id']}/schema")).json()
-        self.assertEqual(read["definition"]["root"]["fields"], [self.field])
+        self.assertEqual(read["definition"]["fields"], [self.field])
         await self.preview(item, status=409)
         result = await self.preview(item, expected=2)
         self.assertEqual(result["version"], 2)
@@ -194,8 +196,19 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_semantic_runtime_and_request_errors_are_distinct(self) -> None:
         """Тип коллекции отклоняется в арифметике, ошибки исполнения не становятся ELSE."""
         item = await self.item(sale=None)
+        await self.preview(
+            item,
+            field={
+                "id": self.field["id"],
+                "key": self.field["key"],
+                "label": self.field["name"],
+                "type_definition": {"kind": "money", **self.field["data"]},
+                "export": self.field["export"],
+            },
+            status=422,
+        )
         invalid = copy.deepcopy(self.field)
-        invalid["type_definition"]["value"]["calculation"]["rules"][0]["expression"] = {
+        invalid["data"]["value"]["calculation"]["rules"][0]["expression"] = {
             "kind": "parameter",
             "parameter": "product.category_ids",
         }
@@ -207,20 +220,18 @@ class FeedCalculationPostgresTests(unittest.IsolatedAsyncioTestCase):
             json={
                 "expected_version": 1,
                 "definition": {
-                    "schema_format_version": 1,
-                    "root": {
-                        "key": "publication",
-                        "kind": "object",
-                        "fields": [invalid],
-                    },
+                    "schema_format_version": 2,
+                    "fields": [invalid],
                 },
             },
         )
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["definition"]["root"]["fields"], [])
-        self.assertEqual(response.json()["version"], 1)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "INVALID_EXPRESSION_TYPE")
+        unchanged = await self.client.get(f"{self.base}/{self.feed['id']}/schema")
+        self.assertEqual(unchanged.json()["definition"]["fields"], [])
+        self.assertEqual(unchanged.json()["version"], 1)
         invalid = copy.deepcopy(self.field)
-        calc = invalid["type_definition"]["value"]["calculation"]
+        calc = invalid["data"]["value"]["calculation"]
         calc["rules"][0]["condition"] = {
             "kind": "comparison",
             "operator": "GT",

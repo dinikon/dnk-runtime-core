@@ -220,7 +220,7 @@ export function useFeedSchemaEditor(id: Ref<string>): FeedSchemaEditor {
     const result = await action.execute({
       id: id.value,
       expectedVersion: base.value.version,
-      definition: { ...draftDefinition(sent, metadata.data.value), schemaFormatVersion: 2 },
+      definition: draftDefinition(sent, metadata.data.value),
     });
     if (captured !== contextKey.value) return false;
     if (!result) {

@@ -166,7 +166,10 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         data = response.json()
         self.assertEqual(data["status"], "DRAFT")
         self.assertEqual(data["version"], 1)
-        self.assertEqual(data["schema"]["root"]["fields"], [])
+        self.assertEqual(
+            data["schema"],
+            {"schema_format_version": 2, "fields": [], "categoryTrees": []},
+        )
         self.assertEqual(data["export_settings"]["format_settings"], settings)
         return data
 
@@ -195,7 +198,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await repository.save(saved, expected_version=original.version)
             return saved
 
-    async def test_schema_save_clears_fields_and_keeps_metadata_and_archive(
+    async def test_schema_save_rejects_v1_and_keeps_metadata_and_archive(
         self,
     ) -> None:
         """Проходит рабочий сценарий схемы с настоящими auth, CSRF, SQL и UoW."""
@@ -221,59 +224,45 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("CONSTANT", modes["text"])
                 self.assertIn("CONSTANT", modes["rich_text"])
         definition = source_schema_document()
-        original = await self.seed_feed_schema(created["id"], definition, 1)
-        self.assertEqual(original.version.value, 2)
-        before = (await self.client.get(path + "/schema")).json()
-        self.assertEqual(len(before["definition"]["root"]["fields"]), 4)
-        expected = {**definition, "root": {**definition["root"], "fields": []}}
         saved = await self.client.put(
+            path + "/schema/draft",
+            headers=self.headers,
+            json={"expected_version": 1, "definition": definition},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["definition"], definition)
+        self.assertEqual(saved.json()["version"], 2)
+        before = (await self.client.get(path + "/schema")).json()
+        self.assertEqual(before["definition"], definition)
+        self.assertEqual(
+            (await self.client.get(self.base)).json()["items"][0]["fields_count"], 4
+        )
+        rejected = await self.client.put(
+            path + "/schema/draft",
+            headers=self.headers,
+            json={
+                "expected_version": 2,
+                "definition": {
+                    "schema_format_version": 1,
+                    "root": {"key": "publication", "kind": "object", "fields": []},
+                },
+            },
+        )
+        self.assertEqual(rejected.status_code, 422, rejected.text)
+        self.assertEqual((await self.client.get(path + "/schema")).json(), before)
+        noop = await self.client.put(
             path + "/schema/draft",
             headers=self.headers,
             json={"expected_version": 2, "definition": definition},
         )
-        self.assertEqual(saved.status_code, 200, saved.text)
-        self.assertEqual(saved.json()["definition"], expected)
-        self.assertEqual(saved.json()["version"], 3)
-        self.assertEqual(
-            (await self.client.get(path + "/schema")).json(),
-            {
-                "feed_id": created["id"],
-                "version": 3,
-                "status": "DRAFT",
-                "definition": expected,
-            },
-        )
-        self.assertEqual(
-            (await self.client.get(self.base)).json()["items"][0]["fields_count"], 0
-        )
-        for incoming in (
-            definition["root"]["fields"],
-            [{"unknown": "field"}],
-            False,
-            {},
-            "ignored",
-            None,
-        ):
-            with self.subTest(incoming=incoming):
-                noop = await self.client.put(
-                    path + "/schema/draft",
-                    headers=self.headers,
-                    json={
-                        "expected_version": 3,
-                        "definition": {
-                            **definition,
-                            "root": {**definition["root"], "fields": incoming},
-                        },
-                    },
-                )
-                self.assertEqual(noop.status_code, 200, noop.text)
-                self.assertEqual(noop.json(), saved.json())
+        self.assertEqual(noop.status_code, 200, noop.text)
+        self.assertEqual(noop.json(), saved.json())
         self.assertEqual(
             (await self.client.get(path)).json()["export_settings"],
             created["export_settings"],
         )
         archived = await self.client.delete(
-            path, headers=self.headers, params={"expected_version": 3}
+            path, headers=self.headers, params={"expected_version": 2}
         )
         self.assertEqual(archived.status_code, 204)
         self.assertEqual(
@@ -282,7 +271,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         denied = await self.client.put(
             path + "/schema/draft",
             headers=self.headers,
-            json={"expected_version": 4, "definition": definition},
+            json={"expected_version": 3, "definition": definition},
         )
         self.assertEqual(denied.status_code, 409)
         self.assertEqual(denied.json()["detail"]["code"], "FEED_ARCHIVED")
@@ -299,25 +288,56 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         }
         definition = {
             "schema_format_version": 2,
-            "fields": [{
-                "id": field_id, "key": "category", "name": "Категория",
-                "typeId": "core.category_reference", "typeVersion": 1,
-                "scope": "offer", "data": {"source": "feed", "treeId": tree_id},
-                "export": {"name": "category", "enabled": True,
-                           "publication": {"value_key": "id"}},
-            }],
-            "categoryTrees": [{"id": tree_id, "data": {
-                "object_schema": {"id_key": "id", "label_key": "name", "fields": [
-                    {"key": "id", "kind": "string", "required": True},
-                    {"key": "name", "kind": "string"},
-                ]},
-                "value": {
-                    "kind": "INLINE", "fallback": "FIXED", "fallback_id": target_id,
-                    "nodes": [{"id": target_id, "values": {"id": "987", "name": "Подборка"}}],
-                    "rules": [{"id": str(uuid4()), "target_id": target_id,
-                               "label": "По категории Catalog", "condition": condition}],
-                },
-            }}],
+            "fields": [
+                {
+                    "id": field_id,
+                    "key": "category",
+                    "name": "Категория",
+                    "typeId": "core.category_reference",
+                    "typeVersion": 1,
+                    "scope": "offer",
+                    "data": {"source": "feed", "treeId": tree_id},
+                    "export": {
+                        "name": "category",
+                        "enabled": True,
+                        "publication": {"value_key": "id"},
+                    },
+                }
+            ],
+            "categoryTrees": [
+                {
+                    "id": tree_id,
+                    "data": {
+                        "object_schema": {
+                            "id_key": "id",
+                            "label_key": "name",
+                            "fields": [
+                                {"key": "id", "kind": "string", "required": True},
+                                {"key": "name", "kind": "string"},
+                            ],
+                        },
+                        "value": {
+                            "kind": "INLINE",
+                            "fallback": "FIXED",
+                            "fallback_id": target_id,
+                            "nodes": [
+                                {
+                                    "id": target_id,
+                                    "values": {"id": "987", "name": "Подборка"},
+                                }
+                            ],
+                            "rules": [
+                                {
+                                    "id": str(uuid4()),
+                                    "target_id": target_id,
+                                    "label": "По категории Catalog",
+                                    "condition": condition,
+                                }
+                            ],
+                        },
+                    },
+                }
+            ],
         }
         path = f"{self.base}/{feed['id']}/schema/draft"
         payload = {"expected_version": 1, "definition": definition}
@@ -327,16 +347,32 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail["code"], "INVALID_EXPRESSION_TYPE")
         self.assertIn("uuid", detail["message"])
         self.assertEqual(detail["field_id"], field_id)
-        self.assertEqual(detail["path"], [
-            "definition", "categoryTrees", 0, "data", "value", "rules", 0,
-            "condition", "right",
-        ])
+        self.assertEqual(
+            detail["path"],
+            [
+                "definition",
+                "categoryTrees",
+                0,
+                "data",
+                "value",
+                "rules",
+                0,
+                "condition",
+                "right",
+            ],
+        )
 
-        condition["right"] = {"kind": "scalar", "value_type": "uuid", "value": catalog_id}
+        condition["right"] = {
+            "kind": "scalar",
+            "value_type": "uuid",
+            "value": catalog_id,
+        }
         saved = await self.client.put(path, headers=self.headers, json=payload)
         self.assertEqual(saved.status_code, 200, saved.text)
         self.assertEqual(saved.json()["version"], 2)
-        rule = saved.json()["definition"]["categoryTrees"][0]["data"]["value"]["rules"][0]
+        rule = saved.json()["definition"]["categoryTrees"][0]["data"]["value"]["rules"][
+            0
+        ]
         self.assertEqual(rule["condition"], condition)
 
     async def test_schema_invalid_payload_limits_and_rollback(self) -> None:
@@ -391,6 +427,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         path = self.base + "/" + created["id"]
         definition = source_schema_document()
         await self.seed_feed_schema(created["id"], definition, 1)
+        definition["fields"][0]["name"] = "Конкурентная схема"
         first, second = await asyncio.gather(
             self.client.put(
                 path + "/schema/draft",
@@ -459,7 +496,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             await SqlAlchemyFeedRepository(session).add(original)
         path = self.base + "/" + str(original.id.uuid)
         read = (await self.client.get(path + "/schema")).json()
-        definition = read["definition"]
+        definition = read["definition"] | {"fields": [], "categoryTrees": []}
         with patch.object(
             UnitOfWork, "commit", side_effect=RuntimeError("test commit failure")
         ):
@@ -476,7 +513,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             json={"expected_version": 1, "definition": definition},
         )
         self.assertEqual(saved.status_code, 200, saved.text)
-        self.assertEqual(saved.json()["definition"]["root"]["fields"], [])
+        self.assertEqual(saved.json()["definition"]["fields"], [])
         self.assertEqual(saved.json()["version"], 2)
 
     async def test_http_create_list_get_patch_archive_and_repeat(self) -> None:
@@ -854,7 +891,9 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             with self.assertRaisesRegex(RuntimeError, "Откат открыл бы доступ"):
                 async with connection.begin_nested():
-                    await self.migrator.downgrade(connection, schema, "0026_fb_export_state")
+                    await self.migrator.downgrade(
+                        connection, schema, "0026_fb_export_state"
+                    )
             self.assertEqual(
                 await self.migrator.current(connection, schema), (self.migrator.head(),)
             )
@@ -895,7 +934,13 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertCountEqual(
                 tables,
-                ["fb_feeds", "fb_publications", "fb_export_states", "fb_export_issues", "fb_access_keys"],
+                [
+                    "fb_feeds",
+                    "fb_publications",
+                    "fb_export_states",
+                    "fb_export_issues",
+                    "fb_access_keys",
+                ],
             )
 
 

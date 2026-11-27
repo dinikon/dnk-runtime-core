@@ -38,8 +38,8 @@ const feed: Feed = {
   createdAt: "2026-11-22T10:30:00Z",
   updatedAt: "2026-11-22T10:35:00Z",
   schema: {
-    schema_format_version: 1,
-    root: { fields: [{ amount: "123456789.123456789" }] },
+    schema_format_version: 2,
+    fields: [{ amount: "123456789.123456789" }],
   },
 };
 test("Creation requires an explicit format and serializes only supported create properties", () => {

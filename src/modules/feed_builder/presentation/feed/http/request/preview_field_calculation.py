@@ -1,9 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
-from src.modules.feed_builder.presentation.feed.http.schema.legacy_graph import (
-    DefinitionFieldSchema,
-)
+from src.modules.feed_builder.presentation.feed.http.schema.graph import FieldNodeSchema
 
 
 class PreviewFieldCalculationRequest(BaseModel):
@@ -14,4 +12,4 @@ class PreviewFieldCalculationRequest(BaseModel):
     field_id: Annotated[UUID, Field(strict=False)]
     catalog_item_id: Annotated[UUID, Field(strict=False)]
     catalog_variant_id: Annotated[UUID, Field(strict=False)] | None = None
-    definition_override: DefinitionFieldSchema | None = None
+    definition_override: FieldNodeSchema | None = None
