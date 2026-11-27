@@ -1,7 +1,23 @@
 """Чистые проверки собственных значений без бизнес-оркестрации и I/O."""
 
+from __future__ import annotations
+
 from decimal import Decimal
 import re
+from typing import TYPE_CHECKING, TypeIs
+
+from modules.feed_builder.domain.feed.expression.value_object.arithmetic_expression import (
+    ArithmeticExpressionVO,
+)
+from modules.feed_builder.domain.feed.expression.value_object.decimal_literal import (
+    DecimalLiteralVO,
+)
+from modules.feed_builder.domain.feed.expression.value_object.function_expression import (
+    FunctionExpressionVO,
+)
+from modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
+    ParameterReferenceVO,
+)
 
 from src.modules.feed_builder.domain.feed.error import (
     DefinitionStructureLimitExceededError,
@@ -11,6 +27,13 @@ from src.modules.feed_builder.domain.feed.limits import (
     MAX_LITERAL_DIGITS,
     MAX_LITERAL_EXPONENT,
 )
+
+if TYPE_CHECKING:
+    from src.modules.feed_builder.domain.feed.types import (
+        Condition,
+        ConditionOperand,
+        Expression,
+    )
 
 _INVALID_XML_CHARACTER = re.compile(
     r"[^\x09\x0a\x0d\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]"
@@ -36,6 +59,7 @@ def decimal(value: Decimal, *, label: str) -> None:
     parts = value.as_tuple()
     if (
         len(parts.digits) > MAX_LITERAL_DIGITS
+        or not isinstance(parts.exponent, int)
         or abs(parts.exponent) > MAX_LITERAL_EXPONENT
     ):
         raise InvalidFeedValueError(
@@ -56,7 +80,7 @@ def sequence[T](
     return tuple(value)
 
 
-def is_expression(value: object) -> bool:
+def is_expression(value: object) -> TypeIs[Expression]:
     """Распознаёт только разрешённые узлы, откладывая импорты рекурсивного графа."""
     from src.modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
         ParameterReferenceVO,
@@ -82,7 +106,17 @@ def is_expression(value: object) -> bool:
     )
 
 
-def is_condition_operand(value: object) -> bool:
+def is_condition_operand(
+    value: object,
+) -> (
+    TypeIs[
+        ParameterReferenceVO
+        | DecimalLiteralVO
+        | ArithmeticExpressionVO
+        | FunctionExpressionVO
+    ]
+    | bool
+):
     """Распознаёт выражение или типизированный литерал сравнения."""
     from src.modules.feed_builder.domain.feed.expression.value_object.scalar_literal import (
         ScalarLiteralVO,
@@ -96,7 +130,7 @@ def is_condition_operand(value: object) -> bool:
     )
 
 
-def is_condition(value: object) -> bool:
+def is_condition(value: object) -> TypeIs[Condition]:
     """Распознаёт только зарегистрированные структуры условий."""
     from src.modules.feed_builder.domain.feed.expression.value_object.comparison_condition import (
         ComparisonConditionVO,

@@ -1,3 +1,4 @@
+from src.modules.feed_builder.domain.error import FeedBuilderDomainError
 from src.modules.feed_builder.domain.feed.expression.value_object.boolean_calculation import (
     BooleanCalculationVO,
 )
@@ -20,7 +21,12 @@ from src.modules.feed_builder.domain.feed.value_object.source_value_definition i
 from src.modules.feed_builder.domain.feed.value_object.manual_value_definition import (
     ManualValueDefinitionVO,
 )
-from src.modules.feed_builder.application.feed.graph.json_values import document
+from src.modules.feed_builder.application.feed.graph.json_values import (
+    boolean,
+    document,
+    integer,
+    optional_integer,
+)
 from src.modules.feed_builder.application.feed.graph.expression_codec import (
     ExpressionReader,
     node_document,
@@ -54,27 +60,42 @@ def read_numeric_bool(raw_type: JsonObject) -> IntegerNodeDataVO | BooleanNodeDa
             scalar = ManualValueDefinitionVO()
         case "CONSTANT":
             constant = document(raw_value, {"kind", "value"})
-            scalar = ConstantValueDefinitionVO(constant["value"])
+            scalar = ConstantValueDefinitionVO(
+                integer(constant["value"], ("value", "value"))
+                if kind == "integer"
+                else boolean(constant["value"], ("value", "value"))
+            )
         case "CALCULATED" if kind == "boolean":
             conditional = document(
                 raw_value, {"kind", "condition", "then_value", "else_value"}
             )
-            scalar = BooleanCalculationVO(
-                ExpressionReader().node(conditional["condition"]),
-                conditional["then_value"],
-                conditional["else_value"],
+            condition = ExpressionReader().condition(
+                conditional["condition"], path=("value", "condition")
             )
+            try:
+                scalar = BooleanCalculationVO(
+                    condition,
+                    boolean(conditional["then_value"], ("value", "then_value")),
+                    boolean(conditional["else_value"], ("value", "else_value")),
+                )
+            except FeedBuilderDomainError as exc:
+                exc.path = ("value", *exc.path)
+                raise
         case _:
             raise InvalidFeedSchemaDocumentError(
                 "Неизвестное определение значения поля."
             )
-    required = constraints.get("required", False)
-    if kind == "integer":
+    required = boolean(constraints.get("required", False), ("constraints", "required"))
+    if kind == "integer" and not isinstance(scalar, BooleanCalculationVO):
         field_type = IntegerNodeDataVO(
             scalar,
             required,
-            constraints.get("min_value"),
-            constraints.get("max_value"),
+            optional_integer(
+                constraints.get("min_value"), ("constraints", "min_value")
+            ),
+            optional_integer(
+                constraints.get("max_value"), ("constraints", "max_value")
+            ),
         )
     else:
         field_type = BooleanNodeDataVO(scalar, required)

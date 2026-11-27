@@ -1,6 +1,3 @@
-from dataclasses import replace
-from src.modules.feed_builder.application.feed.graph.codec import decode_schema
-from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.application.feed.query.get_feed_schema.query import (
     GetFeedSchemaQuery,
 )
@@ -25,8 +22,4 @@ class GetFeedSchemaHandler:
         result = await self._repository.get_schema(query.feed_id)
         if result is None:
             raise FeedNotFoundError("Feed не найден.")
-        if "categories" in result.definition:
-            return replace(
-                result, definition=schema_document(decode_schema(result.definition))
-            )
         return result

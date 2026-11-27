@@ -8,7 +8,9 @@ from src.modules.feed_builder.application.feed.export_settings import (
     settings_from_dto,
     settings_to_dto,
 )
-from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    FeedSettingsRepositoryProtocol,
+)
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
 from src.modules.feed_builder.domain.feed.value_object.feed_code import FeedCodeVO
 from src.modules.shared.domain.time.clock_port import ClockPort
@@ -22,7 +24,9 @@ from src.modules.feed_builder.domain.feed.error import (
 class UpdateFeedHandler:
     """Атомарно меняет настройки загруженного агрегата без изменения схемы."""
 
-    def __init__(self, repository: FeedSettingsRepositoryProtocol, clock: ClockPort) -> None:
+    def __init__(
+        self, repository: FeedSettingsRepositoryProtocol, clock: ClockPort
+    ) -> None:
         """Принимает зависимости сценария без сессии или собственного UoW."""
         self._repository = repository
         self._clock = clock

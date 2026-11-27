@@ -1,4 +1,6 @@
-from src.modules.feed_builder.presentation.access_key.router import router as feed_access_key_router
+from src.modules.feed_builder.presentation.access_key.router import (
+    router as feed_access_key_router,
+)
 from src.modules.feed_builder.presentation.publication.router import (
     router as feed_publications_router,
 )

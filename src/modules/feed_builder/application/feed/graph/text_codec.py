@@ -2,6 +2,7 @@ from src.modules.feed_builder.domain.feed.value_object.text_constant_value_defin
     TextConstantValueDefinitionVO,
 )
 from src.modules.feed_builder.application.feed.types import JsonObject
+from src.modules.feed_builder.domain.feed.error import InvalidFieldDefinitionError
 from src.modules.feed_builder.domain.feed.limits import MAX_TRANSFORMS
 from src.modules.feed_builder.application.feed.graph.error import (
     InvalidFeedSchemaDocumentError,
@@ -33,7 +34,9 @@ from src.modules.feed_builder.domain.feed.value_object.locale_fallback_policy im
 )
 from src.modules.feed_builder.application.feed.graph.json_values import (
     array,
+    boolean,
     document,
+    optional_integer,
     string,
 )
 from src.modules.feed_builder.application.feed.graph.field_settings_codec import (
@@ -50,7 +53,7 @@ def read_text(raw_type: JsonObject) -> ShortTextNodeDataVO | LongTextNodeDataVO:
         decode_transform(item)
         for item in array(raw_type.get("transforms", []), MAX_TRANSFORMS)
     )
-    kind = raw_type.get("kind")
+    kind = string(raw_type.get("kind"))
     definition = document(
         raw_type,
         {"kind", "value"},
@@ -70,7 +73,12 @@ def read_text(raw_type: JsonObject) -> ShortTextNodeDataVO | LongTextNodeDataVO:
         value_definition = ManualValueDefinitionVO()
     elif text_value["kind"] == "CONSTANT":
         constant = document(text_value, {"kind", "value"})
-        value_definition = TextConstantValueDefinitionVO(constant["value"])
+        text = constant["value"]
+        if not isinstance(text, str):
+            raise InvalidFieldDefinitionError(
+                "Задайте текстовое значение.", path=("data", "value", "value")
+            )
+        value_definition = TextConstantValueDefinitionVO(text)
     else:
         raise InvalidFeedSchemaDocumentError("Неизвестное текстовое определение.")
     fallback = None
@@ -97,9 +105,15 @@ def read_text(raw_type: JsonObject) -> ShortTextNodeDataVO | LongTextNodeDataVO:
         ),
         fallback_policy=fallback,
         constraints=TextConstraintsVO(
-            required=constraints.get("required", False),
-            min_length=constraints.get("min_length"),
-            max_length=constraints.get("max_length"),
+            required=boolean(
+                constraints.get("required", False), ("constraints", "required")
+            ),
+            min_length=optional_integer(
+                constraints.get("min_length"), ("constraints", "min_length")
+            ),
+            max_length=optional_integer(
+                constraints.get("max_length"), ("constraints", "max_length")
+            ),
         ),
         transforms=transforms,
     )

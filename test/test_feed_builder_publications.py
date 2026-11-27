@@ -8,7 +8,9 @@ from unittest.mock import Mock, AsyncMock
 from uuid import uuid4
 from src.modules.shared.domain.value_object.entity_id import EntityIdVO
 from src.modules.feed_builder.application.feed.graph.codec import schema_document
-from src.modules.feed_builder.application.feed.port.settings_repository import LockedFeedSettings
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    LockedFeedSettings,
+)
 from src.modules.feed_builder.domain.publication.aggregate import FeedPublication
 from src.modules.feed_builder.domain.publication.enum.publication_status import (
     PublicationStatus as S,
@@ -124,7 +126,13 @@ class AddPublicationApplicationTests(IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         """Собирает необходимые порты и постоянные часы."""
         self.feed = feed()
-        self.feeds = Mock(get_settings_for_update=AsyncMock(return_value=LockedFeedSettings(self.feed, schema_document(self.feed.schema))))
+        self.feeds = Mock(
+            get_settings_for_update=AsyncMock(
+                return_value=LockedFeedSettings(
+                    self.feed, schema_document(self.feed.schema)
+                )
+            )
+        )
         self.publications = Mock(find=AsyncMock(return_value=()), add_many=AsyncMock())
         self.reference = CatalogProductReferenceVO(EntityIdVO(uuid4()))
         self.catalog = Mock(
@@ -183,7 +191,9 @@ class AddPublicationApplicationTests(IsolatedAsyncioTestCase):
             await self.handler.execute(
                 AddCatalogItemsCommand(self.feed.id, 2, (self.reference,))
             )
-        self.feeds.get_settings_for_update.return_value = LockedFeedSettings(self.feed.archive(now=NOW), schema_document(self.feed.schema))
+        self.feeds.get_settings_for_update.return_value = LockedFeedSettings(
+            self.feed.archive(now=NOW), schema_document(self.feed.schema)
+        )
         with self.assertRaises(FeedArchivedError):
             await self.handler.execute(
                 AddCatalogItemsCommand(self.feed.id, 2, (self.reference,))

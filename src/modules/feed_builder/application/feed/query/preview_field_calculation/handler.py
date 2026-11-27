@@ -165,7 +165,7 @@ class PreviewFieldCalculationHandler:
             resolved = NodeValueResolver().resolve(
                 field, PublicationCatalogSnapshotVO(product.inputs, ()), None
             )
-            if type(resolved.value) in (int, bool):
+            if isinstance(resolved.value, int):
                 scalar_value = resolved.value
             valid = not resolved.issues
             issues = resolved.issues

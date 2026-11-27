@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 from fastapi import HTTPException
 from src.modules.feed_builder.application.feed.query.preview_field_calculation.query import (
@@ -11,7 +10,6 @@ from src.modules.feed_builder.application.feed.port.calculation_product import (
 from src.modules.feed_builder.application.feed.graph.error import (
     InvalidFeedSchemaDocumentError,
 )
-from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.error import FeedBuilderDomainError
 from src.modules.feed_builder.domain.feed.expression.error import (
     CalculationDefinitionError,
@@ -87,12 +85,7 @@ async def preview_field_calculation(
                 catalog_item_id=payload.catalog_item_id,
                 catalog_variant_id=payload.catalog_variant_id,
                 definition_override=(
-                    cast(
-                        JsonObject,
-                        payload.definition_override.model_dump(
-                            mode="json", exclude_unset=True
-                        ),
-                    )
+                    payload.definition_override.to_input()
                     if payload.definition_override is not None
                     else None
                 ),

@@ -2,6 +2,11 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
+from src.modules.feed_builder.application.feed.graph.input import (
+    CategoryTreeInput,
+    FeedGraphInput,
+    FieldNodeInput,
+)
 from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.limits import MAX_FIELDS
 from src.modules.feed_builder.presentation.feed.http.schema.field_export import (
@@ -23,6 +28,19 @@ class FieldNodeSchema(ClosedSchema):
     data: JsonObject
     export: FieldExportSchema
     aiInstruction: str | None = Field(default=None, max_length=10000)
+
+    def to_input(self) -> FieldNodeInput:
+        """Собирает данные команды из проверенных HTTP-свойств ноды."""
+        return FieldNodeInput(
+            id=self.id,
+            key=self.key,
+            name=self.name,
+            type_id=self.typeId,
+            type_version=self.typeVersion,
+            data=self.data,
+            export=self.export.to_document(),
+            ai_instruction=self.aiInstruction,
+        )
 
 
 class CategoryTreeSchema(ClosedSchema):
@@ -48,3 +66,12 @@ class FieldGraphSchema(ClosedSchema):
         if type(value) is not int or value != 2:
             raise ValueError("Поддерживается целая версия графа 2.")
         return value
+
+    def to_input(self) -> FeedGraphInput:
+        """Собирает типизированный вход приложения с сохранением порядка графа."""
+        return FeedGraphInput(
+            fields=tuple(field.to_input() for field in self.fields),
+            category_trees=tuple(
+                CategoryTreeInput(tree.id, tree.data) for tree in self.categoryTrees
+            ),
+        )

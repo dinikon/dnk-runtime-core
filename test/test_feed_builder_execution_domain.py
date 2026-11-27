@@ -39,7 +39,9 @@ from src.modules.feed_builder.domain.access_key.enum.access_key_status import (
     AccessKeyStatus,
 )
 from src.modules.feed_builder.domain.access_key.error import InvalidAccessKeyValueError
-from src.modules.feed_builder.domain.access_key.value_object.access_key_name import AccessKeyNameVO
+from src.modules.feed_builder.domain.access_key.value_object.access_key_name import (
+    AccessKeyNameVO,
+)
 from src.modules.feed_builder.domain.access_key.value_object.feed_access_key_id import (
     FeedAccessKeyIdVO,
 )
@@ -259,7 +261,10 @@ class FeedAccessKeyDomainTests(unittest.TestCase):
         feed_id = FeedIdVO(uuid4())
         digest = AccessTokenHashVO(b"h" * 32)
         result = FeedAccessKey.create(
-            identifier=identifier, feed_id=feed_id, token_hash=digest, now=NOW,
+            identifier=identifier,
+            feed_id=feed_id,
+            token_hash=digest,
+            now=NOW,
             name=AccessKeyNameVO("Площадка"),
         )
         self.assertEqual(

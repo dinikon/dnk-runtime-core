@@ -1,6 +1,3 @@
-from collections.abc import Mapping
-from typing import cast
-
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.feed_builder.application.feed.port.settings_repository import (
     LockedFeedSettings,
 )
-from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
@@ -19,14 +15,18 @@ from src.modules.feed_builder.domain.feed.error import (
     FeedVersionConflictError,
 )
 from src.modules.feed_builder.infrastructure.persistence.models.feed import FeedModel
-from src.modules.feed_builder.infrastructure.feed.persistence.mapper import FeedMapper
+from src.modules.feed_builder.infrastructure.feed.persistence.mapper import (
+    FeedMapper,
+    FeedSettingsValues,
+    FeedRow,
+)
 
 
 def is_code_conflict(error: IntegrityError) -> bool:
     """Распознаёт только именованное ограничение кода, не скрывая остальные ошибки БД."""
     name = getattr(error.orig, "constraint_name", None)
     if name is None:
-        name = getattr(error.orig.__cause__, "constraint_name", None)
+        name = getattr(getattr(error.orig, "__cause__", None), "constraint_name", None)
     return name == "uq_fb_feeds_code"
 
 
@@ -57,25 +57,22 @@ class SqlAlchemyFeedRepository:
         row = await self._lock_row(feed_id)
         return LockedFeedSettings(
             FeedMapper.to_domain(row, schema=FeedSchemaVO()),
-            cast(JsonObject, row["schema_definition"]),
+            row["schema_definition"],
         )
 
-    async def _lock_row(self, feed_id: FeedIdVO) -> Mapping[str, object]:
+    async def _lock_row(self, feed_id: FeedIdVO) -> FeedRow:
         """Блокирует одну строку для обоих сценариев записи."""
         row = (
-            (
-                await self._session.execute(
-                    select(FeedModel.__table__)
-                    .where(FeedModel.id == feed_id.uuid)
-                    .with_for_update()
-                )
+            await self._session.execute(
+                select(FeedModel)
+                .where(FeedModel.id == feed_id.uuid)
+                .with_for_update()
+                .execution_options(populate_existing=True)
             )
-            .mappings()
-            .one_or_none()
-        )
+        ).scalar_one_or_none()
         if row is None:
             raise FeedNotFoundError("Feed не найден.")
-        return row
+        return FeedMapper.row_values(row)
 
     async def save(self, feed: Feed, *, expected_version: FeedVersionVO) -> None:
         """Обновляет ожидаемую версию атомарно и не выполняет commit."""
@@ -88,7 +85,7 @@ class SqlAlchemyFeedRepository:
         await self._save(feed, expected_version, FeedMapper.to_settings_values(feed))
 
     async def _save(
-        self, feed: Feed, expected_version: FeedVersionVO, values: Mapping[str, object]
+        self, feed: Feed, expected_version: FeedVersionVO, values: FeedSettingsValues
     ) -> None:
         """Выполняет один UPDATE через ожидаемую версию для обоих сценариев."""
         if feed.version.value != expected_version.value + 1:

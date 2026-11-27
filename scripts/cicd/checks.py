@@ -22,6 +22,17 @@ def check(root: Path, full: bool = False) -> None:
         if shutil.which(tool) is None:
             raise Error(f"Install {tool} first; see docs/plan/ci-cd.md")
     format_python(root, check=True)
+    with stage("Type-check Feed Builder schema"):
+        live(
+            sys.executable,
+            "-m",
+            "pyright",
+            "--pythonpath",
+            sys.executable,
+            "--project",
+            "pyright-feed-builder.json",
+            cwd=root,
+        )
     with tempfile.TemporaryDirectory(prefix="dnk-check-source-") as directory:
         copy = Path(directory)
         snapshot(root, copy)

@@ -10,7 +10,11 @@ from uuid import uuid4
 from pydantic import ValidationError
 from test.test_feed_builder_domain import feed, NOW
 from test.test_feed_builder_crud import rich_feed
-from src.modules.feed_builder.application.feed.graph.codec import decode_schema
+from src.modules.feed_builder.application.feed.graph.codec import (
+    build_schema,
+    decode_schema,
+    read_graph_input,
+)
 from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.application.feed.graph.error import (
     InvalidFeedSchemaDocumentError,
@@ -207,12 +211,14 @@ class FeedSchemaDomainTests(TestCase):
             {"id": first, "values": {"name": "Переименована"}},
             {"id": third, "values": {"name": "Новая"}},
         ]
-        changed = schema_document(decode_schema(document, previous_schema=previous))
+        changed = schema_document(
+            build_schema(read_graph_input(document), previous_schema=previous)
+        )
         nodes = changed["categoryTrees"][0]["data"]["value"]["nodes"]
         self.assertEqual([node["values"]["id"] for node in nodes], ["1", "3"])
         value["nodes"][0]["values"]["id"] = "9"
         with self.assertRaises(InvalidFeedSchemaDocumentError):
-            decode_schema(document, previous_schema=previous)
+            build_schema(read_graph_input(document), previous_schema=previous)
         value["nodes"][0]["values"].pop("id")
         value["nodes"][0]["parent_id"] = third
         value["nodes"][1]["parent_id"] = first
@@ -352,6 +358,29 @@ class FeedSchemaDomainTests(TestCase):
         value["fields"][-1]["data"]["constraints"]["min_amount"] = 0.1
         with self.assertRaises(InvalidFeedSchemaDocumentError):
             decode_schema(value)
+        value = schema_document(rich_feed().schema)
+        calculation = value["fields"][-1]["data"]["value"]["calculation"]
+        calculation["default_expression"] = {
+            "kind": "arithmetic",
+            "operator": "ADD",
+            "left": {"kind": "decimal", "value": "1.2"},
+            "right": {"kind": "decimal", "value": 0.1},
+        }
+        with self.assertRaises(InvalidFeedSchemaDocumentError) as error:
+            decode_schema(value)
+        self.assertEqual(
+            error.exception.path,
+            (
+                "definition",
+                "fields",
+                3,
+                "data",
+                "value",
+                "calculation",
+                "default_expression",
+                "right",
+            ),
+        )
         for version in (None, 0, True, "1"):
             with self.assertRaises(ValidationError):
                 PutFeedSchemaRequest.model_validate(
@@ -397,7 +426,7 @@ class FeedSchemaApplicationTests(IsolatedAsyncioTestCase):
     async def test_save_clears_fields_once(self) -> None:
         """Очищает старые поля через корень и сохраняет версию при повторе."""
         command = SaveFeedSchemaDraftCommand(
-            self.original.id, 1, schema_document(FeedSchemaVO())
+            self.original.id, 1, read_graph_input(schema_document(FeedSchemaVO()))
         )
         result = await self.handler.execute(command)
         self.assertEqual(result.version, 2)
@@ -416,14 +445,18 @@ class FeedSchemaApplicationTests(IsolatedAsyncioTestCase):
         with self.assertRaises(FeedVersionConflictError):
             await self.handler.execute(
                 SaveFeedSchemaDraftCommand(
-                    self.original.id, 2, schema_document(FeedSchemaVO())
+                    self.original.id,
+                    2,
+                    read_graph_input(schema_document(FeedSchemaVO())),
                 )
             )
         self.repository.get_for_update.return_value = self.original.archive(now=NOW)
         with self.assertRaises(FeedArchivedError):
             await self.handler.execute(
                 SaveFeedSchemaDraftCommand(
-                    self.original.id, 2, schema_document(FeedSchemaVO())
+                    self.original.id,
+                    2,
+                    read_graph_input(schema_document(FeedSchemaVO())),
                 )
             )
         self.repository.save.assert_not_awaited()

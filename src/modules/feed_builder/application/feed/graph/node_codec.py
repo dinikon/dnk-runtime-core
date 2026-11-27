@@ -1,4 +1,9 @@
-from src.modules.feed_builder.application.feed.graph.json_values import document, string
+from src.modules.feed_builder.application.feed.graph.json_values import (
+    boolean,
+    choice,
+    document,
+    string,
+)
 from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.enum.xml_field_placement import (
     XmlFieldPlacement,
@@ -29,8 +34,12 @@ def decode_field_export(value: object) -> FieldExportSettingsVO:
         xml_document = DocumentFieldExportVO(
             ExportNameVO(string(node["container"])),
             ExportNameVO(string(node["item"])),
-            node.get("parent", "ROOT"),
-            node.get("layout", "FLAT"),
+            choice(
+                node.get("parent", "ROOT"), ("ROOT", "SHOP"), ("document", "parent")
+            ),
+            choice(
+                node.get("layout", "FLAT"), ("FLAT", "NESTED"), ("document", "layout")
+            ),
             ExportNameVO(string(node.get("parent_attribute", "parentId"))),
         )
     publication = (
@@ -40,11 +49,15 @@ def decode_field_export(value: object) -> FieldExportSettingsVO:
     )
     return FieldExportSettingsVO(
         ExportNameVO(string(export["name"])),
-        export["enabled"],
+        boolean(export["enabled"], ("enabled",)),
         XmlFieldPlacement(export.get("xml_placement", XmlFieldPlacement.ELEMENT)),
         xml_document,
         ExportNameVO(string(publication["value_key"])) if publication else None,
-        publication.get("required", False) if publication else False,
+        (
+            boolean(publication.get("required", False), ("publication", "required"))
+            if publication
+            else False
+        ),
     )
 
 

@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 
 from src.modules.feed_builder.application.feed.graph.category_codec import (
     category_field_document,
@@ -144,12 +145,13 @@ NODE_CODECS = (
         read_numeric_bool,
         write_numeric_bool,
     ),
-    NodeCodec(
+    register(
         FieldValueType.CATEGORY,
         "core.category_reference",
         "Категория",
         ("INLINE",),
-        decode_category_field,
+        CategoryNodeDataVO,
+        partial(decode_category_field, previous=None),
         category_field_document,
     ),
 )
@@ -169,5 +171,12 @@ def versioned_node_codec(type_id: str, version: int) -> NodeCodec:
     """Находит точную зарегистрированную версию типа."""
     codec = _BY_ID.get((type_id, version))
     if codec is None:
-        raise InvalidFeedSchemaDocumentError("Тип или версия ноды недоступны.")
+        path = (
+            "typeVersion"
+            if any(registered.type_id == type_id for registered in NODE_CODECS)
+            else "typeId"
+        )
+        raise InvalidFeedSchemaDocumentError(
+            "Тип или версия ноды недоступны.", path=(path,)
+        )
     return codec

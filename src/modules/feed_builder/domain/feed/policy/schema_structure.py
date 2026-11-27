@@ -1,3 +1,9 @@
+from collections.abc import Sequence
+from uuid import UUID
+
+from src.modules.feed_builder.domain.feed.category.value_object.tree import (
+    FeedCategoryTreeVO,
+)
 from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
     CategoryNodeDataVO,
 )
@@ -18,13 +24,26 @@ class FeedSchemaStructurePolicy:
     """Проверяет целостность графа в Feed и снимке экспорта."""
 
     @staticmethod
+    def index_category_trees(
+        trees: Sequence[FeedCategoryTreeVO],
+    ) -> dict[UUID, FeedCategoryTreeVO]:
+        """Индексирует деревья и указывает повторный ID в исходном порядке."""
+        indexed: dict[UUID, FeedCategoryTreeVO] = {}
+        for index, tree in enumerate(trees):
+            if tree.id in indexed:
+                raise InvalidFeedValueError(
+                    "Дерево категорий повторяется в графе.",
+                    path=("schema", "categoryTrees", index, "id"),
+                )
+            indexed[tree.id] = tree
+        return indexed
+
+    @staticmethod
     def validate(schema: FeedSchemaVO) -> FeedSchemaVO:
         """Возвращает проверенный снимок без повторов ID, ключей и экспортных имён."""
         if not isinstance(schema, FeedSchemaVO):
             raise InvalidFeedValueError("Нужен FeedSchemaVO.")
-        trees = {tree.id: tree.settings for tree in schema.category_trees}
-        if len(trees) != len(schema.category_trees):
-            raise InvalidFeedValueError("Дерево категорий повторяется в графе.")
+        trees = FeedSchemaStructurePolicy.index_category_trees(schema.category_trees)
         identifiers: set[FieldIdVO] = set()
         keys: set[FieldKeyVO] = set()
         export_names: set[ExportNameVO] = set()
@@ -51,7 +70,9 @@ class FeedSchemaStructurePolicy:
                     path=("schema", "fields", index, "key"),
                 )
             if isinstance(definition.type_definition, CategoryNodeDataVO):
-                if trees.get(definition.category_tree_id) != definition.type_definition:
+                tree_id = definition.category_tree_id
+                tree = trees.get(tree_id) if tree_id is not None else None
+                if tree is None or tree.settings != definition.type_definition:
                     raise InvalidFeedValueError(
                         "Нода категории ссылается на неизвестное дерево.",
                         path=("schema", "fields", index, "data", "treeId"),

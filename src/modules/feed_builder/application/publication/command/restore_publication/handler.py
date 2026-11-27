@@ -11,7 +11,9 @@ from src.modules.feed_builder.application.publication.port.catalog_subjects impo
 from src.modules.feed_builder.application.publication.participation import (
     load_editable_publication,
 )
-from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    FeedSettingsRepositoryProtocol,
+)
 from src.modules.feed_builder.domain.publication.repository import (
     FeedPublicationRepositoryProtocol,
 )

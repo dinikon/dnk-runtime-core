@@ -79,7 +79,9 @@ class FeedPublicationMapper:
         )
 
     @staticmethod
-    def write_overrides(overrides: tuple[FieldOverrideVO, ...]) -> dict[str, object]:
+    def write_overrides(
+        overrides: tuple[FieldOverrideVO, ...],
+    ) -> dict[str, dict[str, str | dict[str, str] | int | bool | None]]:
         """Сериализует ручные значения, сохраняя точность денежной суммы."""
         return {
             str(item.field_id.uuid): {

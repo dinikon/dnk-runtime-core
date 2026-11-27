@@ -16,6 +16,9 @@ from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSc
 from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
     MoneyNodeDataVO,
 )
+from src.modules.feed_builder.domain.feed.value_object.money_value_definition import (
+    MoneyValueDefinitionVO,
+)
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
 )
@@ -53,10 +56,10 @@ class FeedSchemaSourcePolicy:
             definition = field.type_definition
             if isinstance(definition, CategoryNodeDataVO):
                 continue
+            value = definition.value_definition
             source = (
-                definition.value_definition.source
-                if isinstance(definition, MoneyNodeDataVO)
-                or isinstance(definition.value_definition, SourceValueDefinitionVO)
+                value.source
+                if isinstance(value, (MoneyValueDefinitionVO, SourceValueDefinitionVO))
                 else None
             )
             if source is None:

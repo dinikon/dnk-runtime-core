@@ -1,4 +1,3 @@
-from typing import cast
 from uuid import UUID
 from fastapi import HTTPException
 from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.command import (
@@ -7,7 +6,6 @@ from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.co
 from src.modules.feed_builder.application.feed.graph.error import (
     InvalidFeedSchemaDocumentError,
 )
-from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.expression.error import (
     CalculationDefinitionError,
 )
@@ -55,10 +53,7 @@ async def put_feed_schema(
             SaveFeedSchemaDraftCommand(
                 FeedIdVO.from_value(feed_id),
                 payload.expected_version,
-                cast(
-                    JsonObject,
-                    payload.definition.model_dump(mode="json", exclude_unset=True),
-                ),
+                payload.definition.to_input(),
             )
         )
     except FeedNotFoundError as exc:
@@ -75,8 +70,8 @@ async def put_feed_schema(
         ) from exc
     except (FeedBuilderDomainError, InvalidFeedSchemaDocumentError) as exc:
         path = exc.path
-        if path[:2] == ("schema", "fields"):
-            path = ("definition", "fields", *path[2:])
+        if path[:1] == ("schema",):
+            path = ("definition", *path[1:])
         field_id = _issue_field_id(payload.definition, path) if len(path) >= 3 else None
         raise HTTPException(
             422,

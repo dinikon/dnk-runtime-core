@@ -71,7 +71,9 @@ def feed_settings_from_document(
 def settings_from_document(value: object) -> FeedExportSettingsVO:
     """Восстанавливает настройки, отвергая отсутствующий или неизвестный формат."""
     try:
-        data = _settings_object(value, {"format_settings", "product_mode", "validation_policy"})
+        data = _settings_object(
+            value, {"format_settings", "product_mode", "validation_policy"}
+        )
         settings = data["format_settings"]
         if not isinstance(settings, dict):
             raise InvalidFeedStorageError("Нужен объект format_settings.")
@@ -79,19 +81,41 @@ def settings_from_document(value: object) -> FeedExportSettingsVO:
             settings = _settings_object(
                 settings, {"format", "delimiter", "encoding", "include_header"}
             )
+            delimiter = settings["delimiter"]
+            encoding = settings["encoding"]
+            if not (isinstance(delimiter, str) and isinstance(encoding, str)):
+                raise InvalidFeedStorageError(
+                    "Некорректные сохранённые настройки Feed."
+                )
+            include_header = settings["include_header"]
+            if not isinstance(include_header, bool):
+                raise InvalidFeedStorageError(
+                    "Некорректные сохранённые настройки Feed."
+                )
             configuration = CsvExportSettingsVO(
-                delimiter=settings["delimiter"],
-                encoding=settings["encoding"],
-                include_header=settings["include_header"],
+                delimiter=delimiter,
+                encoding=encoding,
+                include_header=include_header,
             )
         elif settings.get("format") == "xml":
             settings = _settings_object(
                 settings, {"format", "root_name", "item_name", "encoding"}
             )
+            root_name = settings["root_name"]
+            item_name = settings["item_name"]
+            encoding = settings["encoding"]
+            if not (
+                isinstance(root_name, str)
+                and isinstance(item_name, str)
+                and isinstance(encoding, str)
+            ):
+                raise InvalidFeedStorageError(
+                    "Некорректные сохранённые настройки Feed."
+                )
             configuration = XmlExportSettingsVO(
-                root_name=ExportNameVO(settings["root_name"]),
-                item_name=ExportNameVO(settings["item_name"]),
-                encoding=settings["encoding"],
+                root_name=ExportNameVO(root_name),
+                item_name=ExportNameVO(item_name),
+                encoding=encoding,
             )
         else:
             raise InvalidFeedStorageError("Неизвестный формат выгрузки.")

@@ -9,7 +9,9 @@ from src.modules.feed_builder.application.publication.port.catalog_subjects impo
     PublicationCatalogReaderProtocol,
     PublicationSourceNotFoundError,
 )
-from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    FeedSettingsRepositoryProtocol,
+)
 from src.modules.feed_builder.domain.feed.value_object.feed_version import FeedVersionVO
 from src.modules.feed_builder.domain.publication.repository import (
     FeedPublicationRepositoryProtocol,

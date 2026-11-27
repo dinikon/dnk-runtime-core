@@ -1,4 +1,8 @@
-from collections.abc import Mapping
+from datetime import datetime
+from uuid import UUID
+
+from src.modules.feed_builder.application.feed.types import JsonObject
+from src.modules.feed_builder.infrastructure.feed.persistence.mapper import FeedRow
 from src.modules.feed_builder.application.feed.query.get_feed.dto import FeedDetailsDTO
 from src.modules.feed_builder.application.feed.query.get_feed_schema.dto import (
     FeedSchemaDetailsDTO,
@@ -20,17 +24,19 @@ class FeedQueryMapper:
     """Строит DTO из SQL-проекций без восстановления агрегата Feed."""
 
     @staticmethod
-    def to_schema(row: Mapping[str, object]) -> FeedSchemaDetailsDTO:
+    def to_schema(
+        feed_id: UUID, status: str, version: int, definition: JsonObject
+    ) -> FeedSchemaDetailsDTO:
         """Возвращает документ и общую версию без восстановления корня."""
         return FeedSchemaDetailsDTO(
-            feed_id=row["id"],
-            version=row["row_version"],
-            status=row["status"],
-            definition=schema_document(decode_schema(row["schema_definition"])),
+            feed_id=feed_id,
+            version=version,
+            status=status,
+            definition=schema_document(decode_schema(definition)),
         )
 
     @staticmethod
-    def to_details(row: Mapping[str, object]) -> FeedDetailsDTO:
+    def to_details(row: FeedRow) -> FeedDetailsDTO:
         """Возвращает карточку и документ графа версии 2."""
         settings, _ = feed_settings_from_document(row["export_settings"])
         return FeedDetailsDTO(
@@ -46,16 +52,26 @@ class FeedQueryMapper:
         )
 
     @staticmethod
-    def to_list_item(row: Mapping[str, object]) -> FeedListItemDTO:
+    def to_list_item(
+        feed_id: UUID,
+        name: str,
+        code: str,
+        status: str,
+        version: int,
+        created_at: datetime,
+        updated_at: datetime,
+        format: str,
+        fields_count: int,
+    ) -> FeedListItemDTO:
         """Возвращает компактную строку без полного JSON схемы."""
         return FeedListItemDTO(
-            id=row["id"],
-            name=row["name"],
-            code=row["code"],
-            status=row["status"],
-            format=row["format"],
-            fields_count=row["fields_count"],
-            version=row["row_version"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
+            id=feed_id,
+            name=name,
+            code=code,
+            status=status,
+            format=format,
+            fields_count=fields_count,
+            version=version,
+            created_at=created_at,
+            updated_at=updated_at,
         )

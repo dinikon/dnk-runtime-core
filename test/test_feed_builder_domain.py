@@ -36,10 +36,16 @@ from src.modules.feed_builder.domain.feed.expression.enum.literal_value_type imp
 from src.modules.feed_builder.domain.feed.enum.locale_fallback_mode import (
     LocaleFallbackMode,
 )
-from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import LogicalOperator
+from src.modules.feed_builder.domain.feed.expression.enum.logical_operator import (
+    LogicalOperator,
+)
 from src.modules.feed_builder.domain.feed.enum.money_value_mode import MoneyValueMode
-from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import PresenceOperator
-from src.modules.feed_builder.domain.feed.expression.enum.price_function import PriceFunction
+from src.modules.feed_builder.domain.feed.expression.enum.presence_operator import (
+    PresenceOperator,
+)
+from src.modules.feed_builder.domain.feed.expression.enum.price_function import (
+    PriceFunction,
+)
 from src.modules.feed_builder.domain.feed.enum.transform_operation import (
     TransformOperation,
 )
@@ -913,7 +919,15 @@ class FeedValuesTests(unittest.TestCase):
         original = text_field("sku")
         self.assertEqual(
             {item.name for item in fields(original)},
-            {"id", "key", "label", "type_definition", "export", "ai_instruction", "category_tree_id"},
+            {
+                "id",
+                "key",
+                "label",
+                "type_definition",
+                "export",
+                "ai_instruction",
+                "category_tree_id",
+            },
         )
         self.assertIsNone(original.type_definition.locale)
         for name in (
@@ -1368,9 +1382,7 @@ class FeedCalculationStructureTests(unittest.TestCase):
                 SourceProvider.CATALOG, CatalogSourcePath.REGULAR_PRICE
             ),
         )
-        original = money_field(
-            type_definition=MoneyNodeDataVO(value_definition=source)
-        )
+        original = money_field(type_definition=MoneyNodeDataVO(value_definition=source))
         labelled = replace(
             original,
             type_definition=replace(

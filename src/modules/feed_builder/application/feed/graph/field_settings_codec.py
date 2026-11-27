@@ -20,7 +20,8 @@ from src.modules.feed_builder.domain.feed.value_object.money_ceil_step_parameter
 )
 from src.modules.feed_builder.application.feed.graph.json_values import (
     document,
-    optional_decimal,
+    decimal_value,
+    integer,
     string,
 )
 
@@ -43,10 +44,10 @@ def decode_transform(value: object) -> TransformDefinitionVO:
         parameters = None
     elif operation is TransformOperation.STRING_TRUNCATE:
         params = document(data["params"], {"max_length"})
-        parameters = TruncateParametersVO(params["max_length"])
+        parameters = TruncateParametersVO(integer(params["max_length"]))
     else:
         params = document(data["params"], {"step"})
-        parameters = MoneyCeilStepParametersVO(optional_decimal(params["step"]))
+        parameters = MoneyCeilStepParametersVO(decimal_value(params["step"]))
     return TransformDefinitionVO(operation, parameters)
 
 

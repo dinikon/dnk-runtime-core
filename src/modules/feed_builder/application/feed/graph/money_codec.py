@@ -16,6 +16,7 @@ from src.modules.feed_builder.domain.feed.value_object.money_constraints import 
 )
 from src.modules.feed_builder.application.feed.graph.json_values import (
     array,
+    boolean,
     document,
     optional_decimal,
     string,
@@ -66,7 +67,9 @@ def read_money(raw_type: JsonObject) -> MoneyNodeDataVO:
             else None
         ),
         constraints=MoneyConstraintsVO(
-            required=constraints.get("required", False),
+            required=boolean(
+                constraints.get("required", False), ("constraints", "required")
+            ),
             min_amount=optional_decimal(constraints.get("min_amount")),
             max_amount=optional_decimal(constraints.get("max_amount")),
         ),

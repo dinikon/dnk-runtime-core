@@ -1,3 +1,6 @@
+from decimal import InvalidOperation
+
+from src.modules.feed_builder.domain.error import FeedBuilderDomainError
 from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.limits import (
     MAX_AST_DEPTH,
@@ -75,8 +78,16 @@ from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
 from src.modules.feed_builder.application.feed.graph.json_values import (
     array,
     document,
-    optional_decimal,
+    boolean,
+    decimal_value,
     string,
+)
+
+
+from src.modules.feed_builder.domain.feed.validation import (
+    is_condition,
+    is_condition_operand,
+    is_expression,
 )
 
 
@@ -87,10 +98,24 @@ class ExpressionReader:
         """Создаёт отдельный бюджет одного расчёта."""
         self.nodes = 0
 
-    def node(
-        self, value: object, depth: int = 1
-    ) -> Expression | ConditionOperand | Condition:
-        """Восстанавливает конкретный узел без динамического поиска Python-атрибутов."""
+    def _node_at(
+        self, value: object, depth: int, path: tuple[str | int, ...]
+    ) -> ConditionOperand | Condition:
+        """Добавляет относительный адрес дочернего узла к ошибке его разбора."""
+        try:
+            return self._read_node(value, depth)
+        except FeedBuilderDomainError as exc:
+            exc.path = (*path, *exc.path)
+            raise
+        except InvalidFeedSchemaDocumentError as exc:
+            raise InvalidFeedSchemaDocumentError(
+                str(exc), path=(*path, *exc.path)
+            ) from exc
+        except (ValueError, InvalidOperation) as exc:
+            raise InvalidFeedSchemaDocumentError(str(exc), path=path) from exc
+
+    def _read_node(self, value: object, depth: int) -> ConditionOperand | Condition:
+        """Восстанавливает конкретный узел, расходуя единый бюджет AST."""
         self.nodes += 1
         if depth > MAX_AST_DEPTH or self.nodes > MAX_AST_NODES:
             raise InvalidFeedSchemaDocumentError("Превышен бюджет AST.")
@@ -102,21 +127,30 @@ class ExpressionReader:
             return ParameterReferenceVO(string(data["parameter"]))
         if kind == "decimal":
             data = document(value, {"kind", "value"})
-            return DecimalLiteralVO(optional_decimal(data["value"]))
+            return DecimalLiteralVO(decimal_value(data["value"]))
         if kind == "scalar":
             data = document(value, {"kind", "value_type", "value"})
             value_type = LiteralValueType(string(data["value_type"]))
-            scalar = data["value"]
-            if value_type is LiteralValueType.UUID:
-                scalar = EntityIdVO.from_value(string(scalar))
+            raw = data["value"]
+            scalar = (
+                EntityIdVO.from_value(string(raw))
+                if value_type is LiteralValueType.UUID
+                else (
+                    boolean(raw)
+                    if value_type is LiteralValueType.BOOLEAN
+                    else string(raw)
+                )
+            )
             return ScalarLiteralVO(value_type, scalar)
         if kind == "collection":
             data = document(value, {"kind", "item_type", "items"})
             return CollectionLiteralVO(
                 LiteralValueType(string(data["item_type"])),
                 tuple(
-                    self.node(item, depth + 1)
-                    for item in array(data["items"], MAX_COLLECTION_ITEMS)
+                    self._scalar(item, depth + 1, ("items", index))
+                    for index, item in enumerate(
+                        array(data["items"], MAX_COLLECTION_ITEMS)
+                    )
                 ),
             )
         if kind == "arithmetic":
@@ -124,37 +158,40 @@ class ExpressionReader:
             if operator is ArithmeticOperator.NEGATE:
                 data = document(value, {"kind", "operator", "operand"})
                 return ArithmeticExpressionVO(
-                    operator, operand=self.node(data["operand"], depth + 1)
+                    operator,
+                    operand=self.expression(data["operand"], depth + 1, ("operand",)),
                 )
             data = document(value, {"kind", "operator", "left", "right"})
             return ArithmeticExpressionVO(
                 operator,
-                left=self.node(data["left"], depth + 1),
-                right=self.node(data["right"], depth + 1),
+                left=self.expression(data["left"], depth + 1, ("left",)),
+                right=self.expression(data["right"], depth + 1, ("right",)),
             )
         if kind == "function":
             data = document(value, {"kind", "function", "arguments"})
             return FunctionExpressionVO(
                 PriceFunction(string(data["function"])),
                 tuple(
-                    self.node(item, depth + 1)
-                    for item in array(data["arguments"], MAX_AST_NODES)
+                    self.expression(item, depth + 1, ("arguments", index))
+                    for index, item in enumerate(
+                        array(data["arguments"], MAX_AST_NODES)
+                    )
                 ),
             )
         if kind == "comparison":
             data = document(value, {"kind", "operator", "left", "right"})
             return ComparisonConditionVO(
                 ComparisonOperator(string(data["operator"])),
-                self.node(data["left"], depth + 1),
-                self.node(data["right"], depth + 1),
+                self._operand(data["left"], depth + 1, ("left",)),
+                self._operand(data["right"], depth + 1, ("right",)),
             )
         if kind == "logical":
             data = document(value, {"kind", "operator", "operands"})
             return LogicalConditionVO(
                 LogicalOperator(string(data["operator"])),
                 tuple(
-                    self.node(item, depth + 1)
-                    for item in array(data["operands"], MAX_AST_NODES)
+                    self.condition(item, depth + 1, ("operands", index))
+                    for index, item in enumerate(array(data["operands"], MAX_AST_NODES))
                 ),
             )
         if kind == "presence":
@@ -165,18 +202,79 @@ class ExpressionReader:
             )
         raise InvalidFeedSchemaDocumentError("Неизвестный вид узла AST.")
 
+    def expression(
+        self, value: object, depth: int = 1, path: tuple[str | int, ...] = ()
+    ) -> Expression:
+        """Читает только узлы числовых выражений."""
+        node = self._node_at(value, depth, path)
+        if not is_expression(node):
+            raise InvalidFeedSchemaDocumentError(
+                "Ожидалось числовое выражение.", path=path
+            )
+        return node
+
+    def condition(
+        self, value: object, depth: int = 1, path: tuple[str | int, ...] = ()
+    ) -> Condition:
+        """Читает условие сравнения, наличия или логической группы."""
+        node = self._node_at(value, depth, path)
+        if not is_condition(node):
+            raise InvalidFeedSchemaDocumentError("Ожидалось условие.", path=path)
+        return node
+
+    def _operand(
+        self, value: object, depth: int, path: tuple[str | int, ...] = ()
+    ) -> ConditionOperand:
+        """Читает выражение или литерал сравнения."""
+        node = self._node_at(value, depth, path)
+        if not is_condition_operand(node):
+            raise InvalidFeedSchemaDocumentError(
+                "Ожидался операнд сравнения.", path=path
+            )
+        return node
+
+    def _scalar(
+        self, value: object, depth: int, path: tuple[str | int, ...] = ()
+    ) -> ScalarLiteralVO:
+        """Читает один скалярный элемент коллекции."""
+        node = self._node_at(value, depth, path)
+        if not isinstance(node, ScalarLiteralVO):
+            raise InvalidFeedSchemaDocumentError(
+                "Ожидался скалярный литерал.", path=path
+            )
+        return node
+
     def calculation(self, value: object) -> PriceCalculationVO:
+        """Восстанавливает определение расчёта и сохраняет адрес проблемного узла."""
+        path = ("value", "calculation")
+        try:
+            return self._read_calculation(value)
+        except FeedBuilderDomainError as exc:
+            exc.path = (*path, *exc.path)
+            raise
+        except InvalidFeedSchemaDocumentError as exc:
+            raise InvalidFeedSchemaDocumentError(
+                str(exc), path=(*path, *exc.path)
+            ) from exc
+
+    def _read_calculation(self, value: object) -> PriceCalculationVO:
         """Восстанавливает ELSE, правила и явную привязку закупки."""
         data = document(value, {"default_expression", "rules"}, {"purchase_source"})
-        default = self.node(data["default_expression"])
+        default = self.expression(
+            data["default_expression"], path=("default_expression",)
+        )
         rules = []
-        for item in array(data["rules"], MAX_RULES):
+        for index, item in enumerate(array(data["rules"], MAX_RULES)):
             rule = document(item, {"id", "condition", "expression"})
             rules.append(
                 ConditionalPriceRule.restore(
                     identifier=PriceRuleIdVO.from_value(string(rule["id"])),
-                    condition=self.node(rule["condition"]),
-                    expression=self.node(rule["expression"]),
+                    condition=self.condition(
+                        rule["condition"], path=("rules", index, "condition")
+                    ),
+                    expression=self.expression(
+                        rule["expression"], path=("rules", index, "expression")
+                    ),
                 )
             )
         purchase_source = None
@@ -224,9 +322,11 @@ def node_document(node: Expression | ConditionOperand | Condition) -> JsonObject
         result: JsonObject = {"kind": "arithmetic", "operator": node.operator.value}
         if node.operand is not None:
             result["operand"] = node_document(node.operand)
-        else:
+        elif node.left is not None and node.right is not None:
             result["left"] = node_document(node.left)
             result["right"] = node_document(node.right)
+        else:
+            raise InvalidFeedValueError("Арифметической операции не хватает операндов.")
         return result
     if isinstance(node, FunctionExpressionVO):
         return {

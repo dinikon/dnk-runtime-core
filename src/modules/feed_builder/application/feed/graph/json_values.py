@@ -41,3 +41,40 @@ def optional_decimal(value: object) -> Decimal | None:
     if len(text) > 256:
         raise InvalidFeedSchemaDocumentError("Слишком длинная числовая строка.")
     return Decimal(text)
+
+
+def boolean(value: object, path: tuple[str | int, ...] = ()) -> bool:
+    """Читает логическое значение без приведения строк и чисел."""
+    if not isinstance(value, bool):
+        raise InvalidFeedSchemaDocumentError("Ожидалось true или false.", path=path)
+    return value
+
+
+def integer(value: object, path: tuple[str | int, ...] = ()) -> int:
+    """Читает целое число, исключая логические значения."""
+    if type(value) is not int:
+        raise InvalidFeedSchemaDocumentError("Ожидалось целое число.", path=path)
+    return value
+
+
+def optional_integer(value: object, path: tuple[str | int, ...] = ()) -> int | None:
+    """Читает необязательное целое число."""
+    return None if value is None else integer(value, path)
+
+
+def choice[T: str](
+    value: object, allowed: tuple[T, ...], path: tuple[str | int, ...] = ()
+) -> T:
+    """Возвращает один из допустимых строковых кодов."""
+    for option in allowed:
+        if value == option:
+            return option
+    raise InvalidFeedSchemaDocumentError("Неизвестное значение настройки.", path=path)
+
+
+def decimal_value(value: object) -> Decimal:
+    """Читает обязательное число из Decimal-строки."""
+    result = optional_decimal(value)
+    if result is None:
+        raise InvalidFeedSchemaDocumentError("Ожидалась Decimal-строка.")
+    return result

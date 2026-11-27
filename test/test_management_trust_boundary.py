@@ -173,8 +173,13 @@ class ManagementTrustTests(unittest.IsolatedAsyncioTestCase):
             "/api/public/feed-builder/link/feed.xml?token=secret",
         ):
             record = logging.LogRecord(
-                "uvicorn.access", logging.INFO, "", 0, "%s %s %s %s %s",
-                ("peer", "GET", target, "1.1", 200), None,
+                "uvicorn.access",
+                logging.INFO,
+                "",
+                0,
+                "%s %s %s %s %s",
+                ("peer", "GET", target, "1.1", 200),
+                None,
             )
             RedactAccessQuery().filter(record)
             self.assertNotIn("secret", record.getMessage())

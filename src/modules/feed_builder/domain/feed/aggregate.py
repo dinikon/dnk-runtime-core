@@ -176,18 +176,11 @@ class Feed:
         FeedSchemaSourcePolicy.ensure_valid(checked)
         if checked == self.schema:
             return self
-        return self.restore(
-            identifier=self.id,
-            name=self.name,
-            code=self.code,
-            status=self.status,
+        return replace(
+            self,
             schema=checked,
-            export_settings=self.export_settings,
-            created_at=self.created_at,
             updated_at=now,
             version=FeedVersionVO(self.version.value + 1),
-            public_link_id=self.public_link_id,
-            access_mode=self.access_mode,
         )
 
     def archive(self, *, now: datetime) -> Self:

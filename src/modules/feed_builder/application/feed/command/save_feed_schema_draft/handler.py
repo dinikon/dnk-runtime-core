@@ -7,7 +7,7 @@ from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.dt
     SaveFeedSchemaDraftResultDTO,
 )
 from src.modules.feed_builder.application.feed.graph.codec import (
-    decode_schema,
+    build_schema,
     schema_document,
 )
 from src.modules.feed_builder.application.feed.graph.validation import (
@@ -52,7 +52,7 @@ class SaveFeedSchemaDraftHandler:
             raise FeedVersionConflictError("Feed уже изменён.")
         if original.status is FeedStatus.ARCHIVED:
             raise FeedArchivedError("Архивный Feed нельзя редактировать.")
-        schema = decode_schema(
+        schema = build_schema(
             command.definition,
             previous_schema=original.schema,
             clean_html=self._clean_html,

@@ -43,6 +43,8 @@ jobs:
           cache-dependency-glob: uv.lock
       - name: Install locked dependencies
         run: uv sync --frozen
+      - name: Type-check Feed Builder schema
+        run: make typecheck-feed-builder
       - name: Set up ARM emulation
         uses: docker/setup-qemu-action@v3
         with:

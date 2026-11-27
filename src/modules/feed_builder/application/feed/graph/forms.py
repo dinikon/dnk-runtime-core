@@ -88,11 +88,12 @@ def node_forms(codec: NodeCodec) -> JsonObject:
         _REQUIRED,
     ]
     if kind in (FieldValueType.STRING, FieldValueType.TEXT, FieldValueType.RICH_TEXT):
-        editor = {
+        text_editors: dict[FieldValueType, ControlKind] = {
             FieldValueType.STRING: "input",
             FieldValueType.TEXT: "textarea",
             FieldValueType.RICH_TEXT: "rich_text",
-        }[kind]
+        }
+        editor = text_editors[kind]
         controls.extend(
             (
                 FormControl(

@@ -3,6 +3,7 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from dataclasses import replace
 from unittest.mock import patch
 from uuid import uuid4
@@ -34,7 +35,10 @@ from src.modules.tenancy.infrastructure.tenant.persistence.tenant_migrations imp
 from src.modules.tenancy.infrastructure.tenant.persistence.tenant_connection import (
     bind_tenant_schema,
 )
-from src.modules.feed_builder.application.feed.graph.codec import decode_schema
+from src.modules.feed_builder.application.feed.graph.codec import (
+    build_schema,
+    read_graph_input,
+)
 from src.modules.feed_builder.domain.feed.aggregate import Feed
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.feed.value_object.feed_name import FeedNameVO
@@ -191,7 +195,9 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             original = await repository.get_for_update(FeedIdVO.from_value(feed_id))
             self.assertEqual(original.version.value, expected_version)
             saved = original.change_schema(
-                schema=decode_schema(definition, previous_schema=original.schema),
+                schema=build_schema(
+                    read_graph_input(definition), previous_schema=original.schema
+                ),
                 now=original.updated_at,
             )
             if saved is not original:
@@ -374,6 +380,70 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             0
         ]
         self.assertEqual(rule["condition"], condition)
+
+    async def test_schema_errors_address_the_value_without_saving(self) -> None:
+        """Возвращает пути к версии ноды, fallback, дереву и его локали."""
+        from test.test_feed_builder_schema import (
+            category_schema_document,
+            source_schema_document,
+        )
+
+        await self.seed_schema_locales()
+        feed = await self.create()
+        root = f"{self.base}/{feed['id']}/schema"
+        before = (await self.client.get(root)).json()
+
+        text = source_schema_document()
+        text_field = text["fields"][0]
+        text_field["data"]["fallback_policy"] = {
+            "mode": "LOCALE_CHAIN",
+            "locales": ["ru", "zz"],
+        }
+        unknown_version = deepcopy(text)
+        unknown_version["fields"][0]["typeVersion"] = 2
+        categories = category_schema_document(
+            [{"id": str(uuid4()), "values": {"id": "100", "name": "Аудио"}}]
+        )
+        category_id = categories["fields"][0]["id"]
+        duplicates = deepcopy(categories)
+        duplicates["categoryTrees"].append(deepcopy(duplicates["categoryTrees"][0]))
+        missing_tree = {**categories, "categoryTrees": []}
+        unavailable_tree_locale = deepcopy(categories)
+        data = unavailable_tree_locale["categoryTrees"][0]["data"]
+        data["locale"] = "zz"
+        data["value"]["nodes"][0]["catalog_id"] = str(uuid4())
+
+        for definition, field_id, path in (
+            (unknown_version, text_field["id"], ["fields", 0, "typeVersion"]),
+            (
+                text,
+                text_field["id"],
+                ["fields", 0, "data", "fallback_policy", "locales", 1],
+            ),
+            (missing_tree, category_id, ["fields", 0, "data", "treeId"]),
+            (duplicates, category_id, ["categoryTrees", 1, "id"]),
+            (
+                unavailable_tree_locale,
+                category_id,
+                ["categoryTrees", 0, "data", "locale"],
+            ),
+        ):
+            with self.subTest(path=path):
+                response = await self.client.put(
+                    f"{root}/draft",
+                    headers=self.headers,
+                    json={
+                        "expected_version": feed["version"],
+                        "definition": definition,
+                    },
+                )
+                self.assertEqual(response.status_code, 422, response.text)
+                detail = response.json()["detail"]
+                self.assertEqual(detail["code"], "SCHEMA_INVALID")
+                self.assertEqual(detail["field_id"], field_id)
+                self.assertEqual(detail["path"], ["definition", *path])
+
+        self.assertEqual((await self.client.get(root)).json(), before)
 
     async def test_schema_invalid_payload_limits_and_rollback(self) -> None:
         """Некорректная оболочка и ограничения тела отклоняются до записи."""

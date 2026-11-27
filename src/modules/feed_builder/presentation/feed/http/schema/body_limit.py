@@ -6,7 +6,7 @@ MAX_SCHEMA_BYTES = 1024 * 1024
 MAX_JSON_DEPTH = 160
 
 
-def excessive_json_depth(body: bytes) -> bool:
+def excessive_json_depth(body: bytes | bytearray) -> bool:
     """Ограничивает вложенность до JSON/Pydantic, учитывая экранированные строки."""
     depth = 0
     quoted = False

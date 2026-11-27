@@ -97,6 +97,7 @@ from src.modules.feed_builder.application.feed.port.calculation_product import (
 )
 from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.application.feed.graph.versioned_node import (
+    read_field_node_input,
     versioned_node_document,
 )
 from src.modules.feed_builder.domain.feed.value_object.feed_schema import FeedSchemaVO
@@ -444,7 +445,9 @@ class FeedPricePreviewApplicationTests(IsolatedAsyncioTestCase):
             replace(
                 self.query,
                 field_id=new_field.id.uuid,
-                definition_override=versioned_node_document(new_field),
+                definition_override=read_field_node_input(
+                    versioned_node_document(new_field), ("definition_override",)
+                ),
             )
         )
         self.assertEqual(result.amount, "123.1234567890123456789")
@@ -472,6 +475,12 @@ class FeedPricePreviewApplicationTests(IsolatedAsyncioTestCase):
         )
         with self.assertRaises(CalculationDefinitionError):
             await self.handler.execute(
-                replace(self.query, field_id=UUID(bad["id"]), definition_override=bad)
+                replace(
+                    self.query,
+                    field_id=UUID(bad["id"]),
+                    definition_override=read_field_node_input(
+                        bad, ("definition_override",)
+                    ),
+                )
             )
         self.products.read.assert_not_awaited()

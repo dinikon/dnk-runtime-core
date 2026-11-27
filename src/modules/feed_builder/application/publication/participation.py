@@ -1,6 +1,8 @@
 from uuid import UUID
 from src.modules.feed_builder.domain.feed.aggregate import Feed
-from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    FeedSettingsRepositoryProtocol,
+)
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 from src.modules.feed_builder.domain.publication.repository import (
     FeedPublicationRepositoryProtocol,

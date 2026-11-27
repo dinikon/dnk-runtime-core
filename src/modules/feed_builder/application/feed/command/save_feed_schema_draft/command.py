@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from src.modules.feed_builder.application.feed.types import JsonObject
+from src.modules.feed_builder.application.feed.graph.input import FeedGraphInput
 from src.modules.feed_builder.domain.feed.value_object.feed_id import FeedIdVO
 
 
@@ -9,4 +9,4 @@ class SaveFeedSchemaDraftCommand:
 
     feed_id: FeedIdVO
     expected_version: int
-    definition: JsonObject
+    definition: FeedGraphInput

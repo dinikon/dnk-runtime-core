@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.presentation.strict_request import ClosedSchema
 
 
@@ -30,3 +31,25 @@ class FieldExportSchema(ClosedSchema):
     xml_placement: Literal["ELEMENT", "ATTRIBUTE"] = "ELEMENT"
     document: DocumentFieldExportSchema | None = None
     publication: PublicationFieldExportSchema | None = None
+
+    def to_document(self) -> JsonObject:
+        """Передаёт параметры в кодек без промежуточной сериализации модели."""
+        result: JsonObject = {
+            "name": self.name,
+            "enabled": self.enabled,
+            "xml_placement": self.xml_placement,
+        }
+        if self.document is not None:
+            result["document"] = {
+                "container": self.document.container,
+                "item": self.document.item,
+                "parent": self.document.parent,
+                "layout": self.document.layout,
+                "parent_attribute": self.document.parent_attribute,
+            }
+        if self.publication is not None:
+            result["publication"] = {
+                "value_key": self.publication.value_key,
+                "required": self.publication.required,
+            }
+        return result

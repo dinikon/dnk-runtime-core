@@ -24,6 +24,8 @@ from src.modules.feed_builder.domain.feed.value_object.export_name import Export
 from src.modules.feed_builder.domain.feed.value_object.locale_code import LocaleCodeVO
 from src.modules.feed_builder.application.feed.graph.json_values import (
     array,
+    boolean,
+    choice,
     document,
     string,
 )
@@ -47,18 +49,31 @@ def decode_category_field(
     )
     shape = document(data["object_schema"], {"id_key", "label_key", "fields"})
     props = []
-    for item in array(shape["fields"], 64):
+    for index, item in enumerate(array(shape["fields"], 64)):
+        path = ("object_schema", "fields", index)
         prop = document(item, {"key", "kind"}, {"required", "xml", "source"})
         key = string(prop["key"])
         xml = document(prop.get("xml", {}), set(), {"placement", "name"})
         props.append(
             CategoryPropertyVO(
                 ExportNameVO(key),
-                prop["kind"],
-                prop.get("required", False),
-                xml.get("placement", "NONE"),
+                choice(
+                    prop["kind"],
+                    ("string", "text", "integer", "boolean"),
+                    (*path, "kind"),
+                ),
+                boolean(prop.get("required", False), (*path, "required")),
+                choice(
+                    xml.get("placement", "NONE"),
+                    ("ATTRIBUTE", "ELEMENT", "TEXT", "NONE"),
+                    (*path, "xml", "placement"),
+                ),
                 ExportNameVO(string(xml.get("name") or key)),
-                prop.get("source"),
+                (
+                    choice(prop["source"], ("CATALOG_NAME",), (*path, "source"))
+                    if prop.get("source") is not None
+                    else None
+                ),
             )
         )
     block = document(
@@ -98,7 +113,7 @@ def decode_category_field(
         return UUID(string(raw)) if raw is not None else None
 
     parsed = []
-    for item, values in zip(nodes, raw_values, strict=True):
+    for index, (item, values) in enumerate(zip(nodes, raw_values, strict=True)):
         node_id = UUID(string(item["id"]))
         identifier = values.get(key)
         if node_id in old_ids:
@@ -132,7 +147,10 @@ def decode_category_field(
                 tuple(values.items()),
                 optional_id(item.get("parent_id")),
                 optional_id(item.get("catalog_id")),
-                item.get("inherit_parent", False),
+                boolean(
+                    item.get("inherit_parent", False),
+                    ("value", "nodes", index, "inherit_parent"),
+                ),
             )
         )
     rules = []
@@ -145,9 +163,15 @@ def decode_category_field(
                 CategoryRuleVO(
                     UUID(string(rule["id"])),
                     UUID(string(rule["target_id"])),
-                    BooleanCalculationVO(ExpressionReader().node(rule["condition"])),
+                    BooleanCalculationVO(
+                        ExpressionReader().condition(
+                            rule["condition"], path=("condition",)
+                        )
+                    ),
                     string(rule["label"]),
-                    rule.get("include_descendants", False),
+                    boolean(
+                        rule.get("include_descendants", False), ("include_descendants",)
+                    ),
                 )
             )
         except (FeedBuilderDomainError, InvalidFeedSchemaDocumentError) as exc:
@@ -160,7 +184,7 @@ def decode_category_field(
         LocaleCodeVO(string(data.get("locale", "uk"))),
         tuple(parsed),
         tuple(rules),
-        block["fallback"],
+        choice(block["fallback"], ("CATALOG", "FIXED", "NONE"), ("value", "fallback")),
         optional_id(block.get("fallback_id")),
         tuple(
             UUID(string(item))

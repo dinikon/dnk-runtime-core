@@ -4,7 +4,9 @@ from src.modules.feed_builder.application.publication.command.remove_publication
 from src.modules.feed_builder.application.publication.participation import (
     load_editable_publication,
 )
-from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    FeedSettingsRepositoryProtocol,
+)
 from src.modules.feed_builder.domain.publication.repository import (
     FeedPublicationRepositoryProtocol,
 )
