@@ -6,19 +6,6 @@ from decimal import Decimal
 import re
 from typing import TYPE_CHECKING, TypeIs
 
-from modules.feed_builder.domain.feed.expression.value_object.arithmetic_expression import (
-    ArithmeticExpressionVO,
-)
-from modules.feed_builder.domain.feed.expression.value_object.decimal_literal import (
-    DecimalLiteralVO,
-)
-from modules.feed_builder.domain.feed.expression.value_object.function_expression import (
-    FunctionExpressionVO,
-)
-from modules.feed_builder.domain.feed.expression.value_object.parameter_reference import (
-    ParameterReferenceVO,
-)
-
 from src.modules.feed_builder.domain.feed.error import (
     DefinitionStructureLimitExceededError,
     InvalidFeedValueError,
@@ -106,17 +93,7 @@ def is_expression(value: object) -> TypeIs[Expression]:
     )
 
 
-def is_condition_operand(
-    value: object,
-) -> (
-    TypeIs[
-        ParameterReferenceVO
-        | DecimalLiteralVO
-        | ArithmeticExpressionVO
-        | FunctionExpressionVO
-    ]
-    | bool
-):
+def is_condition_operand(value: object) -> TypeIs[ConditionOperand]:
     """Распознаёт выражение или типизированный литерал сравнения."""
     from src.modules.feed_builder.domain.feed.expression.value_object.scalar_literal import (
         ScalarLiteralVO,
