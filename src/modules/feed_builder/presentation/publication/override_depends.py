@@ -14,6 +14,9 @@ from src.modules.feed_builder.application.publication.query.get_publication_fiel
 from src.modules.feed_builder.infrastructure.publication.persistence.query_repository import (
     SqlAlchemyPublicationQueryRepository,
 )
+from src.modules.feed_builder.infrastructure.publication.field_nodes import (
+    PUBLICATION_FIELD_NODES,
+)
 from src.modules.feed_builder.presentation.feed.depends import FeedRepositoryDep
 from src.modules.feed_builder.presentation.feed.export_depends import (
     PublicationExportDep,
@@ -28,7 +31,9 @@ def get_publication_fields_handler(
 ) -> GetPublicationFieldsHandler:
     """Собирает чтение карточки на общей tenant-сессии."""
     return GetPublicationFieldsHandler(
-        SqlAlchemyPublicationQueryRepository(uow.session), export
+        SqlAlchemyPublicationQueryRepository(uow.session),
+        export,
+        PUBLICATION_FIELD_NODES,
     )
 
 
@@ -36,7 +41,9 @@ def get_set_publication_override_handler(
     feeds: FeedRepositoryDep, publications: PublicationsDep, clock: ClockDep
 ) -> SetPublicationOverrideHandler:
     """Собирает сценарий сохранения ручного значения в общей транзакции."""
-    return SetPublicationOverrideHandler(feeds, publications, clock)
+    return SetPublicationOverrideHandler(
+        feeds, publications, clock, PUBLICATION_FIELD_NODES
+    )
 
 
 def get_reset_publication_override_handler(

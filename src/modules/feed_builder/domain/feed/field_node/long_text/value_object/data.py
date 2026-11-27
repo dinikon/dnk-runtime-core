@@ -41,5 +41,6 @@ class LongTextNodeDataVO(FieldNodeData):
             constraints=self.constraints,
             transforms=self.transforms,
             multiline=True,
+            rich_text=self.kind is FieldValueType.RICH_TEXT,
         )
         object.__setattr__(self, "transforms", transforms)

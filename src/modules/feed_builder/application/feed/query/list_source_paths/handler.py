@@ -22,6 +22,7 @@ class ListSourcePathsHandler:
         labels = {
             CatalogSourcePath.TITLE: "Название товара",
             CatalogSourcePath.DESCRIPTION: "Описание товара",
+            CatalogSourcePath.DESCRIPTION_HTML: "Описание товара (HTML)",
             CatalogSourcePath.SKU: "SKU товара",
             CatalogSourcePath.REGULAR_PRICE: "Обычная цена",
             CatalogSourcePath.STOCK_QUANTITY: "Остаток",

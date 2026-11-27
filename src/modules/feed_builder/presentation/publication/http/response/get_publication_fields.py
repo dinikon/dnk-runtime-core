@@ -2,6 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
 
 
@@ -27,6 +28,7 @@ class PublicationFieldResponse(BaseModel):
     resolved_value: str | int | bool | None
     original_issues: tuple[str, ...]
     issues: tuple[str, ...]
+    value_form: JsonObject | None = None
 
 
 class GetPublicationFieldsResponse(BaseModel):

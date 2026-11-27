@@ -33,6 +33,10 @@ class ResolvedPublication:
 class PublicationNodeResolver:
     """Разрешает все поля публикации по одному неизменяемому снимку."""
 
+    def __init__(self, resolver: NodeValueResolver | None = None) -> None:
+        """Принимает диспетчер нод текущего сценария."""
+        self._resolver = resolver if resolver is not None else NodeValueResolver()
+
     def resolve(
         self,
         publication_id: UUID,
@@ -55,9 +59,8 @@ class PublicationNodeResolver:
                 "INVALID",
             )
         by_field = {override.field_id: override for override in overrides}
-        resolver = NodeValueResolver()
         fields = tuple(
-            resolver.resolve(field, snapshot, by_field.get(field.id))
+            self._resolver.resolve(field, snapshot, by_field.get(field.id))
             for field in schema.fields
             if not isinstance(field.type_definition, CategoryNodeDataVO)
         )

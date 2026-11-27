@@ -10,7 +10,10 @@ from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValu
 from src.modules.feed_builder.domain.feed.enum.transform_operation import (
     TransformOperation,
 )
-from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
+from src.modules.feed_builder.domain.feed.error import (
+    InvalidFeedValueError,
+    InvalidFieldDefinitionError,
+)
 from src.modules.feed_builder.domain.feed.field_node.value_validation import (
     validate_transforms,
 )

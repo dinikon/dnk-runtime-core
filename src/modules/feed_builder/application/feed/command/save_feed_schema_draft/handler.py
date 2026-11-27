@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from src.modules.feed_builder.application.feed.command.save_feed_schema_draft.command import (
     SaveFeedSchemaDraftCommand,
 )
@@ -33,11 +35,13 @@ class SaveFeedSchemaDraftHandler:
         repository: FeedRepositoryProtocol,
         clock: ClockPort,
         locales: SchemaLocalesPort,
+        clean_html: Callable[[str], str],
     ) -> None:
         """Принимает порт хранения, справочник локалей и часы."""
         self._repository = repository
         self._clock = clock
         self._locales = locales
+        self._clean_html = clean_html
 
     async def execute(
         self, command: SaveFeedSchemaDraftCommand
@@ -50,7 +54,11 @@ class SaveFeedSchemaDraftHandler:
         if original.status is FeedStatus.ARCHIVED:
             raise FeedArchivedError("Архивный Feed нельзя редактировать.")
         schema = (
-            decode_schema(command.definition, previous_schema=original.schema)
+            decode_schema(
+                command.definition,
+                previous_schema=original.schema,
+                clean_html=self._clean_html,
+            )
             if command.definition is not None
             else FeedSchemaVO()
         )

@@ -13,6 +13,7 @@ class PreviewColumnDTO:
     field_id: UUID
     name: str
     xml_attribute: bool = False
+    is_html: bool = False
 
 
 @dataclass(frozen=True, slots=True)

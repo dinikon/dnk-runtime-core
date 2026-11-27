@@ -29,6 +29,7 @@ export function mapFeedPreview(dto: FeedPreviewDTO): FeedPreview {
       fieldId: column.field_id,
       name: column.name,
       xmlAttribute: column.xml_attribute,
+      ...(column.is_html ? { isHtml: true } : {}),
     })),
     rows: dto.rows.map((row) => ({
       publicationId: row.publication_id,

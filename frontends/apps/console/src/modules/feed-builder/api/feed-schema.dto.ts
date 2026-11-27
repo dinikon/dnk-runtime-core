@@ -74,7 +74,7 @@ export type FieldTypeDTO =
       constraints: { required: boolean };
     }
   | {
-      kind: "string" | "text";
+      kind: "string" | "text" | "rich_text";
       locale: string | null;
       fallback_policy: {
         mode: "NONE" | "LOCALE_CHAIN" | "MANUAL_REQUIRED";

@@ -205,8 +205,8 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         created = await self.create()
         path = self.base + "/" + created["id"]
         for endpoint, count in [
-            ("field-types", 6),
-            ("source-paths", 6),
+            ("field-types", 7),
+            ("source-paths", 7),
             ("transforms", 3),
         ]:
             response = await self.client.get("/api/console/feed-builder/" + endpoint)
@@ -219,6 +219,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
                 }
                 self.assertIn("CONSTANT", modes["string"])
                 self.assertIn("CONSTANT", modes["text"])
+                self.assertIn("CONSTANT", modes["rich_text"])
         definition = source_schema_document()
         original = await self.seed_feed_schema(created["id"], definition, 1)
         self.assertEqual(original.version.value, 2)

@@ -6,6 +6,7 @@ class CatalogSourcePath(StrEnum):
 
     TITLE = "item.title"
     DESCRIPTION = "item.description"
+    DESCRIPTION_HTML = "item.description_html"
     SKU = "item.sku"
     REGULAR_PRICE = "item.regular_price"
     STOCK_QUANTITY = "item.stock_quantity"

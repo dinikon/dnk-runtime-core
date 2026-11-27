@@ -126,6 +126,30 @@ test("Category membership validation identifies a nested operand and accepts a C
   assert.deepEqual(validateSchemaDraft(draft, schemaMetadata), []);
 });
 
+test("Rich text fields keep the HTML source and locale chain through V2", () => {
+  const field = newSchemaField("rich_text", "00000000-0000-4000-8000-000000000016", [], "uk");
+  if (field.typeDefinition.kind !== "rich_text") throw new Error("fixture");
+  field.typeDefinition.fallbackPolicy = { mode: "LOCALE_CHAIN", locales: ["ru"] };
+  const metadata: typeof schemaMetadata = {
+    ...schemaMetadata,
+    sources: [...schemaMetadata.sources, {
+      provider: "catalog", path: "item.description_html", label: "Описание (HTML)",
+      fieldKinds: ["rich_text"], requiresLocale: true,
+    }],
+  };
+  const draft = { fields: [field] };
+  assert.deepEqual(validateSchemaDraft(draft, metadata), []);
+  const payload = definitionPayload({ ...draftDefinition(draft, metadata), schemaFormatVersion: 2 });
+  assert.equal(payload.schema_format_version, 2);
+  assert.equal(payload.fields[0]?.typeId, "core.rich_text");
+  assert.deepEqual(payload.fields[0]?.data, {
+    locale: "uk", fallback_policy: { mode: "LOCALE_CHAIN", locales: ["ru"] },
+    value: { kind: "SOURCE", source: { provider: "catalog", path: "item.description_html" } },
+    constraints: { required: false, min_length: null, max_length: null }, transforms: [],
+  });
+  assert.deepEqual(schemaDraft(mapDefinition(payload)).fields, draft.fields);
+});
+
 test("Static text in short and multiline fields round-trips through the schema API", () => {
   const draft = schemaDraft(fourFieldSchema());
   const texts = [" r ", "Первая строка\nВторая строка"];

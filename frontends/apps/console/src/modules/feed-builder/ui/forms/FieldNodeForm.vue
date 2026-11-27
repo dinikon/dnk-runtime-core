@@ -27,7 +27,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import PriceCalculationForm from "./PriceCalculationForm.vue";
 import { initialCalculation } from "../../model/feed-calculation.draft";
 import type { CalculationMetadata } from "../../model/feed-calculation.types";
-import type { CatalogCategory } from "@/modules/catalog";
+import { CatalogContentEditor, type CatalogCategory } from "@/modules/catalog";
+import { safeRichTextHtml } from "../../model/rich-text";
 import type { CategoryType } from "../../model/feed-categories.types";
 import NodePropertiesForm from "./NodePropertiesForm.vue";
 import CategoryFieldSettings from "./CategoryFieldSettings.vue";
@@ -62,6 +63,9 @@ const locked = computed(() => props.disabled || fieldIsReadonly(props.field));
 const nodeControls = computed(() =>
   props.metadata.fieldTypes.find((type) => type.kind === props.field.typeDefinition.kind)
     ?.forms?.settings ?? [],
+);
+const richTextControl = computed(() =>
+  nodeControls.value.find((control) => control.kind === "rich_text" && control.path === "data.value.value"),
 );
 const category = computed(() => props.field.typeDefinition.kind === "category" ? props.field.typeDefinition : undefined);
 const scalar = computed(() => {
@@ -105,7 +109,7 @@ function change(update: (field: SchemaFieldDraft) => void): void {
 }
 function textChange(update: (type: TextTypeDraft) => void): void {
   change((f) => {
-    if (f.typeDefinition.kind === "string" || f.typeDefinition.kind === "text")
+    if (f.typeDefinition.kind === "string" || f.typeDefinition.kind === "text" || f.typeDefinition.kind === "rich_text")
       update(f.typeDefinition);
   });
 }
@@ -148,8 +152,10 @@ function setMode(value: string): void {
             }
           : { kind: "MONEY", mode: "MANUAL" }
         : value === "SOURCE"
-          ? { kind: "SOURCE", source: { provider: "catalog", path: "" } }
+          ? { kind: "SOURCE", source: { provider: "catalog", path: settings.kind === "rich_text" ? "item.description_html" : "" } }
           : { kind: "MANUAL" };
+    if (value === "SOURCE" && settings.kind === "rich_text")
+      settings.locale ??= props.metadata.locales[0]?.code ?? null;
   });
 }
 function setConstantValue(value: string): void {
@@ -168,7 +174,7 @@ function setSource(value: string): void {
     const settings = f.typeDefinition;
     if ("source" in settings.value)
       settings.value.source.path = selected.path as SourcePath;
-    if ((settings.kind === "string" || settings.kind === "text") && !selected.requiresLocale) {
+    if ((settings.kind === "string" || settings.kind === "text" || settings.kind === "rich_text") && !selected.requiresLocale) {
       settings.locale = null;
       settings.fallbackPolicy = null;
     }
@@ -317,9 +323,17 @@ function message(key: string): string {
             v-if="type.kind !== 'money' && type.value.kind === 'CONSTANT'"
             :data-invalid="!!message('value')"
           >
-            <FieldLabel for="schema-text-constant">Статический текст</FieldLabel>
+            <FieldLabel :for="richTextControl ? undefined : 'schema-text-constant'">{{ richTextControl?.label ?? 'Статический текст' }}</FieldLabel>
+            <CatalogContentEditor
+              v-if="richTextControl"
+              :label="richTextControl.label"
+              :model-value="safeRichTextHtml(type.value.value)"
+              :disabled="locked"
+              :error-id="message('value') ? 'schema-rich-text-error' : undefined"
+              @update:model-value="setConstantValue"
+            />
             <Textarea
-              v-if="type.kind === 'text'"
+              v-else-if="type.kind === 'text'"
               id="schema-text-constant"
               :model-value="type.value.value"
               :aria-invalid="!!message('value')"
@@ -333,7 +347,7 @@ function message(key: string): string {
               :aria-invalid="!!message('value')"
               @update:model-value="setConstantValue(String($event))"
             />
-            <FieldError v-if="message('value')">{{ message("value") }}</FieldError>
+            <FieldError v-if="message('value')" id="schema-rich-text-error">{{ message("value") }}</FieldError>
           </Field>
           <Field v-if="mode === 'SOURCE'" :data-invalid="!!message('source')"
             ><FieldLabel for="schema-field-source">Источник</FieldLabel

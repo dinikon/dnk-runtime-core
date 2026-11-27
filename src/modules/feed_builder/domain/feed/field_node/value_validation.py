@@ -6,6 +6,9 @@ from src.modules.feed_builder.domain.feed.enum.transform_operation import (
     TransformOperation,
 )
 from src.modules.feed_builder.domain.feed.error import InvalidFieldDefinitionError
+from src.modules.feed_builder.domain.feed.field_node.rich_text.visible_text import (
+    visible_html_text,
+)
 from src.modules.feed_builder.domain.feed.limits import MAX_TRANSFORMS
 from src.modules.feed_builder.domain.feed.validation import sequence
 from src.modules.feed_builder.domain.feed.value_object.locale_code import LocaleCodeVO
@@ -58,6 +61,7 @@ def validate_text_settings(
     constraints: TextConstraintsVO,
     transforms: tuple[TransformDefinitionVO, ...],
     multiline: bool,
+    rich_text: bool = False,
 ) -> tuple[TransformDefinitionVO, ...]:
     """Проверяет общий состав двух текстовых типов без денежной ветви."""
     if not isinstance(
@@ -80,12 +84,10 @@ def validate_text_settings(
             raise InvalidFieldDefinitionError(
                 "Fallback требует целевую локаль и не повторяет её."
             )
-    result = validate_transforms(
-        transforms,
-        allowed=frozenset(
-            (TransformOperation.STRING_TRIM, TransformOperation.STRING_TRUNCATE)
-        ),
-    )
+    allowed = {TransformOperation.STRING_TRIM}
+    if not rich_text:
+        allowed.add(TransformOperation.STRING_TRUNCATE)
+    result = validate_transforms(transforms, allowed=frozenset(allowed))
     if isinstance(value_definition, TextConstantValueDefinitionVO):
         path = ("type_definition", "value", "value")
         if locale is not None or fallback_policy is not None:
@@ -98,6 +100,8 @@ def validate_text_settings(
                 "Недопустимые символы для этого текстового поля.", path=path
             )
         value = apply_text_transforms(value_definition.value, result)
+        if rich_text:
+            value = visible_html_text(value)
         if constraints.required and not value.strip():
             raise InvalidFieldDefinitionError("Требуется значение поля.", path=path)
         if not constraints.accepts_length(value):

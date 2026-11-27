@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from uuid import UUID
 
 from src.modules.feed_builder.domain.feed.category.value_object.tree import (
@@ -21,10 +21,17 @@ from src.modules.feed_builder.application.feed.graph.error import (
 )
 from src.modules.feed_builder.application.feed.types import JsonObject
 from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
+from src.modules.feed_builder.domain.feed.field_node.value_validation import (
+    valid_text_characters,
+)
 
 
 def decode_versioned_node(
-    value: object, index: int, trees: Mapping[UUID, FeedCategoryTreeVO]
+    value: object,
+    index: int,
+    trees: Mapping[UUID, FeedCategoryTreeVO],
+    *,
+    clean_html: Callable[[str], str] | None = None,
 ) -> FieldNodeDefinition:
     """Сопоставляет ноду с зарегистрированным типом и проверяет её данные."""
     path = ("definition", "fields", index)
@@ -54,6 +61,16 @@ def decode_versioned_node(
             raise InvalidFeedSchemaDocumentError(
                 "Нужен объект данных зарегистрированного типа."
             )
+        constant = settings.get("value")
+        if (
+            codec.kind is FieldValueType.RICH_TEXT
+            and clean_html is not None
+            and isinstance(constant, dict)
+            and constant.get("kind") == "CONSTANT"
+            and isinstance(html := constant.get("value"), str)
+            and valid_text_characters(html, multiline=True)
+        ):
+            settings = {**settings, "value": {**constant, "value": clean_html(html)}}
     except (InvalidFeedSchemaDocumentError, ValueError) as exc:
         raise InvalidFeedSchemaDocumentError(str(exc), path=path) from exc
     try:

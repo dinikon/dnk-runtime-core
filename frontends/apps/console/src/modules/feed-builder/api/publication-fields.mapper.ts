@@ -33,6 +33,7 @@ export function mapPublicationFields(
       resolvedValue: field.resolved_value,
       originalIssues: field.original_issues,
       issues: field.issues,
+      ...(field.value_form ? { valueForm: field.value_form } : {}),
     })),
   };
 }

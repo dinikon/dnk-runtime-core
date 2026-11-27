@@ -8,6 +8,7 @@ from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValu
 type ControlKind = Literal[
     "input",
     "textarea",
+    "rich_text",
     "select",
     "number",
     "decimal",
@@ -57,6 +58,9 @@ _COMMON = (
 _LOCALE = FormControl("select", "data.locale", "Локаль", options_source="locales")
 _REQUIRED = FormControl("checkbox", "data.constraints.required", "Обязательное поле")
 _TRANSFORMS = FormControl("transforms", "data.transforms", "Преобразования")
+RICH_TEXT_OVERRIDE_CONTROL = FormControl(
+    "rich_text", "value", "Форматированное описание"
+)
 
 
 def node_forms(codec: NodeCodec) -> JsonObject:
@@ -83,8 +87,12 @@ def node_forms(codec: NodeCodec) -> JsonObject:
         ),
         _REQUIRED,
     ]
-    if kind in (FieldValueType.STRING, FieldValueType.TEXT):
-        editor = "input" if kind is FieldValueType.STRING else "textarea"
+    if kind in (FieldValueType.STRING, FieldValueType.TEXT, FieldValueType.RICH_TEXT):
+        editor = {
+            FieldValueType.STRING: "input",
+            FieldValueType.TEXT: "textarea",
+            FieldValueType.RICH_TEXT: "rich_text",
+        }[kind]
         controls.extend(
             (
                 FormControl(
@@ -155,7 +163,12 @@ def node_forms(codec: NodeCodec) -> JsonObject:
                 ),
             )
         )
+    common = _COMMON
+    override = FormControl(editor, "value", codec.label)
+    if kind is FieldValueType.RICH_TEXT:
+        common = tuple(item for item in common if item.path != "export.xml_placement")
+        override = RICH_TEXT_OVERRIDE_CONTROL
     return {
-        "settings": [item.document() for item in (*_COMMON, *controls)],
-        "publicationOverride": [FormControl(editor, "value", codec.label).document()],
+        "settings": [item.document() for item in (*common, *controls)],
+        "publicationOverride": [override.document()],
     }

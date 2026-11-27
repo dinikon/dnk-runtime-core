@@ -2,6 +2,7 @@ from src.modules.feed_builder.application.feed.graph.category_trees import (
     category_tree_document,
     decode_category_trees,
 )
+from collections.abc import Callable
 from decimal import InvalidOperation
 from src.modules.feed_builder.domain.feed.field_node.category.value_object.data import (
     CategoryNodeDataVO,
@@ -28,7 +29,10 @@ from src.modules.feed_builder.application.feed.graph.versioned_node import (
 
 
 def decode_schema(
-    value: object, *, previous_schema: FeedSchemaVO | None = None
+    value: object,
+    *,
+    previous_schema: FeedSchemaVO | None = None,
+    clean_html: Callable[[str], str] | None = None,
 ) -> FeedSchemaVO:
     """Собирает схему полей и читает ранее сохранённые определения категорий."""
     try:
@@ -56,6 +60,7 @@ def decode_schema(
                     item,
                     index,
                     trees,
+                    clean_html=clean_html,
                 )
                 for index, item in enumerate(array(graph["fields"], MAX_FIELDS))
             )

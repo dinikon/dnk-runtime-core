@@ -127,11 +127,11 @@ export function newSchemaField(
           }
         : {
             kind,
-            locale: null,
+            locale: kind === "rich_text" ? locale : null,
             fallbackPolicy: null,
             value: {
               kind: "SOURCE",
-              source: { provider: "catalog", path: "" },
+              source: { provider: "catalog", path: kind === "rich_text" ? "item.description_html" : "" },
             },
             constraints: { required: false, minLength: "", maxLength: "" },
             transforms: [],
@@ -323,7 +323,7 @@ export function validateSchemaDraft(
           ["type_definition", "value", "source"],
           "Выберите совместимый источник.",
         );
-      else if (type.kind === "string" || type.kind === "text") {
+      else if (type.kind === "string" || type.kind === "text" || type.kind === "rich_text") {
         if (entry.requiresLocale && !type.locale)
           error(["type_definition", "locale"], "Выберите локаль источника.");
         if (!entry.requiresLocale && (type.locale || type.fallbackPolicy))

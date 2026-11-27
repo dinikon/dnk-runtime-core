@@ -65,6 +65,9 @@ from src.modules.feed_builder.infrastructure.feed.persistence.repository import 
 from src.modules.feed_builder.infrastructure.publication.catalog.export_values import (
     CatalogExportValues,
 )
+from src.modules.feed_builder.infrastructure.publication.field_nodes import (
+    PUBLICATION_FIELD_NODES,
+)
 from src.modules.feed_builder.infrastructure.publication.persistence.query_repository import (
     SqlAlchemyPublicationQueryRepository,
 )
@@ -209,6 +212,7 @@ class _BatchReader:
             self.access,
             self.runtime.clock,
             CatalogCategoryTree(SqlAlchemyCatalogCategoryQueryRepository(session)),
+            field_nodes=PUBLICATION_FIELD_NODES,
         )
 
     async def prepare(self, task: ExportTaskVO) -> PublicationExportContext:

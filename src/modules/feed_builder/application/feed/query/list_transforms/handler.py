@@ -20,7 +20,7 @@ class ListTransformsHandler:
                 TransformItemDTO(
                     TransformOperation.STRING_TRIM.value,
                     "Убрать пробелы по краям",
-                    ("string", "text"),
+                    ("string", "text", "rich_text"),
                     "none",
                 ),
                 TransformItemDTO(

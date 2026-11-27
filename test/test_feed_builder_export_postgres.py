@@ -1063,6 +1063,161 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(xml.find("offer").findtext("categoryId"), "20")
         self.assertEqual(xml.find("offer").get("warehouse_code"), "0")
 
+    async def test_rich_text_preserves_catalog_and_override_markup_in_xml_and_csv(
+        self,
+    ) -> None:
+        """Проверяет локаль, безопасный HTML, ручную запись и реальный экспорт."""
+        await crud_fixture.FeedCrudPostgresTests.seed_schema_locales(self)
+        inherited = (
+            "<p>Текст &amp; <strong>опис</strong></p>"
+            "<ul><li>Рядок</li></ul>"
+            '<p><a href="https://example.org" rel="noopener noreferrer">Деталі</a></p>'
+        )
+        clean_override = '<p>Ручне "значення", &amp; <em>формат</em></p>'
+        unsafe = "<img src=x onerror=alert(1)><script>alert(2)</script>"
+        references = [{"catalog_item_id": await self.item()} for _ in range(2)]
+        for item in references:
+            content = await self.client.patch(
+                f"{self.catalog}/{item['catalog_item_id']}?locale=uk",
+                headers=self.headers,
+                json={
+                    "content": {
+                        "expected_schema_version": 1,
+                        "values": {"title": "Товар", "body": inherited},
+                    }
+                },
+            )
+            self.assertEqual(content.status_code, 200, content.text)
+        html_id, plain_id, constant_id = (str(uuid4()) for _ in range(3))
+        fields = [
+            {
+                "id": field_id,
+                "key": key,
+                "name": key,
+                "typeId": type_id,
+                "typeVersion": 1,
+                "scope": "offer",
+                "data": {
+                    "locale": "ru" if field_id == html_id else "uk",
+                    "value": {
+                        "kind": "SOURCE",
+                        "source": {"provider": "catalog", "path": path},
+                    },
+                    **(
+                        {
+                            "fallback_policy": {"mode": "LOCALE_CHAIN", "locales": ["uk"]},
+                            "constraints": {"required": True, "max_length": 40},
+                        }
+                        if field_id == html_id
+                        else {}
+                    ),
+                },
+                "export": {"name": key, "enabled": True},
+            }
+            for field_id, key, type_id, path in (
+                (html_id, "description", "core.rich_text", "item.description_html"),
+                (plain_id, "plain", "core.long_text", "item.description"),
+            )
+        ]
+        fields.append(
+            {
+                "id": constant_id,
+                "key": "constant",
+                "name": "Константа",
+                "typeId": "core.rich_text",
+                "typeVersion": 1,
+                "scope": "offer",
+                "data": {
+                    "value": {"kind": "CONSTANT", "value": "<p>Общее</p>" + unsafe},
+                    "constraints": {"required": True, "max_length": 5},
+                },
+                "export": {"name": "constant", "enabled": True},
+            }
+        )
+        for xml in (False, True):
+            with self.subTest(xml=xml):
+                feed = await self.create(code="html-xml", xml=True) if xml else self.feed
+                self.root = f"{self.base}/{feed['id']}"
+                self.path = f"{self.root}/publications"
+                saved = await self.client.put(
+                    f"{self.root}/schema/draft",
+                    headers=self.headers,
+                    json={
+                        "expected_version": 1,
+                        "definition": {"schema_format_version": 2, "fields": fields},
+                    },
+                )
+                self.assertEqual(saved.status_code, 200, saved.text)
+                version = saved.json()["version"]
+                nodes = saved.json()["definition"]["fields"]
+                self.assertEqual(nodes[2]["data"]["value"]["value"], "<p>Общее</p>")
+                self.assertEqual(
+                    nodes[0]["forms"]["publicationOverride"][0]["kind"], "rich_text"
+                )
+                added = await self.add(references, expected=version)
+                publication = (
+                    f"/api/console/feed-builder/publications/{added['items'][0]['id']}"
+                )
+                initial = await self.client.post(
+                    f"{self.root}/preview",
+                    headers=self.headers,
+                    json={"expected_version": version},
+                )
+                self.assertEqual(initial.status_code, 200, initial.text)
+                columns = initial.json()["columns"]
+                self.assertTrue(columns[0]["is_html"])
+                self.assertFalse(columns[1]["is_html"])
+                original = initial.json()["rows"][0]["values"]
+                self.assertEqual(original[0], inherited)
+                self.assertNotIn("<", original[1])
+                self.assertIn("Текст & опис", original[1])
+
+                override_url = f"{publication}/overrides/{html_id}"
+                expected = {"expected_version": 1, "expected_feed_version": version}
+                empty = await self.client.put(
+                    override_url,
+                    headers=self.headers,
+                    json={**expected, "value": "<p><br></p>" + unsafe},
+                )
+                self.assertEqual(empty.status_code, 422, empty.text)
+                override = await self.client.put(
+                    override_url,
+                    headers=self.headers,
+                    json={**expected, "value": clean_override + unsafe},
+                )
+                self.assertEqual(override.status_code, 200, override.text)
+                editor = await self.client.get(f"{publication}/fields")
+                self.assertEqual(editor.status_code, 200, editor.text)
+                description = editor.json()["fields"][0]
+                self.assertEqual(description["value_form"]["kind"], "rich_text")
+                self.assertEqual(description["original_value"], inherited)
+                self.assertEqual(description["override_value"], clean_override)
+                self.assertEqual(description["resolved_value"], clean_override)
+
+                await self.enqueue(version)
+                await self.worker.process_once()
+                state = await self.export_state()
+                self.assertEqual(state["report"]["outcome"], "PUBLISHED", state)
+                output = await self.public.get(urlsplit(state["active"]["url"]).path)
+                self.assertEqual(output.status_code, 200, output.text)
+                if xml:
+                    exported = [
+                        [
+                            offer.findtext(name)
+                            for name in ("description", "plain", "constant")
+                        ]
+                        for offer in ElementTree.fromstring(output.content)
+                    ]
+                else:
+                    exported = list(csv.reader(StringIO(output.text), delimiter=";"))
+                self.assertCountEqual(
+                    exported,
+                    [
+                        [inherited, original[1], "<p>Общее</p>"],
+                        [clean_override, original[1], "<p>Общее</p>"],
+                    ],
+                )
+
     async def test_static_text_is_available_in_schema_preview_and_export(self) -> None:
         """Выводит заданные тексты, включая атрибут предложения и многострочное значение."""
         selling_type = field_document(text_field("selling_type"))

@@ -8,11 +8,19 @@ from src.modules.feed_builder.domain.feed.error import InvalidFeedValueError
 from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
     MoneyNodeDataVO,
 )
+from src.modules.feed_builder.domain.feed.field_node.rich_text.value_object.data import (
+    RichTextNodeDataVO,
+)
 from src.modules.feed_builder.domain.feed.value_object.price_amount import PriceAmountVO
 from src.modules.feed_builder.domain.publication.error import (
     InvalidPublicationOverrideError,
 )
-from src.modules.feed_builder.domain.publication.field_node.resolver import NodeValueResolver
+from src.modules.feed_builder.domain.publication.field_node.resolver import (
+    NodeValueResolver,
+)
+from src.modules.feed_builder.domain.publication.field_node.registry import (
+    FieldNodeRegistry,
+)
 from src.modules.feed_builder.domain.publication.value_object.field_override import (
     FieldOverrideVO,
 )
@@ -40,9 +48,11 @@ class SetPublicationOverrideHandler:
         feeds: FeedRepositoryProtocol,
         publications: FeedPublicationRepositoryProtocol,
         clock: ClockPort,
+        field_nodes: FieldNodeRegistry,
     ) -> None:
         """Получает порты общей транзакции."""
         self._feeds, self._publications, self._clock = feeds, publications, clock
+        self._resolver = NodeValueResolver(field_nodes)
 
     async def execute(
         self, command: SetPublicationOverrideCommand
@@ -76,12 +86,15 @@ class SetPublicationOverrideHandler:
                 ) from exc
         override = FieldOverrideVO(field.id, value)
         reference = original.product_reference
-        resolved = NodeValueResolver().resolve_manual(
+        resolved = self._resolver.resolve_manual(
             field, override, reference.catalog_variant_id or reference.catalog_item_id
         )
         if resolved.issues:
             issue = resolved.issues[0]
             raise InvalidPublicationOverrideError(issue.code, issue.message)
+        if isinstance(field.type_definition, RichTextNodeDataVO):
+            assert isinstance(resolved.value, str)
+            override = FieldOverrideVO(field.id, resolved.value)
         result = original.set_override(override, now=self._clock.now())
         if result is not original:
             await self._publications.save(result, original.version)

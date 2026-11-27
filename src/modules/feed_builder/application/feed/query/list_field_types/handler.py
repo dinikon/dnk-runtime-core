@@ -28,7 +28,12 @@ class ListFieldTypesHandler:
                 FieldTypeItemDTO(
                     codec.kind.value,
                     codec.label,
-                    codec.kind in (FieldValueType.STRING, FieldValueType.TEXT),
+                    codec.kind
+                    in (
+                        FieldValueType.STRING,
+                        FieldValueType.TEXT,
+                        FieldValueType.RICH_TEXT,
+                    ),
                     codec.kind is FieldValueType.MONEY,
                     codec.modes,
                     codec.type_id,

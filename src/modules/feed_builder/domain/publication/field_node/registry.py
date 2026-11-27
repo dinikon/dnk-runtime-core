@@ -1,9 +1,13 @@
+from collections.abc import Callable
 from typing import Protocol
 
 from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
 from src.modules.feed_builder.domain.feed.error import InvalidFieldDefinitionError
 from src.modules.feed_builder.domain.publication.field_node.money.node import MoneyNode
 from src.modules.feed_builder.domain.publication.field_node.result import ResolvedField
+from src.modules.feed_builder.domain.publication.field_node.rich_text.node import (
+    RichTextNode,
+)
 from src.modules.feed_builder.domain.publication.field_node.scalar.node import (
     ScalarNode,
 )
@@ -69,4 +73,10 @@ class FieldNodeRegistry:
         return node
 
 
-PUBLICATION_NODES = FieldNodeRegistry((TextNode(), ScalarNode(), MoneyNode()))
+_STANDARD_NODES = (TextNode(), ScalarNode(), MoneyNode())
+PUBLICATION_NODES = FieldNodeRegistry(_STANDARD_NODES)
+
+
+def build_publication_nodes(clean_html: Callable[[str], str]) -> FieldNodeRegistry:
+    """Регистрирует HTML-ноду на границе исполнения с доступной очисткой."""
+    return FieldNodeRegistry((*_STANDARD_NODES, RichTextNode(clean_html)))

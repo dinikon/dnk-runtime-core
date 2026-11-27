@@ -28,7 +28,7 @@ export interface FeedPreview {
   version: number;
   asOf: string;
   totalEnabled: number;
-  columns: { fieldId: string; name: string; xmlAttribute: boolean }[];
+  columns: { fieldId: string; name: string; xmlAttribute: boolean; isHtml?: boolean }[];
   rows: FeedPreviewRow[];
 }
 

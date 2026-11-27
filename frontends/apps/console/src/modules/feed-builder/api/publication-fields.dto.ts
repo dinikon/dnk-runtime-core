@@ -1,4 +1,4 @@
-import type { FieldKind } from "../model/feed-schema.types";
+import type { FieldKind, NodeFormControl } from "../model/feed-schema.types";
 import type { PublicationFieldValue } from "../model/publication-fields.types";
 
 export interface PublicationFieldDTO {
@@ -19,6 +19,7 @@ export interface PublicationFieldDTO {
   resolved_value: PublicationFieldValue | null;
   original_issues: string[];
   issues: string[];
+  value_form?: NodeFormControl | null;
 }
 export interface PublicationFieldsDTO {
   feed_version: number;

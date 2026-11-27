@@ -48,8 +48,8 @@ from src.modules.feed_builder.application.publication.port.export_source import 
     CatalogReference,
 )
 from src.modules.feed_builder.domain.feed.entity.field_node import FieldNodeDefinition
-from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
-    CatalogSourcePath,
+from src.modules.feed_builder.domain.feed.policy.schema_sources import (
+    FeedSchemaSourcePolicy,
 )
 from src.modules.feed_builder.domain.feed.error import (
     FeedArchivedError,
@@ -63,6 +63,13 @@ from src.modules.feed_builder.domain.feed.value_object.source_value_definition i
     SourceValueDefinitionVO,
 )
 from src.modules.feed_builder.domain.publication.field_node.result import FieldIssue
+from src.modules.feed_builder.domain.publication.field_node.registry import (
+    FieldNodeRegistry,
+    PUBLICATION_NODES,
+)
+from src.modules.feed_builder.domain.publication.field_node.resolver import (
+    NodeValueResolver,
+)
 from src.modules.feed_builder.domain.publication.field_node.publication import (
     PublicationNodeResolver,
 )
@@ -111,6 +118,8 @@ class PublicationExportService:
         access: PublicationCatalogAccessPort,
         clock: ClockPort,
         categories: CatalogCategoryTreePort | None = None,
+        *,
+        field_nodes: FieldNodeRegistry = PUBLICATION_NODES,
     ) -> None:
         """Принимает только порты чтения и доверенный контекст доступа."""
         self._feeds = feeds
@@ -119,6 +128,7 @@ class PublicationExportService:
         self._access = access
         self._clock = clock
         self._categories = categories
+        self._resolver = PublicationNodeResolver(NodeValueResolver(field_nodes))
 
     async def prepare(
         self, feed_id: FeedIdVO, expected_version: int
@@ -184,7 +194,7 @@ class PublicationExportService:
             ) or not isinstance(settings.value_definition, SourceValueDefinitionVO):
                 continue
             path = settings.value_definition.source.path
-            if path in (CatalogSourcePath.TITLE, CatalogSourcePath.DESCRIPTION):
+            if FeedSchemaSourcePolicy.requires_locale(path):
                 sources.add(path.value)
                 if settings.locale is not None:
                     locales.add(settings.locale.value)
@@ -260,17 +270,18 @@ class PublicationExportService:
         if not items:
             return ()
         snapshots = await self.read_catalog(context, items)
-        resolver = PublicationNodeResolver()
         locales = {
             field.id.uuid: field.type_definition.locale.value
             for field in context.schema.fields
-            if isinstance(field.type_definition, (ShortTextNodeDataVO, LongTextNodeDataVO))
+            if isinstance(
+                field.type_definition, (ShortTextNodeDataVO, LongTextNodeDataVO)
+            )
             and field.type_definition.locale
         }
         records: list[ExportRecord] = []
         for item in items:
             snapshot = snapshots.get(item.reference)
-            publication = resolver.resolve(
+            publication = self._resolver.resolve(
                 item.id, context.schema, item.overrides, snapshot
             )
             fields = {field.field_id: field.value for field in publication.fields}

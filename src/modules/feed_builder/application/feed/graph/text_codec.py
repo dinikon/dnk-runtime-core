@@ -15,6 +15,9 @@ from src.modules.feed_builder.domain.feed.field_node.short_text.value_object.dat
 from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data import (
     LongTextNodeDataVO,
 )
+from src.modules.feed_builder.domain.feed.field_node.rich_text.value_object.data import (
+    RichTextNodeDataVO,
+)
 from src.modules.feed_builder.domain.feed.value_object.source_value_definition import (
     SourceValueDefinitionVO,
 )
@@ -80,7 +83,11 @@ def read_text(raw_type: JsonObject) -> ShortTextNodeDataVO | LongTextNodeDataVO:
                 for item in array(policy.get("locales", []), 32)
             ),
         )
-    constructor = ShortTextNodeDataVO if kind == "string" else LongTextNodeDataVO
+    constructor = {
+        "string": ShortTextNodeDataVO,
+        "text": LongTextNodeDataVO,
+        "rich_text": RichTextNodeDataVO,
+    }[kind]
     field_type = constructor(
         value_definition=value_definition,
         locale=(

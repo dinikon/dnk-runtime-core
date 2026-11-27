@@ -2,6 +2,10 @@ from src.modules.feed_builder.domain.feed.field_node.category.value_object.data 
     CategoryNodeDataVO,
 )
 from src.modules.feed_builder.domain.feed.types import ResolvedFieldValue
+from src.modules.feed_builder.application.feed.graph.forms import (
+    RICH_TEXT_OVERRIDE_CONTROL,
+)
+from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
 from src.modules.feed_builder.domain.feed.field_node.boolean.value_object.data import (
     BooleanNodeDataVO,
 )
@@ -31,6 +35,12 @@ from src.modules.feed_builder.domain.publication.error import PublicationNotFoun
 from src.modules.feed_builder.domain.publication.field_node.publication import (
     PublicationNodeResolver,
 )
+from src.modules.feed_builder.domain.publication.field_node.registry import (
+    FieldNodeRegistry,
+)
+from src.modules.feed_builder.domain.publication.field_node.resolver import (
+    NodeValueResolver,
+)
 
 
 class GetPublicationFieldsHandler:
@@ -40,9 +50,11 @@ class GetPublicationFieldsHandler:
         self,
         publications: PublicationExportReaderProtocol,
         export: PublicationExportService,
+        field_nodes: FieldNodeRegistry,
     ) -> None:
         """Получает порты чтения и общий расчёт публикации."""
         self._publications, self._export = publications, export
+        self._resolver = PublicationNodeResolver(NodeValueResolver(field_nodes))
 
     async def execute(
         self, query: GetPublicationFieldsQuery
@@ -59,10 +71,9 @@ class GetPublicationFieldsHandler:
             snapshot = (await self._export.read_catalog(context, (item,))).get(
                 item.reference
             )
-        resolver = PublicationNodeResolver()
-        original = resolver.resolve(item.id, context.schema, (), snapshot)
+        original = self._resolver.resolve(item.id, context.schema, (), snapshot)
         current = (
-            resolver.resolve(item.id, context.schema, item.overrides, snapshot)
+            self._resolver.resolve(item.id, context.schema, item.overrides, snapshot)
             if item.overrides
             else original
         )
@@ -149,6 +160,11 @@ class GetPublicationFieldsHandler:
                         issue.message
                         for issue in (*current.issues, *format_issues)
                         if issue.field_id == field.id.uuid
+                    ),
+                    value_form=(
+                        RICH_TEXT_OVERRIDE_CONTROL.document()
+                        if settings.kind is FieldValueType.RICH_TEXT
+                        else None
                     ),
                 )
             )

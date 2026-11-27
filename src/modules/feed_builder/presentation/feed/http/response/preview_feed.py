@@ -11,6 +11,7 @@ class PreviewColumnResponse(BaseModel):
     field_id: UUID
     name: str
     xml_attribute: bool
+    is_html: bool = False
 
 
 class PreviewIssueResponse(BaseModel):

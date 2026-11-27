@@ -75,7 +75,11 @@ def _plain_description(value: str | None) -> str | None:
 class CatalogExportValues:
     """Адаптирует пакетный Application-контракт владельца товарных данных."""
 
-    _codes = {"item.title": "title", "item.description": "body"}
+    _codes = {
+        "item.title": "title",
+        "item.description": "body",
+        "item.description_html": "body",
+    }
 
     def __init__(self, reader: CatalogPublicationValuesReaderProtocol) -> None:
         """Сохраняет публичный порт Catalog."""
@@ -103,6 +107,17 @@ class CatalogExportValues:
         result: dict[CatalogReference, PublicationCatalogSnapshotVO] = {}
         for item in items:
             price = item.calculation
+            texts: list[tuple[str, str, str | None]] = []
+            for code, locale, value in item.texts:
+                if code == "title":
+                    texts.append(("item.title", locale, value))
+                elif code == "body":
+                    if "item.description" in sources:
+                        texts.append(
+                            ("item.description", locale, _plain_description(value))
+                        )
+                    if "item.description_html" in sources:
+                        texts.append(("item.description_html", locale, value))
             result[(price.reference.item_id, price.reference.variant_id)] = (
                 PublicationCatalogSnapshotVO(
                     inputs=CalculationInputsVO(
@@ -116,14 +131,7 @@ class CatalogExportValues:
                         stock_quantity=price.stock_quantity,
                         in_stock=price.in_stock,
                     ),
-                    texts=tuple(
-                        (
-                            ("item.description", locale, _plain_description(value))
-                            if code == "body"
-                            else ("item.title", locale, value)
-                        )
-                        for code, locale, value in item.texts
-                    ),
+                    texts=tuple(texts),
                 )
             )
         return result

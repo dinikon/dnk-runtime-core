@@ -18,6 +18,7 @@ from src.modules.feed_builder.application.feed.service.publication_export import
 from src.modules.feed_builder.domain.feed.enum.xml_field_placement import (
     XmlFieldPlacement,
 )
+from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
 
 PREVIEW_LIMIT = 20
 
@@ -46,6 +47,7 @@ class PreviewFeedHandler:
                 field.export.name.value,
                 xml_attribute=xml
                 and field.export.xml_placement is XmlFieldPlacement.ATTRIBUTE,
+                is_html=field.type_definition.kind is FieldValueType.RICH_TEXT,
             )
             for field in context.exported_fields
         )

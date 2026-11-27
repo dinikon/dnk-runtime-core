@@ -28,6 +28,9 @@ from src.modules.feed_builder.infrastructure.feed.serialization.test_csv import 
 from src.modules.feed_builder.infrastructure.publication.catalog.export_values import (
     CatalogExportValues,
 )
+from src.modules.feed_builder.infrastructure.publication.field_nodes import (
+    PUBLICATION_FIELD_NODES,
+)
 from src.modules.feed_builder.infrastructure.publication.persistence.query_repository import (
     SqlAlchemyPublicationQueryRepository,
 )
@@ -111,6 +114,7 @@ def get_publication_export(
         _CatalogAccess(context, authorization),
         clock,
         CatalogCategoryTree(SqlAlchemyCatalogCategoryQueryRepository(uow.session)),
+        field_nodes=PUBLICATION_FIELD_NODES,
     )
 
 

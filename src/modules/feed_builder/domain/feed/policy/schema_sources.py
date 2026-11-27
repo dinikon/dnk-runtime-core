@@ -33,12 +33,18 @@ class FeedSchemaSourcePolicy:
             return (FieldValueType.INTEGER,)
         if path is CatalogSourcePath.IN_STOCK:
             return (FieldValueType.BOOLEAN,)
+        if path is CatalogSourcePath.DESCRIPTION_HTML:
+            return (FieldValueType.RICH_TEXT,)
         return (FieldValueType.STRING, FieldValueType.TEXT)
 
     @staticmethod
     def requires_locale(path: CatalogSourcePath) -> bool:
         """Отмечает локализованный контент, в отличие от SKU и суммы."""
-        return path in (CatalogSourcePath.TITLE, CatalogSourcePath.DESCRIPTION)
+        return path in (
+            CatalogSourcePath.TITLE,
+            CatalogSourcePath.DESCRIPTION,
+            CatalogSourcePath.DESCRIPTION_HTML,
+        )
 
     @classmethod
     def ensure_valid(cls, schema: FeedSchemaVO) -> None:

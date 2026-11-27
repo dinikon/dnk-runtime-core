@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Button } from "@/components/ui/button";
+import { CatalogContentEditor } from "@/modules/catalog";
+import { richTextLength, safeRichTextHtml } from "../../model/rich-text";
+import RichTextValue from "../results/RichTextValue.vue";
 import type {
   PublicationField,
   PublicationFields,
@@ -34,7 +37,13 @@ const rows = computed(() => {
     ? [...fields, missing]
     : fields;
 });
-const length = computed(() => Array.from(props.draft?.value ?? "").length);
+const richTextForm = computed(() =>
+  props.draft?.field.valueForm?.kind === "rich_text" ? props.draft.field.valueForm : undefined,
+);
+const length = computed(() => {
+  const value = props.draft?.value ?? "";
+  return richTextForm.value ? richTextLength(value) : Array.from(value).length;
+});
 const invalidLength = computed(() => {
   const max = props.draft?.field.maxLength;
   return max != null && length.value > max;
@@ -95,7 +104,8 @@ function input(event: Event): void {
           <div class="min-w-0">
             <dt class="text-xs text-muted-foreground">Значение фида</dt>
             <dd class="whitespace-pre-wrap break-words">
-              {{ field.originalValue ?? "—" }}
+              <RichTextValue v-if="field.kind === 'rich_text' && typeof field.originalValue === 'string'" :value="field.originalValue" />
+              <template v-else>{{ field.originalValue ?? "—" }}</template>
             </dd>
             <dd
               v-for="issue in field.originalIssues"
@@ -108,7 +118,8 @@ function input(event: Event): void {
           <div v-if="field.hasOverride" class="min-w-0">
             <dt class="text-xs text-muted-foreground">Итоговое значение</dt>
             <dd class="whitespace-pre-wrap break-words">
-              {{ field.resolvedValue ?? "—" }}
+              <RichTextValue v-if="field.kind === 'rich_text' && typeof field.resolvedValue === 'string'" :value="field.resolvedValue" />
+              <template v-else>{{ field.resolvedValue ?? "—" }}</template>
             </dd>
             <dd
               v-for="issue in field.issues"
@@ -159,7 +170,7 @@ function input(event: Event): void {
           class="grid min-w-0 gap-2 rounded-md border p-3"
           @submit.prevent="emit('save')"
         >
-          <label :for="inputId" class="break-words text-sm font-medium">
+          <label :for="richTextForm ? undefined : inputId" class="break-words text-sm font-medium">
             Своё значение для поля «{{ draft.field.label }}»
           </label>
           <select
@@ -175,6 +186,14 @@ function input(event: Event): void {
             <option value="true">true</option>
             <option value="false">false</option>
           </select>
+          <CatalogContentEditor
+            v-else-if="richTextForm"
+            :label="richTextForm.label"
+            :model-value="safeRichTextHtml(draft.value)"
+            :disabled="pending"
+            :error-id="error?.fieldId === draft.field.id ? `${inputId}-error` : undefined"
+            @update:model-value="emit('update', $event)"
+          />
           <textarea
             v-else-if="draft.field.kind === 'text'"
             :id="inputId"
@@ -239,6 +258,7 @@ function input(event: Event): void {
           </p>
           <p
             v-if="error?.fieldId === draft.field.id"
+            :id="`${inputId}-error`"
             role="alert"
             class="text-sm text-destructive"
           >

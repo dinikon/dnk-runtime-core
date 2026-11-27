@@ -56,7 +56,7 @@ class TextNode(FieldNode[TextFieldType]):
                     "Недопустимые символы для этого текстового поля.",
                 )
             maximum = settings.constraints.max_length
-            if maximum is not None and len(value) > maximum:
+            if maximum is not None and self.input_length(value) > maximum:
                 return invalid_value(
                     field,
                     "MANUAL",
@@ -64,6 +64,22 @@ class TextNode(FieldNode[TextFieldType]):
                     f"Допустимо не более {maximum} символов.",
                 )
         return None
+
+    def input_length(self, value: str) -> int:
+        """Считает символы до применения преобразований ручного значения."""
+        return len(value)
+
+    def translation_available(self, value: str | None) -> bool:
+        """Определяет, можно ли использовать перевод этой локали."""
+        return value not in (None, "")
+
+    def prepare_text(self, value: str, settings: TextFieldType) -> str:
+        """Применяет преобразования перед проверкой результата."""
+        return apply_text_transforms(value, settings.transforms)
+
+    def constraint_text(self, value: str) -> str:
+        """Возвращает строку, по которой проверяются ограничения."""
+        return value
 
     def resolve_value(
         self,
@@ -99,11 +115,11 @@ class TextNode(FieldNode[TextFieldType]):
             )
             for candidate in locales:
                 value = snapshot.text(definition.source.path.value, candidate)
-                if value not in (None, ""):
+                if self.translation_available(value):
                     locale = candidate
                     break
             manual_translation = (
-                value in (None, "")
+                locale is None
                 and fallback is not None
                 and fallback.mode is LocaleFallbackMode.MANUAL_REQUIRED
             )
@@ -113,15 +129,16 @@ class TextNode(FieldNode[TextFieldType]):
                 field, origin, "INVALID_FIELD_VALUE", "Ожидается текст."
             )
         if value is not None:
-            value = apply_text_transforms(value, settings.transforms)
+            value = self.prepare_text(value, settings)
+        visible = self.constraint_text(value) if value is not None else None
         constraints = settings.constraints
         if manual_translation or (
-            constraints.required and (value is None or not value.strip())
+            constraints.required and (visible is None or not visible.strip())
         ):
             return invalid_value(
                 field, origin, "REQUIRED_VALUE_MISSING", "Требуется значение поля."
             )
-        if value is not None and not constraints.accepts_length(value):
+        if visible is not None and not constraints.accepts_length(visible):
             return invalid_value(
                 field, origin, "TEXT_LENGTH_CONSTRAINT", "Длина текста вне границ поля."
             )

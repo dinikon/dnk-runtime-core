@@ -1,4 +1,4 @@
-import type { FieldKind } from "./feed-schema.types";
+import type { FieldKind, NodeFormControl } from "./feed-schema.types";
 
 export type PublicationFieldValue = string | number | boolean;
 
@@ -20,6 +20,7 @@ export interface PublicationField {
   resolvedValue: PublicationFieldValue | null;
   originalIssues: string[];
   issues: string[];
+  valueForm?: NodeFormControl;
 }
 export interface PublicationFields {
   feedVersion: number;

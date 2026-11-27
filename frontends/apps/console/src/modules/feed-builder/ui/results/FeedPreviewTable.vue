@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { FeedPreview } from "../../model/feed-preview.types";
+import RichTextValue from "./RichTextValue.vue";
 
 const props = defineProps<{ preview: FeedPreview }>();
 const hasCategories = computed(() => props.preview.rows.some(row => row.categories?.length));
@@ -67,7 +68,8 @@ defineEmits<{ openPublication: [id: string] }>();
           :key="column.fieldId"
           class="min-w-28 max-w-80 whitespace-pre-wrap break-words align-top"
         >
-          <span v-if="row.values[index] !== null">{{ row.values[index] }}</span>
+          <RichTextValue v-if="column.isHtml && typeof row.values[index] === 'string'" :value="row.values[index]!" show-source />
+          <span v-else-if="row.values[index] !== null">{{ row.values[index] }}</span>
           <span
             v-else
             class="text-muted-foreground"

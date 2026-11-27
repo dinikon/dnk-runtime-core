@@ -1,9 +1,9 @@
 import type { CategoryType, CategoryDocumentExport, CategoryPublicationExport } from "./feed-categories.types";
 import type { FeedStatus } from "./feed.types.ts";
-export type FieldKind = "string" | "text" | "money" | "integer" | "boolean" | "category";
+export type FieldKind = "string" | "text" | "rich_text" | "money" | "integer" | "boolean" | "category";
 export type XmlFieldPlacement = "ELEMENT" | "ATTRIBUTE";
 export type SourcePath =
-  | "item.title" | "item.description" | "item.sku" | "item.regular_price"
+  | "item.title" | "item.description" | "item.description_html" | "item.sku" | "item.regular_price"
   | "item.stock_quantity" | "item.in_stock";
 export interface SchemaSource {
   provider: "catalog";
@@ -74,7 +74,7 @@ export type MoneyValue =
   | { kind: "MONEY"; mode: "CALCULATED"; calculation: SchemaCalculation };
 export type FallbackMode = "NONE" | "LOCALE_CHAIN" | "MANUAL_REQUIRED";
 export interface TextType {
-  kind: "string" | "text";
+  kind: "string" | "text" | "rich_text";
   locale: string | null;
   fallbackPolicy: { mode: FallbackMode; locales: string[] } | null;
   constraints: {
@@ -147,7 +147,7 @@ export interface SaveFeedSchema {
   definition: FeedSchemaDefinition;
 }
 export interface NodeFormControl {
-  kind: "input" | "textarea" | "select" | "number" | "decimal" | "checkbox" |
+  kind: "input" | "textarea" | "rich_text" | "select" | "number" | "decimal" | "checkbox" |
     "conditions" | "categories" | "transforms";
   path: string;
   label: string;

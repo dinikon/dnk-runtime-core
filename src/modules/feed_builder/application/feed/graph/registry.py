@@ -34,6 +34,9 @@ from src.modules.feed_builder.domain.feed.field_node.integer.value_object.data i
 from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data import (
     LongTextNodeDataVO,
 )
+from src.modules.feed_builder.domain.feed.field_node.rich_text.value_object.data import (
+    RichTextNodeDataVO,
+)
 from src.modules.feed_builder.domain.feed.field_node.money.value_object.data import (
     MoneyNodeDataVO,
 )
@@ -102,6 +105,15 @@ NODE_CODECS = (
         "Длинный текст",
         _MODES,
         LongTextNodeDataVO,
+        read_text,
+        write_text,
+    ),
+    register(
+        FieldValueType.RICH_TEXT,
+        "core.rich_text",
+        "Длинный текст (HTML)",
+        _MODES,
+        RichTextNodeDataVO,
         read_text,
         write_text,
     ),

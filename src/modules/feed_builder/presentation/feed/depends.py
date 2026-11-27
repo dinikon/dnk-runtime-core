@@ -1,4 +1,6 @@
 from typing import Annotated
+
+from src.modules.shared.infrastructure.content.rich_text import sanitize_rich_text
 from fastapi import Depends
 from src.modules.feed_builder.domain.feed.repository import FeedRepositoryProtocol
 from src.modules.feed_builder.application.feed.port.query_repository import (
@@ -13,7 +15,9 @@ from src.modules.feed_builder.infrastructure.feed.persistence.query_repository i
 from src.modules.shared.presentation.persistence.depends import UoWDep
 from src.modules.shared.presentation.time.depends import ClockDep
 from src.modules.shared.presentation.uuid.depends import UuidDep
-from src.modules.feed_builder.application.feed.port.settings_repository import FeedSettingsRepositoryProtocol
+from src.modules.feed_builder.application.feed.port.settings_repository import (
+    FeedSettingsRepositoryProtocol,
+)
 from src.modules.feed_builder.application.feed.command.create_feed.handler import (
     CreateFeedHandler,
 )
@@ -155,7 +159,7 @@ def get_save_feed_schema_draft_handler(
     repository: FeedRepositoryDep, clock: ClockDep, locales: SchemaLocalesDep
 ) -> SaveFeedSchemaDraftHandler:
     """Собирает атомарное сохранение рабочей схемы на существующих портах."""
-    return SaveFeedSchemaDraftHandler(repository, clock, locales)
+    return SaveFeedSchemaDraftHandler(repository, clock, locales, sanitize_rich_text)
 
 
 SaveFeedSchemaDraftHandlerDep = Annotated[

@@ -12,7 +12,7 @@ export interface FeedPreviewDTO {
   version: number;
   as_of: string;
   total_enabled: number;
-  columns: { field_id: string; name: string; xml_attribute: boolean }[];
+  columns: { field_id: string; name: string; xml_attribute: boolean; is_html?: boolean }[];
   rows: {
     publication_id: string;
     catalog_item_id: string;

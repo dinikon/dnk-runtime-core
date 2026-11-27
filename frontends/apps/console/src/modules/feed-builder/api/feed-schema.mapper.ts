@@ -355,6 +355,7 @@ function categoryPayload(type: CategoryType): CategoryTypeDTO {
 const nodeIds = {
   string: "core.short_text",
   text: "core.long_text",
+  rich_text: "core.rich_text",
   money: "core.money",
   integer: "core.integer",
   boolean: "core.boolean",

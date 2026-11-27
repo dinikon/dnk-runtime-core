@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from uuid import UUID
+from src.modules.feed_builder.application.feed.types import JsonObject
 
 from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
 
@@ -25,6 +26,7 @@ class PublicationFieldDTO:
     resolved_value: str | int | bool | None
     original_issues: tuple[str, ...]
     issues: tuple[str, ...]
+    value_form: JsonObject | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -386,7 +386,7 @@ class FeedSchemaApplicationTests(IsolatedAsyncioTestCase):
             get_for_update=AsyncMock(return_value=self.original), save=AsyncMock()
         )
         self.handler = SaveFeedSchemaDraftHandler(
-            self.repository, Mock(now=lambda: NOW), AsyncMock()
+            self.repository, Mock(now=lambda: NOW), AsyncMock(), Mock(side_effect=str)
         )
 
     async def test_save_clears_fields_once(self) -> None:
