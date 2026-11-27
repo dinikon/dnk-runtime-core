@@ -3,6 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from src.modules.feed_builder.application.export_state.issue import FeedExportIssueDTO
+from src.modules.feed_builder.domain.feed.enum.feed_access_mode import FeedAccessMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,8 @@ class FeedExportStateDTO:
     task: FeedExportTaskDTO | None
     report: FeedExportReportDTO | None
     active: ActiveFeedFileDTO | None
+    access_mode: FeedAccessMode
+    can_manage_access: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,3 +69,4 @@ class PublicFeedFileDTO:
 
     file_id: UUID
     published_at: datetime
+    access_mode: FeedAccessMode

@@ -18,13 +18,14 @@ export interface FeedAction<I, O> {
 }
 export function useFeedAction<I, O>(
   action: (input: I, signal: AbortSignal) => Promise<O>,
+  context?: Ref<string>,
 ): FeedAction<I, O> {
   const scope = useFeedScope(),
     client = useQueryClient(),
     pending = ref(false),
     error = shallowRef<unknown>();
   const guard = new FeedRequestGuard();
-  const stamp = (): string => JSON.stringify(scope.value);
+  const stamp = (): string => JSON.stringify([scope.value, context?.value]);
   watch(
     stamp,
     () => {

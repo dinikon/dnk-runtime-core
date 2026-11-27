@@ -15,6 +15,8 @@ import { FeedRequestError } from "../model/feed-request-error";
 import { useFeed } from "../model/feed.queries";
 import { feedKeys } from "../model/feed.query-keys";
 import { useFeedScope } from "../model/use-feed-scope";
+import { useFeedAccessEditor } from "../model/use-feed-access-editor";
+import type { FeedAccessMode } from "../model/feed-access.types";
 import {
   exportKeys,
   useFeedExport,
@@ -31,6 +33,7 @@ import type {
 import FeedHeader from "../ui/page/FeedHeader.vue";
 import FeedSections from "../ui/page/FeedSections.vue";
 import FeedExportPanel from "../ui/results/FeedExportPanel.vue";
+import FeedAccessPanel from "../ui/forms/FeedAccessPanel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -42,14 +45,17 @@ const feed = useFeed(id);
 const state = useFeedExport(id);
 const refresh = useRequestFeedRefresh();
 const rotate = useRotateFeedLink();
-const busy = computed(() => refresh.pending.value || rotate.pending.value);
-const actionError = computed(() => {
-  const error = refresh.error.value || rotate.error.value;
+const canManageAccess = computed(() => state.data.value?.canManageAccess === true);
+const access = useFeedAccessEditor(id, canManageAccess);
+const accessContext = computed(() => JSON.stringify([scope.value, id.value]));
+const busy = computed(() => refresh.pending.value || rotate.pending.value || access.pending.value);
+function errorText(error: unknown): string {
   if (error instanceof FeedRequestError && error.issues[0]) {
     return error.issues[0].message;
   }
   return error ? feedErrorMessage(error) : "";
-});
+}
+const actionError = computed(() => errorText(refresh.error.value || rotate.error.value));
 const severity = ref<ExportIssueSeverity | "">("");
 const offset = ref(0);
 const reportedAt = computed(() => state.data.value?.report?.completedAt);
@@ -92,11 +98,24 @@ function filter(value: ExportIssueSeverity | ""): void {
 async function copy(url: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(url);
-    toast.success("Ссылка скопирована.");
+    toast.success("Скопировано.");
   } catch {
-    toast.error("Скопируйте адрес из поля ссылки.");
+    toast.error("Не удалось скопировать. Выделите текст и скопируйте вручную.");
   }
 }
+async function changeAccessMode(mode: FeedAccessMode): Promise<void> {
+  const current = state.data.value;
+  if (!current?.canManageAccess || current.accessMode === mode || busy.value) return;
+  const context = accessContext.value;
+  const key = exportKeys.state(scope.value, id.value);
+  const changed = await access.change(mode, current.feedVersion);
+  if (context !== accessContext.value) return;
+  if (changed) {
+    cache.setQueryData<FeedExportState>(key, (previous) => previous && { ...previous, ...changed });
+  }
+  await state.refetch();
+}
+
 async function requestRefresh(): Promise<void> {
   const current = state.data.value;
   if (!current?.canRefresh || current.task || busy.value) return;
@@ -177,7 +196,28 @@ async function replaceLink(): Promise<void> {
       @page="offset = $event"
       @open-publication="openPublication"
       @retry-issues="issues.refetch()"
-    />
+    >
+      <template #access>
+        <FeedAccessPanel
+          v-if="state.data.value.canManageAccess"
+          :key="accessContext"
+          :mode="state.data.value.accessMode"
+          :tokens="access.tokens.data.value"
+          :loading="access.tokens.isLoading.value"
+          :load-error="errorText(access.tokens.error.value)"
+          :action-error="errorText(access.error.value)"
+          :busy="busy"
+          :issued="access.issued.value"
+          :download-url="state.data.value.active?.url"
+          @change-mode="changeAccessMode"
+          @issue="access.issue"
+          @revoke="access.revoke"
+          @dismiss="access.dismiss"
+          @retry="access.tokens.refetch()"
+          @copy="copy"
+        />
+      </template>
+    </FeedExportPanel>
     <Skeleton v-else class="h-32 w-full" aria-label="Загрузка экспорта" />
   </div>
 </template>

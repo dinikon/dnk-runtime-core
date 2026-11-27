@@ -13,6 +13,8 @@ export function mapFeedExport(dto: FeedExportStateDTO): FeedExportState {
     feedVersion: dto.feed_version,
     canRefresh: dto.can_refresh,
     canRotate: dto.can_rotate,
+    canManageAccess: dto.can_manage_access,
+    accessMode: dto.access_mode,
     task: task && {
       status: task.status,
       requestedAt: task.requested_at,

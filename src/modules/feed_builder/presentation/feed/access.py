@@ -4,6 +4,10 @@ from src.modules.identity.domain.auth.request_context import RequestContext
 from src.modules.identity.application.access.authorization_service_protocol import (
     AuthorizationServiceProtocol,
 )
+from src.modules.identity.presentation.access.depends import AuthorizationServiceDep
+from src.modules.identity.presentation.auth.depends import (
+    AuthenticatedRequestContextDep,
+)
 
 
 async def require_feed_access(
@@ -26,3 +30,15 @@ async def require_feed_access(
     )
     if not allowed:
         raise HTTPException(403, "Недостаточно прав для операции с Feed.")
+
+
+async def require_feed_access_management(
+    feed_id: UUID,
+    context: AuthenticatedRequestContextDep,
+    authorization: AuthorizationServiceDep,
+) -> None:
+    """Проверяет право читать и управлять доступом к выбранному фиду."""
+    for action in ("feed_builder.feed.read", "feed_builder.feed.update"):
+        await require_feed_access(
+            context, authorization, action=action, feed_id=feed_id
+        )

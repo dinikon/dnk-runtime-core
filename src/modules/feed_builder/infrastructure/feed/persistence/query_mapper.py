@@ -15,7 +15,7 @@ from src.modules.feed_builder.infrastructure.feed.persistence.graph_mapper impor
     decode_schema,
 )
 from src.modules.feed_builder.infrastructure.feed.persistence.settings_mapper import (
-    settings_from_document,
+    feed_settings_from_document,
 )
 
 
@@ -35,15 +35,14 @@ class FeedQueryMapper:
     @staticmethod
     def to_details(row: Mapping[str, object]) -> FeedDetailsDTO:
         """Возвращает карточку и исходный документ схемы."""
+        settings, _ = feed_settings_from_document(row["export_settings"])
         return FeedDetailsDTO(
             id=row["id"],
             name=row["name"],
             code=row["code"],
             status=row["status"],
             version=row["row_version"],
-            export_settings=settings_to_dto(
-                settings_from_document(row["export_settings"])
-            ),
+            export_settings=settings_to_dto(settings),
             schema=cast(JsonObject, row["schema_definition"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],

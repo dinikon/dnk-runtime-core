@@ -3,7 +3,7 @@
 import asyncio
 from copy import deepcopy
 import csv
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 import os
@@ -57,6 +57,9 @@ from src.modules.feed_builder.domain.feed.field_node.long_text.value_object.data
 from src.modules.feed_builder.infrastructure.persistence.models.export_state import (
     FeedExportStateModel,
 )
+from src.modules.feed_builder.infrastructure.persistence.models.access_key import FeedAccessKeyModel
+from src.modules.feed_builder.infrastructure.persistence.models.feed import FeedModel
+from src.modules.feed_builder.presentation.access_key.router import router as access_key_router
 from src.modules.feed_builder.presentation.export_state.jobs import (
     FeedExportJobHandler,
     ReconcileFeedExportJobHandler,
@@ -137,6 +140,7 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         await fixture.FeedPublicationsPostgresTests.asyncSetUp(self)
         self.app.state.clock = UtcClock()
         self.app.include_router(router, prefix="/api/console")
+        self.app.include_router(access_key_router, prefix="/api/console")
         self.tenant_host = f"{self.tenant.uuid.hex}.tenant.example"
         self.other_host = f"{self.other.uuid.hex}.tenant.example"
         self.origin = self.origin.replace("tenant.example", self.tenant_host)
@@ -1062,6 +1066,256 @@ class FeedExportPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(xml.find("warehouses/warehouse").attrib, {"code": "0"})
         self.assertEqual(xml.find("offer").findtext("categoryId"), "20")
         self.assertEqual(xml.find("offer").get("warehouse_code"), "0")
+
+    async def test_private_access_uses_independent_tokens_for_published_csv_and_xml(
+        self,
+    ) -> None:
+        """Проверяет закрытие текущего файла, отзыв, срок, чужой tenant и кеш."""
+        item_id = await self.item()
+        other_feed_token = None
+        for xml in (False, True):
+            with self.subTest(xml=xml):
+                feed = await self.create(code="private-xml", xml=True) if xml else self.feed
+                self.root = f"{self.base}/{feed['id']}"
+                self.path = f"{self.root}/publications"
+                version = await self.save_schema(1, [field_document(text_field("name"))])
+                await self.add([{"catalog_item_id": item_id}], expected=version)
+                await self.enqueue(version)
+                await self.worker.process_once()
+                async with self.scoped_session() as session:
+                    feed_row = await session.get(FeedModel, feed["id"])
+                    legacy_settings = dict(feed_row.export_settings)
+                    del legacy_settings["access_mode"]
+                    feed_row.export_settings = legacy_settings
+                state = await self.export_state()
+                self.assertEqual(state["access_mode"], "PUBLIC")
+                self.assertTrue(state["can_manage_access"])
+                self.assertEqual(state["report"]["outcome"], "PUBLISHED", state)
+                link = urlsplit(state["active"]["url"]).path
+                original = await self.public.get(link)
+                self.assertEqual(original.status_code, 200)
+                conditional = {"If-None-Match": original.headers["etag"]}
+                self.assertEqual(
+                    (await self.public.get(link, headers=conditional)).status_code, 304
+                )
+
+                tokens_url = f"{self.root}/access-tokens"
+                denied_issue = await self.client.post(tokens_url, json={"name": "Без CSRF"})
+                self.assertEqual(denied_issue.status_code, 403)
+                issued = []
+                for name in ("Первая площадка", "Вторая площадка", "Срок"):
+                    expires = (
+                        (datetime.now(UTC) + timedelta(days=1)).isoformat()
+                        if name == "Срок"
+                        else None
+                    )
+                    response = await self.client.post(
+                        tokens_url,
+                        headers=self.headers,
+                        json={
+                            "name": name,
+                            "expires_at": expires,
+                        },
+                    )
+                    self.assertEqual(response.status_code, 201, response.text)
+                    self.assertEqual(response.headers["cache-control"], "no-store")
+                    issued.append(response.json())
+                self.assertNotEqual(issued[0]["token"], issued[1]["token"])
+                listed = await self.client.get(tokens_url)
+                self.assertEqual(listed.status_code, 200)
+                self.assertEqual(len(listed.json()["items"]), 3)
+                self.assertFalse(
+                    any(
+                        "token" in item or "token_hash" in item
+                        for item in listed.json()["items"]
+                    )
+                )
+
+                private = await self.client.patch(
+                    f"{self.root}/access",
+                    headers=self.headers,
+                    json={
+                        "expected_version": state["feed_version"],
+                        "access_mode": "PRIVATE",
+                    },
+                )
+                self.assertEqual(private.status_code, 200, private.text)
+                changed = await self.export_state()
+                self.assertEqual(changed["access_mode"], "PRIVATE")
+                self.assertEqual(changed["active"], state["active"])
+                self.assertIsNone(changed["task"])
+                for params in ({}, {"token": "wrong"}, [("token", issued[0]["token"])] * 2):
+                    denied = await self.public.get(link, params=params, headers=conditional)
+                    self.assertEqual(denied.status_code, 404)
+                    self.assertEqual(denied.headers["cache-control"], "no-store")
+                if other_feed_token is not None:
+                    self.assertEqual(
+                        (
+                            await self.public.get(link, params={"token": other_feed_token})
+                        ).status_code,
+                        404,
+                    )
+                for invalid in (None, "UNRECOGNIZED"):
+                    async with self.scoped_session() as session:
+                        feed_row = await session.get(FeedModel, feed["id"])
+                        feed_row.export_settings = legacy_settings | {
+                            "access_mode": invalid
+                        }
+                    for params in ({}, {"token": issued[0]["token"]}):
+                        denied = await self.public.get(
+                            link, params=params, headers=conditional
+                        )
+                        self.assertEqual(denied.status_code, 404)
+                async with self.scoped_session() as session:
+                    feed_row = await session.get(FeedModel, feed["id"])
+                    feed_row.export_settings = legacy_settings | {"access_mode": "PRIVATE"}
+                for token in issued[:2]:
+                    found = await self.public.get(link, params={"token": token["token"]})
+                    self.assertEqual(found.status_code, 200)
+                    self.assertEqual(found.content, original.content)
+                    self.assertEqual(found.headers["cache-control"], "private, no-store")
+                    self.assertEqual(found.headers["referrer-policy"], "no-referrer")
+                not_modified = await self.public.get(
+                    link, params={"token": issued[1]["token"]}, headers=conditional
+                )
+                self.assertEqual(not_modified.status_code, 304)
+                self.assertEqual(not_modified.headers["cache-control"], "private, no-store")
+                foreign = await self.public.get(
+                    f"https://{self.other_host}{link}", params={"token": issued[1]["token"]}
+                )
+                self.assertEqual(foreign.status_code, 404)
+
+                async with self.scoped_session() as session:
+                    keys = FeedAccessKeyModel.__table__
+                    digest = await session.scalar(
+                        select(keys.c.token_hash).where(keys.c.id == issued[0]["id"])
+                    )
+                    self.assertEqual(len(digest), 32)
+                    self.assertNotEqual(digest, issued[0]["token"].encode())
+                    expired = datetime.now(UTC) - timedelta(seconds=1)
+                    await session.execute(
+                        update(keys)
+                        .where(keys.c.id == issued[2]["id"])
+                        .values(created_at=expired - timedelta(days=1), expires_at=expired)
+                    )
+                self.assertEqual(
+                    (
+                        await self.public.get(link, params={"token": issued[2]["token"]})
+                    ).status_code,
+                    404,
+                )
+
+                for _ in range(2):
+                    revoked = await self.client.delete(
+                        f"{tokens_url}/{issued[0]['id']}", headers=self.headers
+                    )
+                    self.assertEqual(revoked.status_code, 204, revoked.text)
+                self.assertEqual(
+                    (
+                        await self.public.get(
+                            link, params={"token": issued[0]["token"]}, headers=conditional
+                        )
+                    ).status_code,
+                    404,
+                )
+                updated = (await self.client.get(tokens_url)).json()["items"]
+                self.assertCountEqual(
+                    [item["status"] for item in updated], ["ACTIVE", "EXPIRED", "REVOKED"]
+                )
+                rotated = await self.client.post(
+                    f"{self.root}/public-link/rotate",
+                    headers=self.headers,
+                    json={"expected_version": private.json()["feed_version"]},
+                )
+                self.assertEqual(rotated.status_code, 200, rotated.text)
+                new_link = urlsplit(rotated.json()["url"]).path
+                valid = {"token": issued[1]["token"]}
+                self.assertEqual(
+                    (await self.public.get(link, params=valid)).status_code, 404
+                )
+                rotated_download = await self.public.get(new_link, params=valid)
+                self.assertEqual(rotated_download.status_code, 200)
+                self.assertEqual(rotated_download.content, original.content)
+                current_version = rotated.json()["feed_version"]
+                stale = await self.client.patch(
+                    f"{self.root}/access",
+                    headers=self.headers,
+                    json={"expected_version": current_version - 1, "access_mode": "PUBLIC"},
+                )
+                self.assertEqual(stale.status_code, 409)
+                self.assertEqual((await self.public.get(new_link)).status_code, 404)
+                reopened = await self.client.patch(
+                    f"{self.root}/access",
+                    headers=self.headers,
+                    json={"expected_version": current_version, "access_mode": "PUBLIC"},
+                )
+                self.assertEqual(reopened.status_code, 200)
+                self.assertEqual(
+                    (await self.public.get(new_link)).content, original.content
+                )
+                other_feed_token = issued[1]["token"]
+
+    async def test_privacy_survives_running_export_and_edits(self) -> None:
+        """Не включает режим выдачи в снимок и сохраняет его при записи фида."""
+        field = field_document(text_field("name"))
+        version = await self.save_schema(1, [field])
+        await self.add([{"catalog_item_id": await self.item()}], expected=version)
+        await self.enqueue(version)
+        await self.worker.process_once()
+        first = await self.export_state()
+        self.assertEqual(first["report"]["outcome"], "PUBLISHED", first)
+        link = urlsplit(first["active"]["url"]).path
+
+        await self.enqueue(first["feed_version"])
+        with patch.object(
+            SqlAlchemyScheduledJobRepository,
+            "owns_current_lease",
+            side_effect=[True, False],
+        ):
+            await self.worker.process_once()
+        running = await self.export_state()
+        self.assertEqual(running["task"]["status"], "RUNNING")
+        async with self.scoped_session() as session:
+            snapshot = await session.scalar(
+                select(FeedExportStateModel.definition_snapshot)
+            )
+        self.assertNotIn("access_mode", snapshot["settings"])
+        private = await self.client.patch(
+            f"{self.root}/access",
+            headers=self.headers,
+            json={"expected_version": running["feed_version"], "access_mode": "PRIVATE"},
+        )
+        self.assertEqual(private.status_code, 200, private.text)
+        self.assertEqual((await self.public.get(link)).status_code, 404)
+
+        await self.make_due(REFRESH_JOB_TYPE)
+        await self.worker.process_once()
+        finished = await self.export_state()
+        self.assertEqual(finished["report"]["outcome"], "PUBLISHED", finished)
+        self.assertEqual(finished["report"]["as_of"], running["task"]["started_at"])
+        self.assertEqual(finished["active"]["url"], first["active"]["url"])
+        self.assertEqual(finished["access_mode"], "PRIVATE")
+
+        configured = await self.client.patch(
+            self.root,
+            headers=self.headers,
+            json={
+                "expected_version": finished["feed_version"],
+                "export_settings": {
+                    "format_settings": {
+                        "format": "xml", "root_name": "catalog", "item_name": "offer"
+                    },
+                },
+            },
+        )
+        self.assertEqual(configured.status_code, 200, configured.text)
+        version = await self.save_schema(
+            configured.json()["version"], [field | {"label": "Новое название"}]
+        )
+        state = await self.export_state()
+        self.assertEqual(state["feed_version"], version)
+        self.assertEqual(state["access_mode"], "PRIVATE")
+        self.assertEqual((await self.public.get(link)).status_code, 404)
 
     async def test_rich_text_preserves_catalog_and_override_markup_in_xml_and_csv(
         self,

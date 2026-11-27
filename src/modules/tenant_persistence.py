@@ -15,6 +15,7 @@ import src.modules.identity.infrastructure.persistence.models.invitation  # noqa
 HISTORICAL_TENANT_TABLE_NAMES = frozenset(
     {
         "fb_feeds",
+        "fb_access_keys",
         "fb_publications",
         "fb_export_states",
         "fb_export_issues",
@@ -81,6 +82,7 @@ import src.modules.catalog.infrastructure.persistence.models.catalog_category_tr
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_category  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item  # noqa: F401
 import src.modules.feed_builder.infrastructure.persistence.models.feed  # noqa: F401
+import src.modules.feed_builder.infrastructure.persistence.models.access_key  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_content_value  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_gallery  # noqa: F401
 import src.modules.catalog.infrastructure.persistence.models.catalog_item_image  # noqa: F401

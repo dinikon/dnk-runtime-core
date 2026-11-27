@@ -7,3 +7,7 @@ class AccessKeyDomainError(FeedBuilderDomainError):
 
 class InvalidAccessKeyValueError(AccessKeyDomainError):
     """Отклоняет некорректное значение или состояние ключа доступа."""
+
+
+class AccessKeyNotFoundError(AccessKeyDomainError):
+    """Обозначает отсутствие ключа у указанного фида."""

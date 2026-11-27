@@ -1,4 +1,5 @@
 import type { ExportFormat, FeedValidationPolicy } from "./feed.types";
+import type { FeedAccessMode } from "./feed-access.types";
 
 export type ExportIssueSeverity = "ERROR" | "WARNING";
 export type FeedRefreshStatus = "PENDING" | "RUNNING";
@@ -31,6 +32,8 @@ export interface FeedExportState {
   feedVersion: number;
   canRefresh: boolean;
   canRotate: boolean;
+  canManageAccess: boolean;
+  accessMode: FeedAccessMode;
   task: FeedExportTask | null;
   report: FeedExportReport | null;
   active: ActiveFeedFile | null;

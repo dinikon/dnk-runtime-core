@@ -4,6 +4,7 @@ import type {
   FeedRefreshStatus,
 } from "../model/feed-export.types";
 import type { ExportFormat, FeedValidationPolicy } from "../model/feed.types";
+import type { FeedAccessMode } from "../model/feed-access.types";
 
 export interface ExportTaskDTO {
   status: FeedRefreshStatus;
@@ -32,6 +33,8 @@ export interface FeedExportStateDTO {
   feed_version: number;
   can_refresh: boolean;
   can_rotate: boolean;
+  can_manage_access: boolean;
+  access_mode: FeedAccessMode;
   task: ExportTaskDTO | null;
   report: ExportReportDTO | null;
   active: ActiveFeedFileDTO | null;

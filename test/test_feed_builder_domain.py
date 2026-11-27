@@ -27,6 +27,7 @@ from src.modules.feed_builder.domain.feed.enum.catalog_source_path import (
 from src.modules.feed_builder.domain.feed.enum.source_provider import SourceProvider
 from src.modules.feed_builder.domain.feed.enum.export_format import ExportFormat
 from src.modules.feed_builder.domain.feed.enum.feed_status import FeedStatus
+from src.modules.feed_builder.domain.feed.enum.feed_access_mode import FeedAccessMode
 from src.modules.feed_builder.domain.feed.enum.feed_product_mode import FeedProductMode
 from src.modules.feed_builder.domain.feed.enum.field_value_type import FieldValueType
 from src.modules.feed_builder.domain.feed.expression.enum.literal_value_type import (
@@ -279,6 +280,7 @@ class FeedConstructionTests(unittest.TestCase):
                         "updated_at": NOW,
                         "version": FeedVersionVO(1),
                         "public_link_id": None,
+                        "access_mode": FeedAccessMode.PUBLIC,
                     }
                     self.assertEqual(
                         {item.name for item in fields(Feed)}, set(expected)
@@ -341,6 +343,7 @@ class FeedConstructionTests(unittest.TestCase):
             export_settings=settings,
             created_at=created_at,
             updated_at=updated_at,
+            access_mode=FeedAccessMode.PRIVATE,
         )
         expected = {
             "id": identifier,
@@ -353,6 +356,7 @@ class FeedConstructionTests(unittest.TestCase):
             "updated_at": updated_at,
             "version": FeedVersionVO(1),
             "public_link_id": None,
+            "access_mode": FeedAccessMode.PRIVATE,
         }
         self.assertEqual({item.name for item in fields(Feed)}, set(expected))
         for attribute, value in expected.items():

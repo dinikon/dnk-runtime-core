@@ -14,6 +14,7 @@ from src.modules.feed_builder.application.export_state.query.download_public_fee
 from src.modules.feed_builder.application.export_state.query.download_public_feed.query import (
     DownloadPublicFeedQuery,
 )
+from src.modules.shared.domain.time.clock_port import ClockPort
 
 
 class DownloadPublicFeedHandler:
@@ -24,11 +25,13 @@ class DownloadPublicFeedHandler:
         tenants: PublicFeedTenantResolverPort,
         queries: FeedExportQueryRepositoryProtocol,
         files: FeedExportContentPort,
+        clock: ClockPort,
     ) -> None:
         """Получает порты разрешения tenant, чтения фида и открытия файла."""
         self._tenants = tenants
         self._queries = queries
         self._files = files
+        self._clock = clock
 
     async def execute(
         self, query: DownloadPublicFeedQuery
@@ -37,10 +40,17 @@ class DownloadPublicFeedHandler:
         tenant_id = await self._tenants.resolve(query.host)
         if tenant_id is None:
             return None
-        file = await self._queries.get_public_file(query.public_link_id, query.format)
+        file = await self._queries.get_public_file(
+            query.public_link_id,
+            query.format,
+            token_hash=query.token_hash,
+            now=self._clock.now(),
+        )
         if file is None:
             return None
-        return DownloadPublicFeedResultDTO(tenant_id, file.file_id, file.published_at)
+        return DownloadPublicFeedResultDTO(
+            tenant_id, file.file_id, file.published_at, file.access_mode
+        )
 
     async def open_file(
         self, file: DownloadPublicFeedResultDTO

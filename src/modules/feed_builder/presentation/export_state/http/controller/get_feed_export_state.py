@@ -52,6 +52,8 @@ async def get_feed_export_state(
         feed_version=result.feed_version,
         can_refresh=editable and result.can_refresh,
         can_rotate=editable and result.can_rotate,
+        access_mode=result.access_mode,
+        can_manage_access=editable and result.can_manage_access,
         task=ExportTaskResponse(**asdict(result.task)) if result.task else None,
         report=ExportReportResponse(**asdict(result.report)) if result.report else None,
         active=(

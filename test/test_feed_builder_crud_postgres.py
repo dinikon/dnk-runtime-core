@@ -812,10 +812,57 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(restored.name, changed.name)
         self.assertEqual(restored.version.value, 2)
 
+    async def test_access_migration_defaults_existing_feeds_to_public(self) -> None:
+        """Оставляет старый JSON нетронутым и защищает от раскрытия при откате."""
+        created = await self.create()
+        schema = self.schemas[0]
+        async with self.engine.begin() as connection:
+            await self.migrator.downgrade(connection, schema, "0026_fb_export_state")
+            await self.migrator.upgrade(connection, schema)
+            column_exists = await connection.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    "WHERE table_schema = :schema AND table_name = 'fb_feeds' "
+                    "AND column_name = 'access_mode')"
+                ),
+                {"schema": schema},
+            )
+            self.assertFalse(column_exists)
+        async with self.scoped_session() as session:
+            row = (
+                await session.execute(
+                    select(FeedModel.export_settings, FeedModel.row_version).where(
+                        FeedModel.id == created["id"]
+                    )
+                )
+            ).one()
+        self.assertEqual(row, (created["export_settings"], created["version"]))
+
+        private = await self.client.patch(
+            f"{self.base}/{created['id']}/access",
+            headers=self.headers,
+            json={"expected_version": created["version"], "access_mode": "PRIVATE"},
+        )
+        self.assertEqual(private.status_code, 200, private.text)
+        async with self.scoped_session() as session:
+            settings = await session.scalar(
+                select(FeedModel.export_settings).where(FeedModel.id == created["id"])
+            )
+        self.assertEqual(
+            settings, created["export_settings"] | {"access_mode": "PRIVATE"}
+        )
+        async with self.engine.begin() as connection:
+            with self.assertRaisesRegex(RuntimeError, "Откат открыл бы доступ"):
+                async with connection.begin_nested():
+                    await self.migrator.downgrade(connection, schema, "0026_fb_export_state")
+            self.assertEqual(
+                await self.migrator.current(connection, schema), (self.migrator.head(),)
+            )
+
     async def test_migration_upgrades_existing_tenant_without_other_tables(
         self,
     ) -> None:
-        """Обновляет существующий tenant с предыдущей версии и создаёт только fb_feeds."""
+        """Обновляет существующий tenant и создаёт таблицы Feed Builder."""
         schema = self.schemas[0]
         async with self.engine.begin() as connection:
             await self.migrator.downgrade(
@@ -848,7 +895,7 @@ class FeedCrudPostgresTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertCountEqual(
                 tables,
-                ["fb_feeds", "fb_publications", "fb_export_states", "fb_export_issues"],
+                ["fb_feeds", "fb_publications", "fb_export_states", "fb_export_issues", "fb_access_keys"],
             )
 
 

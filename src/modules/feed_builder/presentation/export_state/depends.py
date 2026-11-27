@@ -36,7 +36,10 @@ from src.modules.feed_builder.infrastructure.export_state.persistence.repository
 from src.modules.feed_builder.infrastructure.export_state.tenancy import (
     TenancyPublicFeedTenantResolver,
 )
-from src.modules.feed_builder.presentation.feed.depends import FeedRepositoryDep, FeedSettingsRepositoryDep
+from src.modules.feed_builder.presentation.feed.depends import (
+    FeedRepositoryDep,
+    FeedSettingsRepositoryDep,
+)
 from src.modules.shared.presentation.jobs.management import (
     build_schedule_scheduled_job_use_case,
 )
@@ -100,12 +103,14 @@ def get_download_public_feed_handler(
     queries: FeedExportQueriesDep,
     resolve_tenant: ResolveReadableTenantByHostHandlerDep,
     tenant_naming: TenantSchemaNamingDep,
+    clock: ClockDep,
 ) -> DownloadPublicFeedHandler:
     """Подключает Tenancy и Files на той же сессии, что и запрос фида."""
     return DownloadPublicFeedHandler(
         TenancyPublicFeedTenantResolver(resolve_tenant, uow.session, tenant_naming),
         queries,
         FilesFeedExportContent(build_files_handlers(uow.session).content),
+        clock,
     )
 
 

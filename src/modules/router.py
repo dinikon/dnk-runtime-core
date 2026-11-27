@@ -1,3 +1,4 @@
+from src.modules.feed_builder.presentation.access_key.router import router as feed_access_key_router
 from src.modules.feed_builder.presentation.publication.router import (
     router as feed_publications_router,
 )
@@ -29,6 +30,7 @@ router.include_router(catalog_router)
 router.include_router(feeds_router)
 router.include_router(feeds_metadata_router)
 router.include_router(feed_export_router)
+router.include_router(feed_access_key_router)
 from src.modules.files.presentation.router import router as files_router
 
 router.include_router(files_router)

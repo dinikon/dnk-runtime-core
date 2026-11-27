@@ -94,7 +94,7 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                     )
 
     def test_behavior_is_limited_to_implemented_slices(self) -> None:
-        """Разрешает поведение Feed/Publication; остальные объекты сохраняют create/restore."""
+        """Разрешает только реализованное поведение агрегатов Feed Builder."""
         paths = [
             *sorted(DOMAIN.glob("*/aggregate.py")),
             *sorted(DOMAIN.glob("*/entity/*.py")),
@@ -112,6 +112,7 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                         expected |= {
                             "change_settings",
                             "change_schema",
+                            "change_access_mode",
                             "archive",
                             "publish_export",
                             "rotate_public_link",
@@ -119,6 +120,8 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                         }
                     if path == DOMAIN / "export_state/aggregate.py":
                         expected |= {"request", "start", "finish", "_require_task"}
+                    if path == DOMAIN / "access_key/aggregate.py":
+                        expected.add("revoke")
                     if path == DOMAIN / "publication/aggregate.py":
                         expected |= {
                             "_transition",
@@ -308,9 +311,8 @@ class FeedBuilderArchitectureTests(unittest.TestCase):
                                 )
                     if isinstance(node, ast.Name):
                         self.assertNotEqual(node.id, "Any", str(path))
-        for root in ("generation", "access_key"):
-            self.assertFalse((MODULE / "application" / root).exists())
-            self.assertFalse((MODULE / "presentation" / root).exists())
+        for layer in ("application", "presentation"):
+            self.assertFalse((MODULE / layer / "generation").exists())
 
 
 if __name__ == "__main__":

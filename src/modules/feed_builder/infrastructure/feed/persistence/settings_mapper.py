@@ -15,6 +15,7 @@ from src.modules.feed_builder.domain.feed.value_object.xml_export_settings impor
 )
 from src.modules.feed_builder.domain.feed.value_object.export_name import ExportNameVO
 from src.modules.feed_builder.domain.feed.enum.feed_product_mode import FeedProductMode
+from src.modules.feed_builder.domain.feed.enum.feed_access_mode import FeedAccessMode
 from src.modules.feed_builder.domain.feed.enum.validation_policy import ValidationPolicy
 from src.modules.feed_builder.infrastructure.feed.persistence.error import (
     InvalidFeedStorageError,
@@ -50,6 +51,21 @@ def settings_document(value: FeedExportSettingsVO) -> JsonObject:
         "product_mode": value.product_mode.value,
         "validation_policy": value.validation_policy.value,
     }
+
+
+def feed_settings_from_document(
+    value: object,
+) -> tuple[FeedExportSettingsVO, FeedAccessMode]:
+    """Разделяет текущий режим выдачи и параметры сборки из одной колонки."""
+    if not isinstance(value, dict):
+        raise InvalidFeedStorageError("Некорректные свойства настроек выгрузки.")
+    settings = value.copy()
+    raw_mode = settings.pop("access_mode", FeedAccessMode.PUBLIC.value)
+    try:
+        mode = FeedAccessMode(raw_mode)
+    except (TypeError, ValueError) as exc:
+        raise InvalidFeedStorageError("Некорректный режим доступа к Feed.") from exc
+    return settings_from_document(settings), mode
 
 
 def settings_from_document(value: object) -> FeedExportSettingsVO:

@@ -1,4 +1,14 @@
 from fastapi import APIRouter, Depends
+
+from src.modules.feed_builder.presentation.feed.access import (
+    require_feed_access_management,
+)
+from src.modules.feed_builder.presentation.feed.http.controller.change_feed_access_mode import (
+    change_feed_access_mode,
+)
+from src.modules.feed_builder.presentation.feed.http.response.change_feed_access_mode import (
+    ChangeFeedAccessModeResponse,
+)
 from src.modules.feed_builder.presentation.feed.http.controller.create_feed import (
     create_feed,
 )
@@ -164,6 +174,13 @@ schema_router.add_api_route(
     ],
 )
 router.include_router(schema_router)
+router.add_api_route(
+    "/{feed_id}/access",
+    change_feed_access_mode,
+    methods=["PATCH"],
+    response_model=ChangeFeedAccessModeResponse,
+    dependencies=[Depends(require_feed_access_management), Depends(require_csrf)],
+)
 
 
 metadata_router = APIRouter(prefix="/feed-builder", tags=["feed-builder"])

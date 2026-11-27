@@ -15,15 +15,22 @@ from src.modules.feed_builder.application.export_state.query.download_public_fee
     DownloadPublicFeedResultDTO,
 )
 from src.modules.feed_builder.domain.feed.enum.export_format import ExportFormat
+from src.modules.feed_builder.domain.feed.enum.feed_access_mode import FeedAccessMode
 
 
-def feed_file_headers(file: DownloadPublicFeedResultDTO) -> dict[str, str]:
-    """Формирует заголовки для уже проверенной публичной ссылки."""
+def feed_file_headers(
+    file: DownloadPublicFeedResultDTO, *, has_token: bool
+) -> dict[str, str]:
+    """Формирует заголовки после проверки доступа к активному файлу."""
     published = file.published_at.astimezone(UTC).replace(microsecond=0)
+    sensitive = has_token or file.access_mode is FeedAccessMode.PRIVATE
     return {
         "ETag": f'"{file.file_id}"',
         "Last-Modified": format_datetime(published, usegmt=True),
-        "Cache-Control": "no-cache, must-revalidate",
+        "Cache-Control": (
+            "private, no-store" if sensitive else "no-cache, must-revalidate"
+        ),
+        "Referrer-Policy": "no-referrer",
         "X-Content-Type-Options": "nosniff",
     }
 

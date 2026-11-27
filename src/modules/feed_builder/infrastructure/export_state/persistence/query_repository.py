@@ -1,7 +1,9 @@
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select, true
+from sqlalchemy import and_, case, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.modules.feed_builder.application.export_state.issue import FeedExportIssueDTO
 from src.modules.feed_builder.application.export_state.query.dto import (
@@ -13,6 +15,13 @@ from src.modules.feed_builder.application.export_state.query.dto import (
     PublicFeedFileDTO,
 )
 from src.modules.feed_builder.domain.feed.enum.export_format import ExportFormat
+from src.modules.feed_builder.domain.feed.enum.feed_access_mode import FeedAccessMode
+from src.modules.feed_builder.domain.access_key.value_object.access_token_hash import (
+    AccessTokenHashVO,
+)
+from src.modules.feed_builder.infrastructure.persistence.models.access_key import (
+    FeedAccessKeyModel as Key,
+)
 from src.modules.feed_builder.infrastructure.persistence.models.export_state import (
     FeedExportIssueModel as Issue,
     FeedExportStateModel as State,
@@ -20,6 +29,20 @@ from src.modules.feed_builder.infrastructure.persistence.models.export_state imp
 from src.modules.feed_builder.infrastructure.persistence.models.feed import (
     FeedModel as Feed,
 )
+from src.modules.feed_builder.infrastructure.feed.persistence.error import (
+    InvalidFeedStorageError,
+)
+
+
+def _stored_access_mode() -> ColumnElement[str | None]:
+    """Использует PUBLIC только при отсутствии ключа в сохранённом JSONB."""
+    return case(
+        (
+            Feed.export_settings.has_key("access_mode"),
+            Feed.export_settings["access_mode"].astext,
+        ),
+        else_=FeedAccessMode.PUBLIC.value,
+    ).label("access_mode")
 
 
 class SqlAlchemyFeedExportQueryRepository:
@@ -37,6 +60,7 @@ class SqlAlchemyFeedExportQueryRepository:
                     Feed.status,
                     Feed.row_version,
                     Feed.public_link_id,
+                    _stored_access_mode(),
                     Feed.export_settings["format_settings"]["format"].astext.label(
                         "configured_format"
                     ),
@@ -64,6 +88,10 @@ class SqlAlchemyFeedExportQueryRepository:
         ).one_or_none()
         if row is None:
             return None
+        try:
+            access_mode = FeedAccessMode(row.access_mode)
+        except (TypeError, ValueError) as exc:
+            raise InvalidFeedStorageError("Некорректный режим доступа к Feed.") from exc
         visible = (
             row.status in ("ACTIVE", "PAUSED")
             and row.active_file_id is not None
@@ -74,6 +102,8 @@ class SqlAlchemyFeedExportQueryRepository:
             can_refresh=row.status in ("DRAFT", "ACTIVE")
             and row.configured_format in (ExportFormat.CSV, ExportFormat.XML),
             can_rotate=visible,
+            access_mode=access_mode,
+            can_manage_access=row.status != "ARCHIVED",
             task=(
                 FeedExportTaskDTO(row.job_status, row.requested_at, row.started_at)
                 if row.job_status is not None
@@ -154,22 +184,53 @@ class SqlAlchemyFeedExportQueryRepository:
         )
 
     async def get_public_file(
-        self, link_id: UUID, format: ExportFormat
+        self,
+        link_id: UUID,
+        format: ExportFormat,
+        *,
+        token_hash: AccessTokenHashVO | None,
+        now: datetime,
     ) -> PublicFeedFileDTO | None:
-        """Находит доступный файл указанного формата внутри tenant."""
+        """Проверяет режим и действительность ключа в снимке активного файла."""
+        mode = _stored_access_mode()
+        access = mode == FeedAccessMode.PUBLIC.value
+        if token_hash is not None:
+            valid_key = (
+                select(Key.id)
+                .where(
+                    Key.feed_id == Feed.id,
+                    Key.token_hash == token_hash.value,
+                    Key.revoked_at.is_(None),
+                    or_(Key.expires_at.is_(None), Key.expires_at > now),
+                )
+                .exists()
+            )
+            access = or_(
+                access,
+                and_(mode == FeedAccessMode.PRIVATE.value, valid_key),
+            )
         row = (
             await self._session.execute(
-                select(State.active_file_id, State.active_published_at)
+                select(State.active_file_id, State.active_published_at, mode)
                 .join(Feed, Feed.id == State.feed_id)
                 .where(
                     Feed.public_link_id == link_id,
                     Feed.status.in_(("ACTIVE", "PAUSED")),
                     State.active_format == format.value,
                     State.active_file_id.is_not(None),
+                    access,
                 )
             )
         ).one_or_none()
-        return PublicFeedFileDTO(*row) if row is not None else None
+        return (
+            PublicFeedFileDTO(
+                row.active_file_id,
+                row.active_published_at,
+                FeedAccessMode(row.access_mode),
+            )
+            if row is not None
+            else None
+        )
 
     async def used_file_ids(self, file_ids: tuple[UUID, ...]) -> tuple[UUID, ...]:
         """Возвращает используемые файлы без блокировок потребителя."""

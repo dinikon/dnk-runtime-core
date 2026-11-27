@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Self
+from src.modules.feed_builder.domain.feed.enum.feed_access_mode import FeedAccessMode
 from src.modules.feed_builder.domain.feed.enum.feed_status import FeedStatus
 from src.modules.feed_builder.domain.feed.policy.schema_structure import (
     FeedSchemaStructurePolicy,
@@ -41,6 +42,7 @@ class Feed:
     export_settings: FeedExportSettingsVO
     version: FeedVersionVO = FeedVersionVO(1)
     public_link_id: FeedPublicLinkIdVO | None = None
+    access_mode: FeedAccessMode = FeedAccessMode.PUBLIC
 
     @classmethod
     def create(
@@ -79,6 +81,7 @@ class Feed:
         updated_at: datetime,
         version: FeedVersionVO = FeedVersionVO(1),
         public_link_id: FeedPublicLinkIdVO | None = None,
+        access_mode: FeedAccessMode = FeedAccessMode.PUBLIC,
     ) -> Self:
         """Восстанавливает состав и проверяет собственные инварианты без I/O."""
         if (
@@ -89,6 +92,7 @@ class Feed:
             or not isinstance(schema, FeedSchemaVO)
             or not isinstance(export_settings, FeedExportSettingsVO)
             or not isinstance(version, FeedVersionVO)
+            or not isinstance(access_mode, FeedAccessMode)
             or (
                 public_link_id is not None
                 and not isinstance(public_link_id, FeedPublicLinkIdVO)
@@ -118,6 +122,7 @@ class Feed:
             updated_at=updated_at,
             version=version,
             public_link_id=public_link_id,
+            access_mode=access_mode,
         )
 
     def change_settings(
@@ -157,6 +162,7 @@ class Feed:
             updated_at=now,
             version=FeedVersionVO(self.version.value + 1),
             public_link_id=self.public_link_id,
+            access_mode=self.access_mode,
         )
 
     def change_schema(self, *, schema: FeedSchemaVO, now: datetime) -> Self:
@@ -181,6 +187,7 @@ class Feed:
             updated_at=now,
             version=FeedVersionVO(self.version.value + 1),
             public_link_id=self.public_link_id,
+            access_mode=self.access_mode,
         )
 
     def archive(self, *, now: datetime) -> Self:
@@ -201,6 +208,23 @@ class Feed:
             updated_at=now,
             version=FeedVersionVO(self.version.value + 1),
             public_link_id=self.public_link_id,
+            access_mode=self.access_mode,
+        )
+
+    def change_access_mode(self, mode: FeedAccessMode, *, now: datetime) -> Self:
+        """Меняет способ выдачи текущего файла и увеличивает версию Feed."""
+        require_datetime(now, error=InvalidFeedValueError)
+        if self.status is FeedStatus.ARCHIVED:
+            raise FeedArchivedError("Архивный Feed нельзя редактировать.")
+        if not isinstance(mode, FeedAccessMode) or now < self.updated_at:
+            raise InvalidFeedValueError("Некорректное изменение режима доступа.")
+        if mode is self.access_mode:
+            return self
+        return replace(
+            self,
+            access_mode=mode,
+            updated_at=now,
+            version=FeedVersionVO(self.version.value + 1),
         )
 
     def publish_export(self, link: FeedPublicLinkIdVO, *, now: datetime) -> Self:

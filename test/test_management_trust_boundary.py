@@ -168,20 +168,14 @@ class ManagementTrustTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("x-forwarded-host", result.json()["headers"])
 
     def test_access_log_removes_sensitive_query(self):
-        record = logging.LogRecord(
-            "uvicorn.access",
-            logging.INFO,
-            "",
-            0,
-            "%s %s %s %s %s",
-            (
-                "peer",
-                "GET",
-                "/api/auth/cloud/callback/?code=secret&state=secret",
-                "1.1",
-                303,
-            ),
-            None,
-        )
-        RedactAccessQuery().filter(record)
-        self.assertNotIn("secret", record.getMessage())
+        for target in (
+            "/api/auth/cloud/callback/?code=secret&state=secret",
+            "/api/public/feed-builder/link/feed.xml?token=secret",
+        ):
+            record = logging.LogRecord(
+                "uvicorn.access", logging.INFO, "", 0, "%s %s %s %s %s",
+                ("peer", "GET", target, "1.1", 200), None,
+            )
+            RedactAccessQuery().filter(record)
+            self.assertNotIn("secret", record.getMessage())
+            self.assertIn(target.split("?", 1)[0], record.getMessage())

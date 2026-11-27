@@ -157,6 +157,7 @@ from src.modules.feed_builder.application.feed.export_settings_dto import (
 )
 from src.modules.feed_builder.application.feed.graph.codec import schema_document
 from src.modules.feed_builder.infrastructure.feed.persistence.mapper import FeedMapper
+from src.modules.feed_builder.domain.feed.enum.feed_access_mode import FeedAccessMode
 from src.modules.feed_builder.infrastructure.feed.persistence.query_mapper import (
     FeedQueryMapper,
 )
@@ -375,6 +376,32 @@ class FeedCrudDomainTests(unittest.TestCase):
 
 class FeedCrudMapperTests(unittest.TestCase):
     """Проверяет сохранение определений без потери данных и исполнения формул."""
+
+    def test_access_mode_is_read_and_written_inside_feed_settings(self) -> None:
+        """Старый документ публичен, а явный испорченный режим отклоняется."""
+        original = feed()
+        private = original.change_access_mode(FeedAccessMode.PRIVATE, now=NOW)
+        row = FeedMapper.to_insert_values(private)
+        self.assertNotIn("access_mode", row)
+        settings = row["export_settings"]
+        self.assertEqual(settings["access_mode"], "PRIVATE")
+        self.assertEqual(FeedMapper.to_domain(row), private)
+        self.assertEqual(
+            FeedQueryMapper.to_details(row).export_settings,
+            FeedQueryMapper.to_details(
+                FeedMapper.to_insert_values(original)
+            ).export_settings,
+        )
+        legacy = {key: value for key, value in settings.items() if key != "access_mode"}
+        self.assertEqual(
+            FeedMapper.to_domain(row | {"export_settings": legacy}).access_mode,
+            FeedAccessMode.PUBLIC,
+        )
+        for invalid in (None, "unknown", True, ["PUBLIC"]):
+            with self.subTest(mode=invalid), self.assertRaises(InvalidFeedStorageError):
+                FeedMapper.to_domain(
+                    row | {"export_settings": settings | {"access_mode": invalid}}
+                )
 
     def test_complete_schema_round_trip_and_json_serializability(self) -> None:
         """Полная схема сохраняет UUID, Decimal, локали, fallback и все вложенные узлы."""

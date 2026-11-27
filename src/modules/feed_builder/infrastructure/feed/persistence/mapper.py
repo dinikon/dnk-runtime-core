@@ -16,8 +16,8 @@ from src.modules.feed_builder.infrastructure.feed.persistence.graph_mapper impor
     decode_schema,
 )
 from src.modules.feed_builder.infrastructure.feed.persistence.settings_mapper import (
+    feed_settings_from_document,
     settings_document,
-    settings_from_document,
 )
 from src.modules.feed_builder.infrastructure.feed.persistence.error import (
     InvalidFeedStorageError,
@@ -33,13 +33,14 @@ class FeedMapper:
     ) -> Feed:
         """Восстанавливает настройки и загруженную для сценария схему."""
         try:
+            settings, access_mode = feed_settings_from_document(row["export_settings"])
             return Feed.restore(
                 identifier=FeedIdVO.from_value(row["id"]),
                 name=FeedNameVO(row["name"]),
                 code=FeedCodeVO(row["code"]),
                 status=FeedStatus(row["status"]),
                 schema=decode_schema(row["schema_definition"]) if schema is None else schema,
-                export_settings=settings_from_document(row["export_settings"]),
+                export_settings=settings,
                 version=FeedVersionVO(row["row_version"]),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
@@ -48,6 +49,7 @@ class FeedMapper:
                     if row["public_link_id"] is not None
                     else None
                 ),
+                access_mode=access_mode,
             )
         except (DomainError, ValueError, TypeError, KeyError) as exc:
             raise InvalidFeedStorageError(
@@ -79,7 +81,10 @@ class FeedMapper:
             "code": feed.code.value,
             "status": feed.status.value,
             "row_version": feed.version.value,
-            "export_settings": settings_document(feed.export_settings),
+            "export_settings": {
+                **settings_document(feed.export_settings),
+                "access_mode": feed.access_mode.value,
+            },
             "updated_at": feed.updated_at,
             "public_link_id": feed.public_link_id.uuid if feed.public_link_id else None,
         }

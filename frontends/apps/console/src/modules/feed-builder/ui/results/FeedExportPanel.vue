@@ -69,7 +69,7 @@ function selectSeverity(event: Event): void {
     <div class="grid min-w-0 gap-3 rounded-lg border p-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h2 class="font-medium">
-          {{ formatName ? `Публичный ${formatName}` : "Публичная ссылка" }}
+          {{ formatName ? `${data.accessMode === "PRIVATE" ? "Приватный" : "Публичный"} ${formatName}` : "Ссылка на фид" }}
         </h2>
         <Button
           type="button"
@@ -101,16 +101,20 @@ function selectSeverity(event: Event): void {
             <dd>{{ dateLabel(data.active.publishedAt) }}</dd>
           </div>
         </dl>
-        <a :href="data.active.url" class="break-all text-sm underline">{{
+        <a v-if="data.accessMode !== 'PRIVATE'" :href="data.active.url" class="break-all text-sm underline">{{
           data.active.url
         }}</a>
+        <template v-else>
+          <p class="break-all text-sm">{{ data.active.url }}</p>
+          <p class="text-sm text-muted-foreground">Для скачивания по этому адресу нужен токен.</p>
+        </template>
         <div class="flex flex-wrap gap-2">
           <Button
             type="button"
             size="sm"
             variant="outline"
             @click="emit('copy', data.active.url)"
-            >Скопировать ссылку</Button
+            >{{ data.accessMode === "PRIVATE" ? "Скопировать адрес" : "Скопировать ссылку" }}</Button
           >
           <Button
             v-if="data.canRotate"
@@ -127,6 +131,7 @@ function selectSeverity(event: Event): void {
         Ссылка появится после первой успешной сборки{{ formatName ? ` ${formatName}` : "" }}.
       </p>
     </div>
+    <slot name="access" />
     <div v-if="data.report" class="grid min-w-0 gap-3 rounded-lg border p-4">
       <h2 class="font-medium">Последняя проверка</h2>
       <p class="text-sm">
